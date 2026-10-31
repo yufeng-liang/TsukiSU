@@ -65,7 +65,9 @@ dependencies {
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.compose.material.icons.extended)
+    // 编译期用 extended 全集；运行期不流入 :app（其精简 jar + icons-core 已覆盖
+    // 本模块用到的全部图标），否则 release 打包 checkReleaseDuplicateClasses 撞类
+    compileOnly(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.compose.ui)
 
     implementation(libs.androidx.lifecycle.runtime.compose)
