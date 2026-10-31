@@ -1,7 +1,12 @@
 package com.sukisu.ultra.ui.screen.colorpalette
 
+import com.sukisu.ultra.ai.api.R as AiR
+import com.sukisu.ultra.ai.api.AiFeatureBridge
 import android.net.Uri
+import java.io.File
 import android.os.Build
+import com.sukisu.ultra.ui.util.customText
+import com.sukisu.ultra.ui.util.CustomTextKey
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -13,6 +18,8 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -34,6 +41,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.automirrored.rounded.MenuOpen
 import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.BlurOn
@@ -58,6 +66,7 @@ import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material.icons.rounded.Swipe
 import androidx.compose.material.icons.rounded.ViewCarousel
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -118,13 +127,28 @@ import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun ColorPaletteScreenMiuix(
     state: ColorPaletteUiState,
     actions: ColorPaletteScreenActions,
+    section: String? = null,
 ) {
     val scrollBehavior = MiuixScrollBehavior()
+    val sectionRequesters = remember { mutableMapOf<String, BringIntoViewRequester>() }
+    fun sectionRequester(anchor: String): BringIntoViewRequester =
+        sectionRequesters.getOrPut(anchor) { BringIntoViewRequester() }
+
+    LaunchedEffect(section) {
+        val anchor = section?.trim()?.lowercase()?.replace('-', '_')?.takeIf { it.isNotEmpty() }
+            ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(120.milliseconds)
+        val target = sectionRequesters[anchor]
+            ?: sectionRequesters["appearance"]
+            ?: return@LaunchedEffect
+        target.bringIntoView()
+    }
     val enableBlurState = LocalEnableBlur.current
     val backdrop = rememberBlurBackdrop(enableBlurState)
     val blurActive = backdrop != null
@@ -145,14 +169,24 @@ fun ColorPaletteScreenMiuix(
         mutableFloatStateOf(uiState.customBackgroundScrimPercent.toFloat())
     }
     val exportThemeLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/zip")
+        contract = ActivityResultContracts.CreateDocument("*/*")
     ) { uri: Uri? ->
         uri?.let { actions.onExportTheme(context, it) }
+    }
+    val exportImagesLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("*/*")
+    ) { uri: Uri? ->
+        uri?.let { actions.onExportImages(context, it) }
     }
     val importThemeLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let { actions.onImportTheme(context, it) }
+    }
+    val homeCardImageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        uri?.let { actions.onPickHomeCardImage(context, it) }
     }
 
     AppScaffold(
@@ -162,7 +196,7 @@ fun ColorPaletteScreenMiuix(
             BlurredBar(backdrop, scrollBehavior = scrollBehavior) {
                 TopAppBar(
                     color = barColor,
-                    title = stringResource(R.string.settings_theme),
+                    title = customText(CustomTextKey.PAGE_APPEARANCE),
                     navigationIcon = {
                         IconButton(
                             onClick = actions.onBack
@@ -224,6 +258,8 @@ fun ColorPaletteScreenMiuix(
                             floatingBottomBarBlur = uiState.enableFloatingBottomBarBlur,
                             navigationBadge = uiState.enableNavigationBadge,
                             pageScale = uiState.pageScale,
+                            customHomeTitle = uiState.customHomeTitle,
+                            homeCardImagePath = uiState.homeCardImagePath,
                         ),
                     )
                     Spacer(modifier = Modifier.height(28.dp))
@@ -238,6 +274,7 @@ fun ColorPaletteScreenMiuix(
 
                     AppCard(
                         modifier = Modifier
+                            .bringIntoViewRequester(sectionRequester("background"))
                             .padding(bottom = 12.dp)
                             .fillMaxWidth(),
                         colors = backgroundAwareCardColors(),
@@ -308,6 +345,32 @@ fun ColorPaletteScreenMiuix(
                                     onClick = { actions.onCropCurrentBackground(context) }
                                 )
                             }
+                        }
+
+                        val hasCustomBgFile = hasCustomBg && !usingSystemWallpaper
+                        val hasCardBgFile = uiState.homeCardImagePath.isNotBlank() && File(uiState.homeCardImagePath).isFile
+                        if (hasCustomBgFile || hasCardBgFile) {
+                            HorizontalDivider()
+                            ArrowPreference(
+                                title = stringResource(id = R.string.settings_export_images),
+                                summary = stringResource(id = R.string.settings_export_images_summary),
+                                startAction = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.FileDownload,
+                                        modifier = Modifier.padding(end = 6.dp),
+                                        contentDescription = stringResource(id = R.string.settings_export_images),
+                                        tint = colorScheme.onBackground
+                                    )
+                                },
+                                onClick = {
+                                    val fileName = when {
+                                        hasCustomBgFile && hasCardBgFile -> "SukiSU-images.zip"
+                                        hasCardBgFile -> "SukiSU-home-card.png"
+                                        else -> "SukiSU-background.png"
+                                    }
+                                    exportImagesLauncher.launch(fileName)
+                                }
+                            )
                         }
 
                         if (usingSystemWallpaper || hasCustomBg) {
@@ -415,6 +478,7 @@ fun ColorPaletteScreenMiuix(
 
                     AppCard(
                         modifier = Modifier
+                            .bringIntoViewRequester(sectionRequester("theme_package"))
                             .padding(bottom = 12.dp)
                             .fillMaxWidth(),
                     ) {
@@ -446,8 +510,14 @@ fun ColorPaletteScreenMiuix(
                             },
                             onClick = {
                                 importThemeLauncher.launch(
-                                    arrayOf("application/zip", "application/x-zip-compressed")
-                                )
+                                        arrayOf(
+                                            ThemePackageStorage.THEME_MIME_TYPE,
+                                            "application/octet-stream",
+                                            "application/zip",
+                                            "application/x-zip-compressed",
+                                            "*/*"
+                                        )
+                                    )
                             },
                         )
                         BasicComponent(
@@ -466,6 +536,7 @@ fun ColorPaletteScreenMiuix(
                     }
                     AppCard(
                         modifier = Modifier
+                            .bringIntoViewRequester(sectionRequester("appearance"))
                             .padding(bottom = 12.dp)
                             .fillMaxWidth(),
                     ) {
@@ -503,6 +574,25 @@ fun ColorPaletteScreenMiuix(
                             }
                         )
 
+                        if (AiFeatureBridge.isAvailable) {
+                            SwitchPreference(
+                                title = stringResource(id = AiR.string.ai_show_home_card),
+                                summary = stringResource(id = AiR.string.ai_show_home_card_summary),
+                                startAction = {
+                                    Icon(
+                                        Icons.Rounded.AutoAwesome,
+                                        modifier = Modifier.padding(end = 6.dp),
+                                        contentDescription = stringResource(id = AiR.string.ai_show_home_card),
+                                        tint = colorScheme.onBackground
+                                    )
+                                },
+                                checked = state.showAiHomeCard,
+                                onCheckedChange = {
+                                    actions.onSetShowAiHomeCard(it)
+                                }
+                            )
+                        }
+
                         ArrowPreference(
                             title = stringResource(id = R.string.app_icon_title),
                             summary = stringResource(
@@ -520,23 +610,54 @@ fun ColorPaletteScreenMiuix(
                             onClick = actions.onOpenAppIcon,
                         )
                         ArrowPreference(
-                            title = stringResource(id = R.string.settings_home_title),
-                            summary = uiState.customHomeTitle.ifBlank {
-                                stringResource(R.string.settings_home_title_default)
-                            },
+                            title = stringResource(id = R.string.settings_custom_texts),
+                            summary = stringResource(id = R.string.settings_custom_texts_summary),
                             startAction = {
                                 Icon(
                                     Icons.Rounded.Edit,
                                     modifier = Modifier.padding(end = 8.dp),
-                                    contentDescription = stringResource(R.string.settings_home_title),
+                                    contentDescription = stringResource(R.string.settings_custom_texts),
+                                    tint = colorScheme.onBackground,
+                                )
+                            },
+                            onClick = actions.onOpenCustomTexts,
+                        )
+                        ArrowPreference(
+                            title = stringResource(id = R.string.settings_home_card_image),
+                            summary = if (uiState.homeCardImagePath.isBlank()) {
+                                stringResource(R.string.settings_home_card_image_default)
+                            } else {
+                                stringResource(R.string.settings_home_card_image_set)
+                            },
+                            startAction = {
+                                Icon(
+                                    Icons.Rounded.Image,
+                                    modifier = Modifier.padding(end = 8.dp),
+                                    contentDescription = stringResource(R.string.settings_home_card_image),
                                     tint = colorScheme.onBackground,
                                 )
                             },
                             onClick = {
-                                homeTitleDraft = uiState.customHomeTitle
-                                showHomeTitleDialog = true
+                                homeCardImageLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
                             },
                         )
+                        if (uiState.homeCardImagePath.isNotBlank()) {
+                            ArrowPreference(
+                                title = stringResource(id = R.string.settings_home_card_image_clear),
+                                summary = stringResource(R.string.settings_home_card_image_clear_summary),
+                                startAction = {
+                                    Icon(
+                                        Icons.Rounded.Restore,
+                                        modifier = Modifier.padding(end = 8.dp),
+                                        contentDescription = stringResource(R.string.settings_home_card_image_clear),
+                                        tint = colorScheme.onBackground,
+                                    )
+                                },
+                                onClick = actions.onClearHomeCardImage,
+                            )
+                        }
                     }
                     val themeItems = listOf(
                         stringResource(id = R.string.settings_theme_mode_system),
@@ -557,6 +678,7 @@ fun ColorPaletteScreenMiuix(
 
                     AppCard(
                         modifier = Modifier
+                            .bringIntoViewRequester(sectionRequester("colors"))
                             .padding(top = 12.dp)
                             .fillMaxWidth(),
                     ) {
@@ -664,6 +786,7 @@ fun ColorPaletteScreenMiuix(
                     AppCard(
                         modifier = Modifier
                             .padding(top = 12.dp)
+                            .bringIntoViewRequester(sectionRequester("chrome"))
                             .fillMaxWidth(),
                     ) {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -739,6 +862,7 @@ fun ColorPaletteScreenMiuix(
                     AppCard(
                         modifier = Modifier
                             .padding(top = 12.dp)
+                            .bringIntoViewRequester(sectionRequester("behavior"))
                             .fillMaxWidth(),
                     ) {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -843,6 +967,7 @@ fun ColorPaletteScreenMiuix(
                     AppCard(
                         modifier = Modifier
                             .padding(top = 12.dp)
+                            .bringIntoViewRequester(sectionRequester("module_description"))
                             .fillMaxWidth(),
                     ) {
                         var linesValue by remember(uiState.moduleDescriptionMaxLines) { mutableIntStateOf(uiState.moduleDescriptionMaxLines) }

@@ -9,6 +9,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
@@ -35,6 +36,7 @@ data class ThemePackageData(
     val customBackgroundBlurPercent: Int? = null,
     val customBackgroundScrimPercent: Int? = null,
     val hasBackground: Boolean? = null,
+    val hasCardBackground: Boolean? = null,
     val uiMode: String? = null,
     val appIconId: String? = null,
     val enableFloatingBottomBar: Boolean? = null,
@@ -49,19 +51,27 @@ data class ThemePackageData(
     val moduleSortMetamoduleFirst: Boolean? = null,
     val moduleSortNameOrder: String? = null,
     val moduleSortManual: Boolean? = null,
+    val customHomeTitle: String? = null,
+    val customTexts: Map<String, String>? = null,
 )
 
-/** Parsed theme package plus the background file path when the package contains an image. */
+/**
+ * Parsed theme package plus paths to extracted temporary image files.
+ * Callers are responsible for deleting or promoting these temporary files.
+ */
 data class ImportedTheme(
     val data: ThemePackageData,
-    val backgroundPath: String?,
+    val backgroundPath: String? = null,
+    val cardBackgroundPath: String? = null,
 )
 
 object ThemePackageStorage {
     const val CURRENT_VERSION = 1
+    const val THEME_MIME_TYPE = "application/x-sukisu-theme"
 
     private const val THEME_ENTRY = "theme.json"
     private const val BACKGROUND_ENTRY = "background"
+    private const val CARD_BACKGROUND_ENTRY = "card_background"
     private const val MAX_JSON_BYTES = 64L * 1024
     private const val MAX_BACKGROUND_BYTES = 64L * 1024 * 1024
 
@@ -72,7 +82,7 @@ object ThemePackageStorage {
 
     fun packageFileName(): String {
         val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmm"))
-        return "SukiSU-theme-$stamp.zip"
+        return "SukiSU-theme-$stamp.sukisu"
     }
 
     suspend fun export(
@@ -80,42 +90,86 @@ object ThemePackageStorage {
         uri: Uri,
         data: ThemePackageData,
         backgroundFile: File?,
+        cardBackgroundFile: File? = null,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
+            val encryptedBytes = encode(data, backgroundFile, cardBackgroundFile)
             val output = context.contentResolver.openOutputStream(uri)
                 ?: error("Cannot open the destination file")
-            BufferedOutputStream(output).use { buffered ->
-                ZipOutputStream(buffered).use { zip ->
-                    zip.putNextEntry(ZipEntry(THEME_ENTRY))
-                    zip.write(json.encodeToString(ThemePackageData.serializer(), data).toByteArray())
+            BufferedOutputStream(output).use { it.write(encryptedBytes) }
+        }
+    }
+
+    /** Encrypted package written to an app-private file (used for sharing). */
+    suspend fun exportToFile(
+        file: File,
+        data: ThemePackageData,
+        backgroundFile: File?,
+        cardBackgroundFile: File? = null,
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val encryptedBytes = encode(data, backgroundFile, cardBackgroundFile)
+            file.parentFile?.mkdirs()
+            BufferedOutputStream(file.outputStream()).use { it.write(encryptedBytes) }
+        }
+    }
+
+    private fun encode(
+        data: ThemePackageData,
+        backgroundFile: File?,
+        cardBackgroundFile: File?,
+    ): ByteArray {
+        val zipBytes = ByteArrayOutputStream().use { byteOut ->
+            ZipOutputStream(byteOut).use { zip ->
+                zip.putNextEntry(ZipEntry(THEME_ENTRY))
+                zip.write(json.encodeToString(ThemePackageData.serializer(), data).toByteArray())
+                zip.closeEntry()
+                if (data.hasBackground == true && backgroundFile != null && backgroundFile.isFile) {
+                    zip.putNextEntry(ZipEntry(BACKGROUND_ENTRY))
+                    backgroundFile.inputStream().use { it.copyTo(zip) }
                     zip.closeEntry()
-                    if (data.hasBackground == true && backgroundFile != null && backgroundFile.isFile) {
-                        zip.putNextEntry(ZipEntry(BACKGROUND_ENTRY))
-                        backgroundFile.inputStream().use { it.copyTo(zip) }
-                        zip.closeEntry()
-                    }
+                }
+                if (data.hasCardBackground == true && cardBackgroundFile != null && cardBackgroundFile.isFile) {
+                    zip.putNextEntry(ZipEntry(CARD_BACKGROUND_ENTRY))
+                    cardBackgroundFile.inputStream().use { it.copyTo(zip) }
+                    zip.closeEntry()
                 }
             }
+            byteOut.toByteArray()
         }
+        return ThemePackageCrypto.encrypt(zipBytes)
     }
 
     suspend fun import(context: Context, uri: Uri): Result<ImportedTheme> = withContext(Dispatchers.IO) {
         runCatching {
-            val tempBackground = File.createTempFile("theme_bg_", ".tmp", context.cacheDir)
+            val rawBytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                ?: error("Cannot open the theme package")
+            val zipBytes = runCatching { ThemePackageCrypto.decrypt(rawBytes) }.getOrElse {
+                error("Theme package verification or decryption failed")
+            }
+            var tempBackground: File? = null
+            var tempCardBackground: File? = null
             try {
                 var themeText: String? = null
                 var backgroundExtracted = false
-                val input = context.contentResolver.openInputStream(uri)
-                    ?: error("Cannot open the theme package")
-                BufferedInputStream(input).use { buffered ->
-                    ZipInputStream(buffered).use { zip ->
+                var cardBackgroundExtracted = false
+                ByteArrayInputStream(zipBytes).use { byteIn ->
+                    ZipInputStream(byteIn).use { zip ->
                         var entry: ZipEntry? = zip.nextEntry
                         while (entry != null) {
                             when (entry.name) {
                                 THEME_ENTRY -> themeText = readLimited(zip, MAX_JSON_BYTES).toString(Charsets.UTF_8)
                                 BACKGROUND_ENTRY -> {
-                                    tempBackground.outputStream().use { copyLimited(zip, it, MAX_BACKGROUND_BYTES) }
+                                    val bg = File.createTempFile("theme_import_bg_", ".tmp", context.cacheDir)
+                                    tempBackground = bg
+                                    bg.outputStream().use { copyLimited(zip, it, MAX_BACKGROUND_BYTES) }
                                     backgroundExtracted = true
+                                }
+                                CARD_BACKGROUND_ENTRY -> {
+                                    val cardBg = File.createTempFile("theme_import_card_", ".tmp", context.cacheDir)
+                                    tempCardBackground = cardBg
+                                    cardBg.outputStream().use { copyLimited(zip, it, MAX_BACKGROUND_BYTES) }
+                                    cardBackgroundExtracted = true
                                 }
                             }
                             zip.closeEntry()
@@ -127,9 +181,10 @@ object ThemePackageStorage {
                 val text = themeText ?: error("theme.json is missing")
                 val data = json.decodeFromString(ThemePackageData.serializer(), text)
                 if (data.version > CURRENT_VERSION) error("Unsupported theme package version")
+
                 val hasBackground = data.hasBackground ?: backgroundExtracted
                 if (hasBackground && !backgroundExtracted) error("Background image is missing")
-                if (hasBackground) {
+                if (hasBackground && tempBackground != null) {
                     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                     BitmapFactory.decodeFile(tempBackground.absolutePath, bounds)
                     if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
@@ -137,15 +192,24 @@ object ThemePackageStorage {
                     }
                 }
 
-                val backgroundPath = when {
-                    hasBackground -> BgStorage.replace(context, tempBackground)
-                        ?: error("Cannot store the background image")
-
-                    else -> null
+                val hasCardBackground = data.hasCardBackground ?: cardBackgroundExtracted
+                if (hasCardBackground && tempCardBackground != null) {
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(tempCardBackground.absolutePath, bounds)
+                    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                        error("Card background image is invalid")
+                    }
                 }
-                ImportedTheme(data = data, backgroundPath = backgroundPath)
-            } finally {
-                tempBackground.delete()
+
+                ImportedTheme(
+                    data = data,
+                    backgroundPath = tempBackground?.takeIf { hasBackground }?.absolutePath,
+                    cardBackgroundPath = tempCardBackground?.takeIf { hasCardBackground }?.absolutePath,
+                )
+            } catch (e: Exception) {
+                tempBackground?.delete()
+                tempCardBackground?.delete()
+                throw e
             }
         }
     }

@@ -21,11 +21,12 @@ import java.io.File
 import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicBoolean
 
-object BgStorage {
+object ImageStorage {
     private const val DIR_NAME = "backgrounds"
     private const val CROP_DIR_NAME = "background_crop"
     private const val FILE_NAME = "bg_image"
     private const val SYSTEM_WALLPAPER_FILE_NAME = "system_wallpaper"
+    private const val HOME_CARD_PREFIX = "home_card_image"
     private const val SYSTEM_WALLPAPER_SIGNATURE_FILE_NAME = "system_wallpaper.sig"
     private const val MAX_SYSTEM_WALLPAPER_PIXELS = 150_000_000L
     private const val MAX_WALLPAPER_VALIDATION_DIMENSION = 1024
@@ -415,4 +416,92 @@ object BgStorage {
     }
 
     private fun prepareFile(context: Context): File = File(backgroundsDir(context), FILE_NAME)
+
+    /**
+     * Copies a picked image into the home status card slot and returns its path.
+     * Each save uses a fresh file name so Coil's cache never serves the previous image.
+     */
+    suspend fun saveHomeCardImage(context: Context, uri: Uri): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val dir = backgroundsDir(context)
+            val target = File(dir, HOME_CARD_PREFIX + "_" + System.currentTimeMillis())
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            } ?: return@runCatching null
+            if (target.length() == 0L) {
+                target.delete()
+                return@runCatching null
+            }
+            dir.listFiles { file -> file.name.startsWith(HOME_CARD_PREFIX) && file != target }
+                ?.forEach { it.delete() }
+            target.absolutePath
+        }.getOrNull()
+    }
+
+    suspend fun clearHomeCardImage(context: Context) = withContext(Dispatchers.IO) {
+        backgroundsDir(context)
+            .listFiles { file -> file.name.startsWith(HOME_CARD_PREFIX) }
+            ?.forEach { it.delete() }
+    }
+
+    /** Moves [source] over the home status card image slot and returns the new path. */
+    suspend fun replaceHomeCardImage(context: Context, source: File): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val dir = backgroundsDir(context)
+            val target = File(dir, HOME_CARD_PREFIX + "_" + System.currentTimeMillis())
+            if (!source.renameTo(target)) {
+                source.inputStream().use { input ->
+                    target.outputStream().use { output -> input.copyTo(output) }
+                }
+            }
+            if (target.length() == 0L) {
+                target.delete()
+                return@runCatching null
+            }
+            dir.listFiles { file -> file.name.startsWith(HOME_CARD_PREFIX) && file != target }
+                ?.forEach { it.delete() }
+            target.absolutePath
+        }.getOrNull()
+    }
+
+    /**
+     * Unified exporter for custom images (background wallpaper and home status card).
+     * If both are present, they are bundled together into a standard unencrypted ZIP archive.
+     * If only one is present, it is copied directly as a standalone image.
+     */
+    suspend fun exportImages(
+        context: Context,
+        uri: Uri,
+        backgroundFile: File?,
+        cardBackgroundFile: File?,
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val hasBg = backgroundFile != null && backgroundFile.isFile
+            val hasCard = cardBackgroundFile != null && cardBackgroundFile.isFile
+            if (!hasBg && !hasCard) error("No image to export")
+
+            val output = context.contentResolver.openOutputStream(uri)
+                ?: error("Cannot open destination")
+
+            if (hasBg && hasCard) {
+                java.io.BufferedOutputStream(output).use { out ->
+                    java.util.zip.ZipOutputStream(out).use { zip ->
+                        zip.putNextEntry(java.util.zip.ZipEntry("background.png"))
+                        backgroundFile.inputStream().use { it.copyTo(zip) }
+                        zip.closeEntry()
+
+                        zip.putNextEntry(java.util.zip.ZipEntry("home_card.png"))
+                        cardBackgroundFile.inputStream().use { it.copyTo(zip) }
+                        zip.closeEntry()
+                    }
+                }
+            } else {
+                val singleFile = if (hasBg) backgroundFile else cardBackgroundFile
+                java.io.BufferedOutputStream(output).use { out ->
+                    singleFile!!.inputStream().use { it.copyTo(out) }
+                }
+            }
+            Unit
+        }
+    }
 }

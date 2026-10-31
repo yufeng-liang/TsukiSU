@@ -32,6 +32,7 @@ data class SettingsUiState(
     val enableWebDebugging: Boolean = false,
     val showFullStatus: Boolean = true,
     val hideHomeWarnings: Boolean = false,
+    val showAiHomeCard: Boolean = false,
 
     // Su Compat
     val suCompatStatus: String = "",
@@ -97,6 +98,19 @@ data class SettingsUiState(
     val customBackgroundScrimPercent: Int = -35,
     val backgroundAppearanceExpanded: Boolean = true,
     val customHomeTitle: String = "",
+    val customTexts: Map<String, String> = emptyMap(),
+    val homeCardImagePath: String = "",
+    val pendingImportTheme: com.sukisu.ultra.ui.util.ImportedTheme? = null,
+    val showThemeImportDialog: Boolean = false,
+)
+
+@Immutable
+data class ThemeImportOptions(
+    val importAppearance: Boolean = true,
+    val importImages: Boolean = true,
+    val importAppIcon: Boolean = true,
+    val importCustomTexts: Boolean = true,
+    val importCustomConfig: Boolean = true,
 )
 
 @Immutable

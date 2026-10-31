@@ -57,7 +57,13 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.UriHandler
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
+import java.io.File
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -82,7 +88,10 @@ import com.sukisu.ultra.ui.component.material.TonalCard
 import com.sukisu.ultra.ui.component.material.expressiveTopAppBarColors
 import com.sukisu.ultra.ui.component.rebootlistpopup.RebootListPopup
 import com.sukisu.ultra.ui.component.statustag.StatusTag
+import com.sukisu.ultra.ai.api.AiFeatureBridge
 import com.sukisu.ultra.ui.util.module.LatestVersionInfo
+import com.sukisu.ultra.ui.util.customText
+import com.sukisu.ultra.ui.util.CustomTextKey
 
 private val HeroShape = RoundedCornerShape(28.dp)
 private val TileShape = RoundedCornerShape(22.dp)
@@ -98,7 +107,7 @@ fun HomePagerMaterial(
 
     ExpressiveScaffold(
         containerColor = if (hasCustomBackground) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer,
-        topBar = { TopBar(title = state.customHomeTitle, scrollBehavior = scrollBehavior) },
+        topBar = { TopBar(title = customText(CustomTextKey.HOME_TITLE), scrollBehavior = scrollBehavior) },
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
     ) { innerPadding ->
         Column(
@@ -115,7 +124,7 @@ fun HomePagerMaterial(
             )
             if (state.showVersionMismatchWarning) {
                 WarningCard(
-                    stringResource(R.string.version_spoof_home_warning),
+                    customText(CustomTextKey.HOME_WARN_VERSION_SPOOF),
                     onClick = actions.onOpenVersionSpoof,
                 )
             }
@@ -154,6 +163,9 @@ fun HomePagerMaterial(
             }
             if (state.isPreviewMode && !state.hideHomeWarnings) {
                 WarningCard(stringResource(id = R.string.home_preview_mode), level = WarningLevel.Notice)
+            }
+            if (state.showAiHomeCard && AiFeatureBridge.isAvailable) {
+                AiFeatureBridge.HomeCardMaterial(onOpenChat = actions.onOpenAi)
             }
             StatsRow(state = state, actions = actions)
             InfoCard(systemInfo = state.systemInfo, showFullStatus = state.showFullStatus)
@@ -207,6 +219,7 @@ private fun TopBar(
     scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
     val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
+    val displayTitle = customText(CustomTextKey.HOME_TITLE)
     LargeFlexibleTopAppBar(
         title = {
             Row(
@@ -215,7 +228,7 @@ private fun TopBar(
             ) {
                 Text(
                     modifier = Modifier.weight(1f, fill = false),
-                    text = title.ifBlank { stringResource(R.string.app_name) },
+                    text = title.ifBlank { displayTitle },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -269,14 +282,39 @@ private fun ActiveStatusCard(
         else -> "Built-in"
     }
 
+    val cardImagePainter = state.homeCardImagePath.takeIf { it.isNotEmpty() }?.let { path ->
+        rememberAsyncImagePainter(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(File(path))
+                .crossfade(true)
+                .build(),
+            contentScale = ContentScale.Crop,
+        )
+    }
+
     Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = containerColor,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(HeroShape)
+            .then(
+                if (cardImagePainter != null) {
+                    Modifier.drawBehind { with(cardImagePainter) { draw(size) } }
+                } else {
+                    Modifier
+                }
+            ),
+        color = if (cardImagePainter != null) Color.Transparent else containerColor,
         contentColor = contentColor,
         shape = HeroShape,
         onClick = onClick,
     ) {
-        Box(modifier = Modifier.drawBehind { drawStatusRings(contentColor.copy(alpha = 0.18f)) }) {
+        Box(
+            modifier = if (cardImagePainter != null) {
+                Modifier
+            } else {
+                Modifier.drawBehind { drawStatusRings(contentColor.copy(alpha = 0.18f)) }
+            }
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -297,14 +335,14 @@ private fun ActiveStatusCard(
                     }
                     if (state.showCustomLkmBadge) {
                         StatusTag(
-                            label = stringResource(R.string.home_lkm_custom),
+                            label = customText(CustomTextKey.HOME_TAG_LKM),
                             contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                             backgroundColor = MaterialTheme.colorScheme.tertiaryContainer,
                         )
                     }
                     if (state.isSafeMode) {
                         StatusTag(
-                            label = stringResource(id = R.string.safe_mode),
+                            label = customText(CustomTextKey.HOME_TAG_SAFEMODE),
                             contentColor = MaterialTheme.colorScheme.onErrorContainer,
                             backgroundColor = MaterialTheme.colorScheme.errorContainer,
                         )
@@ -319,7 +357,7 @@ private fun ActiveStatusCard(
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = stringResource(R.string.home_working),
+                        text = customText(CustomTextKey.HOME_STATUS_WORKING),
                         style = MaterialTheme.typography.displaySmall,
                         fontWeight = FontWeight.Black,
                     )
@@ -440,9 +478,14 @@ private fun StatsRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         tiles.forEach { (count, label, onClick) ->
+            val labelText = when (label) {
+                R.string.superuser -> customText(CustomTextKey.HOME_STATS_SUPERUSER)
+                R.string.module -> customText(CustomTextKey.HOME_STATS_MODULE)
+                else -> stringResource(label)
+            }
             StatTile(
                 count = count,
-                label = stringResource(label),
+                label = labelText,
                 onClick = onClick,
                 modifier = Modifier.weight(1f),
             )
@@ -628,27 +671,27 @@ private fun InfoCard(
     val hookTypeLabel = rememberHookTypeLabel(manualHookText, inlineHookText, tracepointHookText, unknownHookText)
 
     val systemRows = buildList {
-        add(stringResource(R.string.home_manager_version) to systemInfo.managerVersion)
-        add(stringResource(R.string.home_kernel) to systemInfo.kernelVersion)
+        add(customText(CustomTextKey.HOME_INFO_MANAGER_VERSION) to systemInfo.managerVersion)
+        add(customText(CustomTextKey.HOME_INFO_KERNEL) to systemInfo.kernelVersion)
         if (showFullStatus) {
             if (!systemInfo.kernelFullVersion.isNullOrBlank()) {
-                add(stringResource(R.string.home_kernel_full_version) to systemInfo.kernelFullVersion)
+                add(customText(CustomTextKey.HOME_INFO_KERNEL_FULL) to systemInfo.kernelFullVersion)
             }
             if (isSusfsSupported) {
                 add(stringResource(R.string.home_susfs_version) to susfsInfo.detail)
             } else if (!hookTypeLabel.isNullOrBlank()) {
-                add(stringResource(R.string.hook_type) to hookTypeLabel)
+                add(customText(CustomTextKey.HOME_INFO_HOOK_TYPE) to hookTypeLabel)
             }
             if (!systemInfo.zygiskImplementation.isNullOrBlank()) {
-                add(stringResource(R.string.home_zygisk_implementation) to systemInfo.zygiskImplementation)
+                add(customText(CustomTextKey.HOME_INFO_ZYGISK) to systemInfo.zygiskImplementation)
             }
         }
-        add(stringResource(R.string.home_device_model) to systemInfo.deviceModel)
-        add(stringResource(R.string.home_fingerprint) to systemInfo.fingerprint)
+        add(customText(CustomTextKey.HOME_INFO_DEVICE_MODEL) to systemInfo.deviceModel)
+        add(customText(CustomTextKey.HOME_INFO_FINGERPRINT) to systemInfo.fingerprint)
     }
     val securityRows = listOf(
-        stringResource(R.string.home_selinux_status) to selinuxDisplay,
-        stringResource(R.string.home_seccomp_status) to seccompDisplay,
+        customText(CustomTextKey.HOME_INFO_SELINUX) to selinuxDisplay,
+        customText(CustomTextKey.HOME_INFO_SECCOMP) to seccompDisplay,
     )
 
     Column(

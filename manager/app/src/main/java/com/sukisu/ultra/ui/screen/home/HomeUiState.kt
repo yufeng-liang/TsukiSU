@@ -52,7 +52,9 @@ data class HomeUiState(
     // 任一侧为空说明对端还不支持该指纹（旧内核 / tarball 构建），此时退回比版本号。
     val bundledLkmRev: String = "",
     val kernelLkmRev: String = "",
+    val showAiHomeCard: Boolean = false,
     val customHomeTitle: String = "",
+    val homeCardImagePath: String = "",
 ) {
     val isSELinuxPermissive: Boolean
         get() = systemInfo.selinuxStatus == "Permissive"
@@ -115,6 +117,7 @@ data class HomeActions(
     val onModuleClick: () -> Unit = {},
     val onReleaseUpdateClick: () -> Unit = {},
     val onOpenVersionSpoof: () -> Unit = {},
+    val onOpenAi: () -> Unit = {},
 )
 
 private val LKM_REV_SUFFIX = Regex("""\+lkm\.([0-9a-fA-F]{6,40})\s*$""")

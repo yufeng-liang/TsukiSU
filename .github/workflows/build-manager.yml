@@ -3,7 +3,7 @@ name: Build Manager
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "dev", "ci" ]
+    branches: [ "main", "dev" ]
     paths:
       - '.github/workflows/build-manager.yml'
       - '.github/workflows/build-lkm.yml'
@@ -260,7 +260,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        spoofed: ["false", "true"]
+        spoofed: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && fromJson('["false", "true"]') || fromJson('["false"]') }}
 
     defaults:
       run:
@@ -357,7 +357,7 @@ jobs:
 
       - name: Write key
         if: ${{ (github.event_name != 'pull_request' &&
-          (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'))
+          (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' || github.event_name == 'workflow_dispatch'))
           || github.ref_type == 'tag' }}
 
         run: |
@@ -575,6 +575,7 @@ jobs:
 
       - name: Upload Gradle APK
         if: ${{ github.event_name == 'pull_request' ||
+          github.event_name == 'workflow_dispatch' ||
           (github.event_name != 'pull_request' &&
           (github.ref == 'refs/heads/main' ||
            github.ref == 'refs/heads/dev' ||
@@ -595,7 +596,8 @@ jobs:
       - name: Upload mappings
         if: ${{ (github.event_name != 'pull_request' &&
           (github.ref == 'refs/heads/main' ||
-           github.ref == 'refs/heads/dev'))
+           github.ref == 'refs/heads/dev' ||
+           github.event_name == 'workflow_dispatch'))
           || github.ref_type == 'tag' }}
 
         uses: actions/upload-artifact@v7
@@ -622,7 +624,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        spoofed: ["false", "true"]
+        spoofed: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && fromJson('["false", "true"]') || fromJson('["false"]') }}
 
     steps:
 
@@ -748,6 +750,7 @@ jobs:
 
       - name: Prepare signing inputs
         if: ${{ github.event_name == 'pull_request' ||
+          github.event_name == 'workflow_dispatch' ||
           (github.event_name != 'pull_request' &&
           (github.ref == 'refs/heads/main' ||
            github.ref == 'refs/heads/dev' ||
@@ -794,6 +797,7 @@ jobs:
 
       - name: Repack and resign
         if: ${{ github.event_name == 'pull_request' ||
+          github.event_name == 'workflow_dispatch' ||
           (github.event_name != 'pull_request' &&
           (github.ref == 'refs/heads/main' ||
            github.ref == 'refs/heads/dev' ||
@@ -829,6 +833,7 @@ jobs:
 
       - name: Upload build artifact
         if: ${{ github.event_name == 'pull_request' ||
+          github.event_name == 'workflow_dispatch' ||
           (github.event_name != 'pull_request' &&
           (github.ref == 'refs/heads/main' ||
            github.ref == 'refs/heads/dev' ||

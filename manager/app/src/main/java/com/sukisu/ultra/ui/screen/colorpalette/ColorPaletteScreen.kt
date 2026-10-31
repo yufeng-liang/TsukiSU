@@ -17,11 +17,12 @@ import com.sukisu.ultra.ui.UiMode
 import com.sukisu.ultra.ui.navigation3.LocalNavigator
 import com.sukisu.ultra.ui.navigation3.Route
 import com.sukisu.ultra.ui.theme.ColorMode
-import com.sukisu.ultra.ui.util.BgStorage
+import com.sukisu.ultra.ui.util.ImageStorage
 import com.sukisu.ultra.ui.viewmodel.SettingsViewModel
+import com.sukisu.ultra.ui.component.themeimport.ThemeImportDialog
 
 @Composable
-fun ColorPaletteScreen() {
+fun ColorPaletteScreen(section: String? = null) {
     val navigator = LocalNavigator.current
     val context = LocalContext.current
     val activity = LocalActivity.current
@@ -48,6 +49,7 @@ fun ColorPaletteScreen() {
         currentColorSpec = currentColorSpec,
         showFullStatus = uiState.showFullStatus,
         hideHomeWarnings = uiState.hideHomeWarnings,
+        showAiHomeCard = uiState.showAiHomeCard,
     )
     val actions = ColorPaletteScreenActions(
         onBack = dropUnlessResumed { navigator.pop() },
@@ -72,16 +74,17 @@ fun ColorPaletteScreen() {
         onSetModuleDescriptionMaxLines = viewModel::setModuleDescriptionMaxLines,
         onSetShowFullStatus = viewModel::setShowFullStatus,
         onSetHideHomeWarnings = viewModel::setHideHomeWarnings,
+        onSetShowAiHomeCard = viewModel::setShowAiHomeCard,
         onOpenAppIcon = { navigator.push(Route.AppIcon) },
         onSetBackgroundAppearanceExpanded = viewModel::setBackgroundAppearanceExpanded,
         onSetCustomHomeTitle = viewModel::setCustomHomeTitle,
         onPickCustomBackground = { ctx, uri ->
             viewModel.stagePickedBackground(ctx, uri) { path ->
                 if (path != null) {
-                    if (navigator.current() == Route.ColorPalette) {
+                    if (navigator.current() is Route.ColorPalette) {
                         navigator.push(Route.BackgroundCrop(path))
                     } else {
-                        BgStorage.discardStaged(path)
+                        ImageStorage.discardStaged(path)
                     }
                 }
             }
@@ -89,15 +92,17 @@ fun ColorPaletteScreen() {
         onCropCurrentBackground = { ctx ->
             viewModel.stageCurrentBackground(ctx) { path ->
                 if (path != null) {
-                    if (navigator.current() == Route.ColorPalette) {
+                    if (navigator.current() is Route.ColorPalette) {
                         navigator.push(Route.BackgroundCrop(path))
                     } else {
-                        BgStorage.discardStaged(path)
+                        ImageStorage.discardStaged(path)
                     }
                 }
             }
         },
         onClearCustomBackground = viewModel::clearCustomBackground,
+        onPickHomeCardImage = viewModel::pickHomeCardImage,
+        onClearHomeCardImage = viewModel::clearHomeCardImage,
         onSetUseSystemWallpaper = viewModel::setUseSystemWallpaper,
         onSetExtractColorFromBackground = viewModel::setExtractColorFromBackground,
         onSetCardBackgroundAlphaPercent = viewModel::setCardBackgroundAlphaPercent,
@@ -105,11 +110,27 @@ fun ColorPaletteScreen() {
         onSetCustomBackgroundScrimPercent = viewModel::setCustomBackgroundScrimPercent,
         onExportTheme = viewModel::exportTheme,
         onImportTheme = viewModel::importTheme,
+        onExportImages = viewModel::exportImages,
+        onExportCustomBackground = viewModel::exportCustomBackground,
+        onConfirmImportTheme = viewModel::confirmImportTheme,
+        onDismissImportThemeDialog = viewModel::dismissImportThemeDialog,
+        onSetCustomText = viewModel::setCustomText,
+        onResetAllCustomTexts = viewModel::resetAllCustomTexts,
+        onOpenCustomTexts = { navigator.push(Route.CustomTexts) },
         onResetBackgroundAppearance = viewModel::resetBackgroundAppearance,
     )
 
+    ThemeImportDialog(
+        show = uiState.showThemeImportDialog,
+        theme = uiState.pendingImportTheme,
+        onDismissRequest = viewModel::dismissImportThemeDialog,
+        onConfirm = { options ->
+            viewModel.confirmImportTheme(context, options)
+        }
+    )
+
     when (LocalUiMode.current) {
-        UiMode.Miuix -> ColorPaletteScreenMiuix(state, actions)
-        UiMode.Material -> ColorPaletteScreenMaterial(state, actions)
+        UiMode.Miuix -> ColorPaletteScreenMiuix(state, actions, section)
+        UiMode.Material -> ColorPaletteScreenMaterial(state, actions, section)
     }
 }

@@ -1,14 +1,17 @@
 package com.sukisu.ultra.ui.navigation3
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.core.net.toUri
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.launch
 import com.sukisu.ultra.Natives
@@ -19,6 +22,9 @@ import com.sukisu.ultra.ui.screen.flash.FlashIt
 import com.sukisu.ultra.ui.util.BackupNotifier
 import com.sukisu.ultra.ui.screen.scriptrun.ScriptRunArg
 import com.sukisu.ultra.ui.util.DownloadService
+import com.sukisu.ultra.ui.util.ThemePackageStorage
+import com.sukisu.ultra.ui.util.getFileName
+import com.sukisu.ultra.ui.viewmodel.SettingsViewModel
 import com.sukisu.ultra.ui.webui.WebUIActivity
 
 private const val SCHEME_KSU = "ksu"
@@ -101,6 +107,51 @@ private fun parseValidatedDeepLink(uri: Uri?): KsuDeepLink? {
     }
 }
 
+private fun extractThemePackageUri(context: Context, intent: Intent): Uri? {
+    val uris = linkedSetOf<Uri>()
+
+    fun addIfTheme(uri: Uri?) {
+        if (uri != null && isThemePackageUri(context, intent, uri)) {
+            uris.add(uri)
+        }
+    }
+
+    when (intent.action) {
+        Intent.ACTION_VIEW, Intent.ACTION_SEND -> {
+            addIfTheme(intent.data)
+            addIfTheme(intent.getThemeStreamUri())
+        }
+    }
+
+    val clipData = intent.clipData
+    if (clipData != null) {
+        for (i in 0 until clipData.itemCount) {
+            addIfTheme(clipData.getItemAt(i)?.uri)
+        }
+    }
+
+    return uris.firstOrNull()
+}
+
+private fun Intent.getThemeStreamUri(): Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+    getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+} else {
+    @Suppress("DEPRECATION")
+    getParcelableExtra(Intent.EXTRA_STREAM)
+}
+
+private fun isThemePackageUri(context: Context, intent: Intent, uri: Uri): Boolean {
+    val fileName = uri.getFileName(context) ?: uri.lastPathSegment.orEmpty()
+    val cleanName = fileName.substringBefore('?')
+    if (cleanName.endsWith(".sukisu", ignoreCase = true)) return true
+
+    val mimeType = (intent.type ?: context.contentResolver.getType(uri))
+        ?.substringBefore(';')
+        ?.trim()
+        ?.lowercase()
+    return mimeType == ThemePackageStorage.THEME_MIME_TYPE
+}
+
 @Composable
 fun IntentDispatcher(intentChannel: ReceiveChannel<Intent>) {
     val context = LocalContext.current
@@ -110,7 +161,6 @@ fun IntentDispatcher(intentChannel: ReceiveChannel<Intent>) {
     val isManager = Natives.isManager
     val handleZipIntent = rememberZipFileIntentHandler()
     val scope = rememberCoroutineScope()
-
     // A one-shot script ZIP opens the run page, which also offers installing it as a module.
     val openModuleZip: (Uri) -> Unit = { uri ->
         scope.launch {
@@ -122,11 +172,20 @@ fun IntentDispatcher(intentChannel: ReceiveChannel<Intent>) {
             }
         }
     }
+    val settingsViewModel = viewModel<SettingsViewModel>()
 
     CollectIntentChannel(intentChannel) { intent ->
         if (!isManager) return@CollectIntentChannel
 
         // 文件管理器 / 分享进来的 ZIP：模块、AnyKernel3 内核都从这条路径处理。
+        val themeUri = extractThemePackageUri(context, intent)
+        if (themeUri != null) {
+            if (navigator.current() !is Route.ColorPalette) {
+                navigator.push(Route.ColorPalette())
+            }
+            settingsViewModel.importTheme(context, themeUri)
+            return@CollectIntentChannel
+        }
         if (hasZipFileIntent(context, intent)) {
             handleZipIntent(intent)
             return@CollectIntentChannel

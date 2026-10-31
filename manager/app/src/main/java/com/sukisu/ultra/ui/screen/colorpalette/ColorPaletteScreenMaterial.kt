@@ -1,7 +1,12 @@
 package com.sukisu.ultra.ui.screen.colorpalette
 
+import com.sukisu.ultra.ai.api.R as AiR
+import com.sukisu.ultra.ai.api.AiFeatureBridge
 import android.net.Uri
+import java.io.File
 import android.os.Build
+import com.sukisu.ultra.ui.util.customText
+import com.sukisu.ultra.ui.util.CustomTextKey
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -40,9 +45,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.automirrored.rounded.MenuOpen
 import androidx.compose.material.icons.filled.Brightness1
 import androidx.compose.material.icons.filled.Brightness3
@@ -136,10 +143,17 @@ import com.sukisu.ultra.ui.util.ThemePackageStorage
 fun ColorPaletteScreenMaterial(
     state: ColorPaletteUiState,
     actions: ColorPaletteScreenActions,
+    section: String? = null,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    val listState = rememberLazyListState()
     val uiState = state.uiState
     val currentColorMode = state.currentColorMode
+
+    LaunchedEffect(section) {
+        val index = appearanceSectionIndex(section) ?: return@LaunchedEffect
+        listState.animateScrollToItem(index)
+    }
     val currentKeyColor = uiState.keyColor
     val colorStyle = state.currentPaletteStyle
     val colorSpec = state.currentColorSpec
@@ -179,14 +193,24 @@ fun ColorPaletteScreenMaterial(
         }
     }
     val exportThemeLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/zip")
+        contract = ActivityResultContracts.CreateDocument("*/*")
     ) { uri: Uri? ->
         uri?.let { actions.onExportTheme(context, it) }
+    }
+    val exportImagesLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("*/*")
+    ) { uri: Uri? ->
+        uri?.let { actions.onExportImages(context, it) }
     }
     val importThemeLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let { actions.onImportTheme(context, it) }
+    }
+    val homeCardImageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        uri?.let { actions.onPickHomeCardImage(context, it) }
     }
 
     ExpressiveScaffold(
@@ -195,7 +219,7 @@ fun ColorPaletteScreenMaterial(
                 navigationIcon = {
                     TopBarBackButton(onClick = actions.onBack)
                 },
-                title = { Text(stringResource(R.string.settings_theme)) },
+                title = { Text(customText(CustomTextKey.PAGE_APPEARANCE)) },
                 colors = expressiveTopAppBarColors(),
                 windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
                 scrollBehavior = scrollBehavior
@@ -209,6 +233,7 @@ fun ColorPaletteScreenMaterial(
         val isAmoled = currentColorMode.isAmoled
 
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
@@ -236,6 +261,8 @@ fun ColorPaletteScreenMaterial(
                         floatingBottomBarBlur = uiState.enableFloatingBottomBarBlur,
                         navigationBadge = uiState.enableNavigationBadge,
                         pageScale = uiState.pageScale,
+                        customHomeTitle = uiState.customHomeTitle,
+                        homeCardImagePath = uiState.homeCardImagePath,
                     ),
                 )
             }
@@ -295,6 +322,25 @@ fun ColorPaletteScreenMaterial(
                                         headlineContent = { Text(stringResource(id = R.string.settings_crop_background)) },
                                         supportingContent = { Text(stringResource(id = R.string.settings_crop_background_summary)) },
                                         leadingContent = { IconTile(Icons.Rounded.Crop, stringResource(id = R.string.settings_crop_background)) },
+                                    )
+                                }
+                            }
+                            val hasCustomBgFile = hasCustomBg && !usingSystemWallpaper
+                            val hasCardBgFile = uiState.homeCardImagePath.isNotBlank() && File(uiState.homeCardImagePath).isFile
+                            if (hasCustomBgFile || hasCardBgFile) {
+                                add {
+                                    SegmentedListItem(
+                                        onClick = {
+                                            val fileName = when {
+                                                hasCustomBgFile && hasCardBgFile -> "SukiSU-images.zip"
+                                                hasCardBgFile -> "SukiSU-home-card.png"
+                                                else -> "SukiSU-background.png"
+                                            }
+                                            exportImagesLauncher.launch(fileName)
+                                        },
+                                        headlineContent = { Text(stringResource(id = R.string.settings_export_images)) },
+                                        supportingContent = { Text(stringResource(id = R.string.settings_export_images_summary)) },
+                                        leadingContent = { IconTile(Icons.Rounded.FileDownload, stringResource(id = R.string.settings_export_images)) },
                                     )
                                 }
                             }
@@ -445,7 +491,7 @@ fun ColorPaletteScreenMaterial(
             item {
                 SegmentedColumn(
                     modifier = Modifier.padding(horizontal = 16.dp),
-                    content = listOf(
+                    content = listOf<@Composable () -> Unit>(
                         {
                             SegmentedListItem(
                                 onClick = {
@@ -460,7 +506,13 @@ fun ColorPaletteScreenMaterial(
                             SegmentedListItem(
                                 onClick = {
                                     importThemeLauncher.launch(
-                                        arrayOf("application/zip", "application/x-zip-compressed")
+                                        arrayOf(
+                                            ThemePackageStorage.THEME_MIME_TYPE,
+                                            "application/octet-stream",
+                                            "application/zip",
+                                            "application/x-zip-compressed",
+                                            "*/*"
+                                        )
                                     )
                                 },
                                 headlineContent = { Text(stringResource(id = R.string.theme_import)) },
@@ -482,7 +534,7 @@ fun ColorPaletteScreenMaterial(
             item {
                 SegmentedColumn(
                     modifier = Modifier.padding(horizontal = 16.dp),
-                    content = listOf(
+                    content = listOf<@Composable () -> Unit>(
                         {
                             SegmentedSwitchItem(
                                 icon = Icons.Rounded.Fingerprint,
@@ -500,6 +552,17 @@ fun ColorPaletteScreenMaterial(
                                 checked = state.hideHomeWarnings,
                                 onCheckedChange = actions.onSetHideHomeWarnings
                             )
+                        },
+                        {
+                            if (AiFeatureBridge.isAvailable) {
+                                SegmentedSwitchItem(
+                                    icon = Icons.Rounded.AutoAwesome,
+                                    title = stringResource(id = AiR.string.ai_show_home_card),
+                                    summary = stringResource(id = AiR.string.ai_show_home_card_summary),
+                                    checked = state.showAiHomeCard,
+                                    onCheckedChange = actions.onSetShowAiHomeCard
+                                )
+                            }
                         },
                         {
                             val currentIcon = BuiltinAppIcons.find(uiState.appIconId)
@@ -534,22 +597,13 @@ fun ColorPaletteScreenMaterial(
                         },
                         {
                             SegmentedListItem(
-                                onClick = {
-                                    homeTitleDraft = uiState.customHomeTitle
-                                    showHomeTitleDialog = true
-                                },
-                                headlineContent = { Text(stringResource(R.string.settings_home_title)) },
-                                supportingContent = {
-                                    Text(
-                                        uiState.customHomeTitle.ifBlank {
-                                            stringResource(R.string.settings_home_title_default)
-                                        }
-                                    )
-                                },
+                                onClick = actions.onOpenCustomTexts,
+                                headlineContent = { Text(stringResource(R.string.settings_custom_texts)) },
+                                supportingContent = { Text(stringResource(R.string.settings_custom_texts_summary)) },
                                 leadingContent = {
                                     IconTile(
                                         Icons.Rounded.Edit,
-                                        stringResource(R.string.settings_home_title),
+                                        stringResource(R.string.settings_custom_texts),
                                     )
                                 },
                                 trailingContent = {
@@ -560,8 +614,53 @@ fun ColorPaletteScreenMaterial(
                                     )
                                 },
                             )
+                        },
+                        {
+                            SegmentedListItem(
+                                onClick = {
+                                    homeCardImageLauncher.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    )
+                                },
+                                headlineContent = { Text(stringResource(R.string.settings_home_card_image)) },
+                                supportingContent = {
+                                    Text(
+                                        if (uiState.homeCardImagePath.isBlank()) {
+                                            stringResource(R.string.settings_home_card_image_default)
+                                        } else {
+                                            stringResource(R.string.settings_home_card_image_set)
+                                        }
+                                    )
+                                },
+                                leadingContent = {
+                                    IconTile(
+                                        Icons.Rounded.Image,
+                                        stringResource(R.string.settings_home_card_image),
+                                    )
+                                },
+                            )
                         }
-                    )
+                    ) + if (uiState.homeCardImagePath.isNotBlank()) {
+                        listOf<@Composable () -> Unit>(
+                            {
+                                SegmentedListItem(
+                                    onClick = actions.onClearHomeCardImage,
+                                    headlineContent = { Text(stringResource(R.string.settings_home_card_image_clear)) },
+                                    supportingContent = {
+                                        Text(stringResource(R.string.settings_home_card_image_clear_summary))
+                                    },
+                                    leadingContent = {
+                                        IconTile(
+                                            Icons.Rounded.Restore,
+                                            stringResource(R.string.settings_home_card_image_clear),
+                                        )
+                                    },
+                                )
+                            }
+                        )
+                    } else {
+                        emptyList()
+                    }
                 )
             }
 
@@ -658,7 +757,7 @@ fun ColorPaletteScreenMaterial(
             item {
                 SegmentedColumn(
                     modifier = Modifier.padding(horizontal = 16.dp),
-                    content = listOf(
+                    content = listOf<@Composable () -> Unit>(
                         {
                             val styles = PaletteStyle.entries
                             SegmentedDropdownItem(
@@ -718,7 +817,7 @@ fun ColorPaletteScreenMaterial(
                 item {
                     SegmentedColumn(
                         modifier = Modifier.padding(horizontal = 16.dp),
-                        content = listOf(
+                        content = listOf<@Composable () -> Unit>(
                             {
                                 SegmentedSwitchItem(
                                     icon = Icons.AutoMirrored.Rounded.MenuOpen,
@@ -737,7 +836,7 @@ fun ColorPaletteScreenMaterial(
             item {
                 SegmentedColumn(
                     modifier = Modifier.padding(horizontal = 16.dp),
-                    content = listOf(
+                    content = listOf<@Composable () -> Unit>(
                         {
                             SegmentedSwitchItem(
                                 icon = Icons.Rounded.Swipe,
@@ -1056,5 +1155,26 @@ private fun ColorButtonMaterial(
                 }
             }
         }
+    }
+}
+
+/** Item index of an appearance section; conditional items shift later indices. */
+private fun appearanceSectionIndex(section: String?): Int? {
+    val id = section?.trim()?.lowercase()?.replace('-', '_') ?: return null
+    val hasPredictive = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+    return when (id) {
+        "preview" -> 0
+        "background" -> 1
+        "theme_package" -> 2
+        "appearance" -> 3
+        "colors" -> 4
+        "color_mode" -> 5
+        "palette" -> 6
+        "chrome", "bottom_bar" -> 7
+        "predictive_back" -> if (hasPredictive) 8 else 7
+        "behavior", "gestures" -> if (hasPredictive) 9 else 8
+        "scale" -> if (hasPredictive) 10 else 9
+        "module_description" -> if (hasPredictive) 11 else 10
+        else -> null
     }
 }

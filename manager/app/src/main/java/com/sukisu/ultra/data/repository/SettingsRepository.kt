@@ -12,6 +12,8 @@ interface SettingsRepository {
     var customBackgroundScrimPercent: Int
     var backgroundAppearanceExpanded: Boolean
     var customHomeTitle: String
+    var customTexts: Map<String, String>
+    var homeCardImagePath: String
     var uiMode: String
     var appLanguage: String
     var checkUpdate: Boolean
@@ -70,6 +72,8 @@ interface SettingsRepository {
     var suLogFilters: Set<String>?
     var showFullStatus: Boolean
     var hideHomeWarnings: Boolean
+    /** Show the AI assistant card on the home page. Off disconnects the home entry entirely. */
+    var showAiHomeCard: Boolean
     var autoJailbreak: Boolean
     var useSoftReboot: Boolean
 
