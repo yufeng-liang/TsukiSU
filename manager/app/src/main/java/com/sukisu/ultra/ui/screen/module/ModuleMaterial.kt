@@ -56,7 +56,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
@@ -312,7 +312,7 @@ fun ModulePagerMaterial(
                         onClick = { actions.onOpenRepo() }
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.Cloud,
+                            imageVector = Icons.Outlined.Storefront,
                             contentDescription = stringResource(id = R.string.module_repos)
                         )
                     }

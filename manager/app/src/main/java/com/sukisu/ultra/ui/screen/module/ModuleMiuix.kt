@@ -157,7 +157,7 @@ import top.yukonga.miuix.kmp.basic.rememberPullToRefreshState
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Delete
-import top.yukonga.miuix.kmp.icon.extended.Download
+import top.yukonga.miuix.kmp.icon.extended.Store
 import top.yukonga.miuix.kmp.icon.extended.Sort
 import top.yukonga.miuix.kmp.icon.extended.Undo
 import top.yukonga.miuix.kmp.icon.extended.UploadCloud
@@ -410,7 +410,7 @@ fun ModulePagerMiuix(
                                 onClick = actions.onOpenRepo,
                             ) {
                                 Icon(
-                                    imageVector = MiuixIcons.Download,
+                                    imageVector = MiuixIcons.Store,
                                     tint = colorScheme.onSurface,
                                     contentDescription = null
                                 )
