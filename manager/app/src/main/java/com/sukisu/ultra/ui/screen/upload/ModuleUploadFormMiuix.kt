@@ -110,6 +110,8 @@ fun ModuleUploadFormMiuix(
     onRemove: (String) -> Unit,
     onSourceChange: (String, String) -> Unit,
     onApplySourceToAll: (String) -> Unit,
+    onRepoChange: (String, String) -> Unit,
+    onApplyRepoToAll: (String) -> Unit,
     onUidChange: (String) -> Unit,
     onRetryUid: () -> Unit,
     onSelectItem: (String) -> Unit,
@@ -232,6 +234,8 @@ fun ModuleUploadFormMiuix(
                         onRemove = { onRemove(current.path) },
                         onSourceChange = { onSourceChange(current.path, it) },
                         onApplyToAll = { onApplySourceToAll(current.source) },
+                        onRepoChange = { onRepoChange(current.path, it) },
+                        onApplyRepoToAll = { onApplyRepoToAll(current.repoUrl) },
                     )
                 }
             }
@@ -553,9 +557,12 @@ private fun UploadZipCardMiuix(
     enabled: Boolean,
     onRemove: () -> Unit,
     onSourceChange: (String) -> Unit,
+    onRepoChange: (String) -> Unit,
     onApplyToAll: () -> Unit,
+    onApplyRepoToAll: () -> Unit,
 ) {
     val problem = ModuleUploadRules.sourceProblem(item.source)
+    val repoProblem = ModuleUploadRules.repoProblem(item.repoUrl)
     Card(
         modifier = Modifier
             .padding(top = 20.dp)
@@ -659,8 +666,8 @@ private fun UploadZipCardMiuix(
 
             SectionLabelMiuix(
                 icon = Icons.Outlined.Link,
+                // 与 Material 侧一致：出处与源码仓库二选一，分组标题不再单独标必填。
                 text = stringResource(R.string.module_upload_section_source),
-                required = true,
             )
             TextField(
                 value = item.source,
@@ -677,31 +684,72 @@ private fun UploadZipCardMiuix(
                 ),
                 modifier = Modifier.fillMaxWidth(),
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    modifier = Modifier.weight(1f),
-                    // 「必填」已上移到分组标题右边；这一行只留填在哪、填成什么样，
-                    // 只有真正填错（不是 coolapk 链接）才转成错误色。
-                    text = stringResource(
-                        if (problem == ModuleUploadRules.SourceProblem.NOT_COOLAPK) {
-                            R.string.module_upload_source_invalid
-                        } else {
-                            R.string.module_upload_source_hint
-                        }
-                    ),
-                    fontSize = 12.sp,
-                    color = if (problem == ModuleUploadRules.SourceProblem.NOT_COOLAPK) {
-                        colorScheme.error
+            Text(
+                // 「必填」已上移到分组标题右边；这一行只留填在哪、填成什么样，
+                // 只有真正填错（不是 coolapk 链接）才转成错误色。
+                text = stringResource(
+                    if (problem == ModuleUploadRules.SourceProblem.NOT_COOLAPK) {
+                        R.string.module_upload_source_invalid
                     } else {
-                        colorScheme.onSurfaceVariantSummary
-                    },
-                )
+                        R.string.module_upload_source_hint
+                    }
+                ),
+                fontSize = 12.sp,
+                color = if (problem == ModuleUploadRules.SourceProblem.NOT_COOLAPK) {
+                    colorScheme.error
+                } else {
+                    colorScheme.onSurfaceVariantSummary
+                },
+            )
+            TextField(
+                value = item.repoUrl,
+                onValueChange = onRepoChange,
+                enabled = enabled,
+                label = stringResource(R.string.module_upload_repo),
+                useLabelAsPlaceholder = true,
+                singleLine = true,
+                // 仓库也是 URL：与出处同一个键盘策略。
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Done,
+                    autoCorrectEnabled = false,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                text = stringResource(
+                    when {
+                        repoProblem == ModuleUploadRules.RepoProblem.INVALID ->
+                            R.string.module_upload_repo_invalid
+                        item.indexRepoUrl.isNotBlank() && item.repoUrl.isBlank() ->
+                            R.string.module_upload_repo_inherit_hint
+                        else -> R.string.module_upload_repo_hint
+                    }
+                ),
+                fontSize = 12.sp,
+                color = if (repoProblem == ModuleUploadRules.RepoProblem.INVALID) {
+                    colorScheme.error
+                } else {
+                    colorScheme.onSurfaceVariantSummary
+                },
+            )
+            // 两个「应用到全部」各按各的合法状态放行：半截链接/半截仓库灌进全部条目
+            // 只会让红字留在当前这一枚上。
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            ) {
                 TextButton(
                     text = stringResource(R.string.module_upload_apply_all),
                     onClick = onApplyToAll,
-                    // 与 Material 侧一致：只判非空会把半截链接灌进全部条目。
                     enabled = enabled &&
                         ModuleUploadRules.sourceProblem(item.source) == ModuleUploadRules.SourceProblem.OK,
+                )
+                TextButton(
+                    text = stringResource(R.string.module_upload_apply_repo_all),
+                    onClick = onApplyRepoToAll,
+                    enabled = enabled &&
+                        ModuleUploadRules.repoProblem(item.repoUrl) == ModuleUploadRules.RepoProblem.OK,
                 )
             }
         }

@@ -1,6 +1,7 @@
 package com.sukisu.ultra.ui.screen.upload
 
 import com.sukisu.ultra.R
+import com.sukisu.ultra.data.model.GitHubRepoAddress
 import com.sukisu.ultra.ui.util.BatchLimits
 import com.sukisu.ultra.ui.util.CheckStatus
 import com.sukisu.ultra.ui.util.ContributionBatch
@@ -231,6 +232,44 @@ object ModuleUploadRules {
         return LimitProblem.NONE
     }
 
+    /**
+     * 源码仓库校验结论。与 [SourceProblem] 分开：两者是「二选一」的两条来源，
+     * 合并成一个枚举的话，「填了出处但仓库为空」会被当成「出处有问题」。
+     */
+    enum class RepoProblem {
+        /** 用户没填。 */
+        EMPTY,
+
+        /** 填了，但不是 GitHub 的 `<owner>/<repo>`。 */
+        INVALID,
+
+        OK,
+    }
+
+    /**
+     * 源码仓库必须是 GitHub 仓库：`https://github.com/<owner>/<repo>`（协议可省、末尾 `/` 与
+     * `.git` 可带）。归一化与网页端、Worker 同一条规则（见 [GitHubRepoAddress]）。
+     *
+     * 本地只判形状，**不**判断仓库是否存在、是否公开、最新版有没有被覆盖——那三件事
+     * 都要问 GitHub，由服务端在提交时做，失败会硬失败并把原因写回来。
+     */
+    fun repoProblem(raw: String): RepoProblem {
+        val text = raw.trim()
+        if (text.isEmpty()) return RepoProblem.EMPTY
+        return if (GitHubRepoAddress.normalize(text) != null) RepoProblem.OK else RepoProblem.INVALID
+    }
+
+    /**
+     * 这一枚在本地算不算「有来源」：出处是酷安链接、仓库形状合法、或索引里已经绑过仓库。
+     *
+     * 第三种是契约里「留空将沿用」的那条路：用户改一版老模块时不想重填仓库，
+     * 只要索引里记着，服务端就会继承，本地没理由拦。
+     */
+    fun hasOrigin(item: UploadZip): Boolean =
+        sourceProblem(item.source) == SourceProblem.OK ||
+            repoProblem(item.repoUrl) == RepoProblem.OK ||
+            item.indexRepoUrl.isNotBlank()
+
     /** 出处校验结论。 */
     enum class SourceProblem {
         EMPTY,
@@ -329,6 +368,10 @@ object ModuleUploadRules {
         CHECKING,
         RECORDED,
         SOURCE,
+        /** 填了仓库地址，但不是 GitHub 的 `<owner>/<repo>`。 */
+        REPO,
+        /** 出处与仓库都没填，索引里也没绑过仓库——连一条来源都没有。 */
+        ORIGIN,
         OWNERSHIP,
     }
 
@@ -409,7 +452,18 @@ object ModuleUploadRules {
         // 已经收录的那一版不再重复投（要换内容走下架/更新那条路，不在本屏）。
         if (items.any { it.checking }) blockers += SubmitBlocker.CHECKING
         if (items.any { it.status == CheckStatus.RECORDED }) blockers += SubmitBlocker.RECORDED
-        if (items.any { sourceProblem(it.source) != SourceProblem.OK }) blockers += SubmitBlocker.SOURCE
+        // 来源是「出处」与「源码仓库」二选一：两条都空（且索引里也没有可沿用的仓库）
+        // 才拦；填了但形状不对则分别报 SOURCE / REPO，避免同一处问题算成两项。
+        val anyMissingOrigin = items.any {
+            it.source.isBlank() && it.repoUrl.isBlank() && it.indexRepoUrl.isBlank()
+        }
+        if (anyMissingOrigin) blockers += SubmitBlocker.ORIGIN
+        if (items.any { sourceProblem(it.source) == SourceProblem.NOT_COOLAPK }) {
+            blockers += SubmitBlocker.SOURCE
+        }
+        if (items.any { repoProblem(it.repoUrl) == RepoProblem.INVALID }) {
+            blockers += SubmitBlocker.REPO
+        }
         // 归属闸：只要有一枚被服务端判成「别人的」，整批都不许发。
         // 一批是原子提交（一个 PR、一次口令），放过这一枚等于让整批带着一次必然的拒绝走完全程。
         if (items.any { it.eligibility.blocksSubmit }) blockers += SubmitBlocker.OWNERSHIP
@@ -434,6 +488,8 @@ object ModuleUploadRules {
             SubmitBlocker.CONSENT,
             SubmitBlocker.PROOF,
             SubmitBlocker.SOURCE,
+            SubmitBlocker.REPO,
+            SubmitBlocker.ORIGIN,
             SubmitBlocker.LIMITS,
             SubmitBlocker.EMPTY,
             -> true

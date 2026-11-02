@@ -30,6 +30,21 @@ data class UploadZip(
     val sha256: String,
     val sizeBytes: Long,
     val source: String = "",
+    /**
+     * 作者公开的源码仓库（GitHub），可留空。
+     *
+     * 存的是用户原始输入，归一化只在判据与提交时做——输入过程中就改写会把用户
+     * 正在敲的半截地址改坏（比如把 `https://github.com/o` 直接变成空）。
+     */
+    val repoUrl: String = "",
+    /**
+     * 索引里这个模块已经绑定的仓库地址；空表示索引没记录。
+     *
+     * 与 [repoUrl] 分开存，是为了回答两个不同的问题：用户留空时服务端会不会沿用
+     * （看这里非空），以及「留空将沿用」这句提示要不要显示。索引里没有绑定关系时
+     * 留空就必须拦下——否则提交上去只会换一个 400。
+     */
+    val indexRepoUrl: String = "",
     /** 手选包自己的收录状态；null = 还没查，checking = 正在查。 */
     val status: CheckStatus? = null,
     val checking: Boolean = false,

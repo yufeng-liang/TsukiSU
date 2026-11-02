@@ -64,7 +64,7 @@
     <string name="module_repo_coolapk_enabled">已开启</string>
     <string name="module_repo_coolapk_restore">恢复酷安社区模块</string>
     <string name="module_repo_coolapk_restore_summary">你之前删掉了这个源。恢复后仍是关闭状态，需要在商店页重新开启。</string>
-    <string name="module_repo_coolapk_post">出处</string>
+    <string name="module_repo_coolapk_post">来源</string>
     <string name="module_repo_coolapk_uploader">上传者</string>
     <string name="module_repo_coolapk_submitted_at">提交时间</string>
     <string name="module_repo_coolapk_open_failed">没能打开酷安，也没能打开链接。</string>
@@ -99,6 +99,18 @@
     <string name="module_repo_immutable_release">不可变的 GitHub Release</string>
     <string name="module_repo_source_commit">提交 %s</string>
     <string name="module_repo_license">许可证</string>
+    <string name="module_repo_badge_open_source">开源</string>
+    <string name="module_repo_badge_public_source">公开源码</string>
+    <string name="module_repo_badge_latest_not_covered">最新版未覆盖</string>
+    <string name="module_repo_badge_stale">源码校验失效</string>
+    <string name="module_repo_repo_evidence_title">源码校验</string>
+    <string name="module_repo_repo_url">仓库</string>
+    <string name="module_repo_repo_tag">匹配的 Release</string>
+    <string name="module_repo_repo_digest">摘要</string>
+    <string name="module_repo_repo_checked_at">最近校验</string>
+    <string name="module_repo_repo_valid">已通过 GitHub 校验</string>
+    <string name="module_repo_repo_stale">校验已失效</string>
+    <string name="module_repo_no_public_source">作者未提供公开源码</string>
     <string name="module_repo_homepage">主页</string>
     <string name="module_repo_support">支持</string>
     <string name="module_repo_integrity">完整性</string>
@@ -1047,7 +1059,7 @@
     <string name="module_contribution_version">版本</string>
     <string name="module_contribution_author">作者</string>
     <string name="module_contribution_description">描述</string>
-    <string name="module_contribution_source">出处链接或来源说明</string>
+    <string name="module_contribution_source">来源链接或说明</string>
     <string name="module_contribution_uploader">你的署名，会公开展示</string>
     <string name="module_contribution_uid">酷安 UID</string>
     <string name="module_contribution_uid_hint">个人主页链接末尾那串数字（coolapk.com/u/…）</string>
@@ -1059,7 +1071,7 @@
     <string name="module_contribution_uid_self_reported">服务端未开启核实</string>
     <string name="module_contribution_uid_required">核实酷安 UID 后才能分享</string>
     <string name="module_contribution_section_info">模块信息</string>
-    <string name="module_contribution_section_identity">出处与身份</string>
+    <string name="module_contribution_section_identity">来源与身份</string>
     <string name="module_contribution_proof_title">酷安签名</string>
     <string name="module_contribution_proof_copy">复制</string>
     <string name="module_contribution_proof_hint">打开酷安「我的 → 编辑资料 → 签名」，填入这串后保存，再回来提交。这是为了证明账号归你，且它只绑你此刻要上传的这个包：换模块 ID、换包或重新发起投稿都会换一串——签名里对不上就照当前这串再填一次。</string>
@@ -1274,16 +1286,22 @@
     <string name="module_upload_blockers">还差 %1$d 项才能上传</string>
     <string name="module_upload_detail_package">安装包</string>
     <string name="module_upload_section_info">模块信息</string>
-    <string name="module_upload_section_source">出处</string>
+    <string name="module_upload_section_source">来源</string>
     <string name="module_upload_section_identity">上传者</string>
-    <string name="module_upload_source">这个模块的酷安链接</string>
-    <string name="module_upload_source_hint">贴这个模块的酷安帖子链接。没有的话可以顺手发一个帖子存档，也顺便宣传一下。</string>
+    <string name="module_upload_source">酷安帖子链接</string>
+    <string name="module_upload_source_hint">贴这个模块的酷安帖子链接。「来源」也可以填源码仓库，两者至少填一项，也可以都填。没有帖子的话可以顺手发一个存档，也顺便宣传一下。</string>
     <string name="module_upload_source_empty">必填</string>
-    <!-- 分组标题右侧的必填徽标。出处与上传者共用，所以不带字段名。 -->
+    <!-- 分组标题右侧的必填徽标。来源与上传者共用，所以不带字段名。 -->
     <string name="module_upload_must_do">必做</string>
     <string name="module_upload_required">必填</string>
     <string name="module_upload_source_invalid">必须是 coolapk.com 的链接</string>
     <string name="module_upload_apply_all">应用到全部</string>
+    <string name="module_upload_apply_repo_all">仓库应用到全部</string>
+    <string name="module_upload_repo">源码仓库（GitHub）</string>
+    <string name="module_upload_repo_hint">填一个公开的 GitHub 仓库，别人就能核对安装的内容；和上面的酷安帖子至少填一个，也可以都填。</string>
+    <string name="module_upload_repo_invalid">源码仓库必须是 https://github.com/&lt;owner&gt;/&lt;repo&gt; 形式</string>
+    <string name="module_upload_repo_inherit_hint">该模块已绑定源码仓库，留空将沿用。</string>
+    <string name="module_upload_origin_required">请至少填写「酷安帖子」或「源码仓库」之一</string>
     <string name="module_upload_size">大小</string>
     <string name="module_upload_sha">SHA-256</string>
     <string name="module_upload_remove">移除</string>
@@ -1555,7 +1573,7 @@
     <string name="module_upload_identity_pledge_title">承诺</string>
     <string name="module_upload_identity_pledge_lead">此后以该账号提交的每一份模块，都适用以下三条；本次承诺随账号存档。</string>
     <string name="module_upload_identity_pledge_1">我提交的模块不含恶意代码：不窃取凭据、不静默回传、不破坏系统与数据。</string>
-    <string name="module_upload_identity_pledge_2">我是所提交模块的作者或已获授权，标注的出处真实可查。</string>
+    <string name="module_upload_identity_pledge_2">我是所提交模块的作者或已获授权，标注的来源真实可查。</string>
     <string name="module_upload_identity_pledge_3">我提交的压缩包不含个人隐私、账号信息与密钥。</string>
     <string name="module_upload_identity_pledge">我确认以上三条，并接受违反时的公开处置与追责。</string>
     <string name="module_upload_identity_verify">验证并继续</string>

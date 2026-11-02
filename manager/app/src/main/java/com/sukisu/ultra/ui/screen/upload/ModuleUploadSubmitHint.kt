@@ -43,6 +43,16 @@ fun submitHint(
     ModuleUploadRules.SubmitBlocker.RECORDED in blockers ->
         stringResource(R.string.module_upload_status_recorded_summary)
 
+    // 来源两条一起说：只说「还差一项」会让用户不知道该填哪一栏。
+    ModuleUploadRules.SubmitBlocker.ORIGIN in blockers ->
+        stringResource(R.string.module_upload_origin_required)
+
+    ModuleUploadRules.SubmitBlocker.REPO in blockers ->
+        stringResource(R.string.module_upload_repo_invalid)
+
+    ModuleUploadRules.SubmitBlocker.SOURCE in blockers ->
+        stringResource(R.string.module_upload_source_invalid)
+
     else -> stringResource(
         R.string.module_upload_blockers,
         ModuleUploadRules.actionableBlockerCount(blockers),

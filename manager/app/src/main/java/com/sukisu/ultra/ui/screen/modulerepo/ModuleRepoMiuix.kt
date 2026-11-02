@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.net.Uri
 import android.widget.Toast
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
@@ -16,6 +17,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -105,6 +107,7 @@ import com.sukisu.ultra.ui.theme.backgroundAwareColor
 import com.sukisu.ultra.ui.theme.isInDarkTheme
 import com.sukisu.ultra.ui.util.BlurredBar
 import com.sukisu.ultra.ui.util.CoolapkLinks
+import com.sukisu.ultra.ui.util.formatEpochTime
 import com.sukisu.ultra.ui.util.formatFileSize
 import com.sukisu.ultra.ui.util.formatRepoTime
 import com.sukisu.ultra.ui.util.isDownloadAvailable
@@ -298,6 +301,8 @@ fun ModuleRepoScreenMiuix(
                         Spacer(Modifier.height(6.dp))
                     }
                     items(state.searchResults, key = { "${it.sourceId}|${it.moduleId}" }, contentType = { "module" }) { module ->
+                        // 源码状态只有一枚，判据与 Material 侧共用同一个函数。
+                        val sourceBadge = repoSourceBadge(module)
                         AppCard(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -356,6 +361,32 @@ fun ModuleRepoScreenMiuix(
                                                     .padding(start = 6.dp)
                                                     .clip(RoundedCornerShape(6.dp))
                                                     .background(sourceBg)
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                                                fontWeight = FontWeight(750),
+                                                maxLines = 1
+                                            )
+                                        }
+                                        if (sourceBadge != null) {
+                                            Text(
+                                                // 绿勾只给校验通过的两态；灰标没有勾。
+                                                text = (if (sourceBadge.isVerified) "✓ " else "") +
+                                                    stringResource(repoSourceBadgeLabel(sourceBadge)),
+                                                fontSize = 12.sp,
+                                                color = if (sourceBadge.isVerified) {
+                                                    colorScheme.onPrimary
+                                                } else {
+                                                    colorScheme.onSurfaceVariantSummary
+                                                },
+                                                modifier = Modifier
+                                                    .padding(start = 6.dp)
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(
+                                                        if (sourceBadge.isVerified) {
+                                                            colorScheme.primary
+                                                        } else {
+                                                            colorScheme.surfaceContainer
+                                                        }
+                                                    )
                                                     .padding(horizontal = 6.dp, vertical = 2.dp),
                                                 fontWeight = FontWeight(750),
                                                 maxLines = 1
@@ -595,6 +626,7 @@ fun ModuleRepoScreenMiuix(
                             }
                             items(items = filteredModules, key = { "${it.sourceId}|${it.moduleId}" }, contentType = { "module" }) { module ->
                                 val moduleAuthor = stringResource(id = R.string.module_author)
+                                val sourceBadge = repoSourceBadge(module)
                                 val latestReleaseTime = remember(module.latestReleaseTime) {
                                     formatRepoTime(module.latestReleaseTime)
                                 }
@@ -1457,6 +1489,12 @@ fun InfoPage(
                     }
                 }
             }
+            // 源码仓库证据；仓库地址与上面的「源码」重复时不再画一遍。
+            sourceEvidenceItemsMiuix(
+                evidence = module.repoEvidence,
+                includeRepoUrl = module.repoEvidence.repoUrl != sourceUrl,
+                onOpenUrl = { uriHandler.openUri(it) },
+            )
             item { Spacer(Modifier.height(12.dp)) }
         }
     }
@@ -1466,13 +1504,16 @@ fun InfoPage(
 private enum class RepoDetailPageKindMiuix { README, RELEASES, INFO }
 
 /**
- * 酷安条目的「信息」页：出处（帖子链接）、上传者（昵称，有 UID 时挂主页入口）、提交时间。
+ * 酷安条目的「信息」页：出处（帖子链接）、上传者（昵称，有 UID 时挂主页入口）、提交时间，
+ * 以及源码仓库的校验证据。
  *
  * 没有 GitHub 仓库、星标、README——索引里没有的东西整块不画，而不是画一行空占位。
+ * 有仓库证据但没有酷安元数据时也走这一页，所以 [meta] 可空。
  */
 @Composable
 private fun CoolapkInfoPageMiuix(
-    meta: CoolapkModuleMeta,
+    meta: CoolapkModuleMeta?,
+    evidence: RepoEvidenceArg,
     innerPadding: PaddingValues,
     scrollBehavior: ScrollBehavior,
     backdrop: LayerBackdrop?,
@@ -1480,12 +1521,13 @@ private fun CoolapkInfoPageMiuix(
     secondaryContainer: Color,
     onOpenPost: (String) -> Unit,
     onOpenUser: (String) -> Unit,
+    onOpenUrl: (String) -> Unit,
 ) {
     val layoutDirection = LocalLayoutDirection.current
-    val postUrl = meta.postUrl?.takeIf { it.isNotBlank() }
-    val uploaderName = meta.uploaderName?.takeIf { it.isNotBlank() }
-    val uploaderUid = meta.coolapkUid?.takeIf { it.isNotBlank() }
-    val submittedAt = meta.submittedAt?.takeIf { it.isNotBlank() }
+    val postUrl = meta?.postUrl?.takeIf { it.isNotBlank() }
+    val uploaderName = meta?.uploaderName?.takeIf { it.isNotBlank() }
+    val uploaderUid = meta?.coolapkUid?.takeIf { it.isNotBlank() }
+    val submittedAt = meta?.submittedAt?.takeIf { it.isNotBlank() }
     Box(modifier = if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier) {
         LazyColumn(
             modifier = Modifier
@@ -1608,6 +1650,8 @@ private fun CoolapkInfoPageMiuix(
                     }
                 }
             }
+            // 出处信息之后接源码仓库的校验证据。
+            sourceEvidenceItemsMiuix(evidence = evidence, onOpenUrl = onOpenUrl)
             item { Spacer(Modifier.height(12.dp)) }
         }
     }
@@ -1662,9 +1706,9 @@ fun ModuleRepoDetailScreenMiuix(
     val tabReadme = stringResource(R.string.tab_readme)
     val tabReleases = stringResource(R.string.tab_releases)
     val tabInfo = stringResource(R.string.tab_info)
-    // 酷安条目没有 README，这一页整个去掉；出处信息没接上数据之前也不摆一张空的「信息」页。
+    // 酷安条目没有 README，这一页整个去掉；出处信息与仓库证据都没有时才不摆「信息」页。
     val pages = when {
-        isCoolapkModule && coolapkMeta != null -> listOf(
+        isCoolapkModule && (coolapkMeta != null || module.repoEvidence.repoUrl.isNotEmpty()) -> listOf(
             RepoDetailPageKindMiuix.RELEASES,
             RepoDetailPageKindMiuix.INFO,
         )
@@ -1786,29 +1830,27 @@ fun ModuleRepoDetailScreenMiuix(
                     downloads = downloads)
 
                 RepoDetailPageKindMiuix.INFO -> if (isCoolapkModule) {
-                    // pages 里给出 INFO 就说明 coolapkMeta 非空，这里再收窄一次类型。
-                    val meta = coolapkMeta
-                    if (meta != null) {
-                        CoolapkInfoPageMiuix(
-                            meta = meta,
-                            innerPadding = innerPadding,
-                            scrollBehavior = scrollBehavior,
-                            backdrop = backdrop,
-                            actionIconTint = actionIconTint,
-                            secondaryContainer = secondaryContainer,
-                            onOpenPost = { url ->
-                                // 装了酷安就进帖子，没装回落网页；两条都不通才提示。
-                                if (!CoolapkLinks.openPost(context, url)) {
-                                    Toast.makeText(context, coolapkOpenFailed, Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            onOpenUser = { uid ->
-                                if (!CoolapkLinks.openUser(context, uid)) {
-                                    Toast.makeText(context, coolapkOpenFailed, Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                        )
-                    }
+                    CoolapkInfoPageMiuix(
+                        meta = coolapkMeta,
+                        evidence = module.repoEvidence,
+                        innerPadding = innerPadding,
+                        scrollBehavior = scrollBehavior,
+                        backdrop = backdrop,
+                        actionIconTint = actionIconTint,
+                        secondaryContainer = secondaryContainer,
+                        onOpenPost = { url ->
+                            // 装了酷安就进帖子，没装回落网页；两条都不通才提示。
+                            if (!CoolapkLinks.openPost(context, url)) {
+                                Toast.makeText(context, coolapkOpenFailed, Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onOpenUser = { uid ->
+                            if (!CoolapkLinks.openUser(context, uid)) {
+                                Toast.makeText(context, coolapkOpenFailed, Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onOpenUrl = actions.onOpenUrl,
+                    )
                 } else {
                     val uriHandler = remember(actions) {
                         object : UriHandler {
@@ -1827,6 +1869,120 @@ fun ModuleRepoDetailScreenMiuix(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * 「信息」页的源码校验证据块（Miuix 版）：仓库、LICENSE、命中的 Release tag、摘要、
+ * 最近校验时间与复验结论收在一张卡里，免得六段标题把页面拉长。
+ *
+ * 没有仓库时只留一句灰字——空壳比没有更让人困惑；字段缺哪个就跳过哪一行，
+ * 免得把「索引没给」画成「作者没填」。
+ */
+private fun LazyListScope.sourceEvidenceItemsMiuix(
+    evidence: RepoEvidenceArg,
+    includeRepoUrl: Boolean = true,
+    onOpenUrl: (String) -> Unit,
+) {
+    if (evidence.repoUrl.isEmpty()) {
+        item {
+            Text(
+                text = stringResource(R.string.module_repo_no_public_source),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                fontSize = 13.sp,
+                color = colorScheme.onSurfaceVariantSummary,
+            )
+        }
+        return
+    }
+    item {
+        SmallTitle(
+            text = stringResource(R.string.module_repo_repo_evidence_title),
+            modifier = Modifier.padding(top = 6.dp)
+        )
+        AppCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp),
+            insideMargin = PaddingValues(16.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (includeRepoUrl) {
+                    EvidenceLineMiuix(
+                        label = R.string.module_repo_repo_url,
+                        value = evidence.repoUrl,
+                        action = {
+                            IconButton(
+                                minHeight = 35.dp,
+                                minWidth = 35.dp,
+                                onClick = { onOpenUrl(evidence.repoUrl) },
+                            ) {
+                                Icon(
+                                    modifier = Modifier.size(20.dp),
+                                    imageVector = MiuixIcons.Link,
+                                    contentDescription = null
+                                )
+                            }
+                        }
+                    )
+                }
+                if (evidence.repoLicense.isNotEmpty()) {
+                    EvidenceLineMiuix(R.string.module_repo_license, evidence.repoLicense)
+                }
+                if (evidence.matchedTag.isNotEmpty()) {
+                    EvidenceLineMiuix(R.string.module_repo_repo_tag, evidence.matchedTag)
+                }
+                if (evidence.digest.isNotEmpty()) {
+                    EvidenceLineMiuix(R.string.module_repo_repo_digest, shortRepoDigest(evidence.digest))
+                }
+                if (evidence.repoCheckedAt > 0L) {
+                    EvidenceLineMiuix(
+                        R.string.module_repo_repo_checked_at,
+                        formatEpochTime(LocalContext.current, evidence.repoCheckedAt)
+                    )
+                }
+                Text(
+                    text = stringResource(
+                        if (evidence.repoVerified) {
+                            R.string.module_repo_repo_valid
+                        } else {
+                            R.string.module_repo_repo_stale
+                        }
+                    ),
+                    fontSize = 12.sp,
+                    color = if (evidence.repoVerified) colorScheme.primary else colorScheme.onSurfaceVariantSummary
+                )
+            }
+        }
+    }
+}
+
+/** 证据卡的一行：小号标题 + 值，右侧可选一个打开链接的按钮。 */
+@Composable
+private fun EvidenceLineMiuix(
+    @StringRes label: Int,
+    value: String,
+    action: (@Composable () -> Unit)? = null,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = stringResource(label),
+            fontSize = 12.sp,
+            color = colorScheme.onSurfaceVariantSummary
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = value,
+                fontSize = 14.sp,
+                color = colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            action?.invoke()
         }
     }
 }

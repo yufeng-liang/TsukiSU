@@ -30,6 +30,8 @@ class ModuleUploadRulesTest {
         sha: String = "a".repeat(64),
         size: Long = 1024L,
         source: String = "https://www.coolapk.com/feed/1",
+        repoUrl: String = "",
+        indexRepoUrl: String = "",
         eligibility: UpdateEligibility = UpdateEligibility.UNKNOWN,
         eligibilityReason: String = "",
     ) = UploadZip(
@@ -44,6 +46,8 @@ class ModuleUploadRulesTest {
         sha256 = sha,
         sizeBytes = size,
         source = source,
+        repoUrl = repoUrl,
+        indexRepoUrl = indexRepoUrl,
         eligibility = eligibility,
         eligibilityReason = eligibilityReason,
     )
@@ -443,8 +447,9 @@ class ModuleUploadRulesTest {
                 probe(items = listOf(zip("a").copy(status = CheckStatus.RECORDED))).second,
         )
         assertTrue(
+            // 空来源现在是「两栏都没填」（ORIGIN）；SOURCE 只留给「填了但不是酷安帖子」。
             ModuleUploadRules.SubmitBlocker.SOURCE in
-                probe(items = listOf(zip("a", source = ""))).second,
+                probe(items = listOf(zip("a", source = "https://example.com/post"))).second,
         )
         assertTrue(
             ModuleUploadRules.SubmitBlocker.OWNERSHIP in
@@ -727,4 +732,66 @@ class ModuleUploadRulesTest {
         // 只看它的话，刷新键会在这里停转，用户会以为刷完了（或者以为没点上）。
         assertTrue(idle.copy(checking = true).busy)
     }
+    // ── 来源二选一：出处 / 源码仓库 ─────────────────────────────────────────
+
+    @Test
+    fun `repo problem separates empty from malformed`() {
+        assertEquals(ModuleUploadRules.RepoProblem.EMPTY, ModuleUploadRules.repoProblem(""))
+        assertEquals(ModuleUploadRules.RepoProblem.EMPTY, ModuleUploadRules.repoProblem("   "))
+        assertEquals(
+            ModuleUploadRules.RepoProblem.OK,
+            ModuleUploadRules.repoProblem("https://github.com/owner/repo"),
+        )
+        // 填了但形状不对，必须与「没填」分开：一个该提醒改，一个该提醒补。
+        assertEquals(
+            ModuleUploadRules.RepoProblem.INVALID,
+            ModuleUploadRules.repoProblem("https://gitlab.com/owner/repo"),
+        )
+    }
+
+    @Test
+    fun `a valid repo replaces the coolapk source`() {
+        val blockers = blockersOf(listOf(zip(source = "", repoUrl = "https://github.com/o/r")))
+        assertTrue(blockers.isEmpty())
+    }
+
+    @Test
+    fun `an index-bound repo is enough to submit without typing anything`() {
+        // 索引里已经绑了仓库：表单留空表示「沿用」，不该逼用户再抄一遍地址。
+        val blockers = blockersOf(
+            listOf(zip(source = "", repoUrl = "", indexRepoUrl = "https://github.com/o/r")),
+        )
+        assertTrue(blockers.isEmpty())
+    }
+
+    @Test
+    fun `both origins missing blocks the batch`() {
+        val blockers = blockersOf(listOf(zip(source = "", repoUrl = "")))
+        assertEquals(listOf(ModuleUploadRules.SubmitBlocker.ORIGIN), blockers)
+    }
+
+    @Test
+    fun `a malformed repo is reported as its own problem`() {
+        val blockers = blockersOf(listOf(zip(source = "", repoUrl = "not a repo")))
+        assertEquals(listOf(ModuleUploadRules.SubmitBlocker.REPO), blockers)
+    }
+
+    @Test
+    fun `a non-coolapk source is still rejected even with a repo`() {
+        // 「来源」这一栏的语义没变：填了就必须是酷安帖子；不想填就走仓库。
+        val blockers = blockersOf(
+            listOf(zip(source = "https://example.com/post", repoUrl = "https://github.com/o/r")),
+        )
+        assertEquals(listOf(ModuleUploadRules.SubmitBlocker.SOURCE), blockers)
+    }
+
+    private fun blockersOf(items: List<UploadZip>): List<ModuleUploadRules.SubmitBlocker> =
+        ModuleUploadRules.submitBlockers(
+            items = items,
+            uidVerified = true,
+            consent = true,
+            signatureValid = true,
+            submitting = false,
+            limitProblem = ModuleUploadRules.LimitProblem.NONE,
+        )
 }

@@ -1,6 +1,7 @@
 package com.sukisu.ultra.data.repository
 
 import com.sukisu.ultra.data.model.Author
+import com.sukisu.ultra.data.model.GitHubRepoAddress
 import com.sukisu.ultra.data.model.MmrlModuleInfo
 import com.sukisu.ultra.data.model.MmrlVersion
 import com.sukisu.ultra.data.model.RepoModule
@@ -11,6 +12,7 @@ import org.json.JSONObject
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 enum class RepoFormat {
     KERNELSU,
@@ -255,6 +257,7 @@ object RepoModuleParser {
             val zipUrl = stripTicks(v.optString("zipUrl", "")).trim()
             if (zipUrl.isEmpty()) return@mapNotNull null
             val timestamp = optSecondsValue(v, "timestamp")
+            val auto = v.optBoolean("auto", false)
             MmrlVersion(
                 version = v.optString("version", ""),
                 versionCode = optLongValue(v, "versionCode"),
@@ -264,6 +267,16 @@ object RepoModuleParser {
                 zipUrlFallback = sameOriginAssetFallback(zipUrl, indexUrl),
                 changelogUrl = stripTicks(v.optString("changelog", "")).trim().ifEmpty { null },
                 size = optLongValue(v, "size"),
+                // 版本级证据：缺了就留空，不猜。tag 与 digest 是「这版能不能被核对」的唯一凭据。
+                repoTag = stripTicks(v.optString("repoTag", "")).trim(),
+                repoDigest = repoDigestOf(v),
+                auto = auto,
+                autoVia = if (auto) {
+                    stripTicks(v.optString("autoVia", "")).trim()
+                        .takeIf { it == "repo" || it == "update-json" } ?: ""
+                } else {
+                    ""
+                },
             )
         }.sortedWith(compareByDescending<MmrlVersion> { it.versionCode }.thenByDescending { it.timestamp })
 
@@ -297,6 +310,14 @@ object RepoModuleParser {
             coolapkUid = stripTicks(item.optString("coolapkUid", "")).trim(),
             // 索引可能给毫秒也可能给秒；这里只做数值化，单位由展示侧按数量级判断。
             submittedAt = optSecondsValue(item, "submittedAt"),
+            // 源码仓库：归一化失败的地址按「没填」处理，界面据此显示「作者未提供公开源码」。
+            repoUrl = GitHubRepoAddress.normalize(stripTicks(item.optString("repoUrl", ""))) ?: "",
+            repoVerified = item.optBoolean("repoVerified", false),
+            repoCheckedAt = optEpochMillis(item, "repoCheckedAt"),
+            repoLicense = stripTicks(item.optString("repoLicense", "")).trim(),
+            // 索引显式给了布尔就按它；没给时按「最新版有没有 repoTag」派生，
+            // 免得旧索引只有仓库地址、却被列表说成「最新版未覆盖」。
+            repoCoversLatest = repoCoversLatestOf(item, latest),
             mmrl = MmrlModuleInfo(
                 readmeUrl = stripTicks(item.optString("readme", "")).trim().ifEmpty { null },
                 supportUrl = stripTicks(item.optString("support", "")).trim().ifEmpty { null },
@@ -304,6 +325,35 @@ object RepoModuleParser {
             ),
         )
     }
+
+    /** `sha256:` + 64 位小写十六进制；其它形状（大写、短哈希、别的前缀）一律当没有。 */
+    private fun repoDigestOf(obj: JSONObject): String {
+        val raw = stripTicks(obj.optString("repoDigest", "")).trim().lowercase(Locale.ROOT)
+        return if (REPO_DIGEST_RE.matches(raw)) raw else ""
+    }
+
+    /**
+     * 校验时刻统一成毫秒：索引可能给秒也可能给毫秒，按数量级判断。
+     * 1e11 毫秒约等于 1973 年，比它小的数只可能是秒。
+     */
+    private fun optEpochMillis(obj: JSONObject, key: String): Long {
+        val value = optSecondsValue(obj, key)
+        if (value <= 0L) return 0L
+        return if (value < 100_000_000_000L) value * 1000L else value
+    }
+
+    /**
+     * 最新版是否被仓库证据覆盖。显式布尔优先；缺省时按「最新版带不带 repoTag」派生。
+     * 旧索引连接口都没有时，派生结果也是 false——但那类条目根本没有 repoUrl，
+     * 界面不会显示这一条，所以不会出现「没仓库却提示未覆盖」。
+     */
+    private fun repoCoversLatestOf(item: JSONObject, latest: MmrlVersion?): Boolean {
+        val explicit = item.opt("repoCoversLatest")
+        if (explicit is Boolean) return explicit
+        return latest?.repoTag?.isNotEmpty() == true
+    }
+
+    private val REPO_DIGEST_RE = Regex("^sha256:[0-9a-f]{64}$")
 
     private fun stripTicks(s: String): String {
         val t = s.trim()

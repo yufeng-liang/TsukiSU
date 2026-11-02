@@ -7,11 +7,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sukisu.ultra.R
 import com.sukisu.ultra.data.model.Module
+import com.sukisu.ultra.data.model.RepoModule
 import com.sukisu.ultra.data.modulezip.ModuleZipArchive
+import com.sukisu.ultra.data.repository.COOLAPK_COMMUNITY_INDEX_URL
 import com.sukisu.ultra.data.repository.ModuleRepository
 import com.sukisu.ultra.data.repository.ModuleRepositoryImpl
 import com.sukisu.ultra.data.repository.SettingsRepository
 import com.sukisu.ultra.data.repository.SettingsRepositoryImpl
+import com.sukisu.ultra.data.repository.fetchIndexModules
 import com.sukisu.ultra.ksuApp
 import com.sukisu.ultra.ui.component.CoolapkUidState
 import com.sukisu.ultra.ui.component.SearchStatus
@@ -131,6 +134,15 @@ class ModuleUploadViewModel(
     private var loadJob: Job? = null
     private var lookupJob: Job? = null
     private var mineJob: Job? = null
+    private var indexLoadJob: Job? = null
+
+    /**
+     * 酷安社区索引的模块表，按 moduleId 索引；null 表示还没读过。
+     *
+     * 只用于给表单预填「来源/源码仓库」。失败时写空表而不是留 null：
+     * 留 null 会让每加一个包都再打一次注定失败的请求。
+     */
+    private var indexModules: Map<String, RepoModule>? = null
 
     /** 已经问过服务端的 id。与「查了但没问出来」（UNKNOWN）区分开，避免刷新时重复查。 */
     private val checkedIds = mutableSetOf<String>()
@@ -955,6 +967,8 @@ class ModuleUploadViewModel(
             }
         }
         _step.value = UploadStep.FORM
+        // 先查收录、再预填：预填只动空字段，两件事互不依赖，顺序只影响用户眼睛看到的先后。
+        prefillFromIndex()
         checkManual(unique.values.toList())
     }
 
@@ -1100,6 +1114,77 @@ class ModuleUploadViewModel(
             state.copy(
                 items = state.items.map { it.copy(source = trimmed) },
                 outcome = state.outcome.keepUnlessSuccess(),
+            )
+        }
+    }
+
+    /**
+     * 改一枚的源码仓库地址。
+     *
+     * 不在输入过程中归一化：用户可能正敲半截地址，改写会把光标处的文本换成别的东西。
+     * 形状判定留给 [ModuleUploadRules.repoProblem]，提交时由 [ContributionBatch] 归一化。
+     */
+    fun updateRepoUrl(path: String, value: String) {
+        val trimmed = value.take(REPO_MAX_CHARS)
+        _formState.update { state ->
+            state.copy(
+                items = state.items.map { if (it.path == path) it.copy(repoUrl = trimmed) else it },
+                outcome = state.outcome.keepUnlessSuccess(),
+            )
+        }
+    }
+
+    /** 「应用到全部」：把这一张卡上的源码仓库写给所有条目。 */
+    fun applyRepoToAll(value: String) {
+        val trimmed = value.take(REPO_MAX_CHARS)
+        _formState.update { state ->
+            state.copy(
+                items = state.items.map { it.copy(repoUrl = trimmed) },
+                outcome = state.outcome.keepUnlessSuccess(),
+            )
+        }
+    }
+
+    /**
+     * 用酷安社区索引给刚选进来的包预填来源字段。
+     *
+     * 只在**当前为空**的字段上填，绝不覆盖用户已经敲进去的内容；索引里这个 id 没绑仓库
+     * 时也不写空串，界面据此判断要不要显示「留空将沿用」。
+     *
+     * 索引是一次性懒加载：成功缓存整张表，失败也缓存空表——这一页里再加包不会再打一次
+     * 注定失败的请求。索引读不到不是错误：预填只是省事，用户照样可以手填。
+     */
+    private fun prefillFromIndex() {
+        val cached = indexModules
+        if (cached != null) {
+            applyIndexPrefill(cached)
+            return
+        }
+        if (indexLoadJob?.isActive == true) return
+        indexLoadJob = viewModelScope.launch {
+            val loaded = withContext(Dispatchers.IO) {
+                runCatching { fetchIndexModules(ksuApp.okhttpClient, COOLAPK_COMMUNITY_INDEX_URL) }
+                    .getOrDefault(emptyList())
+            }
+            val byId = loaded.associateBy { it.moduleId }
+            indexModules = byId
+            applyIndexPrefill(byId)
+        }
+    }
+
+    private fun applyIndexPrefill(index: Map<String, RepoModule>) {
+        if (index.isEmpty()) return
+        _formState.update { state ->
+            state.copy(
+                items = state.items.map { item ->
+                    val hit = index[item.id] ?: return@map item
+                    item.copy(
+                        source = if (item.source.isBlank()) hit.source else item.source,
+                        repoUrl = if (item.repoUrl.isBlank()) hit.repoUrl else item.repoUrl,
+                        // 记下索引里绑过的仓库：用户把预填清空时，服务端仍会沿用这一个。
+                        indexRepoUrl = hit.repoUrl,
+                    )
+                },
             )
         }
     }
@@ -1897,6 +1982,9 @@ class ModuleUploadViewModel(
                         meta = ModuleUploadStaging.metaOf(item),
                         sha256 = item.sha256,
                         source = item.source.trim(),
+                        repoUrl = item.repoUrl.trim(),
+                        // 索引里记着仓库就等于「服务端会沿用」：用户留空不算没有来源。
+                        boundRepo = item.indexRepoUrl.isNotBlank(),
                         fileName = item.fileName,
                     )
                 }
@@ -2031,6 +2119,12 @@ class ModuleUploadViewModel(
 
         /** 出处链接的最大长度：够放任何酷安链接，又不至于让人把整篇文章粘进来。 */
         const val SOURCE_MAX_CHARS = 512
+
+        /**
+         * 源码仓库地址的长度上限：`https://github.com/` + 39 + 1 + 100 已经不到 200，
+         * 留 200 足够；再长必然是粘错了东西。
+         */
+        const val REPO_MAX_CHARS = 200
 
         /** 与旧投稿对话框一致：输入停止 500ms 后再核实 UID。 */
         const val UID_DEBOUNCE_MS = 500L

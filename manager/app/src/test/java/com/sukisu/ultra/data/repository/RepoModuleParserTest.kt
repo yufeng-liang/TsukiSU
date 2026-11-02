@@ -366,4 +366,102 @@ class RepoModuleParserTest {
             registryDocumentUrl("https://modules.kernelsu.org/", "/api/v1/modules/CertBridge.json"),
         )
     }
+    // ── 源码仓库字段（服务端写入索引） ──────────────────────────────────────
+
+    private val repoJson = """
+        {
+          "modules": [
+            {
+              "id": "repo_module",
+              "name": "Repo Module",
+              "author": "me",
+              "repoUrl": "https://GitHub.com/Owner/Repo.git/",
+              "repoVerified": true,
+              "repoCheckedAt": 1700000000,
+              "repoLicense": "MIT",
+              "versions": [
+                {
+                  "version": "v1.2.3",
+                  "versionCode": 12,
+                  "timestamp": 1700000000,
+                  "zipUrl": "https://example.com/v1.2.3.zip",
+                  "repoTag": "v1.2.3",
+                  "repoDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "auto": true,
+                  "autoVia": "repo"
+                }
+              ]
+            }
+          ]
+        }
+    """.trimIndent()
+
+    @Test
+    fun `mmrl carries repo evidence through`() {
+        val module = RepoModuleParser.parseMmrl(repoJson, "src", "Src").single()
+        // 地址归一化在解析层完成：下游只认这一种形状。
+        assertEquals("https://github.com/Owner/Repo", module.repoUrl)
+        assertTrue(module.repoVerified)
+        // 索引给的是秒，UI 用毫秒：解析时统一乘开，别让两边各自猜。
+        assertEquals(1_700_000_000_000L, module.repoCheckedAt)
+        assertEquals("MIT", module.repoLicense)
+        // 最新一版带 repoTag，所以覆盖最新版。
+        assertTrue(module.repoCoversLatest)
+
+        val version = module.mmrl!!.versions.single()
+        assertEquals("v1.2.3", version.repoTag)
+        assertEquals("sha256:" + "a".repeat(64), version.repoDigest)
+        assertTrue(version.auto)
+        assertEquals("repo", version.autoVia)
+    }
+
+    @Test
+    fun `repo fields are optional`() {
+        val body = """
+            {"modules": [{"id": "plain", "name": "Plain", "versions": [
+              {"version": "v1", "versionCode": 1, "zipUrl": "https://example.com/v1.zip"}
+            ]}]}
+        """.trimIndent()
+        val module = RepoModuleParser.parseMmrl(body, "", "").single()
+        assertEquals("", module.repoUrl)
+        assertFalse(module.repoVerified)
+        assertEquals(0L, module.repoCheckedAt)
+        assertEquals("", module.repoLicense)
+        // 派生：最新一版没有 repoTag，就是没覆盖最新版。
+        assertFalse(module.repoCoversLatest)
+        val version = module.mmrl!!.versions.single()
+        assertEquals("", version.repoTag)
+        assertEquals("", version.repoDigest)
+        assertFalse(version.auto)
+        assertEquals("", version.autoVia)
+    }
+
+    @Test
+    fun `malformed repo values are dropped instead of stored`() {
+        val body = """
+            {"modules": [{
+              "id": "broken", "name": "Broken",
+              "repoUrl": "https://gitlab.com/owner/repo",
+              "repoVerified": "yes",
+              "repoCheckedAt": "yesterday",
+              "versions": [{
+                "version": "v1", "versionCode": 1, "zipUrl": "https://example.com/v1.zip",
+                "repoTag": "v1",
+                "repoDigest": "deadbeef",
+                "auto": true,
+                "autoVia": "manual"
+              }]
+            }]}
+        """.trimIndent()
+        val module = RepoModuleParser.parseMmrl(body, "", "").single()
+        // 一个坏字段不该让整条模块消失，也不该把非法值原样带进 UI。
+        assertEquals("broken", module.moduleId)
+        assertEquals("", module.repoUrl)
+        assertFalse(module.repoVerified)
+        assertEquals(0L, module.repoCheckedAt)
+        val version = module.mmrl!!.versions.single()
+        assertEquals("", version.repoDigest)
+        // autoVia 只认两个通道；认不得就当没这个字段。
+        assertEquals("", version.autoVia)
+    }
 }

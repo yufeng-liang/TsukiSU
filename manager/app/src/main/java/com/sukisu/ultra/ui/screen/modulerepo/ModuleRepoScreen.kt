@@ -77,6 +77,7 @@ fun ModuleRepoScreen(selectedSourceId: String? = null) {
                 uploader = module.uploader,
                 coolapkUid = module.coolapkUid,
                 submittedAt = module.submittedAt,
+                repoEvidence = module.repoEvidenceArg(),
                 alternateSourceNames = module.alternateSourceNames,
                 readmeUrl = module.mmrl?.readmeUrl,
                 webUrl = module.mmrl?.supportUrl,

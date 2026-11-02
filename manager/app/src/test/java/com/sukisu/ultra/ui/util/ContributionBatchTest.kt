@@ -233,7 +233,7 @@ class ContributionBatchTest {
         )
         assertTrue(ContributionBatch.localRejection(dup, limits)!!.contains("同一个模块 id"))
         val blank = listOf(batchZip("demo", "a.zip", shaA, " "))
-        assertEquals("请填写每一枚的出处链接", ContributionBatch.localRejection(blank, limits))
+        assertEquals("请至少填写「来源」或「源码仓库」之一", ContributionBatch.localRejection(blank, limits))
     }
 
     @Test
@@ -312,6 +312,60 @@ class ContributionBatchTest {
         assertTrue(!copy.contains("HTTP 200"))
     }
 
+
+    // ── 来源二选一 ─────────────────────────────────────────────────────────
+
+    @Test
+    fun `a repo alone passes the local gate`() {
+        val limits = BatchLimits(maxModules = 8, maxBytes = 100, maxTotalBytes = 1000)
+        val modules = listOf(
+            batchZip("demo", "a.zip", shaA, "", repoUrl = "https://github.com/owner/repo"),
+        )
+        assertNull(ContributionBatch.localRejection(modules, limits))
+    }
+
+    @Test
+    fun `an inherited repo alone passes the local gate`() {
+        // 索引里已绑定、用户留空：boundRepo 说明「沿用」，本地闸不能当成没填。
+        val limits = BatchLimits(maxModules = 8, maxBytes = 100, maxTotalBytes = 1000)
+        val modules = listOf(batchZip("demo", "a.zip", shaA, "", boundRepo = true))
+        assertNull(ContributionBatch.localRejection(modules, limits))
+    }
+
+    @Test
+    fun `a malformed repo is rejected with its own wording`() {
+        val limits = BatchLimits(maxModules = 8, maxBytes = 100, maxTotalBytes = 1000)
+        val modules = listOf(batchZip("demo", "a.zip", shaA, "", repoUrl = "https://gitlab.com/o/r"))
+        assertEquals(
+            "源码仓库必须是 https://github.com/<owner>/<repo> 形式",
+            ContributionBatch.localRejection(modules, limits),
+        )
+    }
+
+    @Test
+    fun `manifest omits an empty source and normalizes the repo`() {
+        val modules = listOf(
+            batchZip("demo", "a.zip", shaA, "", repoUrl = "https://GitHub.com/Owner/Repo.git/"),
+        )
+        val json = JSONObject(ContributionBatch.buildManifestJson(modules))
+        val first = json.getJSONArray("modules").getJSONObject(0)
+        // 空值省略键，而不是写空串：服务端用「键在不在」区分「没填」与「填错」。
+        assertFalse(first.has("source"))
+        assertEquals("https://github.com/Owner/Repo", first.getString("repoUrl"))
+        assertEquals(shaA, first.getString("sha256"))
+    }
+
+    @Test
+    fun `manifest keeps a source when one is given`() {
+        val modules = listOf(
+            batchZip("demo", "a.zip", shaA, " https://www.coolapk.com/feed/1 ", repoUrl = "https://github.com/o/r"),
+        )
+        val first = JSONObject(ContributionBatch.buildManifestJson(modules))
+            .getJSONArray("modules").getJSONObject(0)
+        assertEquals("https://www.coolapk.com/feed/1", first.getString("source"))
+        assertEquals("https://github.com/o/r", first.getString("repoUrl"))
+    }
+
     // ── helpers ────────────────────────────────────────────────────────────
 
     private fun batchZip(
@@ -321,6 +375,8 @@ class ContributionBatchTest {
         source: String,
         size: Int = 4,
         fileName: String = "",
+        repoUrl: String = "",
+        boundRepo: Boolean = false,
     ): BatchZip {
         val dir = Files.createTempDirectory("batch-test").toFile()
         val file = File(dir, name)
@@ -337,6 +393,8 @@ class ContributionBatchTest {
             ),
             sha256 = sha,
             source = source,
+            repoUrl = repoUrl,
+            boundRepo = boundRepo,
             fileName = fileName,
         )
     }

@@ -31,6 +31,19 @@ data class AuthorArg(
 ) : Parcelable
 
 @Parcelize
+data class RepoEvidenceArg(
+    val repoUrl: String = "",
+    val repoVerified: Boolean = false,
+    val repoCheckedAt: Long = 0L,
+    val repoLicense: String = "",
+    val repoCoversLatest: Boolean = false,
+    /** 索引认定为「就是这个 APK」的 Release tag，或 checksums.txt@分支。 */
+    val matchedTag: String = "",
+    /** 服务端算出的 sha256 摘要，形如 sha256:<64 hex>。 */
+    val digest: String = "",
+) : Parcelable
+
+@Parcelize
 data class RepoModuleArg(
     val moduleId: String,
     val moduleName: String,
@@ -46,6 +59,8 @@ data class RepoModuleArg(
     val uploader: String = "",
     val coolapkUid: String = "",
     val submittedAt: Long = 0L,
+    /** 源码仓库校验证据。只带页面用得到的几项，不把整个 versions 塞进导航参数。 */
+    val repoEvidence: RepoEvidenceArg = RepoEvidenceArg(),
     /** Other repositories publishing the same module, merged away by deduplication. */
     val alternateSourceNames: List<String> = emptyList(),
     val readmeUrl: String? = null,

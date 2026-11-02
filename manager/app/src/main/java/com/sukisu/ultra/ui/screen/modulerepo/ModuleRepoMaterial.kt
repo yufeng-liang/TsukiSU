@@ -33,7 +33,9 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
+import androidx.annotation.StringRes
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -124,6 +126,7 @@ import com.sukisu.ultra.ui.component.material.TopBarBackButton
 import com.sukisu.ultra.ui.component.material.expressiveTopAppBarColors
 import com.sukisu.ultra.ui.component.statustag.StatusTag
 import com.sukisu.ultra.ui.util.CoolapkLinks
+import com.sukisu.ultra.ui.util.formatEpochTime
 import com.sukisu.ultra.ui.util.formatFileSize
 import com.sukisu.ultra.ui.util.formatRepoTime
 import com.sukisu.ultra.ui.util.isDownloadAvailable
@@ -443,6 +446,13 @@ private fun RepoModuleList(
         }
         items(modules, key = { "${it.sourceId}|${it.moduleId}" }, contentType = { "module" }) { module ->
             val latestReleaseTime = remember(module.latestReleaseTime) { formatRepoTime(module.latestReleaseTime) }
+            // 源码状态只有一枚：单状态由 repoSourceBadge 收口，界面这里只负责翻文案与配色。
+            val sourceBadge = remember(
+                module.repoUrl,
+                module.repoVerified,
+                module.repoCoversLatest,
+                module.repoLicense,
+            ) { repoSourceBadge(module) }
 
             TonalCard(
                 modifier = Modifier.fillMaxWidth(),
@@ -484,7 +494,7 @@ private fun RepoModuleList(
                         )
                     }
 
-                    if (module.metamodule || module.zygisk || module.sourceName.isNotEmpty()) {
+                    if (module.metamodule || module.zygisk || module.sourceName.isNotEmpty() || sourceBadge != null) {
                         Row(
                             modifier = Modifier.padding(vertical = 4.dp),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -508,6 +518,24 @@ private fun RepoModuleList(
                                     module.sourceName,
                                     contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                                     backgroundColor = MaterialTheme.colorScheme.secondaryContainer
+                                )
+                            }
+                            if (sourceBadge != null) {
+                                StatusTag(
+                                    // 绿勾是「校验通过」的唯一记号；两态灰标没有勾，
+                                    // 免得把「最新版未覆盖」也看成已核实。
+                                    label = (if (sourceBadge.isVerified) "✓ " else "") +
+                                        stringResource(repoSourceBadgeLabel(sourceBadge)),
+                                    contentColor = if (sourceBadge.isVerified) {
+                                        MaterialTheme.colorScheme.onPrimary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    backgroundColor = if (sourceBadge.isVerified) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceContainerHighest
+                                    },
                                 )
                             }
                         }
@@ -859,9 +887,10 @@ fun ModuleRepoDetailScreenMaterial(
         val tabReadme = stringResource(R.string.tab_readme)
         val tabReleases = stringResource(R.string.tab_releases)
         val tabInfo = stringResource(R.string.tab_info)
-        // 酷安条目没有 README，这一页整个去掉；出处信息没接上数据之前也不摆一张空的「信息」页。
+        // 酷安条目没有 README，这一页整个去掉；只要还有出处信息或者源码仓库证据，
+        // 「信息」页就值得留——两条都没有时不摆一张空页。
         val pages = when {
-            isCoolapkModule && coolapkMeta != null -> listOf(
+            isCoolapkModule && (coolapkMeta != null || module.repoEvidence.repoUrl.isNotEmpty()) -> listOf(
                 RepoDetailPageKind.RELEASES,
                 RepoDetailPageKind.INFO,
             )
@@ -919,26 +948,26 @@ fun ModuleRepoDetailScreenMaterial(
                     )
 
                     RepoDetailPageKind.INFO -> if (isCoolapkModule) {
-                        // pages 里给出 INFO 就说明 coolapkMeta 非空，这里再收窄一次类型。
-                        val meta = coolapkMeta
-                        if (meta != null) {
-                            CoolapkInfoPage(
-                                meta = meta,
-                                innerPadding = paddedInnerPadding,
-                                scrollBehavior = scrollBehavior,
-                                onOpenPost = { url ->
-                                    // 装了酷安就进帖子，没装回落网页；两条都不通才提示。
-                                    if (!CoolapkLinks.openPost(context, url)) {
-                                        Toast.makeText(context, coolapkOpenFailed, Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                onOpenUser = { uid ->
-                                    if (!CoolapkLinks.openUser(context, uid)) {
-                                        Toast.makeText(context, coolapkOpenFailed, Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                            )
-                        }
+                        // 有仓库证据但没有酷安元数据时也走这一页：meta 收窄为可空，
+                        // 页里按「有就画、没有就跳过」处理。
+                        CoolapkInfoPage(
+                            meta = coolapkMeta,
+                            evidence = module.repoEvidence,
+                            innerPadding = paddedInnerPadding,
+                            scrollBehavior = scrollBehavior,
+                            onOpenPost = { url ->
+                                // 装了酷安就进帖子，没装回落网页；两条都不通才提示。
+                                if (!CoolapkLinks.openPost(context, url)) {
+                                    Toast.makeText(context, coolapkOpenFailed, Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onOpenUser = { uid ->
+                                if (!CoolapkLinks.openUser(context, uid)) {
+                                    Toast.makeText(context, coolapkOpenFailed, Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onOpenUrl = actions.onOpenUrl,
+                        )
                     } else {
                         InfoPage(
                             module = module,
@@ -971,23 +1000,27 @@ fun ModuleRepoDetailScreenMaterial(
 private enum class RepoDetailPageKind { README, RELEASES, INFO }
 
 /**
- * 酷安条目的「信息」页：出处（帖子链接）、上传者（昵称，有 UID 时挂主页入口）、提交时间。
+ * 酷安条目的「信息」页：出处（帖子链接）、上传者（昵称，有 UID 时挂主页入口）、提交时间，
+ * 以及源码仓库的校验证据。
  *
  * 没有 GitHub 仓库、星标、README——索引里没有的东西整块不画，而不是画一行空占位。
+ * 有仓库证据但没有酷安元数据时也走这一页，所以 [meta] 可空。
  */
 @Composable
 private fun CoolapkInfoPage(
-    meta: CoolapkModuleMeta,
+    meta: CoolapkModuleMeta?,
+    evidence: RepoEvidenceArg,
     innerPadding: PaddingValues,
     scrollBehavior: TopAppBarScrollBehavior,
     onOpenPost: (String) -> Unit,
     onOpenUser: (String) -> Unit,
+    onOpenUrl: (String) -> Unit,
 ) {
     val layoutDirection = LocalLayoutDirection.current
-    val postUrl = meta.postUrl?.takeIf { it.isNotBlank() }
-    val uploaderName = meta.uploaderName?.takeIf { it.isNotBlank() }
-    val uploaderUid = meta.coolapkUid?.takeIf { it.isNotBlank() }
-    val submittedAt = meta.submittedAt?.takeIf { it.isNotBlank() }
+    val postUrl = meta?.postUrl?.takeIf { it.isNotBlank() }
+    val uploaderName = meta?.uploaderName?.takeIf { it.isNotBlank() }
+    val uploaderUid = meta?.coolapkUid?.takeIf { it.isNotBlank() }
+    val submittedAt = meta?.submittedAt?.takeIf { it.isNotBlank() }
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -1054,6 +1087,8 @@ private fun CoolapkInfoPage(
                 )
             }
         }
+        // 出处信息之后接源码仓库的校验证据：仓库、LICENSE、命中的 Release 与摘要。
+        sourceEvidenceItems(evidence = evidence, onOpenUrl = onOpenUrl)
         item { Spacer(Modifier.height(12.dp)) }
     }
 }
@@ -1072,6 +1107,106 @@ private fun DetailLinkButton(onClick: () -> Unit) {
             contentDescription = null,
         )
     }
+}
+
+/**
+ * 信息页的「源码校验」证据块：仓库、LICENSE、命中的 Release tag、摘要前 12 位、
+ * 最近校验时间与复验结论。
+ *
+ * 没有仓库的条目只留一句灰字——空壳比没有更让人困惑。字段缺哪个就跳过哪一行，
+ * 免得把「索引没给」画成「作者没填」。
+ */
+private fun LazyListScope.sourceEvidenceItems(
+    evidence: RepoEvidenceArg,
+    includeRepoUrl: Boolean = true,
+    onOpenUrl: (String) -> Unit,
+) {
+    if (evidence.repoUrl.isEmpty()) {
+        item {
+            Text(
+                text = stringResource(R.string.module_repo_no_public_source),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        return
+    }
+    if (includeRepoUrl) {
+        item {
+            EvidenceRow(
+                title = R.string.module_repo_repo_url,
+                value = evidence.repoUrl,
+                onOpenUrl = onOpenUrl,
+            )
+        }
+    }
+    if (evidence.repoLicense.isNotEmpty()) {
+        item { EvidenceRow(title = R.string.module_repo_license, value = evidence.repoLicense) }
+    }
+    if (evidence.matchedTag.isNotEmpty()) {
+        item { EvidenceRow(title = R.string.module_repo_repo_tag, value = evidence.matchedTag) }
+    }
+    if (evidence.digest.isNotEmpty()) {
+        item {
+            EvidenceRow(
+                title = R.string.module_repo_repo_digest,
+                value = shortRepoDigest(evidence.digest),
+            )
+        }
+    }
+    if (evidence.repoCheckedAt > 0L) {
+        item {
+            EvidenceRow(
+                title = R.string.module_repo_repo_checked_at,
+                value = formatEpochTime(LocalContext.current, evidence.repoCheckedAt),
+            )
+        }
+    }
+    item {
+        Text(
+            text = stringResource(
+                if (evidence.repoVerified) {
+                    R.string.module_repo_repo_valid
+                } else {
+                    R.string.module_repo_repo_stale
+                }
+            ),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = if (evidence.repoVerified) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+    }
+}
+
+/** 证据块的一行：标题在上、值在下，右侧可选一个打开链接的按钮。 */
+@Composable
+private fun EvidenceRow(
+    @StringRes title: Int,
+    value: String,
+    onOpenUrl: ((String) -> Unit)? = null,
+) {
+    val action: (@Composable () -> Unit)? = onOpenUrl?.let { open ->
+        { DetailLinkButton(onClick = { open(value) }) }
+    }
+    SegmentedColumn(
+        title = stringResource(title),
+        modifier = Modifier
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 8.dp),
+        content = listOf(
+            {
+                SegmentedListItem(
+                    headlineContent = { Text(text = value) },
+                    trailingContent = action,
+                )
+            }
+        ),
+    )
 }
 
 @Composable
@@ -1466,5 +1601,11 @@ fun InfoPage(
                 )
             }
         }
+        // 源码仓库证据；仓库地址与上面的「源码」重复时不再画一遍。
+        sourceEvidenceItems(
+            evidence = module.repoEvidence,
+            includeRepoUrl = module.repoEvidence.repoUrl != sourceUrl,
+            onOpenUrl = { uriHandler.openUri(it) },
+        )
     }
 }

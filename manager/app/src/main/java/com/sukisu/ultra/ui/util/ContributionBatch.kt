@@ -1,6 +1,7 @@
 package com.sukisu.ultra.ui.util
 
 import com.sukisu.ultra.data.backup.sha256Hex
+import com.sukisu.ultra.data.model.GitHubRepoAddress
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -38,6 +39,20 @@ data class BatchZip(
     val meta: ModulePropInfo,
     val sha256: String,
     val source: String,
+    /**
+     * 作者公开的源码仓库，归一化后提交；空表示这一枚没填。
+     *
+     * 与 [source] 是「二选一」：两个都空、且 [boundRepo] 为 false 时本地就拦下，
+     * 不用等服务端 400。
+     */
+    val repoUrl: String = "",
+    /**
+     * 索引里这个模块已经绑过仓库（用户留空将沿用服务端记着的那一个）。
+     *
+     * 只影响本地判据与 manifest 的键：留空时不写 `repoUrl`，服务端看到「没填且有
+     * 归属」就会继承；这里传 true 只是让本地别把「留空」误判成「没有来源」。
+     */
+    val boundRepo: Boolean = false,
     /**
      * 上传时给服务端看的文件名，形如 `{id}-{versionCode}.zip`。
      *
@@ -193,17 +208,19 @@ object ContributionBatch {
     fun buildManifestJson(modules: List<BatchZip>): String {
         val arr = JSONArray()
         for (module in modules) {
-            arr.put(
-                JSONObject()
-                    .put("id", module.meta.id)
-                    .put("sha256", module.sha256.trim().lowercase(Locale.ROOT))
-                    .put("name", module.meta.name)
-                    .put("version", module.meta.version)
-                    .put("versionCode", module.meta.versionCode)
-                    .put("author", module.meta.author)
-                    .put("description", module.meta.description)
-                    .put("source", module.source.trim())
-            )
+            val entry = JSONObject()
+                .put("id", module.meta.id)
+                .put("sha256", module.sha256.trim().lowercase(Locale.ROOT))
+                .put("name", module.meta.name)
+                .put("version", module.meta.version)
+                .put("versionCode", module.meta.versionCode)
+                .put("author", module.meta.author)
+                .put("description", module.meta.description)
+            // 空值省略键、不写 null：契约（§1）明确要求，服务端按「键在不在」判断，
+            // 一个空串会被当成「作者填了、但填错了」。
+            module.source.trim().takeIf { it.isNotEmpty() }?.let { entry.put("source", it) }
+            GitHubRepoAddress.normalize(module.repoUrl)?.let { entry.put("repoUrl", it) }
+            arr.put(entry)
         }
         return JSONObject()
             .put("version", "batch-v1")
@@ -232,7 +249,12 @@ object ContributionBatch {
             if (!SHA256_RE.matches(module.sha256.trim().lowercase(Locale.ROOT))) {
                 return "有一个包的 sha256 还没算完；请稍后再试"
             }
-            if (module.source.isBlank()) return "请填写每一枚的出处链接"
+            if (module.source.isBlank() && module.repoUrl.isBlank() && !module.boundRepo) {
+                return "请至少填写「来源」或「源码仓库」之一"
+            }
+            if (module.repoUrl.isNotBlank() && GitHubRepoAddress.normalize(module.repoUrl) == null) {
+                return "源码仓库必须是 https://github.com/<owner>/<repo> 形式"
+            }
             if (!seen.add(module.meta.id)) return "同一套里同一个模块 id 出现两次：${module.meta.id}"
             if (module.file.length() > safeLimits.maxBytes) {
                 return "这个包超过单枚上限（${humanBytes(safeLimits.maxBytes)}）；请换小包"

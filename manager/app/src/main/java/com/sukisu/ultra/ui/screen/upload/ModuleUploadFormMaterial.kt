@@ -101,6 +101,8 @@ fun ModuleUploadFormMaterial(
     onRemove: (String) -> Unit,
     onSourceChange: (String, String) -> Unit,
     onApplySourceToAll: (String) -> Unit,
+    onRepoChange: (String, String) -> Unit,
+    onApplyRepoToAll: (String) -> Unit,
     onUidChange: (String) -> Unit,
     onRetryUid: () -> Unit,
     onSelectItem: (String) -> Unit,
@@ -224,6 +226,8 @@ fun ModuleUploadFormMaterial(
                         onRemove = { onRemove(current.path) },
                         onSourceChange = { onSourceChange(current.path, it) },
                         onApplyToAll = { onApplySourceToAll(current.source) },
+                        onRepoChange = { onRepoChange(current.path, it) },
+                        onApplyRepoToAll = { onApplyRepoToAll(current.repoUrl) },
                     )
                 }
             }
@@ -558,9 +562,12 @@ private fun UploadZipCardMaterial(
     enabled: Boolean,
     onRemove: () -> Unit,
     onSourceChange: (String) -> Unit,
+    onRepoChange: (String) -> Unit,
     onApplyToAll: () -> Unit,
+    onApplyRepoToAll: () -> Unit,
 ) {
     val problem = ModuleUploadRules.sourceProblem(item.source)
+    val repoProblem = ModuleUploadRules.repoProblem(item.repoUrl)
     TonalCard(
         modifier = Modifier
             .padding(top = 20.dp)
@@ -666,8 +673,9 @@ private fun UploadZipCardMaterial(
 
             SectionLabelMaterial(
                 icon = Icons.Outlined.Link,
+                // 「出处」与「源码仓库」二选一：分组标题不再挂「必填」，由提交时的
+                // ORIGIN blocker 统一说明；单独标必填会让人以为仓库可以空着。
                 text = stringResource(R.string.module_upload_section_source),
-                required = true,
             )
             OutlinedTextField(
                 value = item.source,
@@ -699,11 +707,42 @@ private fun UploadZipCardMaterial(
                     )
                 },
             )
-            // 提示文案已归位 supportingText，这行只留「应用到全部」按钮，保持靠右。
+            OutlinedTextField(
+                value = item.repoUrl,
+                onValueChange = onRepoChange,
+                enabled = enabled,
+                label = { Text(stringResource(R.string.module_upload_repo)) },
+                singleLine = true,
+                // 与出处同一个键盘策略：仓库也是 URL，别让输入法改写。
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Done,
+                    autoCorrectEnabled = false,
+                ),
+                isError = repoProblem == ModuleUploadRules.RepoProblem.INVALID,
+                modifier = Modifier.fillMaxWidth(),
+                supportingText = {
+                    Text(
+                        stringResource(
+                            when {
+                                repoProblem == ModuleUploadRules.RepoProblem.INVALID ->
+                                    R.string.module_upload_repo_invalid
+                                // 索引里已经绑了仓库：告诉用户留空会沿用，而不是
+                                // 让空框看起来像「没来源」。
+                                item.indexRepoUrl.isNotBlank() && item.repoUrl.isBlank() ->
+                                    R.string.module_upload_repo_inherit_hint
+                                else -> R.string.module_upload_repo_hint
+                            }
+                        )
+                    )
+                },
+            )
+            // 两个「应用到全部」各管各的：把半截出处灌进全部条目，红字只会在当前这枚
+            // 显示；仓库同理，所以按各自的合法状态单独放行。
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
             ) {
                 TextButton(
                     onClick = onApplyToAll,
@@ -713,6 +752,13 @@ private fun UploadZipCardMaterial(
                         ModuleUploadRules.sourceProblem(item.source) == ModuleUploadRules.SourceProblem.OK,
                 ) {
                     Text(stringResource(R.string.module_upload_apply_all))
+                }
+                TextButton(
+                    onClick = onApplyRepoToAll,
+                    enabled = enabled &&
+                        ModuleUploadRules.repoProblem(item.repoUrl) == ModuleUploadRules.RepoProblem.OK,
+                ) {
+                    Text(stringResource(R.string.module_upload_apply_repo_all))
                 }
             }
         }
