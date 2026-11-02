@@ -327,7 +327,8 @@ class SettingsRepositoryImpl : SettingsRepository {
         set(value) = prefs.edit { putInt("pager_interception_mode", value.coerceIn(0, 2)) }
 
     override var enableBlur: Boolean
-        get() = prefs.getBoolean("enable_blur", false)
+        // 默认开启：顶栏/底栏模糊是这套 UI 的默认观感；用户显式关过仍保留 false。
+        get() = prefs.getBoolean("enable_blur", true)
         set(value) = prefs.edit { putBoolean("enable_blur", value) }
 
     override var enableFloatingBottomBar: Boolean
