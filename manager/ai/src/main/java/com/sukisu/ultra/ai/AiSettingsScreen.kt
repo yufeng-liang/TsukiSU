@@ -1,5 +1,4 @@
 package com.sukisu.ultra.ai
-import com.sukisu.ultra.ai.api.AiUiMode
 
 import android.annotation.SuppressLint
 import android.widget.Toast
@@ -53,7 +52,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 
 @SuppressLint("LocalContextGetResourceValueCall")
 @Composable
-fun AiSettingsScreen(uiMode: AiUiMode, onBack: () -> Unit) {
+fun AiSettingsScreen(onBack: () -> Unit) {
     val model = rememberAiChatViewModel()
     val state by model.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -166,33 +165,19 @@ fun AiSettingsScreen(uiMode: AiUiMode, onBack: () -> Unit) {
         }
     }
 
-    when (uiMode) {
-        AiUiMode.Material -> AiSettingsMaterial(
-            draft = draft,
-            onDraftChange = updateDraft,
-            testState = testState,
-            fetchingModels = fetchingModels,
-            onTest = testConnection,
-            onFetchModels = fetchModels,
-            onBack = {
-                advancedOptionsError()?.let { reportAdvancedOptionsError(it) }
-                onBack()
-            },
-        )
-
-        AiUiMode.Miuix -> AiSettingsMiuix(
-            draft = draft,
-            onDraftChange = updateDraft,
-            testState = testState,
-            fetchingModels = fetchingModels,
-            onTest = testConnection,
-            onFetchModels = fetchModels,
-            onBack = {
-                advancedOptionsError()?.let { reportAdvancedOptionsError(it) }
-                onBack()
-            },
-        )
-    }
+    // 助手恒用 MD3（宿主已包 AiAssistantMaterialTheme），旧 Miuix 实现保留为死代码
+    AiSettingsMaterial(
+        draft = draft,
+        onDraftChange = updateDraft,
+        testState = testState,
+        fetchingModels = fetchingModels,
+        onTest = testConnection,
+        onFetchModels = fetchModels,
+        onBack = {
+            advancedOptionsError()?.let { reportAdvancedOptionsError(it) }
+            onBack()
+        },
+    )
 
     val target = modelTarget
     if (target != null) {
@@ -201,10 +186,7 @@ fun AiSettingsScreen(uiMode: AiUiMode, onBack: () -> Unit) {
             modelTarget = null
         }
         val dismiss = { modelTarget = null }
-        when (uiMode) {
-            AiUiMode.Material -> AiModelListDialogMaterial(modelOptions, onSelect, dismiss)
-            AiUiMode.Miuix -> AiModelListDialogMiuix(modelOptions, onSelect, dismiss)
-        }
+        AiModelListDialogMaterial(modelOptions, onSelect, dismiss)
     }
 }
 

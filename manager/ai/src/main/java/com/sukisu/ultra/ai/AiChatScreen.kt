@@ -1,5 +1,4 @@
 package com.sukisu.ultra.ai
-import com.sukisu.ultra.ai.api.AiUiMode
 
 import com.sukisu.ultra.ai.api.AiNavigationTarget
 
@@ -55,7 +54,6 @@ private fun rememberShowAiHomeCard(): Boolean {
  */
 @Composable
 fun AiChatScreen(
-    uiMode: AiUiMode,
     onClose: () -> Unit,
     onOpenSettings: () -> Unit,
     onNavigate: (AiNavigationTarget) -> Unit,
@@ -140,7 +138,7 @@ fun AiChatScreen(
 
     var pendingRunCommand by remember { mutableStateOf<String?>(null) }
     val runDialog = rememberAiConfirmDialog(
-        uiMode = uiMode,
+        AiUiMode.Material,
         onConfirm = {
             pendingRunCommand?.let(model::runCodeBlock)
             pendingRunCommand = null
@@ -187,10 +185,8 @@ fun AiChatScreen(
         onNavigate = onNavigate,
     )
 
-    when (uiMode) {
-        AiUiMode.Miuix -> AiChatMiuix(state, actions)
-        AiUiMode.Material -> AiChatMaterial(state, actions)
-    }
+    // 助手恒用 MD3（宿主已包 AiAssistantMaterialTheme），旧 Miuix 实现保留为死代码
+    AiChatMaterial(state, actions)
 
     if (!disclaimerAccepted) {
         val onAccept = {
@@ -198,10 +194,7 @@ fun AiChatScreen(
             disclaimerAccepted = true
         }
         val onExit = onClose
-        when (uiMode) {
-            AiUiMode.Material -> AiDisclaimerDialogMaterial(onAccept = onAccept, onExit = onExit)
-            AiUiMode.Miuix -> AiDisclaimerDialogMiuix(onAccept = onAccept, onExit = onExit)
-        }
+        AiDisclaimerDialogMaterial(onAccept = onAccept, onExit = onExit)
     }
 }
 

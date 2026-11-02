@@ -1,7 +1,5 @@
 package com.sukisu.ultra.ai
 
-import com.sukisu.ultra.ai.api.AiUiMode
-
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -72,6 +70,15 @@ import top.yukonga.miuix.kmp.basic.ToolbarPosition
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.MiuixPopupUtils.Companion.MiuixPopupHost
+
+/**
+ * AI 界面内部使用的 UI 模式标记。上游 ai-api 已移除 AiUiMode（助手恒用 MD3），
+ * 这里保留同名 internal 枚举仅为旧 Miuix 组件（保留为死代码）的调用点可编译。
+ */
+internal enum class AiUiMode {
+    Material,
+    Miuix,
+}
 
 @Composable
 private fun backgroundImageActive(): Boolean =
@@ -406,7 +413,7 @@ class AiConfirmDialogHandle internal constructor() {
 }
 
 @Composable
-fun rememberAiConfirmDialog(
+internal fun rememberAiConfirmDialog(
     uiMode: AiUiMode,
     onConfirm: () -> Unit = {},
     onDismiss: () -> Unit = {},

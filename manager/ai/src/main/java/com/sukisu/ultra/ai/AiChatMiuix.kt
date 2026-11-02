@@ -1,5 +1,4 @@
 package com.sukisu.ultra.ai
-import com.sukisu.ultra.ai.api.AiUiMode
 
 import com.sukisu.ultra.ai.api.AiNavigationTarget
 
