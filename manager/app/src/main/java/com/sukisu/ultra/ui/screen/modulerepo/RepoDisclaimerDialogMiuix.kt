@@ -1,5 +1,6 @@
 package com.sukisu.ultra.ui.screen.modulerepo
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -89,7 +91,14 @@ fun RepoDisclaimerDialogMiuix(
                     color = colorScheme.primary,
                 )
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // 整行可点：点文字也能勾选，不用非戳那个小方块。
+                        .clickable(
+                            enabled = readToEnd,
+                            role = Role.Checkbox,
+                            onClick = { committed = !committed },
+                        ),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Checkbox(
