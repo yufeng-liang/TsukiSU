@@ -154,6 +154,11 @@
     <string name="module_uninstall_failed">Failed to uninstall: %s</string>
     <string name="module_version">Version</string>
     <string name="module_author">Author</string>
+    <!-- 作者主页是上传者自己填的，没有经过任何核验；详情页必须把这句话放在链接旁边。 -->
+    <string name="module_repo_author_unverified">Filled in by the uploader, not verified</string>
+    <string name="module_repo_author_coolapk">Coolapk profile</string>
+    <string name="module_repo_author_github">GitHub profile</string>
+    <string name="module_repo_author_unknown">Unknown author</string>
     <string name="module_preinit_no_space">preinit skipped: not enough space on /metadata</string>
     <string name="module_preinit_error">preinit skipped: invalid preinit directory</string>
     <string name="module_preinit_bootloop">preinit disabled after repeated boot failures</string>
@@ -1316,6 +1321,13 @@
     <string name="module_upload_repo_hint">A public GitHub repo lets people check what they install; fill this, the Coolapk post, or both.</string>
     <string name="module_upload_repo_invalid">Must be https://github.com/&lt;owner&gt;/&lt;repo&gt;</string>
     <string name="module_upload_repo_inherit_hint">This module is already bound to a repo; leave it empty to keep that one.</string>
+    <string name="module_upload_author_coolapk">Author\'s Coolapk profile (optional)</string>
+    <string name="module_upload_author_coolapk_hint">For example https://www.coolapk.com/u/123456 — shown as filled in by the uploader, not verified.</string>
+    <string name="module_upload_author_coolapk_invalid">Must be https://www.coolapk.com/u/&lt;4-12 digits&gt;</string>
+    <string name="module_upload_author_github">Author\'s GitHub profile (optional)</string>
+    <string name="module_upload_author_github_hint">For example https://github.com/octocat — shown as filled in by the uploader, not verified.</string>
+    <string name="module_upload_author_github_invalid">Must be https://github.com/&lt;username&gt;</string>
+    <string name="module_upload_author_inherit_hint">This module already has author profile links; leave them empty to keep the existing ones.</string>
     <string name="module_upload_origin_required">Fill at least one: Coolapk post or source repo</string>
     <string name="module_upload_size">Size</string>
     <string name="module_upload_sha">SHA-256</string>

@@ -464,4 +464,40 @@ class RepoModuleParserTest {
         // autoVia 只认两个通道；认不得就当没这个字段。
         assertEquals("", version.autoVia)
     }
+
+    @Test
+    fun `author links are normalized during parse`() {
+        val body = """
+            {"modules": [{
+              "id": "with_authors", "name": "With Authors", "author": "Alice",
+              "authorCoolapkUrl": "www.coolapk.com/u/123456",
+              "authorGithubUrl": "github.com/OctoCat",
+              "versions": [{"version": "v1", "versionCode": 1, "zipUrl": "https://example.com/v1.zip"}]
+            }]}
+        """.trimIndent()
+        val module = RepoModuleParser.parseMmrl(body, "src", "Src").single()
+        // 归一化在解析层做完，下游只认规范形状；GitHub login 保留原始大小写。
+        assertEquals("https://www.coolapk.com/u/123456", module.authorCoolapkUrl)
+        assertEquals("https://github.com/OctoCat", module.authorGithubUrl)
+        // MMRL 仍然只有单作者，作者主页不改变作者列表的形状。
+        assertEquals("Alice", module.authorList.single().name)
+    }
+
+    @Test
+    fun `malformed author links are dropped instead of stored`() {
+        val body = """
+            {"modules": [{
+              "id": "bad_authors", "name": "Bad Authors", "author": "Alice",
+              "authorCoolapkUrl": "https://www.coolapk.com/feed/1",
+              "authorGithubUrl": "https://github.com/octocat/repo",
+              "versions": [{"version": "v1", "versionCode": 1, "zipUrl": "https://example.com/v1.zip"}]
+            }]}
+        """.trimIndent()
+        val module = RepoModuleParser.parseMmrl(body, "", "").single()
+        // 作者主页只是附加信息：坏值丢掉，模块本身仍然照常出现。
+        assertEquals("bad_authors", module.moduleId)
+        assertEquals("", module.authorCoolapkUrl)
+        assertEquals("", module.authorGithubUrl)
+        assertEquals("Alice", module.authorList.single().name)
+    }
 }

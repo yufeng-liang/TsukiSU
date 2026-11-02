@@ -31,6 +31,14 @@ data class UploadZip(
     val sizeBytes: Long,
     val source: String = "",
     /**
+     * 作者本人主页（由上传者填写），可留空。
+     *
+     * 存原始输入，理由同 [repoUrl]：输入过程中归一化会把半截地址改坏。作者与上传者是
+     * 两个人，这两个字段只描述作者，上传者链接由 UID 派生，不在这里。
+     */
+    val authorCoolapkUrl: String = "",
+    val authorGithubUrl: String = "",
+    /**
      * 作者公开的源码仓库（GitHub），可留空。
      *
      * 存的是用户原始输入，归一化只在判据与提交时做——输入过程中就改写会把用户
@@ -45,6 +53,14 @@ data class UploadZip(
      * 留空就必须拦下——否则提交上去只会换一个 400。
      */
     val indexRepoUrl: String = "",
+    /**
+     * 索引里这个模块已有的作者主页；非空表示用户留空时服务端会沿用。
+     *
+     * 与 [authorCoolapkUrl] 分开存，和 [indexRepoUrl] 是同一个道理：既决定提示要不要显示，
+     * 也决定「留空」到底是沿用还是真的没有。
+     */
+    val indexAuthorCoolapkUrl: String = "",
+    val indexAuthorGithubUrl: String = "",
     /** 手选包自己的收录状态；null = 还没查，checking = 正在查。 */
     val status: CheckStatus? = null,
     val checking: Boolean = false,

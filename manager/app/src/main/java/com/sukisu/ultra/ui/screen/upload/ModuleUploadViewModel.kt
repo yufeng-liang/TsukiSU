@@ -1146,6 +1146,38 @@ class ModuleUploadViewModel(
     }
 
     /**
+     * 改一枚的作者酷安主页。
+     *
+     * 同 [updateRepoUrl]：输入过程中不归一化，形状判定在 [ModuleUploadRules.authorCoolapkProblem]，
+     * 提交时再由 [ContributionBatch] 归一化。作者主页不提供「应用到全部」——每一枚的作者
+     * 本来就可能不是同一个人，一个批量按钮只会把别人的主页写错到别的模块上。
+     */
+    fun updateAuthorCoolapkUrl(path: String, value: String) {
+        val trimmed = value.take(AUTHOR_URL_MAX_CHARS)
+        _formState.update { state ->
+            state.copy(
+                items = state.items.map {
+                    if (it.path == path) it.copy(authorCoolapkUrl = trimmed) else it
+                },
+                outcome = state.outcome.keepUnlessSuccess(),
+            )
+        }
+    }
+
+    /** 改一枚的作者 GitHub 主页；理由同 [updateAuthorCoolapkUrl]。 */
+    fun updateAuthorGithubUrl(path: String, value: String) {
+        val trimmed = value.take(AUTHOR_URL_MAX_CHARS)
+        _formState.update { state ->
+            state.copy(
+                items = state.items.map {
+                    if (it.path == path) it.copy(authorGithubUrl = trimmed) else it
+                },
+                outcome = state.outcome.keepUnlessSuccess(),
+            )
+        }
+    }
+
+    /**
      * 用酷安社区索引给刚选进来的包预填来源字段。
      *
      * 只在**当前为空**的字段上填，绝不覆盖用户已经敲进去的内容；索引里这个 id 没绑仓库
@@ -1181,8 +1213,22 @@ class ModuleUploadViewModel(
                     item.copy(
                         source = if (item.source.isBlank()) hit.source else item.source,
                         repoUrl = if (item.repoUrl.isBlank()) hit.repoUrl else item.repoUrl,
+                        // 作者主页同样只填空字段：用户自己填的优先，留空则沿用索引里的旧值。
+                        authorCoolapkUrl = if (item.authorCoolapkUrl.isBlank()) {
+                            hit.authorCoolapkUrl
+                        } else {
+                            item.authorCoolapkUrl
+                        },
+                        authorGithubUrl = if (item.authorGithubUrl.isBlank()) {
+                            hit.authorGithubUrl
+                        } else {
+                            item.authorGithubUrl
+                        },
                         // 记下索引里绑过的仓库：用户把预填清空时，服务端仍会沿用这一个。
                         indexRepoUrl = hit.repoUrl,
+                        // 作者链接同理：清空输入框后服务端会保留索引里那一份，提示要照实说。
+                        indexAuthorCoolapkUrl = hit.authorCoolapkUrl,
+                        indexAuthorGithubUrl = hit.authorGithubUrl,
                     )
                 },
             )
@@ -1983,6 +2029,8 @@ class ModuleUploadViewModel(
                         sha256 = item.sha256,
                         source = item.source.trim(),
                         repoUrl = item.repoUrl.trim(),
+                        authorCoolapkUrl = item.authorCoolapkUrl.trim(),
+                        authorGithubUrl = item.authorGithubUrl.trim(),
                         // 索引里记着仓库就等于「服务端会沿用」：用户留空不算没有来源。
                         boundRepo = item.indexRepoUrl.isNotBlank(),
                         fileName = item.fileName,
@@ -2125,6 +2173,12 @@ class ModuleUploadViewModel(
          * 留 200 足够；再长必然是粘错了东西。
          */
         const val REPO_MAX_CHARS = 200
+
+        /**
+         * 作者主页的长度上限：`https://github.com/` + 39 字符登录名也才 58，
+         * 200 足够放下任何合法值；再长必然是粘错了东西。
+         */
+        const val AUTHOR_URL_MAX_CHARS = 200
 
         /** 与旧投稿对话框一致：输入停止 500ms 后再核实 UID。 */
         const val UID_DEBOUNCE_MS = 500L

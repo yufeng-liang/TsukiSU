@@ -59,6 +59,13 @@ data class RepoModuleArg(
     val uploader: String = "",
     val coolapkUid: String = "",
     val submittedAt: Long = 0L,
+    /**
+     * 作者本人主页（由上传者填写，未验证）；空表示没填或填得不合法。
+     *
+     * 与 [uploader] 分开：上传者是贴包的人，作者是写包的人，详情页要把这两者说清楚。
+     */
+    val authorCoolapkUrl: String = "",
+    val authorGithubUrl: String = "",
     /** 源码仓库校验证据。只带页面用得到的几项，不把整个 versions 塞进导航参数。 */
     val repoEvidence: RepoEvidenceArg = RepoEvidenceArg(),
     /** Other repositories publishing the same module, merged away by deduplication. */

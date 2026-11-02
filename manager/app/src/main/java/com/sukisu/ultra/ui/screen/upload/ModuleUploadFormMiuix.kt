@@ -112,6 +112,8 @@ fun ModuleUploadFormMiuix(
     onApplySourceToAll: (String) -> Unit,
     onRepoChange: (String, String) -> Unit,
     onApplyRepoToAll: (String) -> Unit,
+    onAuthorCoolapkChange: (String, String) -> Unit,
+    onAuthorGithubChange: (String, String) -> Unit,
     onUidChange: (String) -> Unit,
     onRetryUid: () -> Unit,
     onSelectItem: (String) -> Unit,
@@ -236,6 +238,8 @@ fun ModuleUploadFormMiuix(
                         onApplyToAll = { onApplySourceToAll(current.source) },
                         onRepoChange = { onRepoChange(current.path, it) },
                         onApplyRepoToAll = { onApplyRepoToAll(current.repoUrl) },
+                        onAuthorCoolapkChange = { onAuthorCoolapkChange(current.path, it) },
+                        onAuthorGithubChange = { onAuthorGithubChange(current.path, it) },
                     )
                 }
             }
@@ -560,9 +564,13 @@ private fun UploadZipCardMiuix(
     onRepoChange: (String) -> Unit,
     onApplyToAll: () -> Unit,
     onApplyRepoToAll: () -> Unit,
+    onAuthorCoolapkChange: (String) -> Unit,
+    onAuthorGithubChange: (String) -> Unit,
 ) {
     val problem = ModuleUploadRules.sourceProblem(item.source)
     val repoProblem = ModuleUploadRules.repoProblem(item.repoUrl)
+    val authorCoolapkProblem = ModuleUploadRules.authorCoolapkProblem(item.authorCoolapkUrl)
+    val authorGithubProblem = ModuleUploadRules.authorGithubProblem(item.authorGithubUrl)
     Card(
         modifier = Modifier
             .padding(top = 20.dp)
@@ -728,6 +736,72 @@ private fun UploadZipCardMiuix(
                 ),
                 fontSize = 12.sp,
                 color = if (repoProblem == ModuleUploadRules.RepoProblem.INVALID) {
+                    colorScheme.error
+                } else {
+                    colorScheme.onSurfaceVariantSummary
+                },
+            )
+            // 作者主页是选填的附加信息：不影响来源二选一，空着就沿用索引里的旧值。
+            // 与上面的仓库分开，是因为「谁写的包」和「包的源码在哪」在详情页也是两块。
+            TextField(
+                value = item.authorCoolapkUrl,
+                onValueChange = onAuthorCoolapkChange,
+                enabled = enabled,
+                label = stringResource(R.string.module_upload_author_coolapk),
+                useLabelAsPlaceholder = true,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Done,
+                    autoCorrectEnabled = false,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                text = stringResource(
+                    when {
+                        authorCoolapkProblem == ModuleUploadRules.AuthorProblem.INVALID ->
+                            R.string.module_upload_author_coolapk_invalid
+                        item.indexAuthorCoolapkUrl.isNotBlank() &&
+                            item.authorCoolapkUrl.isBlank() ->
+                            R.string.module_upload_author_inherit_hint
+                        else -> R.string.module_upload_author_coolapk_hint
+                    }
+                ),
+                fontSize = 12.sp,
+                color = if (authorCoolapkProblem == ModuleUploadRules.AuthorProblem.INVALID) {
+                    colorScheme.error
+                } else {
+                    colorScheme.onSurfaceVariantSummary
+                },
+            )
+            TextField(
+                value = item.authorGithubUrl,
+                onValueChange = onAuthorGithubChange,
+                enabled = enabled,
+                label = stringResource(R.string.module_upload_author_github),
+                useLabelAsPlaceholder = true,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Done,
+                    autoCorrectEnabled = false,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                text = stringResource(
+                    when {
+                        authorGithubProblem == ModuleUploadRules.AuthorProblem.INVALID ->
+                            R.string.module_upload_author_github_invalid
+                        item.indexAuthorGithubUrl.isNotBlank() &&
+                            item.authorGithubUrl.isBlank() ->
+                            R.string.module_upload_author_inherit_hint
+                        else -> R.string.module_upload_author_github_hint
+                    }
+                ),
+                fontSize = 12.sp,
+                color = if (authorGithubProblem == ModuleUploadRules.AuthorProblem.INVALID) {
                     colorScheme.error
                 } else {
                     colorScheme.onSurfaceVariantSummary

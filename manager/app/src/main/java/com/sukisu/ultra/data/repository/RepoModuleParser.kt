@@ -1,6 +1,7 @@
 package com.sukisu.ultra.data.repository
 
 import com.sukisu.ultra.data.model.Author
+import com.sukisu.ultra.data.model.AuthorLinks
 import com.sukisu.ultra.data.model.GitHubRepoAddress
 import com.sukisu.ultra.data.model.MmrlModuleInfo
 import com.sukisu.ultra.data.model.MmrlVersion
@@ -310,6 +311,14 @@ object RepoModuleParser {
             coolapkUid = stripTicks(item.optString("coolapkUid", "")).trim(),
             // 索引可能给毫秒也可能给秒；这里只做数值化，单位由展示侧按数量级判断。
             submittedAt = optSecondsValue(item, "submittedAt"),
+            // 作者主页（不是上传者）：由上传者填写。归一化失败的链接按「没填」处理，
+            // 不让一条坏链接把整条模块从列表里踢掉——老索引里这两键本来就不存在。
+            authorCoolapkUrl = AuthorLinks.normalizeCoolapk(
+                stripTicks(item.optString("authorCoolapkUrl", "")),
+            ) ?: "",
+            authorGithubUrl = AuthorLinks.normalizeGithub(
+                stripTicks(item.optString("authorGithubUrl", "")),
+            ) ?: "",
             // 源码仓库：归一化失败的地址按「没填」处理，界面据此显示「作者未提供公开源码」。
             repoUrl = GitHubRepoAddress.normalize(stripTicks(item.optString("repoUrl", ""))) ?: "",
             repoVerified = item.optBoolean("repoVerified", false),

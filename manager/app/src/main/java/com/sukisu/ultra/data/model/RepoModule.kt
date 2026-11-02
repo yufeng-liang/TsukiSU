@@ -92,6 +92,15 @@ data class RepoModule(
     /** 提交时间，epoch 毫秒或秒都由索引给；0 表示索引没带这个字段。 */
     val submittedAt: Long = 0L,
     /**
+     * 作者本人主页，由上传者填写、归一化后的地址；空表示没填或填得不合法。
+     *
+     * 与 [uploader] 是两个人：作者是写在 module.prop 里的那一位，上传者是把包贴到索引里的人。
+     * 这两个链接只代表「上传者声称这是作者」，没有做过任何验证，所以界面必须一并标注，
+     * 否则读者会把「有人填了」当成「已经核实」。
+     */
+    val authorCoolapkUrl: String = "",
+    val authorGithubUrl: String = "",
+    /**
      * 作者公开的源码仓库，归一化后的 `https://github.com/<owner>/<repo>`。
      *
      * 空表示索引里没有这个字段（旧索引、或作者没填）。App 只按「有没有」判断，

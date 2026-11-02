@@ -103,6 +103,8 @@ fun ModuleUploadFormMaterial(
     onApplySourceToAll: (String) -> Unit,
     onRepoChange: (String, String) -> Unit,
     onApplyRepoToAll: (String) -> Unit,
+    onAuthorCoolapkChange: (String, String) -> Unit,
+    onAuthorGithubChange: (String, String) -> Unit,
     onUidChange: (String) -> Unit,
     onRetryUid: () -> Unit,
     onSelectItem: (String) -> Unit,
@@ -228,6 +230,8 @@ fun ModuleUploadFormMaterial(
                         onApplyToAll = { onApplySourceToAll(current.source) },
                         onRepoChange = { onRepoChange(current.path, it) },
                         onApplyRepoToAll = { onApplyRepoToAll(current.repoUrl) },
+                        onAuthorCoolapkChange = { onAuthorCoolapkChange(current.path, it) },
+                        onAuthorGithubChange = { onAuthorGithubChange(current.path, it) },
                     )
                 }
             }
@@ -565,9 +569,13 @@ private fun UploadZipCardMaterial(
     onRepoChange: (String) -> Unit,
     onApplyToAll: () -> Unit,
     onApplyRepoToAll: () -> Unit,
+    onAuthorCoolapkChange: (String) -> Unit,
+    onAuthorGithubChange: (String) -> Unit,
 ) {
     val problem = ModuleUploadRules.sourceProblem(item.source)
     val repoProblem = ModuleUploadRules.repoProblem(item.repoUrl)
+    val authorCoolapkProblem = ModuleUploadRules.authorCoolapkProblem(item.authorCoolapkUrl)
+    val authorGithubProblem = ModuleUploadRules.authorGithubProblem(item.authorGithubUrl)
     TonalCard(
         modifier = Modifier
             .padding(top = 20.dp)
@@ -732,6 +740,66 @@ private fun UploadZipCardMaterial(
                                 item.indexRepoUrl.isNotBlank() && item.repoUrl.isBlank() ->
                                     R.string.module_upload_repo_inherit_hint
                                 else -> R.string.module_upload_repo_hint
+                            }
+                        )
+                    )
+                },
+            )
+            // 作者主页是选填的附加信息：不影响来源二选一，空着就沿用索引里的旧值。
+            // 两个字段连着放，与上面「来源」里的仓库分开——仓库是模块的出处，
+            // 这里是写包的人，详情页也分两块显示，表单跟着分开才不至于被当成同一件事。
+            OutlinedTextField(
+                value = item.authorCoolapkUrl,
+                onValueChange = onAuthorCoolapkChange,
+                enabled = enabled,
+                label = { Text(stringResource(R.string.module_upload_author_coolapk)) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Done,
+                    autoCorrectEnabled = false,
+                ),
+                isError = authorCoolapkProblem == ModuleUploadRules.AuthorProblem.INVALID,
+                modifier = Modifier.fillMaxWidth(),
+                supportingText = {
+                    Text(
+                        stringResource(
+                            when {
+                                authorCoolapkProblem == ModuleUploadRules.AuthorProblem.INVALID ->
+                                    R.string.module_upload_author_coolapk_invalid
+                                // 索引里已经有作者主页：说清楚留空是「沿用」而不是「没有」。
+                                item.indexAuthorCoolapkUrl.isNotBlank() &&
+                                    item.authorCoolapkUrl.isBlank() ->
+                                    R.string.module_upload_author_inherit_hint
+                                else -> R.string.module_upload_author_coolapk_hint
+                            }
+                        )
+                    )
+                },
+            )
+            OutlinedTextField(
+                value = item.authorGithubUrl,
+                onValueChange = onAuthorGithubChange,
+                enabled = enabled,
+                label = { Text(stringResource(R.string.module_upload_author_github)) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Done,
+                    autoCorrectEnabled = false,
+                ),
+                isError = authorGithubProblem == ModuleUploadRules.AuthorProblem.INVALID,
+                modifier = Modifier.fillMaxWidth(),
+                supportingText = {
+                    Text(
+                        stringResource(
+                            when {
+                                authorGithubProblem == ModuleUploadRules.AuthorProblem.INVALID ->
+                                    R.string.module_upload_author_github_invalid
+                                item.indexAuthorGithubUrl.isNotBlank() &&
+                                    item.authorGithubUrl.isBlank() ->
+                                    R.string.module_upload_author_inherit_hint
+                                else -> R.string.module_upload_author_github_hint
                             }
                         )
                     )

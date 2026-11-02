@@ -33,6 +33,11 @@ internal data class CoolapkModuleMeta(
     val uploaderName: String? = null,
     val coolapkUid: String? = null,
     val submittedAt: String? = null,
+    /** 作者名（module.prop 里的那一位），与上传者不是同一个人。 */
+    val authorName: String? = null,
+    /** 作者主页，由上传者填写；空表示没填。详情页必须同时标注「未验证」。 */
+    val authorCoolapkUrl: String? = null,
+    val authorGithubUrl: String? = null,
 )
 
 /** 这条模块是不是来自酷安社区索引。 */
@@ -42,18 +47,27 @@ internal fun RepoModuleArg.isCoolapkCommunityModule(): Boolean =
 /**
  * 把这条模块的索引字段折成详情页要的出处信息。
  *
- * 只有 [RepoModuleArg.source]（上传者当时贴的帖子地址）在，才算「有出处」：其它仓库的索引
+ * 出处帖、作者酷安主页、作者 GitHub 主页三者至少有一个，才算「有东西可画」：其它仓库的索引
  * 没有这套字段，酷安索引里的老条目也可能缺——这时返回 null，详情页不画信息页，也不留空壳。
- * 昵称、UID、时间都是可选的，缺哪条由界面整行不画。
+ * 只填了仓库、没贴帖子的模块仍然要画作者块：作者是谁与「出处是个帖子」是两件事，
+ * 不能因为没帖子就把作者一起藏掉。昵称、UID、时间都是可选的，缺哪条由界面整行不画。
  */
 internal fun RepoModuleArg.coolapkMeta(): CoolapkModuleMeta? {
-    val postUrl = source.takeIf { it.isNotBlank() } ?: return null
+    val postUrl = source.takeIf { it.isNotBlank() }
+    val authorCoolapk = authorCoolapkUrl.takeIf { it.isNotBlank() }
+    val authorGithub = authorGithubUrl.takeIf { it.isNotBlank() }
+    if (postUrl == null && authorCoolapk == null && authorGithub == null) return null
     return CoolapkModuleMeta(
         postUrl = postUrl,
         uploaderName = uploader.takeIf { it.isNotBlank() },
         // 昵称在酷安站内不唯一，只有 UID 能稳定跳主页，所以按钮的有无看 UID。
         coolapkUid = coolapkUid.takeIf { it.isNotBlank() },
         submittedAt = submittedAt.takeIf { it > 0L }?.let(::epochToIso),
+        // MMRL 只保留单作者；优先用作者列表里的名字，老索引只有 authors 串时退回它。
+        authorName = authorsList.firstOrNull()?.name?.takeIf { it.isNotBlank() }
+            ?: authors.takeIf { it.isNotBlank() },
+        authorCoolapkUrl = authorCoolapk,
+        authorGithubUrl = authorGithub,
     )
 }
 

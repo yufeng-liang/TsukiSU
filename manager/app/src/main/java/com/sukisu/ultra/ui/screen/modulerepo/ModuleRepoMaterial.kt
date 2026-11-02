@@ -1021,6 +1021,12 @@ private fun CoolapkInfoPage(
     val uploaderName = meta?.uploaderName?.takeIf { it.isNotBlank() }
     val uploaderUid = meta?.coolapkUid?.takeIf { it.isNotBlank() }
     val submittedAt = meta?.submittedAt?.takeIf { it.isNotBlank() }
+    // 作者与上传者是两个人：作者是写包的人，上传者是把它贴到酷安的人。作者主页由上传者
+    // 填写，服务端没有核验过，所以这一块必须把「未验证」写在链接旁边。
+    val authorName = meta?.authorName?.takeIf { it.isNotBlank() }
+    val authorCoolapkUrl = meta?.authorCoolapkUrl?.takeIf { it.isNotBlank() }
+    val authorGithubUrl = meta?.authorGithubUrl?.takeIf { it.isNotBlank() }
+    val hasAuthor = authorName != null || authorCoolapkUrl != null || authorGithubUrl != null
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -1032,6 +1038,52 @@ private fun CoolapkInfoPage(
             bottom = innerPadding.calculateBottomPadding(),
         ),
     ) {
+        if (hasAuthor) {
+            item {
+                val authorItems = buildList<@Composable () -> Unit> {
+                    // 名字那行始终在：没有链接也要让人知道作者是谁，而不是整块消失。
+                    add {
+                        SegmentedListItem(
+                            headlineContent = {
+                                Text(authorName ?: stringResource(R.string.module_repo_author_unknown))
+                            },
+                            supportingContent = {
+                                Text(stringResource(R.string.module_repo_author_unverified))
+                            },
+                        )
+                    }
+                    authorCoolapkUrl?.let { url ->
+                        add {
+                            SegmentedListItem(
+                                headlineContent = {
+                                    Text(stringResource(R.string.module_repo_author_coolapk))
+                                },
+                                supportingContent = { Text(text = url) },
+                                trailingContent = { DetailLinkButton(onClick = { onOpenUrl(url) }) },
+                            )
+                        }
+                    }
+                    authorGithubUrl?.let { url ->
+                        add {
+                            SegmentedListItem(
+                                headlineContent = {
+                                    Text(stringResource(R.string.module_repo_author_github))
+                                },
+                                supportingContent = { Text(text = url) },
+                                trailingContent = { DetailLinkButton(onClick = { onOpenUrl(url) }) },
+                            )
+                        }
+                    }
+                }
+                SegmentedColumn(
+                    title = stringResource(R.string.module_author),
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 8.dp),
+                    content = authorItems,
+                )
+            }
+        }
         if (postUrl != null) {
             item {
                 SegmentedColumn(

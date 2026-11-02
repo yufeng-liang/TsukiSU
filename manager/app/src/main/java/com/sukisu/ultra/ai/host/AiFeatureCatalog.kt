@@ -954,6 +954,9 @@ object AiFeatureCatalog : AiFeatureService {
         uploader = uploader,
         coolapkUid = coolapkUid,
         submittedAt = submittedAt,
+        // 作者主页跟着模块走，AI 打开的详情页也要能看到，别只在这里丢掉。
+        authorCoolapkUrl = authorCoolapkUrl,
+        authorGithubUrl = authorGithubUrl,
         alternateSourceNames = alternateSourceNames,
         readmeUrl = mmrl?.readmeUrl,
         webUrl = mmrl?.supportUrl,

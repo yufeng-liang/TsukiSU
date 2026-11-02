@@ -65,6 +65,11 @@
     <string name="module_uninstall_failed">無法解除安裝：%s</string>
     <string name="module_version">版本</string>
     <string name="module_author">作者</string>
+    <!-- 作者主頁是上傳者自己填的，沒有經過任何核驗；詳情頁必須把這句話放在連結旁邊。 -->
+    <string name="module_repo_author_unverified">由上傳者填寫，未驗證</string>
+    <string name="module_repo_author_coolapk">酷安主頁</string>
+    <string name="module_repo_author_github">GitHub 主頁</string>
+    <string name="module_repo_author_unknown">作者未知</string>
     <string name="show_system_apps">顯示系統 App</string>
     <string name="send_log">傳送日誌</string>
     <string name="safe_mode">安全模式</string>
@@ -414,6 +419,13 @@
     <string name="module_upload_repo_hint">填一個公開的 GitHub 倉庫，別人就能核對安裝的內容；和上面的酷安帖子至少填一個，也可以都填。</string>
     <string name="module_upload_repo_invalid">原始碼倉庫必須是 https://github.com/&lt;owner&gt;/&lt;repo&gt; 形式</string>
     <string name="module_upload_repo_inherit_hint">該模組已綁定原始碼倉庫，留空將沿用。</string>
+    <string name="module_upload_author_coolapk">作者酷安主頁（選填）</string>
+    <string name="module_upload_author_coolapk_hint">例如 https://www.coolapk.com/u/123456；詳情頁會標註「由上傳者填寫，未驗證」。</string>
+    <string name="module_upload_author_coolapk_invalid">作者酷安主頁必須是 https://www.coolapk.com/u/&lt;4-12 位數字&gt;</string>
+    <string name="module_upload_author_github">作者 GitHub 主頁（選填）</string>
+    <string name="module_upload_author_github_hint">例如 https://github.com/octocat；詳情頁會標註「由上傳者填寫，未驗證」。</string>
+    <string name="module_upload_author_github_invalid">作者 GitHub 主頁必須是 https://github.com/&lt;使用者名稱&gt;</string>
+    <string name="module_upload_author_inherit_hint">該模組已記錄作者主頁，留空將沿用。</string>
     <string name="module_upload_origin_required">請至少填寫「酷安帖子」或「原始碼倉庫」之一</string>
     <string name="module_repo_badge_open_source">開源</string>
     <string name="module_repo_badge_public_source">公開原始碼</string>

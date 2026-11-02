@@ -1,6 +1,7 @@
 package com.sukisu.ultra.ui.util
 
 import com.sukisu.ultra.data.backup.sha256Hex
+import com.sukisu.ultra.data.model.AuthorLinks
 import com.sukisu.ultra.data.model.GitHubRepoAddress
 import org.json.JSONArray
 import org.json.JSONObject
@@ -46,6 +47,14 @@ data class BatchZip(
      * 不用等服务端 400。
      */
     val repoUrl: String = "",
+    /**
+     * 作者本人主页，归一化后提交；空表示没填，服务端会沿用索引里的旧值。
+     *
+     * 与 [repoUrl] 不同，这两个字段**不**参与「来源二选一」：作者主页只是附加信息，
+     * 少填一条不影响这次投稿能不能发。
+     */
+    val authorCoolapkUrl: String = "",
+    val authorGithubUrl: String = "",
     /**
      * 索引里这个模块已经绑过仓库（用户留空将沿用服务端记着的那一个）。
      *
@@ -220,6 +229,12 @@ object ContributionBatch {
             // 一个空串会被当成「作者填了、但填错了」。
             module.source.trim().takeIf { it.isNotEmpty() }?.let { entry.put("source", it) }
             GitHubRepoAddress.normalize(module.repoUrl)?.let { entry.put("repoUrl", it) }
+            AuthorLinks.normalizeCoolapk(module.authorCoolapkUrl)?.let {
+                entry.put("authorCoolapkUrl", it)
+            }
+            AuthorLinks.normalizeGithub(module.authorGithubUrl)?.let {
+                entry.put("authorGithubUrl", it)
+            }
             arr.put(entry)
         }
         return JSONObject()
@@ -254,6 +269,16 @@ object ContributionBatch {
             }
             if (module.repoUrl.isNotBlank() && GitHubRepoAddress.normalize(module.repoUrl) == null) {
                 return "源码仓库必须是 https://github.com/<owner>/<repo> 形式"
+            }
+            if (module.authorCoolapkUrl.isNotBlank() &&
+                AuthorLinks.normalizeCoolapk(module.authorCoolapkUrl) == null
+            ) {
+                return "作者酷安主页必须是 https://www.coolapk.com/u/<4-12 位数字>"
+            }
+            if (module.authorGithubUrl.isNotBlank() &&
+                AuthorLinks.normalizeGithub(module.authorGithubUrl) == null
+            ) {
+                return "作者 GitHub 主页必须是 https://github.com/<用户名>"
             }
             if (!seen.add(module.meta.id)) return "同一套里同一个模块 id 出现两次：${module.meta.id}"
             if (module.file.length() > safeLimits.maxBytes) {
@@ -308,6 +333,18 @@ object ContributionBatch {
         // 只有原作者能发。服务端给了原话就用原话（它会指出是哪个 id），没给才说这句。
         "not_owner" -> serverError?.takeIf { it.isNotBlank() }
             ?: "这个模块的更新版本只有原作者能发；当前验证的酷安账号不是它的上传者。"
+
+        // 作者主页三条：形状不对的两条本地已经拦过，走到这里说明是服务端按同一规则
+        // 又判了一次（客户端版本旧、或批量里另一枚）；能走到 author_locked 说明这次
+        // 请求想把已收录模块的作者链接改掉，而那只能由台账里的归属人做。
+        "bad_author_coolapk_url" -> serverError?.takeIf { it.isNotBlank() }
+            ?: "作者酷安主页必须是 https://www.coolapk.com/u/<4-12 位数字>。"
+
+        "bad_author_github_url" -> serverError?.takeIf { it.isNotBlank() }
+            ?: "作者 GitHub 主页必须是 https://github.com/<用户名>。"
+
+        "author_locked" -> serverError?.takeIf { it.isNotBlank() }
+            ?: "作者主页只能由模块归属人设置或修改；留空则沿用已有链接。"
 
         // 下面两条同为 403，但语义是「我们这边查不了」，服务端文案里已经明写
         // 「与你的包无关」。落到通用 403 兜底会被冠上「服务端拒绝了这次上传」，

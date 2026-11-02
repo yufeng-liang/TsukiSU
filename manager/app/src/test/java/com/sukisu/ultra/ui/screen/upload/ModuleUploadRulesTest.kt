@@ -32,6 +32,8 @@ class ModuleUploadRulesTest {
         source: String = "https://www.coolapk.com/feed/1",
         repoUrl: String = "",
         indexRepoUrl: String = "",
+        authorCoolapkUrl: String = "",
+        authorGithubUrl: String = "",
         eligibility: UpdateEligibility = UpdateEligibility.UNKNOWN,
         eligibilityReason: String = "",
     ) = UploadZip(
@@ -48,6 +50,8 @@ class ModuleUploadRulesTest {
         source = source,
         repoUrl = repoUrl,
         indexRepoUrl = indexRepoUrl,
+        authorCoolapkUrl = authorCoolapkUrl,
+        authorGithubUrl = authorGithubUrl,
         eligibility = eligibility,
         eligibilityReason = eligibilityReason,
     )
@@ -783,6 +787,73 @@ class ModuleUploadRulesTest {
             listOf(zip(source = "https://example.com/post", repoUrl = "https://github.com/o/r")),
         )
         assertEquals(listOf(ModuleUploadRules.SubmitBlocker.SOURCE), blockers)
+    }
+
+    // ── 作者主页：选填，填了就必须是那个平台的用户页 ─────────────────────────
+
+    @Test
+    fun `author problems separate empty from malformed`() {
+        // 空是合法的：老模块没有这两个字段，新模块也可以不填，服务端会沿用旧值。
+        assertEquals(ModuleUploadRules.AuthorProblem.EMPTY, ModuleUploadRules.authorCoolapkProblem(""))
+        assertEquals(ModuleUploadRules.AuthorProblem.EMPTY, ModuleUploadRules.authorGithubProblem("  "))
+        assertEquals(
+            ModuleUploadRules.AuthorProblem.OK,
+            ModuleUploadRules.authorCoolapkProblem("https://www.coolapk.com/u/123456"),
+        )
+        assertEquals(
+            ModuleUploadRules.AuthorProblem.OK,
+            ModuleUploadRules.authorGithubProblem("https://github.com/octocat"),
+        )
+        // 填了但指错地方，必须与「没填」分开：一个该提醒改，一个什么都不用做。
+        assertEquals(
+            ModuleUploadRules.AuthorProblem.INVALID,
+            ModuleUploadRules.authorCoolapkProblem("https://www.coolapk.com/feed/1"),
+        )
+        assertEquals(
+            ModuleUploadRules.AuthorProblem.INVALID,
+            ModuleUploadRules.authorGithubProblem("https://github.com/octocat/repo"),
+        )
+    }
+
+    @Test
+    fun `author links are optional and do not block a batch`() {
+        val blockers = blockersOf(listOf(zip(authorCoolapkUrl = "", authorGithubUrl = "")))
+        assertTrue(blockers.isEmpty())
+        val filled = blockersOf(
+            listOf(
+                zip(
+                    authorCoolapkUrl = "https://www.coolapk.com/u/123456",
+                    authorGithubUrl = "https://github.com/octocat",
+                ),
+            ),
+        )
+        assertTrue(filled.isEmpty())
+    }
+
+    @Test
+    fun `a malformed author coolapk link is its own blocker`() {
+        val blockers = blockersOf(listOf(zip(authorCoolapkUrl = "https://www.coolapk.com/u/12")))
+        assertEquals(listOf(ModuleUploadRules.SubmitBlocker.AUTHOR_COOLAPK), blockers)
+    }
+
+    @Test
+    fun `a malformed author github link is its own blocker`() {
+        val blockers = blockersOf(listOf(zip(authorGithubUrl = "https://www.github.com/octocat")))
+        assertEquals(listOf(ModuleUploadRules.SubmitBlocker.AUTHOR_GITHUB), blockers)
+    }
+
+    @Test
+    fun `both author fields malformed reports both`() {
+        val blockers = blockersOf(
+            listOf(zip(authorCoolapkUrl = "nope", authorGithubUrl = "nope")),
+        )
+        assertEquals(
+            listOf(
+                ModuleUploadRules.SubmitBlocker.AUTHOR_COOLAPK,
+                ModuleUploadRules.SubmitBlocker.AUTHOR_GITHUB,
+            ),
+            blockers,
+        )
     }
 
     private fun blockersOf(items: List<UploadZip>): List<ModuleUploadRules.SubmitBlocker> =

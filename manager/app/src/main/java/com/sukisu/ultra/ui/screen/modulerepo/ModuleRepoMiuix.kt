@@ -1528,6 +1528,12 @@ private fun CoolapkInfoPageMiuix(
     val uploaderName = meta?.uploaderName?.takeIf { it.isNotBlank() }
     val uploaderUid = meta?.coolapkUid?.takeIf { it.isNotBlank() }
     val submittedAt = meta?.submittedAt?.takeIf { it.isNotBlank() }
+    // 作者与上传者是两个人：作者是写包的人，上传者是把它贴到酷安的人。作者主页由上传者
+    // 填写，服务端没有核验过，所以这一块必须把「未验证」写在链接旁边。
+    val authorName = meta?.authorName?.takeIf { it.isNotBlank() }
+    val authorCoolapkUrl = meta?.authorCoolapkUrl?.takeIf { it.isNotBlank() }
+    val authorGithubUrl = meta?.authorGithubUrl?.takeIf { it.isNotBlank() }
+    val hasAuthor = authorName != null || authorCoolapkUrl != null || authorGithubUrl != null
     Box(modifier = if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier) {
         LazyColumn(
             modifier = Modifier
@@ -1543,6 +1549,54 @@ private fun CoolapkInfoPageMiuix(
             ),
             overscrollEffect = null,
         ) {
+            if (hasAuthor) {
+                item {
+                    SmallTitle(
+                        text = stringResource(R.string.module_author),
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
+                    AppCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp),
+                        insideMargin = PaddingValues(16.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // 名字那行始终在：没有链接也要让人知道作者是谁，而不是整块消失。
+                            Text(
+                                text = authorName ?: stringResource(R.string.module_repo_author_unknown),
+                                fontSize = 14.sp,
+                                color = colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = stringResource(R.string.module_repo_author_unverified),
+                                fontSize = 11.sp,
+                                color = colorScheme.onSurfaceVariantSummary
+                            )
+                            authorCoolapkUrl?.let { url ->
+                                AuthorLinkRowMiuix(
+                                    label = stringResource(R.string.module_repo_author_coolapk),
+                                    url = url,
+                                    actionIconTint = actionIconTint,
+                                    secondaryContainer = secondaryContainer,
+                                    onOpenUrl = onOpenUrl,
+                                )
+                            }
+                            authorGithubUrl?.let { url ->
+                                AuthorLinkRowMiuix(
+                                    label = stringResource(R.string.module_repo_author_github),
+                                    url = url,
+                                    actionIconTint = actionIconTint,
+                                    secondaryContainer = secondaryContainer,
+                                    onOpenUrl = onOpenUrl,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             if (postUrl != null) {
                 item {
                     SmallTitle(
@@ -1653,6 +1707,50 @@ private fun CoolapkInfoPageMiuix(
             // 出处信息之后接源码仓库的校验证据。
             sourceEvidenceItemsMiuix(evidence = evidence, onOpenUrl = onOpenUrl)
             item { Spacer(Modifier.height(12.dp)) }
+        }
+    }
+}
+
+/** 信息页里的「作者主页」一行：左边平台名与地址，右边打开按钮。 */
+@Composable
+private fun AuthorLinkRowMiuix(
+    label: String,
+    url: String,
+    actionIconTint: Color,
+    secondaryContainer: Color,
+    onOpenUrl: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                fontSize = 13.sp,
+                color = colorScheme.onSurface
+            )
+            Text(
+                text = url,
+                fontSize = 11.sp,
+                color = colorScheme.onSurfaceVariantSummary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        IconButton(
+            backgroundColor = secondaryContainer,
+            minHeight = 35.dp,
+            minWidth = 35.dp,
+            onClick = { onOpenUrl(url) },
+        ) {
+            Icon(
+                modifier = Modifier.size(20.dp),
+                imageVector = MiuixIcons.Link,
+                tint = actionIconTint,
+                contentDescription = null
+            )
         }
     }
 }

@@ -142,6 +142,11 @@
     <string name="module_uninstall_failed">卸载失败：%s</string>
     <string name="module_version">版本</string>
     <string name="module_author">作者</string>
+    <!-- 作者主页是上传者自己填的，没有经过任何核验；详情页必须把这句话放在链接旁边。 -->
+    <string name="module_repo_author_unverified">由上传者填写，未验证</string>
+    <string name="module_repo_author_coolapk">酷安主页</string>
+    <string name="module_repo_author_github">GitHub 主页</string>
+    <string name="module_repo_author_unknown">作者未知</string>
     <string name="module_preinit_no_space">preinit 未生效：/metadata 空间不足</string>
     <string name="module_preinit_error">preinit 未生效：preinit 目录无效</string>
     <string name="module_preinit_bootloop">多次启动失败，preinit 已停用</string>
@@ -1301,6 +1306,13 @@
     <string name="module_upload_repo_hint">填一个公开的 GitHub 仓库，别人就能核对安装的内容；和上面的酷安帖子至少填一个，也可以都填。</string>
     <string name="module_upload_repo_invalid">源码仓库必须是 https://github.com/&lt;owner&gt;/&lt;repo&gt; 形式</string>
     <string name="module_upload_repo_inherit_hint">该模块已绑定源码仓库，留空将沿用。</string>
+    <string name="module_upload_author_coolapk">作者酷安主页（选填）</string>
+    <string name="module_upload_author_coolapk_hint">例如 https://www.coolapk.com/u/123456；详情页会标注「由上传者填写，未验证」。</string>
+    <string name="module_upload_author_coolapk_invalid">作者酷安主页必须是 https://www.coolapk.com/u/&lt;4-12 位数字&gt;</string>
+    <string name="module_upload_author_github">作者 GitHub 主页（选填）</string>
+    <string name="module_upload_author_github_hint">例如 https://github.com/octocat；详情页会标注「由上传者填写，未验证」。</string>
+    <string name="module_upload_author_github_invalid">作者 GitHub 主页必须是 https://github.com/&lt;用户名&gt;</string>
+    <string name="module_upload_author_inherit_hint">该模块已记录作者主页，留空将沿用。</string>
     <string name="module_upload_origin_required">请至少填写「酷安帖子」或「源码仓库」之一</string>
     <string name="module_upload_size">大小</string>
     <string name="module_upload_sha">SHA-256</string>

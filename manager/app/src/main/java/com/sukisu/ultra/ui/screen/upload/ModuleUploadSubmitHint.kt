@@ -50,6 +50,12 @@ fun submitHint(
     ModuleUploadRules.SubmitBlocker.REPO in blockers ->
         stringResource(R.string.module_upload_repo_invalid)
 
+    ModuleUploadRules.SubmitBlocker.AUTHOR_COOLAPK in blockers ->
+        stringResource(R.string.module_upload_author_coolapk_invalid)
+
+    ModuleUploadRules.SubmitBlocker.AUTHOR_GITHUB in blockers ->
+        stringResource(R.string.module_upload_author_github_invalid)
+
     ModuleUploadRules.SubmitBlocker.SOURCE in blockers ->
         stringResource(R.string.module_upload_source_invalid)
 

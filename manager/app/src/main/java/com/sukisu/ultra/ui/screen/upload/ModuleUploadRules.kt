@@ -1,6 +1,7 @@
 package com.sukisu.ultra.ui.screen.upload
 
 import com.sukisu.ultra.R
+import com.sukisu.ultra.data.model.AuthorLinks
 import com.sukisu.ultra.data.model.GitHubRepoAddress
 import com.sukisu.ultra.ui.util.BatchLimits
 import com.sukisu.ultra.ui.util.CheckStatus
@@ -259,6 +260,41 @@ object ModuleUploadRules {
         return if (GitHubRepoAddress.normalize(text) != null) RepoProblem.OK else RepoProblem.INVALID
     }
 
+    /** 作者主页校验结论。 */
+    enum class AuthorProblem {
+        /** 用户没填：合法，服务端会沿用索引里的旧值。 */
+        EMPTY,
+
+        /** 填了，但不是该平台的主页地址。 */
+        INVALID,
+
+        OK,
+    }
+
+    /**
+     * 作者酷安主页：`https://www.coolapk.com/u/<4-12 位数字>`。
+     *
+     * 与 Worker、网页端同一条规则（见 [AuthorLinks.normalizeCoolapk]）：作者链接是上传者
+     * 自己填的、没人核过，形状卡严一点，至少保证它指向酷安的某个用户页而不是任意站点。
+     */
+    fun authorCoolapkProblem(raw: String): AuthorProblem {
+        val text = raw.trim()
+        if (text.isEmpty()) return AuthorProblem.EMPTY
+        return if (AuthorLinks.normalizeCoolapk(text) != null) AuthorProblem.OK else AuthorProblem.INVALID
+    }
+
+    /**
+     * 作者 GitHub 主页：`https://github.com/<login>`。
+     *
+     * 同上：只判形状，不判断这个账号是否存在、是不是作者本人——那是服务端与人工的事，
+     * 详情页会明确标注「由上传者填写，未验证」。
+     */
+    fun authorGithubProblem(raw: String): AuthorProblem {
+        val text = raw.trim()
+        if (text.isEmpty()) return AuthorProblem.EMPTY
+        return if (AuthorLinks.normalizeGithub(text) != null) AuthorProblem.OK else AuthorProblem.INVALID
+    }
+
     /**
      * 这一枚在本地算不算「有来源」：出处是酷安链接、仓库形状合法、或索引里已经绑过仓库。
      *
@@ -370,6 +406,10 @@ object ModuleUploadRules {
         SOURCE,
         /** 填了仓库地址，但不是 GitHub 的 `<owner>/<repo>`。 */
         REPO,
+        /** 填了作者酷安主页，但不是 `https://www.coolapk.com/u/<数字>`。 */
+        AUTHOR_COOLAPK,
+        /** 填了作者 GitHub 主页，但不是 `https://github.com/<用户名>`。 */
+        AUTHOR_GITHUB,
         /** 出处与仓库都没填，索引里也没绑过仓库——连一条来源都没有。 */
         ORIGIN,
         OWNERSHIP,
@@ -464,6 +504,13 @@ object ModuleUploadRules {
         if (items.any { repoProblem(it.repoUrl) == RepoProblem.INVALID }) {
             blockers += SubmitBlocker.REPO
         }
+        // 作者主页是选填的，只有「填了但形状不对」才拦；空着交给服务端沿用旧值。
+        if (items.any { authorCoolapkProblem(it.authorCoolapkUrl) == AuthorProblem.INVALID }) {
+            blockers += SubmitBlocker.AUTHOR_COOLAPK
+        }
+        if (items.any { authorGithubProblem(it.authorGithubUrl) == AuthorProblem.INVALID }) {
+            blockers += SubmitBlocker.AUTHOR_GITHUB
+        }
         // 归属闸：只要有一枚被服务端判成「别人的」，整批都不许发。
         // 一批是原子提交（一个 PR、一次口令），放过这一枚等于让整批带着一次必然的拒绝走完全程。
         if (items.any { it.eligibility.blocksSubmit }) blockers += SubmitBlocker.OWNERSHIP
@@ -489,6 +536,8 @@ object ModuleUploadRules {
             SubmitBlocker.PROOF,
             SubmitBlocker.SOURCE,
             SubmitBlocker.REPO,
+            SubmitBlocker.AUTHOR_COOLAPK,
+            SubmitBlocker.AUTHOR_GITHUB,
             SubmitBlocker.ORIGIN,
             SubmitBlocker.LIMITS,
             SubmitBlocker.EMPTY,
