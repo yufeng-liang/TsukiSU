@@ -37,7 +37,8 @@ object AiThemeImageStore : AiThemeImageService {
                     repo.customBackgroundUri = path
                     repo.customBackgroundUpdatedAt = System.currentTimeMillis()
                     repo.useSystemWallpaper = false
-                    if (repo.extractColorFromBackground) {
+                    // A manually picked key color wins over the background, as in the settings VM.
+                    if (repo.extractColorFromBackground && repo.keyColor == 0) {
                         repo.keyColor = ImageStorage.extractSeedColor(File(path), repo.keyColor)
                     }
                     path

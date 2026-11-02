@@ -967,6 +967,7 @@
     <string name="settings_use_system_wallpaper_reading">正在讀取目前桌布…</string>
     <string name="settings_extract_background_color">從背景圖取色</string>
     <string name="settings_extract_background_color_summary">使用目前背景圖作為主題取色來源</string>
+    <string name="settings_extract_background_color_disabled">需要先開啟莫內取色才會生效</string>
     <string name="settings_system_wallpaper_failed">無法讀取系統桌布</string>
     <string name="settings_crop_background">重新裁切背景</string>
     <string name="settings_crop_background_summary">調整背景可見區域，或使用相簿裁切</string>

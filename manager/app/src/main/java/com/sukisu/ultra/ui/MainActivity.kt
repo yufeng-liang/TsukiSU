@@ -30,6 +30,7 @@ import androidx.core.animation.doOnEnd
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
+import com.sukisu.ultra.ui.theme.LocalAppBackgroundBackdrop
 import com.sukisu.ultra.ui.theme.LocalBackgroundImagePath
 import com.sukisu.ultra.ui.theme.LocalCardBackgroundAlpha
 import java.io.File
@@ -97,7 +98,6 @@ import com.sukisu.ultra.ui.navigation3.Route
 import com.sukisu.ultra.ui.navigation3.rememberNavigator
 import com.sukisu.ultra.ui.screen.about.AboutScreen
 import com.sukisu.ultra.ai.api.AiFeatureBridge
-import com.sukisu.ultra.ai.api.AiUiMode
 import com.sukisu.ultra.ai.host.ManagerAiTarget
 import com.sukisu.ultra.ui.screen.appicon.AppIconScreen
 import com.sukisu.ultra.ui.screen.customtext.CustomTextScreen
@@ -129,6 +129,7 @@ import com.sukisu.ultra.ui.screen.template.AppProfileTemplateScreen
 import com.sukisu.ultra.ui.screen.templateeditor.TemplateEditorScreen
 import com.sukisu.ultra.ui.screen.umountmanager.UmountManagerScreen
 import com.sukisu.ultra.ui.screen.upload.ModuleUploadScreen
+import com.sukisu.ultra.ui.theme.AiAssistantMaterialTheme
 import com.sukisu.ultra.ui.theme.KernelSUTheme
 import com.sukisu.ultra.ui.theme.LocalColorMode
 import com.sukisu.ultra.ui.theme.LocalEnableBlur
@@ -280,6 +281,12 @@ class MainActivity : ComponentActivity() {
             val density = remember(systemDensity, uiState.pageScale) {
                 Density(systemDensity.density * uiState.pageScale, systemDensity.fontScale)
             }
+            // Bars sample the page backdrop, which is transparent wherever the page paints nothing.
+            // Blurring that reads as black, so over a custom background they also need the wallpaper:
+            // capture it here, where only the background image is drawn, and combine it underneath.
+            val appBackgroundBackdrop = rememberLayerBackdrop()
+            val captureAppBackground = uiMode == UiMode.Miuix && uiState.enableBlur &&
+                uiState.customBackgroundUri.isNotEmpty()
 
             CompositionLocalProvider(
                 LocalNavigator provides navigator,
@@ -291,11 +298,15 @@ class MainActivity : ComponentActivity() {
                 LocalEnableNavigationBadge provides uiState.enableNavigationBadge,
                 LocalModuleDescriptionMaxLines provides uiState.moduleDescriptionMaxLines,
                 LocalBackgroundImagePath provides uiState.customBackgroundUri,
+                LocalAppBackgroundBackdrop provides appBackgroundBackdrop.takeIf { captureAppBackground },
                 LocalCardBackgroundAlpha provides (uiState.cardBackgroundAlphaPercent / 100f),
                 LocalUiMode provides uiMode,
                 LocalCustomTexts provides uiState.customTexts,
             ) {
-                KernelSUTheme(appSettings = appSettings, uiMode = uiMode) {
+                val themedAppSettings = remember(appSettings, uiState.keyColorOverride) {
+                    uiState.keyColorOverride?.let { appSettings.copy(keyColor = it) } ?: appSettings
+                }
+                KernelSUTheme(appSettings = themedAppSettings, uiMode = uiMode) {
                     IntentDispatcher(intentChannel = intentChannel)
                     val swipeDismiss = if (uiState.enableSwipeDismiss) {
                         if (LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl) {
@@ -415,37 +426,37 @@ class MainActivity : ComponentActivity() {
                                     if (!AiFeatureBridge.isAvailable) {
                                         LaunchedEffect(Unit) { navigator.pop() }
                                     } else {
-                                        val assistantUiMode =
-                                            if (uiMode == UiMode.Miuix) AiUiMode.Miuix else AiUiMode.Material
-                                        AiFeatureBridge.ChatScreen(
-                                            uiMode = assistantUiMode,
-                                            onClose = {
-                                                if (navigator.current() == Route.AiAssistant) navigator.pop()
-                                            },
-                                            onOpenSettings = { navigator.push(Route.AiSettings) },
-                                            onNavigate = { target ->
-                                                when (target) {
-                                                    is ManagerAiTarget.Tab -> {
-                                                        viewModel.openMainPage(target.pageIndex, target.section)
-                                                        navigator.popUntil { it is Route.Main }
-                                                    }
+                                        // The assistant is always MD3; inside the Miuix shell it needs
+                                        // the MD3 colour scheme of the current appearance settings.
+                                        AiAssistantMaterialTheme {
+                                            AiFeatureBridge.ChatScreen(
+                                                onClose = {
+                                                    if (navigator.current() == Route.AiAssistant) navigator.pop()
+                                                },
+                                                onOpenSettings = { navigator.push(Route.AiSettings) },
+                                                onNavigate = { target ->
+                                                    when (target) {
+                                                        is ManagerAiTarget.Tab -> {
+                                                            viewModel.openMainPage(target.pageIndex, target.section)
+                                                            navigator.popUntil { it is Route.Main }
+                                                        }
 
-                                                    is ManagerAiTarget.Push -> navigator.navigateTo(target.route)
-                                                }
-                                            },
-                                        )
+                                                        is ManagerAiTarget.Push -> navigator.navigateTo(target.route)
+                                                    }
+                                                },
+                                            )
+                                        }
                                     }
                                 }
                                 entry<Route.AiSettings>(swipeDismiss = swipeDismiss) {
                                     if (!AiFeatureBridge.isAvailable) {
                                         LaunchedEffect(Unit) { navigator.pop() }
                                     } else {
-                                        val assistantUiMode =
-                                            if (uiMode == UiMode.Miuix) AiUiMode.Miuix else AiUiMode.Material
-                                        AiFeatureBridge.SettingsScreen(
-                                            uiMode = assistantUiMode,
-                                            onBack = { navigator.pop() },
-                                        )
+                                        AiAssistantMaterialTheme {
+                                            AiFeatureBridge.SettingsScreen(
+                                                onBack = { navigator.pop() },
+                                            )
+                                        }
                                     }
                                 }
                         }
@@ -489,16 +500,23 @@ class MainActivity : ComponentActivity() {
                             ImageStorage.BACKGROUND_BLUR_MAX_RADIUS_DP * uiState.customBackgroundBlurPercent / 100f
                         ).dp
                         Crossfade(
+                            modifier = if (captureAppBackground) {
+                                Modifier.layerBackdrop(appBackgroundBackdrop)
+                            } else {
+                                Modifier
+                            },
                             targetState = uiState.customBackgroundUri to uiState.customBackgroundUpdatedAt,
                             label = "global_background",
                         ) { (path, _) ->
                             if (path.isNotEmpty()) {
                                 val context = LocalContext.current
+                                val stamp = File(path).lastModified()
                                 AsyncImage(
                                     model = ImageRequest.Builder(context)
                                         .data(File(path))
                                         .crossfade(true)
-                                        .setParameter("mtime", File(path).lastModified(), memoryCacheKey = null)
+                                        .memoryCacheKey("$path@$stamp")
+                                        .diskCacheKey("$path@$stamp")
                                         .build(),
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,

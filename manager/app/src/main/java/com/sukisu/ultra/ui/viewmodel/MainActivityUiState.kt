@@ -21,6 +21,8 @@ data class MainActivityUiState(
     val cardBackgroundAlphaPercent: Int = 60,
     val customBackgroundBlurPercent: Int = 50,
     val customBackgroundScrimPercent: Int = -35,
+    /** Seed to render while a background extraction is in flight, so the palette does not flash. */
+    val keyColorOverride: Int? = null,
     val uiMode: UiMode,
     val customTexts: Map<String, String> = emptyMap(),
 )

@@ -27,6 +27,7 @@ object ImageStorage {
     private const val FILE_NAME = "bg_image"
     private const val SYSTEM_WALLPAPER_FILE_NAME = "system_wallpaper"
     private const val HOME_CARD_PREFIX = "home_card_image"
+    private const val HOME_CARD_STICKER_PREFIX = "home_card_sticker"
     private const val SYSTEM_WALLPAPER_SIGNATURE_FILE_NAME = "system_wallpaper.sig"
     private const val MAX_SYSTEM_WALLPAPER_PIXELS = 150_000_000L
     private const val MAX_WALLPAPER_VALIDATION_DIMENSION = 1024
@@ -444,6 +445,51 @@ object ImageStorage {
             ?.forEach { it.delete() }
     }
 
+    suspend fun saveHomeCardSticker(context: Context, uri: Uri): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val dir = backgroundsDir(context)
+            val target = File(dir, HOME_CARD_STICKER_PREFIX + "_" + System.currentTimeMillis() + "_" + System.nanoTime())
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            } ?: return@runCatching null
+            if (target.length() == 0L) {
+                target.delete()
+                return@runCatching null
+            }
+            target.absolutePath
+        }.getOrNull()
+    }
+
+    /** Deletes one sticker file; files outside the app's image directory are ignored. */
+    suspend fun deleteHomeCardSticker(context: Context, path: String) = withContext(Dispatchers.IO) {
+        val dir = backgroundsDir(context)
+        File(path).takeIf { it.parentFile == dir }?.delete()
+    }
+
+    suspend fun clearHomeCardSticker(context: Context) = withContext(Dispatchers.IO) {
+        backgroundsDir(context)
+            .listFiles { file -> file.name.startsWith(HOME_CARD_STICKER_PREFIX) }
+            ?.forEach { it.delete() }
+    }
+
+    /** Moves an imported sticker into app storage without touching the other sticker slots. */
+    suspend fun importHomeCardSticker(context: Context, source: File): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val dir = backgroundsDir(context)
+            val target = File(dir, HOME_CARD_STICKER_PREFIX + "_" + System.currentTimeMillis() + "_" + System.nanoTime())
+            if (!source.renameTo(target)) {
+                source.inputStream().use { input ->
+                    target.outputStream().use { output -> input.copyTo(output) }
+                }
+            }
+            if (target.length() == 0L) {
+                target.delete()
+                return@runCatching null
+            }
+            target.absolutePath
+        }.getOrNull()
+    }
+
     /** Moves [source] over the home status card image slot and returns the new path. */
     suspend fun replaceHomeCardImage(context: Context, source: File): String? = withContext(Dispatchers.IO) {
         runCatching {
@@ -465,43 +511,59 @@ object ImageStorage {
     }
 
     /**
-     * Unified exporter for custom images (background wallpaper and home status card).
-     * If both are present, they are bundled together into a standard unencrypted ZIP archive.
-     * If only one is present, it is copied directly as a standalone image.
+     * Unified exporter for custom images (background wallpaper, home status card and sticker).
+     * Multiple images are bundled into a standard unencrypted ZIP archive; a single image is
+     * copied directly.
      */
     suspend fun exportImages(
         context: Context,
         uri: Uri,
         backgroundFile: File?,
         cardBackgroundFile: File?,
+        stickerFiles: List<File> = emptyList(),
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            val hasBg = backgroundFile != null && backgroundFile.isFile
-            val hasCard = cardBackgroundFile != null && cardBackgroundFile.isFile
-            if (!hasBg && !hasCard) error("No image to export")
+            val entries = buildList {
+                backgroundFile?.takeIf { it.isFile }?.let { add("background.png" to it) }
+                cardBackgroundFile?.takeIf { it.isFile }?.let { add("home_card.png" to it) }
+                stickerFiles.filter { it.isFile }.forEachIndexed { index, file ->
+                    add("sticker_${index + 1}.png" to file)
+                }
+            }
+            if (entries.isEmpty()) error("No image to export")
 
             val output = context.contentResolver.openOutputStream(uri)
                 ?: error("Cannot open destination")
 
-            if (hasBg && hasCard) {
+            if (entries.size > 1) {
                 java.io.BufferedOutputStream(output).use { out ->
                     java.util.zip.ZipOutputStream(out).use { zip ->
-                        zip.putNextEntry(java.util.zip.ZipEntry("background.png"))
-                        backgroundFile.inputStream().use { it.copyTo(zip) }
-                        zip.closeEntry()
-
-                        zip.putNextEntry(java.util.zip.ZipEntry("home_card.png"))
-                        cardBackgroundFile.inputStream().use { it.copyTo(zip) }
-                        zip.closeEntry()
+                        entries.forEach { (name, file) ->
+                            zip.putNextEntry(java.util.zip.ZipEntry(name))
+                            file.inputStream().use { it.copyTo(zip) }
+                            zip.closeEntry()
+                        }
                     }
                 }
             } else {
-                val singleFile = if (hasBg) backgroundFile else cardBackgroundFile
                 java.io.BufferedOutputStream(output).use { out ->
-                    singleFile!!.inputStream().use { it.copyTo(out) }
+                    entries.single().second.inputStream().use { it.copyTo(out) }
                 }
             }
             Unit
         }
+    }
+
+    /** Default file name for the quick image export, based on which images are present. */
+    fun exportImagesFileName(
+        hasBackground: Boolean,
+        hasCardBackground: Boolean,
+        stickerCount: Int,
+    ): String = when {
+        listOf(hasBackground, hasCardBackground).count { it } + stickerCount > 1 -> "SukiSU-images.zip"
+        hasBackground -> "SukiSU-background.png"
+        hasCardBackground -> "SukiSU-home-card.png"
+        stickerCount > 0 -> "SukiSU-sticker.png"
+        else -> "SukiSU-images.zip"
     }
 }

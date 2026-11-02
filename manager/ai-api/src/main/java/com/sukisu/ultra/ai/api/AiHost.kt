@@ -42,12 +42,6 @@ interface AiHost {
     val themeImages: AiThemeImageService
 }
 
-/** Visual flavour the host is currently rendering. */
-enum class AiUiMode {
-    Material,
-    Miuix,
-}
-
 data class AiAvatarDrawables(
     val iconRes: Int,
     val foregroundRes: Int,

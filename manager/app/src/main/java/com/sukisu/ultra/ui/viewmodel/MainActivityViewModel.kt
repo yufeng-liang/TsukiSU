@@ -3,6 +3,7 @@ package com.sukisu.ultra.ui.viewmodel
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Parcelable
+import androidx.core.content.edit
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -24,7 +25,7 @@ class MainActivityViewModel(
     private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
-    private val prefs = ksuApp.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    private val prefs = ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
     private val settingRepo: SettingsRepository = SettingsRepositoryImpl()
     private val mainPageState = MainPageState(savedStateHandle)
     @Volatile private var systemWallpaperCacheValidated = false
@@ -99,7 +100,8 @@ class MainActivityViewModel(
             systemWallpaperCacheValidated = result.path != null
             if (result.changed) {
                 settingRepo.customBackgroundUpdatedAt = System.currentTimeMillis()
-                if (settingRepo.extractColorFromBackground && result.path != null) {
+                // A manually picked key color wins over the background, see SettingsViewModel.
+                if (settingRepo.extractColorFromBackground && settingRepo.keyColor == 0 && result.path != null) {
                     settingRepo.keyColor = ImageStorage.extractSeedColor(File(result.path), settingRepo.keyColor)
                 }
             }
@@ -136,13 +138,24 @@ class MainActivityViewModel(
             cardBackgroundAlphaPercent = settingRepo.cardBackgroundAlphaPercent,
             customBackgroundBlurPercent = settingRepo.customBackgroundBlurPercent,
             customBackgroundScrimPercent = settingRepo.customBackgroundScrimPercent,
+            // While the settings screen is scoring a background seed it parks the previous color
+            // here, so the palette can stay put instead of re-deriving an intermediate one.
+            keyColorOverride = prefs.getInt(KEY_COLOR_PENDING, NO_PENDING_SEED)
+                .takeIf { it != NO_PENDING_SEED },
             uiMode = UiMode.fromValue(settingRepo.uiMode),
             customTexts = settingRepo.customTexts,
         )
     }
 
-    private companion object {
-        val observedKeys = setOf(
+    companion object {
+        const val SETTINGS_PREFS = "settings"
+
+        /** Window-scoped only: holds the color to keep while a background seed is scoring. */
+        const val KEY_COLOR_PENDING = "key_color_pending"
+
+        private const val NO_PENDING_SEED = Int.MIN_VALUE
+
+        private val observedKeys = setOf(
             "color_mode",
             "miuix_monet",
             "key_color",
@@ -162,6 +175,7 @@ class MainActivityViewModel(
             "card_bg_alpha_percent",
             "custom_bg_blur_percent",
             "custom_bg_scrim_percent",
+            KEY_COLOR_PENDING,
             "ui_mode",
             "custom_texts",
         )

@@ -12,20 +12,16 @@ interface AiFeatureProvider {
     fun install(host: AiHost)
 
     fun chatScreen(
-        uiMode: AiUiMode,
         onClose: () -> Unit,
         onOpenSettings: () -> Unit,
         onNavigate: (AiNavigationTarget) -> Unit,
     ): @Composable () -> Unit
 
     fun settingsScreen(
-        uiMode: AiUiMode,
         onBack: () -> Unit,
     ): @Composable () -> Unit
 
-    fun homeCardMaterial(onOpenChat: () -> Unit): @Composable () -> Unit
-
-    fun homeCardMiuix(onOpenChat: () -> Unit): @Composable () -> Unit
+    fun homeCard(onOpenChat: () -> Unit): @Composable () -> Unit
 }
 
 /**
@@ -54,29 +50,22 @@ object AiFeatureBridge {
 
     @Composable
     fun ChatScreen(
-        uiMode: AiUiMode,
         onClose: () -> Unit,
         onOpenSettings: () -> Unit,
         onNavigate: (AiNavigationTarget) -> Unit,
     ) {
-        provider?.chatScreen(uiMode, onClose, onOpenSettings, onNavigate)?.invoke()
+        provider?.chatScreen(onClose, onOpenSettings, onNavigate)?.invoke()
     }
 
     @Composable
     fun SettingsScreen(
-        uiMode: AiUiMode,
         onBack: () -> Unit,
     ) {
-        provider?.settingsScreen(uiMode, onBack)?.invoke()
+        provider?.settingsScreen(onBack)?.invoke()
     }
 
     @Composable
-    fun HomeCardMaterial(onOpenChat: () -> Unit) {
-        provider?.homeCardMaterial(onOpenChat)?.invoke()
-    }
-
-    @Composable
-    fun HomeCardMiuix(onOpenChat: () -> Unit) {
-        provider?.homeCardMiuix(onOpenChat)?.invoke()
+    fun HomeCard(onOpenChat: () -> Unit) {
+        provider?.homeCard(onOpenChat)?.invoke()
     }
 }

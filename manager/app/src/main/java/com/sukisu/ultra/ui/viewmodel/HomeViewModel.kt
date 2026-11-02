@@ -26,6 +26,9 @@ import com.sukisu.ultra.data.repository.CiManagerUpdater
 import com.sukisu.ultra.data.repository.SettingsRepository
 import com.sukisu.ultra.data.repository.SettingsRepositoryImpl
 import com.sukisu.ultra.data.repository.KEY_CUSTOM_HOME_TITLE
+import com.sukisu.ultra.data.repository.KEY_HIDE_HOME_CARD_DECORATION
+import com.sukisu.ultra.data.repository.KEY_HIDE_HOME_CARD_STATUS_TEXT
+import com.sukisu.ultra.data.repository.KEY_HOME_CARD_STICKERS
 import com.sukisu.ultra.data.repository.KEY_HOME_CARD_IMAGE_PATH
 import java.io.File
 import com.sukisu.ultra.getKernelVersion
@@ -42,6 +45,7 @@ import com.sukisu.ultra.ui.util.getKpmModuleCount
 import com.sukisu.ultra.ui.util.getKpmVersion
 import com.sukisu.ultra.ui.util.getSuperuserCount
 import com.sukisu.ultra.ui.util.getSELinuxStatusRaw
+import com.sukisu.ultra.ui.util.HomeCardSticker
 import com.sukisu.ultra.ui.util.listModules
 import com.sukisu.ultra.ui.util.module.LatestVersionInfo
 import com.sukisu.ultra.ui.util.resolveDeviceName
@@ -59,6 +63,15 @@ class HomeViewModel(
         if (key == null || key == KEY_HOME_CARD_IMAGE_PATH) {
             updateContent { it.copy(homeCardImagePath = existingHomeCardImage()) }
         }
+        if (key == null || key == KEY_HIDE_HOME_CARD_STATUS_TEXT) {
+            updateContent { it.copy(hideHomeCardStatusText = settingsRepo.hideHomeCardStatusText) }
+        }
+        if (key == null || key == KEY_HIDE_HOME_CARD_DECORATION) {
+            updateContent { it.copy(hideHomeCardDecoration = settingsRepo.hideHomeCardDecoration) }
+        }
+        if (key == null || key == KEY_HOME_CARD_STICKERS) {
+            updateContent { it.copy(homeCardStickers = existingHomeCardStickers()) }
+        }
         if (key == null || key == "show_ai_home_card") {
             updateContent { it.copy(showAiHomeCard = settingsRepo.showAiHomeCard) }
         }
@@ -67,6 +80,9 @@ class HomeViewModel(
     /** The stored card image only applies while its file still exists. */
     private fun existingHomeCardImage(): String =
         settingsRepo.homeCardImagePath.takeIf { it.isNotEmpty() && File(it).isFile } ?: ""
+
+    private fun existingHomeCardStickers(): List<HomeCardSticker> =
+        settingsRepo.homeCardStickers.filter { File(it.path).isFile }
 
     private val _uiState = MutableStateFlow(HomeLoadState())
     val uiState: StateFlow<HomeLoadState> = _uiState.asStateFlow()
@@ -228,6 +244,9 @@ class HomeViewModel(
             checkUpdateEnabled = settingsRepo.checkUpdate,
             customHomeTitle = settingsRepo.customHomeTitle,
             homeCardImagePath = existingHomeCardImage(),
+            hideHomeCardStatusText = settingsRepo.hideHomeCardStatusText,
+            hideHomeCardDecoration = settingsRepo.hideHomeCardDecoration,
+            homeCardStickers = existingHomeCardStickers(),
             showAiHomeCard = settingsRepo.showAiHomeCard,
             showFullStatus = ksuApp.getSharedPreferences("settings", Context.MODE_PRIVATE)
                 .getBoolean("show_fingerprint", true),

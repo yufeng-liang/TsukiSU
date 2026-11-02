@@ -2,6 +2,7 @@ package com.sukisu.ultra.ui.screen.home
 
 import androidx.compose.runtime.Immutable
 import com.sukisu.ultra.KernelVersion
+import com.sukisu.ultra.ui.util.HomeCardSticker
 import com.sukisu.ultra.ui.util.module.LatestVersionInfo
 
 @Immutable
@@ -55,6 +56,9 @@ data class HomeUiState(
     val showAiHomeCard: Boolean = false,
     val customHomeTitle: String = "",
     val homeCardImagePath: String = "",
+    val hideHomeCardStatusText: Boolean = false,
+    val hideHomeCardDecoration: Boolean = false,
+    val homeCardStickers: List<HomeCardSticker> = emptyList(),
 ) {
     val isSELinuxPermissive: Boolean
         get() = systemInfo.selinuxStatus == "Permissive"

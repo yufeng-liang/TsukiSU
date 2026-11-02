@@ -1,10 +1,12 @@
 package com.sukisu.ultra.ui.screen.settings
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.saveable.listSaver
 import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamiccolor.ColorSpec
 import com.sukisu.ultra.ui.UiMode
 import com.sukisu.ultra.ui.util.BuiltinAppIcons
+import com.sukisu.ultra.ui.util.HomeCardSticker
 
 @Immutable
 data class SettingsUiState(
@@ -97,20 +99,66 @@ data class SettingsUiState(
     val customBackgroundBlurPercent: Int = 50,
     val customBackgroundScrimPercent: Int = -35,
     val backgroundAppearanceExpanded: Boolean = true,
+    val backgroundSectionExpanded: Boolean = true,
+    val themePackageSectionExpanded: Boolean = true,
+    val appearanceSectionExpanded: Boolean = true,
+    val homeCardSectionExpanded: Boolean = true,
+    val colorsSectionExpanded: Boolean = true,
     val customHomeTitle: String = "",
     val customTexts: Map<String, String> = emptyMap(),
     val homeCardImagePath: String = "",
+    val hideHomeCardStatusText: Boolean = false,
+    val hideHomeCardDecoration: Boolean = false,
+    val homeCardStickers: List<HomeCardSticker> = emptyList(),
+
     val pendingImportTheme: com.sukisu.ultra.ui.util.ImportedTheme? = null,
     val showThemeImportDialog: Boolean = false,
 )
 
+/**
+ * What a theme package import or export covers. The groups mirror the appearance page's
+ * collapsible sections, and the sub-options let users pick individual parts of a group.
+ */
 @Immutable
-data class ThemeImportOptions(
-    val importAppearance: Boolean = true,
-    val importImages: Boolean = true,
-    val importAppIcon: Boolean = true,
-    val importCustomTexts: Boolean = true,
-    val importCustomConfig: Boolean = true,
+data class ThemePackageOptions(
+    val colors: Boolean = true,
+    val backgroundImage: Boolean = true,
+    val backgroundAppearance: Boolean = true,
+    val homeCardImage: Boolean = true,
+    val stickers: Boolean = true,
+    val homeCardDisplay: Boolean = true,
+    val appIcon: Boolean = true,
+    val customTexts: Boolean = true,
+    val customConfig: Boolean = true,
+)
+
+val ThemePackageOptionsSaver = listSaver<ThemePackageOptions, Boolean>(
+    save = {
+        listOf(
+            it.colors,
+            it.backgroundImage,
+            it.backgroundAppearance,
+            it.homeCardImage,
+            it.stickers,
+            it.homeCardDisplay,
+            it.appIcon,
+            it.customTexts,
+            it.customConfig,
+        )
+    },
+    restore = {
+        ThemePackageOptions(
+            colors = it[0],
+            backgroundImage = it[1],
+            backgroundAppearance = it[2],
+            homeCardImage = it[3],
+            stickers = it[4],
+            homeCardDisplay = it[5],
+            appIcon = it[6],
+            customTexts = it[7],
+            customConfig = it[8],
+        )
+    },
 )
 
 @Immutable

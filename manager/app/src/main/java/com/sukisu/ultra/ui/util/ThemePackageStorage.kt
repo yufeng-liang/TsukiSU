@@ -37,6 +37,9 @@ data class ThemePackageData(
     val customBackgroundScrimPercent: Int? = null,
     val hasBackground: Boolean? = null,
     val hasCardBackground: Boolean? = null,
+    val hideHomeCardStatusText: Boolean? = null,
+    val hideHomeCardDecoration: Boolean? = null,
+    val homeCardStickerTransforms: List<HomeCardStickerTransform>? = null,
     val uiMode: String? = null,
     val appIconId: String? = null,
     val enableFloatingBottomBar: Boolean? = null,
@@ -63,6 +66,7 @@ data class ImportedTheme(
     val data: ThemePackageData,
     val backgroundPath: String? = null,
     val cardBackgroundPath: String? = null,
+    val stickerPaths: List<String> = emptyList(),
 )
 
 object ThemePackageStorage {
@@ -72,6 +76,7 @@ object ThemePackageStorage {
     private const val THEME_ENTRY = "theme.json"
     private const val BACKGROUND_ENTRY = "background"
     private const val CARD_BACKGROUND_ENTRY = "card_background"
+    private const val CARD_STICKER_ENTRY_PREFIX = "card_sticker_"
     private const val MAX_JSON_BYTES = 64L * 1024
     private const val MAX_BACKGROUND_BYTES = 64L * 1024 * 1024
 
@@ -91,9 +96,10 @@ object ThemePackageStorage {
         data: ThemePackageData,
         backgroundFile: File?,
         cardBackgroundFile: File? = null,
+        cardStickerFiles: List<File> = emptyList(),
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            val encryptedBytes = encode(data, backgroundFile, cardBackgroundFile)
+            val encryptedBytes = encode(data, backgroundFile, cardBackgroundFile, cardStickerFiles)
             val output = context.contentResolver.openOutputStream(uri)
                 ?: error("Cannot open the destination file")
             BufferedOutputStream(output).use { it.write(encryptedBytes) }
@@ -106,9 +112,10 @@ object ThemePackageStorage {
         data: ThemePackageData,
         backgroundFile: File?,
         cardBackgroundFile: File? = null,
+        cardStickerFiles: List<File> = emptyList(),
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            val encryptedBytes = encode(data, backgroundFile, cardBackgroundFile)
+            val encryptedBytes = encode(data, backgroundFile, cardBackgroundFile, cardStickerFiles)
             file.parentFile?.mkdirs()
             BufferedOutputStream(file.outputStream()).use { it.write(encryptedBytes) }
         }
@@ -118,6 +125,7 @@ object ThemePackageStorage {
         data: ThemePackageData,
         backgroundFile: File?,
         cardBackgroundFile: File?,
+        cardStickerFiles: List<File>,
     ): ByteArray {
         val zipBytes = ByteArrayOutputStream().use { byteOut ->
             ZipOutputStream(byteOut).use { zip ->
@@ -132,6 +140,11 @@ object ThemePackageStorage {
                 if (data.hasCardBackground == true && cardBackgroundFile != null && cardBackgroundFile.isFile) {
                     zip.putNextEntry(ZipEntry(CARD_BACKGROUND_ENTRY))
                     cardBackgroundFile.inputStream().use { it.copyTo(zip) }
+                    zip.closeEntry()
+                }
+                cardStickerFiles.filter { it.isFile }.forEachIndexed { index, file ->
+                    zip.putNextEntry(ZipEntry(CARD_STICKER_ENTRY_PREFIX + index))
+                    file.inputStream().use { it.copyTo(zip) }
                     zip.closeEntry()
                 }
             }
@@ -149,6 +162,7 @@ object ThemePackageStorage {
             }
             var tempBackground: File? = null
             var tempCardBackground: File? = null
+            val tempStickers = mutableMapOf<Int, File>()
             try {
                 var themeText: String? = null
                 var backgroundExtracted = false
@@ -157,19 +171,37 @@ object ThemePackageStorage {
                     ZipInputStream(byteIn).use { zip ->
                         var entry: ZipEntry? = zip.nextEntry
                         while (entry != null) {
-                            when (entry.name) {
-                                THEME_ENTRY -> themeText = readLimited(zip, MAX_JSON_BYTES).toString(Charsets.UTF_8)
-                                BACKGROUND_ENTRY -> {
+                            val name = entry.name
+                            when {
+                                name == THEME_ENTRY -> themeText =
+                                    readLimited(zip, MAX_JSON_BYTES).toString(Charsets.UTF_8)
+
+                                name == BACKGROUND_ENTRY -> {
                                     val bg = File.createTempFile("theme_import_bg_", ".tmp", context.cacheDir)
                                     tempBackground = bg
                                     bg.outputStream().use { copyLimited(zip, it, MAX_BACKGROUND_BYTES) }
                                     backgroundExtracted = true
                                 }
-                                CARD_BACKGROUND_ENTRY -> {
+
+                                name == CARD_BACKGROUND_ENTRY -> {
                                     val cardBg = File.createTempFile("theme_import_card_", ".tmp", context.cacheDir)
                                     tempCardBackground = cardBg
                                     cardBg.outputStream().use { copyLimited(zip, it, MAX_BACKGROUND_BYTES) }
                                     cardBackgroundExtracted = true
+                                }
+
+                                name.startsWith(CARD_STICKER_ENTRY_PREFIX) -> {
+                                    val index = name.removePrefix(CARD_STICKER_ENTRY_PREFIX).toIntOrNull()
+                                    if (index != null && index in 0 until HomeCardSticker.MAX_COUNT) {
+                                        if (tempStickers.containsKey(index)) {
+                                            error("Duplicate card sticker entry")
+                                        }
+                                        val sticker = File.createTempFile(
+                                            "theme_import_sticker_", ".tmp", context.cacheDir
+                                        )
+                                        tempStickers[index] = sticker
+                                        sticker.outputStream().use { copyLimited(zip, it, MAX_BACKGROUND_BYTES) }
+                                    }
                                 }
                             }
                             zip.closeEntry()
@@ -193,6 +225,9 @@ object ThemePackageStorage {
                 }
 
                 val hasCardBackground = data.hasCardBackground ?: cardBackgroundExtracted
+                if (hasCardBackground && !cardBackgroundExtracted) {
+                    error("Card background image is missing")
+                }
                 if (hasCardBackground && tempCardBackground != null) {
                     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                     BitmapFactory.decodeFile(tempCardBackground.absolutePath, bounds)
@@ -201,14 +236,28 @@ object ThemePackageStorage {
                     }
                 }
 
+                tempStickers.forEach { (_, sticker) ->
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(sticker.absolutePath, bounds)
+                    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                        error("Card sticker image is invalid")
+                    }
+                }
+
+                val orderedStickerPaths = tempStickers.entries
+                    .sortedBy { it.key }
+                    .map { it.value.absolutePath }
+
                 ImportedTheme(
                     data = data,
                     backgroundPath = tempBackground?.takeIf { hasBackground }?.absolutePath,
                     cardBackgroundPath = tempCardBackground?.takeIf { hasCardBackground }?.absolutePath,
+                    stickerPaths = orderedStickerPaths,
                 )
             } catch (e: Exception) {
                 tempBackground?.delete()
                 tempCardBackground?.delete()
+                tempStickers.forEach { (_, file) -> file.delete() }
                 throw e
             }
         }

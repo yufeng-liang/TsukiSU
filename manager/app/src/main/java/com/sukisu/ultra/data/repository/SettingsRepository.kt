@@ -1,19 +1,36 @@
 package com.sukisu.ultra.data.repository
 
+import com.sukisu.ultra.ui.util.HomeCardSticker
+
 interface SettingsRepository {
     var customBackgroundUri: String
     var customBackgroundUpdatedAt: Long
     /** Use the launcher wallpaper as the app background instead of [customBackgroundUri]. */
     var useSystemWallpaper: Boolean
-    /** Derive the theme key color from the active background image. */
+    /**
+     * Derive the theme key color from the active background image. This and [keyColor] are
+     * mutually exclusive: a non-zero [keyColor] wins, so read through
+     * [com.sukisu.ultra.ui.viewmodel.derivesKeyColorFromBackground] instead of the raw flag.
+     */
     var extractColorFromBackground: Boolean
     var cardBackgroundAlphaPercent: Int
     var customBackgroundBlurPercent: Int
     var customBackgroundScrimPercent: Int
     var backgroundAppearanceExpanded: Boolean
+    /** Expanded state of the top-level cards on the appearance page. */
+    var backgroundSectionExpanded: Boolean
+    var themePackageSectionExpanded: Boolean
+    var appearanceSectionExpanded: Boolean
+    var homeCardSectionExpanded: Boolean
+    var colorsSectionExpanded: Boolean
     var customHomeTitle: String
     var customTexts: Map<String, String>
     var homeCardImagePath: String
+    /** Hide the working text and version line on the home status card while a card image is set. */
+    var hideHomeCardStatusText: Boolean
+    /** Hide the check icon (Miuix) or ring decoration (Material) on the home status card. */
+    var hideHomeCardDecoration: Boolean
+    var homeCardStickers: List<HomeCardSticker>
     var uiMode: String
     var appLanguage: String
     var checkUpdate: Boolean

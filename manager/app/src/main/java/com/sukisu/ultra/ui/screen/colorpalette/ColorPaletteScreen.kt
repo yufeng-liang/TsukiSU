@@ -9,14 +9,11 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.dropUnlessResumed
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.materialkolor.PaletteStyle
-import com.materialkolor.dynamiccolor.ColorSpec
 import com.sukisu.ultra.KernelSUApplication
 import com.sukisu.ultra.ui.LocalUiMode
 import com.sukisu.ultra.ui.UiMode
 import com.sukisu.ultra.ui.navigation3.LocalNavigator
 import com.sukisu.ultra.ui.navigation3.Route
-import com.sukisu.ultra.ui.theme.ColorMode
 import com.sukisu.ultra.ui.util.ImageStorage
 import com.sukisu.ultra.ui.viewmodel.SettingsViewModel
 import com.sukisu.ultra.ui.component.themeimport.ThemeImportDialog
@@ -27,30 +24,13 @@ fun ColorPaletteScreen(section: String? = null) {
     val context = LocalContext.current
     val activity = LocalActivity.current
     val viewModel = viewModel<SettingsViewModel>()
+    // The page state is projected in the view model, so nothing is parsed while composing.
+    val state by viewModel.colorPaletteState.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         viewModel.refreshBackgroundAppearance()
     }
-    val currentPaletteStyle = try {
-        PaletteStyle.valueOf(uiState.colorStyle)
-    } catch (_: Exception) {
-        PaletteStyle.TonalSpot
-    }
-    val currentColorSpec = try {
-        ColorSpec.SpecVersion.valueOf(uiState.colorSpec)
-    } catch (_: Exception) {
-        ColorSpec.SpecVersion.SPEC_2025
-    }
-    val state = ColorPaletteUiState(
-        uiState = uiState,
-        currentColorMode = ColorMode.fromValue(uiState.themeMode),
-        currentPaletteStyle = currentPaletteStyle,
-        currentColorSpec = currentColorSpec,
-        showFullStatus = uiState.showFullStatus,
-        hideHomeWarnings = uiState.hideHomeWarnings,
-        showAiHomeCard = uiState.showAiHomeCard,
-    )
     val actions = ColorPaletteScreenActions(
         onBack = dropUnlessResumed { navigator.pop() },
         onSetThemeMode = viewModel::setThemeMode,
@@ -77,6 +57,11 @@ fun ColorPaletteScreen(section: String? = null) {
         onSetShowAiHomeCard = viewModel::setShowAiHomeCard,
         onOpenAppIcon = { navigator.push(Route.AppIcon) },
         onSetBackgroundAppearanceExpanded = viewModel::setBackgroundAppearanceExpanded,
+        onSetBackgroundSectionExpanded = viewModel::setBackgroundSectionExpanded,
+        onSetThemePackageSectionExpanded = viewModel::setThemePackageSectionExpanded,
+        onSetAppearanceSectionExpanded = viewModel::setAppearanceSectionExpanded,
+        onSetHomeCardSectionExpanded = viewModel::setHomeCardSectionExpanded,
+        onSetColorsSectionExpanded = viewModel::setColorsSectionExpanded,
         onSetCustomHomeTitle = viewModel::setCustomHomeTitle,
         onPickCustomBackground = { ctx, uri ->
             viewModel.stagePickedBackground(ctx, uri) { path ->
@@ -103,6 +88,11 @@ fun ColorPaletteScreen(section: String? = null) {
         onClearCustomBackground = viewModel::clearCustomBackground,
         onPickHomeCardImage = viewModel::pickHomeCardImage,
         onClearHomeCardImage = viewModel::clearHomeCardImage,
+        onSetHideHomeCardStatusText = viewModel::setHideHomeCardStatusText,
+        onSetHideHomeCardDecoration = viewModel::setHideHomeCardDecoration,
+        onPickHomeCardSticker = viewModel::addHomeCardSticker,
+        onRemoveHomeCardSticker = viewModel::removeHomeCardSticker,
+        onUpdateHomeCardStickerTransform = viewModel::updateHomeCardStickerTransform,
         onSetUseSystemWallpaper = viewModel::setUseSystemWallpaper,
         onSetExtractColorFromBackground = viewModel::setExtractColorFromBackground,
         onSetCardBackgroundAlphaPercent = viewModel::setCardBackgroundAlphaPercent,
@@ -118,6 +108,7 @@ fun ColorPaletteScreen(section: String? = null) {
         onResetAllCustomTexts = viewModel::resetAllCustomTexts,
         onOpenCustomTexts = { navigator.push(Route.CustomTexts) },
         onResetBackgroundAppearance = viewModel::resetBackgroundAppearance,
+        onClearAllAppearance = viewModel::clearAllAppearance,
     )
 
     ThemeImportDialog(
@@ -128,6 +119,9 @@ fun ColorPaletteScreen(section: String? = null) {
             viewModel.confirmImportTheme(context, options)
         }
     )
+
+    // The first frame would otherwise render the preview from placeholder defaults.
+    if (state.loading) return
 
     when (LocalUiMode.current) {
         UiMode.Miuix -> ColorPaletteScreenMiuix(state, actions, section)

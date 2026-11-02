@@ -8,9 +8,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
+import com.sukisu.ultra.ui.component.liquid.rememberCombinedBackdrop
+import com.sukisu.ultra.ui.theme.LocalAppBackgroundBackdrop
 import com.sukisu.ultra.ui.theme.LocalBackgroundImagePath
 import com.sukisu.ultra.ui.theme.LocalCardBackgroundAlpha
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
+import top.yukonga.miuix.kmp.blur.Backdrop
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurColors
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
@@ -25,11 +28,34 @@ fun rememberBlurBackdrop(enableBlur: Boolean): LayerBackdrop? {
     val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
     val surfaceColor = MiuixTheme.colorScheme.surface
     return rememberLayerBackdrop {
+        // Without a custom background the layer has to be opaque on its own. With one, the page
+        // stays transparent so the wallpaper shows through, and BlurredBar adds the wallpaper
+        // back underneath when it samples this layer.
         if (!hasCustomBackground) {
             drawRect(surfaceColor)
         }
         drawContent()
     }
+}
+
+/**
+ * Stacks the app background under the page layer captured by [backdrop].
+ *
+ * Over a custom background the page layer is transparent wherever the page paints nothing, and
+ * blurring those pixels bleeds black into the bar. The background image fills exactly those
+ * pixels, so drawing both layers reproduces what is really on screen behind the bar.
+ *
+ * Returns null when only the page layer is available; [BlurredBar] then falls back to a plain
+ * translucent surface instead of blurring an incomplete backdrop.
+ */
+@Composable
+private fun rememberBarBackdrop(backdrop: LayerBackdrop?): Backdrop? {
+    if (backdrop == null) return null
+    val appBackground = LocalAppBackgroundBackdrop.current
+    if (appBackground != null) return rememberCombinedBackdrop(appBackground, backdrop)
+    // Over a custom background the page layer alone is transparent wherever nothing is drawn,
+    // so leaving it out is only safe when the layer was filled with the opaque surface color.
+    return backdrop.takeIf { LocalBackgroundImagePath.current.isEmpty() }
 }
 
 @Composable
@@ -49,11 +75,12 @@ fun BlurredBar(
     val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
     val cardAlpha = LocalCardBackgroundAlpha.current
     val surfaceColor = MiuixTheme.colorScheme.surface
+    val blurBackdrop = rememberBarBackdrop(backdrop)
 
-    val blurModifier = if (effectiveBlurActive && backdrop != null) {
+    val blurModifier = if (effectiveBlurActive && blurBackdrop != null) {
         val tintAlpha = if (hasCustomBackground) cardAlpha else 0.87f
         Modifier.textureBlur(
-            backdrop = backdrop,
+            backdrop = blurBackdrop,
             shape = RectangleShape,
             blurRadius = 25f,
             colors = BlurColors(

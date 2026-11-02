@@ -10,6 +10,7 @@ import com.sukisu.ultra.data.repository.SettingsRepository
 import com.sukisu.ultra.data.repository.SettingsRepositoryImpl
 import com.sukisu.ultra.ui.LocalUiMode
 import com.sukisu.ultra.ui.UiMode
+import top.yukonga.miuix.kmp.blur.LayerBackdrop
 
 enum class ColorMode(val value: Int) {
     SYSTEM(0),
@@ -143,6 +144,16 @@ val LocalEnableNavigationBadge = staticCompositionLocalOf { true }
 val LocalModuleDescriptionMaxLines = staticCompositionLocalOf { 4 }
 
 val LocalBackgroundImagePath = staticCompositionLocalOf { "" }
+
+/**
+ * Captures the app background image (and its scrim) exactly as drawn behind the navigation host.
+ *
+ * `layerBackdrop` only records the page it is attached to, so over a custom background the
+ * unpainted parts of that layer are fully transparent. Miuix bar blurs sample that layer, and
+ * transparent pixels bleed black into the result, so bars combine this backdrop underneath their
+ * own page backdrop to blur what is actually on screen. Null when no capture is available.
+ */
+val LocalAppBackgroundBackdrop = staticCompositionLocalOf<LayerBackdrop?> { null }
 
 val LocalCardBackgroundAlpha = staticCompositionLocalOf { 0.6f }
 

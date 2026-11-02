@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -79,6 +80,7 @@ import com.sukisu.ultra.ui.component.ModuleEcoBadge
 import com.sukisu.ultra.ui.theme.LocalBackgroundImagePath
 import com.sukisu.ultra.ui.theme.backgroundAwareColor
 import com.sukisu.ultra.ui.component.WarningLevel
+import com.sukisu.ultra.ui.component.HomeCardStickerOverlays
 import com.sukisu.ultra.ui.component.dialog.rememberConfirmDialog
 import com.sukisu.ultra.ui.component.material.ExpressiveScaffold
 import com.sukisu.ultra.ui.component.material.IconTile
@@ -92,6 +94,7 @@ import com.sukisu.ultra.ai.api.AiFeatureBridge
 import com.sukisu.ultra.ui.util.module.LatestVersionInfo
 import com.sukisu.ultra.ui.util.customText
 import com.sukisu.ultra.ui.util.CustomTextKey
+import com.sukisu.ultra.ui.util.drawPainterCover
 
 private val HeroShape = RoundedCornerShape(28.dp)
 private val TileShape = RoundedCornerShape(22.dp)
@@ -165,7 +168,7 @@ fun HomePagerMaterial(
                 WarningCard(stringResource(id = R.string.home_preview_mode), level = WarningLevel.Notice)
             }
             if (state.showAiHomeCard && AiFeatureBridge.isAvailable) {
-                AiFeatureBridge.HomeCardMaterial(onOpenChat = actions.onOpenAi)
+                AiFeatureBridge.HomeCard(onOpenChat = actions.onOpenAi)
             }
             StatsRow(state = state, actions = actions)
             InfoCard(systemInfo = state.systemInfo, showFullStatus = state.showFullStatus)
@@ -292,13 +295,14 @@ private fun ActiveStatusCard(
         )
     }
 
+    val hideCardDecoration = state.homeCardImagePath.isNotEmpty() && state.hideHomeCardDecoration
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clip(HeroShape)
             .then(
                 if (cardImagePainter != null) {
-                    Modifier.drawBehind { with(cardImagePainter) { draw(size) } }
+                    Modifier.drawPainterCover(cardImagePainter)
                 } else {
                     Modifier
                 }
@@ -308,8 +312,8 @@ private fun ActiveStatusCard(
         shape = HeroShape,
         onClick = onClick,
     ) {
-        Box(
-            modifier = if (cardImagePainter != null) {
+        BoxWithConstraints(
+            modifier = if (hideCardDecoration) {
                 Modifier
             } else {
                 Modifier.drawBehind { drawStatusRings(contentColor.copy(alpha = 0.18f)) }
@@ -356,18 +360,24 @@ private fun ActiveStatusCard(
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = customText(CustomTextKey.HOME_STATUS_WORKING),
-                        style = MaterialTheme.typography.displaySmall,
-                        fontWeight = FontWeight.Black,
-                    )
-                    Text(
-                        text = stringResource(R.string.home_working_version, "${state.ksuVersion}-${state.kernelUAPIVersion}"),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontFamily = FontFamily.Monospace,
-                    )
+                    if (!(state.homeCardImagePath.isNotEmpty() && state.hideHomeCardStatusText)) {
+                        Text(
+                            text = customText(CustomTextKey.HOME_STATUS_WORKING),
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.Black,
+                        )
+                        Text(
+                            text = stringResource(R.string.home_working_version, "${state.ksuVersion}-${state.kernelUAPIVersion}"),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontFamily = FontFamily.Monospace,
+                        )
+                    }
                 }
             }
+            HomeCardStickerOverlays(
+                stickers = state.homeCardStickers,
+                cardWidth = maxWidth,
+            )
         }
     }
 }

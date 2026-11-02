@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -45,7 +46,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
@@ -68,6 +68,7 @@ import com.sukisu.ultra.Natives
 import com.sukisu.ultra.R
 import com.sukisu.ultra.ui.component.ModuleEcoBadge
 import com.sukisu.ultra.ui.component.WarningLevel
+import com.sukisu.ultra.ui.component.HomeCardStickerOverlays
 import com.sukisu.ultra.ui.component.dialog.rememberConfirmDialog
 import com.sukisu.ultra.ui.component.miuix.AppCard
 import com.sukisu.ultra.ui.component.miuix.AppScaffold
@@ -75,6 +76,7 @@ import com.sukisu.ultra.ui.component.miuix.WarningCard
 import com.sukisu.ultra.ui.component.rebootlistpopup.RebootListPopupMiuix
 import com.sukisu.ultra.ui.component.statustag.StatusTag
 import com.sukisu.ultra.ai.api.AiFeatureBridge
+import com.sukisu.ultra.ui.theme.AiAssistantMaterialTheme
 import com.sukisu.ultra.ui.theme.LocalBackgroundImagePath
 import com.sukisu.ultra.ui.theme.LocalEnableBlur
 import com.sukisu.ultra.ui.theme.backgroundAwareCardColors
@@ -83,6 +85,7 @@ import com.sukisu.ultra.ui.util.customText
 import com.sukisu.ultra.ui.util.CustomTextKey
 import com.sukisu.ultra.ui.theme.isInDarkTheme
 import com.sukisu.ultra.ui.util.BlurredBar
+import com.sukisu.ultra.ui.util.drawPainterCover
 import com.sukisu.ultra.ui.util.module.LatestVersionInfo
 import com.sukisu.ultra.ui.util.rememberBlurBackdrop
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -194,7 +197,10 @@ fun HomePagerMiuix(
                             WarningCard(stringResource(id = R.string.home_preview_mode), level = WarningLevel.Notice)
                         }
                         if (state.showAiHomeCard && AiFeatureBridge.isAvailable) {
-                            AiFeatureBridge.HomeCardMiuix(onOpenChat = actions.onOpenAi)
+                            // MD3 card inside the Miuix page: use the MD3 scheme of the appearance settings.
+                            AiAssistantMaterialTheme {
+                                AiFeatureBridge.HomeCard(onOpenChat = actions.onOpenAi)
+                            }
                         }
                         StatsRow(state = state, actions = actions)
                         InfoCard(
@@ -371,7 +377,7 @@ private fun ActiveStatusCard(
             .clip(RoundedCornerShape(CardDefaults.CornerRadius))
             .then(
                 if (cardImagePainter != null) {
-                    Modifier.drawBehind { with(cardImagePainter) { draw(size) } }
+                    Modifier.drawPainterCover(cardImagePainter)
                 } else {
                     Modifier
                 }
@@ -393,16 +399,18 @@ private fun ActiveStatusCard(
         showIndication = !state.isLateLoadMode,
         pressFeedbackType = PressFeedbackType.Tilt
     ) {
-        Box {
-            Icon(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .offset(27.dp, 31.dp)
-                    .size(150.dp),
-                imageVector = Icons.Rounded.CheckCircleOutline,
-                tint = accentColor.copy(alpha = if (isDynamicColor) 0.8f else 1f),
-                contentDescription = null
-            )
+        BoxWithConstraints {
+            if (!(state.homeCardImagePath.isNotEmpty() && state.hideHomeCardDecoration)) {
+                Icon(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .offset(27.dp, 31.dp)
+                        .size(150.dp),
+                    imageVector = Icons.Rounded.CheckCircleOutline,
+                    tint = accentColor.copy(alpha = if (isDynamicColor) 0.8f else 1f),
+                    contentDescription = null
+                )
+            }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -444,22 +452,28 @@ private fun ActiveStatusCard(
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = customText(CustomTextKey.HOME_STATUS_WORKING),
-                        fontSize = 36.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        text = stringResource(
-                            R.string.home_working_version,
-                            "${state.ksuVersion}-${state.kernelUAPIVersion}"
-                        ),
-                        fontSize = 14.sp,
-                        fontFamily = FontFamily.Monospace,
-                        color = colorScheme.onSurfaceVariantSummary,
-                    )
+                    if (!(state.homeCardImagePath.isNotEmpty() && state.hideHomeCardStatusText)) {
+                        Text(
+                            text = customText(CustomTextKey.HOME_STATUS_WORKING),
+                            fontSize = 36.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = stringResource(
+                                R.string.home_working_version,
+                                "${state.ksuVersion}-${state.kernelUAPIVersion}"
+                            ),
+                            fontSize = 14.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = colorScheme.onSurfaceVariantSummary,
+                        )
+                    }
                 }
             }
+            HomeCardStickerOverlays(
+                stickers = state.homeCardStickers,
+                cardWidth = maxWidth,
+            )
         }
     }
 }

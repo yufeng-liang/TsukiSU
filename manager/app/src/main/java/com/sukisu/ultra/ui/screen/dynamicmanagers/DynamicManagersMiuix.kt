@@ -92,6 +92,8 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.rememberPullToRefreshState
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
+import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 @Composable
 internal fun DynamicManagersMiuix(
@@ -192,8 +194,11 @@ internal fun DynamicManagersMiuix(
                     state = listState,
                     modifier = Modifier
                         .fillMaxSize()
+                        .scrollEndHaptic()
+                        .overScrollVertical()
                         .nestedScroll(scrollBehavior.nestedScrollConnection),
                     contentPadding = contentPadding,
+                    overscrollEffect = null,
                 ) {
                     item(key = "status", contentType = "status") {
                         StatusCard(
