@@ -1,7 +1,13 @@
 package com.sukisu.ultra.data.column
 
 import android.net.Uri
+import android.util.Log
 import com.sukisu.ultra.data.model.RepoColumnStep
+import com.sukisu.ultra.data.proxy.GithubProxyRouter
+import com.sukisu.ultra.data.proxy.ProxyEntry
+import com.sukisu.ultra.data.proxy.ProxyMode
+import com.sukisu.ultra.data.proxy.ProxyRuntime
+import com.sukisu.ultra.data.proxy.ProxyUrl
 import com.sukisu.ultra.ksuApp
 import com.sukisu.ultra.ui.util.hasAnyNetwork
 import kotlinx.coroutines.Dispatchers
@@ -210,8 +216,9 @@ class ColumnModuleFetcher(
     /**
      * 流式下载 + 边下边算 sha256，先把内容写到 `.part`，校验通过后才改名成目标文件。
      *
-     * 这样任何一步失败都不会在缓存里留下一个「看起来能用」的半截 zip；`ksud` 拿到的永远是
-     * 校验过的字节。
+     * 地址由 [GithubProxyRouter] 展开成候选列表（粘性代理 → 其余代理 → 直连），逐个尝试：
+     * 任何一个候选失败（包括 sha256 对不上）都删掉临时文件、换下一个；全部失败才把最后一个
+     * 异常抛出去。这样缓存里永远只会留下「校验过、能装」的 zip，`ksud` 拿到的就是这份字节。
      */
     private suspend fun download(repo: String, url: String, destination: File, expectedSha256: String) {
         if (!url.startsWith("https://", ignoreCase = true)) {
@@ -222,6 +229,62 @@ class ColumnModuleFetcher(
             throw ColumnFetchException("无法创建下载目录：${destination.parentFile?.absolutePath ?: "（未知）"}")
         }
 
+        val (candidates, proxies) = downloadCandidates(url)
+        var lastError: Exception? = null
+        for (candidate in candidates) {
+            // 只有「确实是代理包出来的」地址才计入代理健康度；直连地址不写粘性记忆。
+            val proxied = ProxyUrl.entryOf(candidate, proxies)
+            try {
+                downloadOne(repo, candidate, destination, expectedSha256)
+                proxied?.let { ProxyRuntime.prefs.recordSuccess(it, 0L) }
+                return
+            } catch (e: CancellationException) {
+                // 取消不是失败：继续往上抛，否则上层再也停不下来。
+                throw e
+            } catch (e: Exception) {
+                proxied?.let { ProxyRuntime.prefs.recordFailure(it.id) }
+                lastError = e
+                Log.w("ColumnModuleFetcher", "候选地址下载失败，尝试下一个：$candidate", e)
+            }
+        }
+        throw lastError ?: ColumnFetchException("没有可用的模块下载地址：$url")
+    }
+
+    /**
+     * 把 [url] 展开成候选列表，并带回代理条目，便于事后记成功/失败。
+     *
+     * 代理配置读不到（远程 json 坏掉、还没初始化）时退回「只下原始地址」：
+     * 加速是锦上添花，不能因为它把正常下载挡死。
+     */
+    private suspend fun downloadCandidates(url: String): Pair<List<String>, List<ProxyEntry>> {
+        val proxies = runCatching { ProxyRuntime.list.load() }.getOrDefault(emptyList())
+        val candidates = runCatching {
+            val mode = ProxyRuntime.prefs.mode()
+            // AUTO 才竞速：ranking 自带 1 小时 + 同网络指纹缓存，正常不会多等。
+            val ranking = if (mode == ProxyMode.AUTO) {
+                runCatching { ProxyRuntime.prober.ranking(url) }.getOrDefault(emptyList())
+            } else {
+                emptyList()
+            }
+            GithubProxyRouter.candidates(
+                originalUrl = url,
+                mode = mode,
+                entries = proxies,
+                pinnedId = ProxyRuntime.prefs.pinnedId(),
+                lastGoodId = ProxyRuntime.prefs.lastGoodId(),
+                ranking = ranking,
+            )
+        }.getOrElse {
+            Log.w("ColumnModuleFetcher", "代理路由不可用，退回直连", it)
+            listOf(url)
+        }
+        return candidates to proxies
+    }
+
+    /** 单个候选地址的一次完整下载尝试；失败时自己清掉 `.part`，不留半截文件。 */
+    private suspend fun downloadOne(repo: String, url: String, destination: File, expectedSha256: String) {
+        val dir = destination.parentFile
+            ?: throw ColumnFetchException("下载目录不可用：${destination.absolutePath}")
         val temp = File(dir, destination.name + ".part")
         temp.delete()
         val digest = MessageDigest.getInstance("SHA-256")

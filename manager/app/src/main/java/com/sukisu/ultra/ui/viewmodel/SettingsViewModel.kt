@@ -23,6 +23,8 @@ import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamiccolor.ColorSpec
 import com.sukisu.ultra.Natives
 import com.sukisu.ultra.R
+import com.sukisu.ultra.data.proxy.ProxyMode
+import com.sukisu.ultra.data.proxy.ProxyRuntime
 import com.sukisu.ultra.data.repository.SettingsRepository
 import com.sukisu.ultra.data.repository.SettingsRepositoryImpl
 import com.sukisu.ultra.ksuApp
@@ -90,6 +92,21 @@ class SettingsViewModel(
 
     init {
         refresh()
+        // 代理配置不在 SettingsRepository 里，启动时单独读一次再填进 UI 状态，
+        // 否则设置页会先闪一下默认的「官方直连」。
+        viewModelScope.launch {
+            try {
+                val (mode, pinnedId) = withContext(Dispatchers.IO) {
+                    ProxyRuntime.prefs.mode() to ProxyRuntime.prefs.pinnedId().orEmpty()
+                }
+                _uiState.update { it.copy(proxyMode = mode.value, proxyPinnedId = pinnedId) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // 读不到就保持默认值（官方直连），设置页照常可用
+            }
+            refreshProxyEntries()
+        }
     }
 
     fun refresh() {
@@ -1041,6 +1058,75 @@ class SettingsViewModel(
     fun setCheckUpdate(enabled: Boolean) {
         repo.checkUpdate = enabled
         _uiState.update { it.copy(checkUpdate = enabled) }
+    }
+
+    // ---- GitHub 下载加速 ----
+
+    /**
+     * 切换代理模式。写失败就保持旧值，避免 UI 显示的模式和实际下载行为对不上。
+     */
+    fun setProxyMode(mode: String) {
+        val resolved = ProxyMode.from(mode)
+        try {
+            ProxyRuntime.prefs.setMode(resolved)
+            _uiState.update { it.copy(proxyMode = resolved.value) }
+        } catch (_: Exception) {
+            // 保持旧值
+        }
+    }
+
+    /**
+     * 指定代理。传空串表示「还没选」，落库时按 null 处理，读回来仍是空。
+     */
+    fun setProxyPinnedId(id: String) {
+        try {
+            ProxyRuntime.prefs.setPinnedId(id.ifBlank { null })
+            _uiState.update { it.copy(proxyPinnedId = id) }
+        } catch (_: Exception) {
+            // 保持旧值
+        }
+    }
+
+    /**
+     * 重新读一遍代理列表（内置项 + 远程下发项）。失败静默：卡片会退回「暂无代理」。
+     */
+    fun refreshProxyEntries() {
+        viewModelScope.launch {
+            try {
+                val entries = withContext(Dispatchers.IO) { ProxyRuntime.list.load() }
+                _uiState.update { it.copy(proxyEntries = entries) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // 列表读不到就保持现状，不打扰用户
+            }
+        }
+    }
+
+    /**
+     * 测速全部代理。结果只用于展示；下载选路仍由 [ProxyMode.AUTO] 的排序决定。
+     */
+    fun testProxies() {
+        if (_uiState.value.proxyTesting) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(proxyTesting = true) }
+            try {
+                val entries = _uiState.value.proxyEntries.ifEmpty {
+                    withContext(Dispatchers.IO) { ProxyRuntime.list.load() }
+                }
+                val health = withContext(Dispatchers.IO) {
+                    ProxyRuntime.prober.probeAll(entries, sampleUrl = null)
+                }
+                _uiState.update { it.copy(proxyEntries = entries, proxyHealth = health) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // 测速失败保留上一次结果
+            } finally {
+                // 无论成功、失败还是取消，进度都必须复位，否则按钮会一直卡在「正在测速」
+                _uiState.update { it.copy(proxyTesting = false) }
+            }
+        }
     }
 
     fun setUiMode(mode: String) {

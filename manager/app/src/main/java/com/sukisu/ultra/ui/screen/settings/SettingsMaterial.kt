@@ -73,6 +73,7 @@ import com.sukisu.ultra.ui.component.material.IconTile
 import com.sukisu.ultra.ui.component.material.SegmentedColumn
 import com.sukisu.ultra.ui.component.material.SegmentedDropdownItem
 import com.sukisu.ultra.ui.component.material.SegmentedListItem
+import com.sukisu.ultra.ui.component.material.SegmentedRadioItem
 import com.sukisu.ultra.ui.component.material.SegmentedSwitchItem
 import com.sukisu.ultra.ui.component.material.SendLogBottomSheet
 import com.sukisu.ultra.ui.component.material.SnackBarHost
@@ -82,6 +83,19 @@ import com.sukisu.ultra.ui.util.LocaleHelper
 import com.sukisu.ultra.ui.component.uninstalldialog.UninstallDialog
 import com.sukisu.ultra.ui.viewmodel.MainPageRequest
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.RadioButton
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import com.sukisu.ultra.data.proxy.ProxyHealth
+import com.sukisu.ultra.data.proxy.ProxyMode
 
 /**
  * @author weishu
@@ -219,6 +233,139 @@ fun SettingPagerMaterial(
                 }
             )
             }
+
+            // GitHub 下载加速：模式选择 + 代理测速。纯客户端配置，不需要 root，所以放在通用设置里。
+            val proxyMode = ProxyMode.from(uiState.proxyMode)
+            val proxyPinned = proxyMode == ProxyMode.PINNED
+            val proxyHealthById = uiState.proxyHealth.associateBy { it.id }
+            SegmentedColumn(
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
+                content = buildList {
+                    add {
+                        SegmentedListItem(
+                            headlineContent = {
+                                Text(
+                                    text = stringResource(R.string.settings_proxy_title),
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            },
+                            supportingContent = {
+                                Text(stringResource(R.string.settings_proxy_summary))
+                            },
+                            leadingContent = {
+                                IconTile(
+                                    Icons.Filled.Download,
+                                    stringResource(R.string.settings_proxy_title)
+                                )
+                            }
+                        )
+                    }
+                    add {
+                        SegmentedRadioItem(
+                            title = stringResource(R.string.settings_proxy_mode_official),
+                            selected = proxyMode == ProxyMode.OFFICIAL,
+                            onClick = { actions.onSetProxyMode(ProxyMode.OFFICIAL.value) }
+                        )
+                    }
+                    add {
+                        SegmentedRadioItem(
+                            title = stringResource(R.string.settings_proxy_mode_auto),
+                            selected = proxyMode == ProxyMode.AUTO,
+                            onClick = { actions.onSetProxyMode(ProxyMode.AUTO.value) }
+                        )
+                    }
+                    add {
+                        SegmentedRadioItem(
+                            title = stringResource(R.string.settings_proxy_mode_pinned),
+                            selected = proxyPinned,
+                            onClick = { actions.onSetProxyMode(ProxyMode.PINNED.value) }
+                        )
+                    }
+                    // 选了「指定代理」但还没选具体哪一条时，明确告诉用户现在走的是直连。
+                    if (proxyPinned && uiState.proxyPinnedId.isBlank()) {
+                        add {
+                            SegmentedListItem(
+                                headlineContent = {
+                                    Text(stringResource(R.string.settings_proxy_pinned_hint))
+                                }
+                            )
+                        }
+                    }
+                    if (uiState.proxyEntries.isEmpty()) {
+                        add {
+                            SegmentedListItem(
+                                headlineContent = {
+                                    Text(stringResource(R.string.settings_proxy_empty))
+                                }
+                            )
+                        }
+                    }
+                    uiState.proxyEntries.forEach { entry ->
+                        add {
+                            val health = proxyHealthById[entry.id]
+                            SegmentedListItem(
+                                // 只有「指定代理」模式下这些行才是可点的
+                                onClick = if (proxyPinned) {
+                                    { actions.onSetProxyPinnedId(entry.id) }
+                                } else {
+                                    null
+                                },
+                                enabled = proxyPinned,
+                                headlineContent = { Text(entry.name) },
+                                supportingContent = {
+                                    if (entry.note.isNotBlank()) Text(entry.note)
+                                },
+                                leadingContent = {
+                                    RadioButton(
+                                        selected = entry.id == uiState.proxyPinnedId,
+                                        onClick = null,
+                                        enabled = proxyPinned
+                                    )
+                                },
+                                trailingContent = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(proxyLatencyLabel(health))
+                                        Spacer(Modifier.width(8.dp))
+                                        ProxyStatusDot(health)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                    add {
+                        SegmentedListItem(
+                            // 测速中禁用整行，避免重复点出好几轮并发探测
+                            onClick = if (uiState.proxyTesting) null else actions.onTestProxies,
+                            enabled = !uiState.proxyTesting,
+                            headlineContent = {
+                                Text(
+                                    stringResource(
+                                        if (uiState.proxyTesting) {
+                                            R.string.settings_proxy_testing
+                                        } else {
+                                            R.string.settings_proxy_test_all
+                                        }
+                                    )
+                                )
+                            },
+                            leadingContent = {
+                                IconTile(
+                                    Icons.Filled.Refresh,
+                                    stringResource(R.string.settings_proxy_test_all)
+                                )
+                            },
+                            trailingContent = {
+                                if (uiState.proxyTesting) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                }
+                            }
+                        )
+                    }
+                }
+            )
 
             val profileTemplate = stringResource(id = R.string.settings_profile_template)
             KsuIsValid {
@@ -596,3 +743,30 @@ private fun TopBar(
         scrollBehavior = scrollBehavior
     )
 }
+
+/** 延迟文案：未测 / 不可用 / 具体毫秒三种情况分开，避免把内部值 -1 ms 直接显示出来。 */
+@Composable
+private fun proxyLatencyLabel(health: ProxyHealth?): String = when {
+    health == null -> stringResource(R.string.settings_proxy_untested)
+    !health.reachable -> stringResource(R.string.settings_proxy_unavailable)
+    else -> stringResource(R.string.settings_proxy_latency, health.latencyMs)
+}
+
+/** 状态点：绿=可连通、红=不可用、灰=未测。文案已经说了状态，这里只补一个一眼可见的颜色。 */
+@Composable
+private fun ProxyStatusDot(health: ProxyHealth?) {
+    val color = when {
+        health == null -> MaterialTheme.colorScheme.outline
+        health.reachable -> ProxyReachableGreen
+        else -> MaterialTheme.colorScheme.error
+    }
+    Box(
+        modifier = Modifier
+            .size(8.dp)
+            .clip(CircleShape)
+            .background(color)
+    )
+}
+
+/** Material3 配色里没有「成功」语义色，测速结果又与主题无关，用一个固定的绿。 */
+private val ProxyReachableGreen = Color(0xFF2E7D32)

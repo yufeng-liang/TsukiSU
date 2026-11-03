@@ -2,6 +2,10 @@ package com.sukisu.ultra.data.column
 
 import com.sukisu.ultra.data.backup.sha256Hex
 import com.sukisu.ultra.data.model.RepoColumnKeybox
+import com.sukisu.ultra.data.proxy.GithubProxyRouter
+import com.sukisu.ultra.data.proxy.ProxyEntry
+import com.sukisu.ultra.data.proxy.ProxyRuntime
+import com.sukisu.ultra.data.proxy.ProxyUrl
 import com.sukisu.ultra.ksuApp
 import com.sukisu.ultra.ui.util.hasAnyNetwork
 import kotlinx.coroutines.Dispatchers
@@ -59,7 +63,7 @@ class ColumnKeyboxFetcher(
         }
     }
 
-    private fun download(keybox: RepoColumnKeybox): String {
+    private suspend fun download(keybox: RepoColumnKeybox): String {
         val url = keybox.url.trim()
         if (!url.startsWith("https://", ignoreCase = true)) {
             throw IOException("密钥地址必须是 https，已拒绝下载：${keybox.url}")
@@ -76,8 +80,63 @@ class ColumnKeyboxFetcher(
             throw IOException("当前没有可用网络，无法下载密钥材料")
         }
 
+        // 候选顺序：粘性代理 → 其余代理 → 直连。keybox 地址通常不在 GitHub Release 白名单里，
+        // 这时路由只返回原始地址，行为与以前完全一致。
+        val (candidates, proxies) = downloadCandidates(url)
+        var lastError: Exception? = null
+        for (candidate in candidates) {
+            val proxied = ProxyUrl.entryOf(candidate, proxies)
+            val bytes = try {
+                fetchBytes(candidate)
+            } catch (e: CancellationException) {
+                // 取消不是失败：继续往上抛，否则向导里的「停止」再也停不下来。
+                throw e
+            } catch (e: Exception) {
+                proxied?.let { ProxyRuntime.prefs.recordFailure(it.id) }
+                lastError = e
+                continue
+            }
+
+            // 每个候选下完都要校验：代理是 TLS 终点，能改写内容，哈希对不上就换下一条路。
+            val actual = bytes.sha256Hex()
+            if (!actual.equals(expected, ignoreCase = true)) {
+                proxied?.let { ProxyRuntime.prefs.recordFailure(it.id) }
+                lastError = IOException(
+                    "密钥材料 sha256 与登记值不一致：期望 $expected，实际 $actual" +
+                        "（地址里的文件可能已被替换，已中止，未写入任何内容）"
+                )
+                continue
+            }
+
+            proxied?.let { ProxyRuntime.prefs.recordSuccess(it, 0L) }
+            return String(bytes, Charsets.UTF_8)
+        }
+        throw lastError ?: IOException("密钥材料下载失败：没有可用的下载地址")
+    }
+
+    /**
+     * 把登记地址展开成候选列表，并带回代理条目，便于事后记成功/失败。
+     *
+     * 代理配置读不到时退回「只下原始地址」——加速不能成为下载的前置条件。
+     */
+    private suspend fun downloadCandidates(url: String): Pair<List<String>, List<ProxyEntry>> {
+        val proxies = runCatching { ProxyRuntime.list.load() }.getOrDefault(emptyList())
+        val candidates = runCatching {
+            GithubProxyRouter.candidates(
+                originalUrl = url,
+                mode = ProxyRuntime.prefs.mode(),
+                entries = proxies,
+                pinnedId = ProxyRuntime.prefs.pinnedId(),
+                lastGoodId = ProxyRuntime.prefs.lastGoodId(),
+            )
+        }.getOrElse { listOf(url) }
+        return candidates to proxies
+    }
+
+    /** 单个候选地址的一次取回；体积上限与 https 强制都在这里兜住。 */
+    private fun fetchBytes(url: String): ByteArray {
         val request = Request.Builder().url(url).build()
-        val bytes = client.newCall(request).execute().use { response ->
+        return client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
                 throw IOException("下载密钥材料失败：HTTP ${response.code}")
             }
@@ -97,14 +156,5 @@ class ColumnKeyboxFetcher(
             }
             body
         }
-
-        val actual = bytes.sha256Hex()
-        if (!actual.equals(expected, ignoreCase = true)) {
-            throw IOException(
-                "密钥材料 sha256 与登记值不一致：期望 $expected，实际 $actual" +
-                    "（地址里的文件可能已被替换，已中止，未写入任何内容）"
-            )
-        }
-        return String(bytes, Charsets.UTF_8)
     }
 }

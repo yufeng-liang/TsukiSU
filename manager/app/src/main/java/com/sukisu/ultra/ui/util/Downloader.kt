@@ -6,6 +6,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
+import com.sukisu.ultra.data.proxy.GithubProxyRouter
+import com.sukisu.ultra.data.proxy.ProxyEntry
+import com.sukisu.ultra.data.proxy.ProxyMode
+import com.sukisu.ultra.data.proxy.ProxyRuntime
+import com.sukisu.ultra.data.proxy.ProxyUrl
+import com.sukisu.ultra.data.registry.DownloadVerificationException
 import com.sukisu.ultra.data.registry.ExpectedFile
 import com.sukisu.ultra.ksuApp
 import com.sukisu.ultra.ui.util.module.LatestVersionInfo
@@ -21,6 +27,9 @@ import okhttp3.Request
  *
  * [expected] is the size + SHA-256 a registry release declared; [onFailed] reports the last
  * failed state (including a verification failure) instead of returning silently.
+ *
+ * 每个地址都会先按「GitHub 下载加速」展开成候选列表（粘性代理 → 其余代理 → 直连），
+ * 逐个交给 [DownloadManager] 尝试；哈希校验仍由 [expected] 兜底，代理改不了结果。
  */
 suspend fun download(
     url: String,
@@ -34,7 +43,10 @@ suspend fun download(
 ) {
     onDownloading()
 
-    val candidates = listOfNotNull(url, altUrl?.takeIf { it.isNotBlank() && it != url })
+    // 主地址在前、备用地址在后，各自展开；代理全挂才会轮到备用地址，直连是每条链路最后的兜底。
+    val origins = listOfNotNull(url, altUrl?.takeIf { it.isNotBlank() && it != url })
+    val (candidates, proxies) = expandCandidates(origins)
+
     var lastState: DownloadManager.DownloadState? = null
     for ((index, candidate) in candidates.withIndex()) {
         val downloadId = DownloadManager.enqueue(
@@ -53,8 +65,20 @@ suspend fun download(
                     status == DownloadManager.Status.FAILED
             }[downloadId]
 
-        if (state?.status == DownloadManager.Status.COMPLETED) return
+        // 只有「确实是代理包出来的」候选才计入代理健康度，直连不写粘性记忆。
+        val proxied = ProxyUrl.entryOf(candidate, proxies)
+        if (state?.status == DownloadManager.Status.COMPLETED) {
+            // 拿不到字节数就别编速度：如实记 0，别让它影响下次的排序。
+            proxied?.let { ProxyRuntime.prefs.recordSuccess(it, 0L) }
+            return
+        }
         lastState = state
+        // 被本地闸门当场拒掉的地址（校验型下载不认某个代理）不代表代理不可用，不能记黑账。
+        val rejectedBeforeNetwork =
+            state?.verificationFailure == DownloadVerificationException.Reason.URL_NOT_ALLOWED
+        if (!rejectedBeforeNetwork) {
+            proxied?.let { ProxyRuntime.prefs.recordFailure(it.id) }
+        }
         if (index < candidates.lastIndex) {
             Log.w("Downloader", "download failed for $candidate, retrying ${candidates[index + 1]}")
         }
@@ -62,6 +86,39 @@ suspend fun download(
 
     val failed = lastState
     if (failed != null) withContext(Dispatchers.Main) { onFailed(failed) }
+}
+
+/**
+ * 把 [origins] 展开成按优先级排列的候选地址，并带回代理条目，便于事后记成功/失败。
+ *
+ * 不同原始地址之间也会去重（主地址与备用地址可能指向同一个资产）。代理配置读不到时
+ * 退回「只下原始地址」：加速是锦上添花，不能因为它把正常下载挡死。
+ */
+private suspend fun expandCandidates(origins: List<String>): Pair<List<String>, List<ProxyEntry>> {
+    val proxies = runCatching { ProxyRuntime.list.load() }.getOrDefault(emptyList())
+    val expanded = runCatching {
+        val mode = ProxyRuntime.prefs.mode()
+        val pinnedId = ProxyRuntime.prefs.pinnedId()
+        val lastGoodId = ProxyRuntime.prefs.lastGoodId()
+        buildList {
+            for (origin in origins) {
+                // AUTO 才竞速：官方直连与「固定某个代理」都不该产生测速流量。
+                // ranking 自带 1 小时 + 同网络指纹缓存，正常情况下这里不会真的等满超时。
+                val ranking = if (mode == ProxyMode.AUTO) {
+                    runCatching { ProxyRuntime.prober.ranking(origin) }.getOrDefault(emptyList())
+                } else {
+                    emptyList()
+                }
+                GithubProxyRouter.candidates(origin, mode, proxies, pinnedId, lastGoodId, ranking)
+                    .filterNot { it in this }
+                    .forEach { add(it) }
+            }
+        }
+    }.getOrElse {
+        Log.w("Downloader", "代理路由不可用，退回直连", it)
+        origins
+    }
+    return (if (expanded.isEmpty()) origins else expanded) to proxies
 }
 
 internal suspend fun isDownloadAvailable(uri: Uri): Boolean = withContext(Dispatchers.IO) {
@@ -125,10 +182,17 @@ private fun checkLatestRelease(): LatestVersionInfo {
             for (i in 0 until assets.length()) {
                 val asset = assets.getJSONObject(i)
                 val versionCode = matchSelfUpdateApk(asset.getString("name")) ?: continue
+                // 管理器 APK 的哈希只能来自这条直连查询：走代理下载时它就是唯一的校验依据，
+                // 拿不到就留空，下载侧会因此拒绝走代理（宁可直接下，也不能让代理决定装什么）。
+                val digest = sha256DigestOf(asset)
+                if (digest == null) {
+                    Log.w("UpdateCheck", "latest: ${asset.getString("name")} 没有 sha256，只能直连下载")
+                }
                 return@use LatestVersionInfo(
-                    versionCode,
-                    asset.getString("browser_download_url"),
-                    changelog,
+                    versionCode = versionCode,
+                    downloadUrl = asset.getString("browser_download_url"),
+                    changelog = changelog,
+                    sha256 = digest ?: "",
                 )
             }
             LatestVersionInfo()
@@ -136,4 +200,18 @@ private fun checkLatestRelease(): LatestVersionInfo {
     }.onFailure {
         Log.w("UpdateCheck", "latest: update check failed", it)
     }.getOrDefault(LatestVersionInfo())
+}
+
+/**
+ * 从 release 资产里取 sha256 摘要。
+ *
+ * GitHub 的 release 接口给的是 `"digest": "sha256:<64 位十六进制>"`；老接口没有这个字段，
+ * 或者算法不是 sha256，一律返回 null —— 调用方按「没有哈希」处理，绝不能拿未知内容去装。
+ */
+private fun sha256DigestOf(asset: org.json.JSONObject): String? {
+    val digest = asset.optString("digest").trim()
+    if (!digest.startsWith("sha256:", ignoreCase = true)) return null
+    val hex = digest.substringAfter("sha256:", "").trim()
+    if (hex.length != 64 || !hex.all { it in "0123456789abcdefABCDEF" }) return null
+    return hex.lowercase()
 }

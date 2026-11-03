@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import com.sukisu.ultra.data.registry.DownloadVerificationException
 import com.sukisu.ultra.data.registry.ExpectedFile
-import com.sukisu.ultra.data.registry.RegistryUrls
 import com.sukisu.ultra.data.registry.canShareDownload
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
@@ -111,10 +110,10 @@ object DownloadManager {
         )
         _downloads.update { it + (id to state) }
 
-        if (expected != null && !RegistryUrls.isAllowedReleaseDownloadUrl(url)) {
-            markFailed(id, "Download URL not allowed", DownloadVerificationException.Reason.URL_NOT_ALLOWED)
-            return id
-        }
+        // 地址白名单校验已后移到 DownloadService.downloadVerified：这里的入队早于候选展开，
+        // 而「GitHub 下载加速」会把 release 地址套成 https://<代理>/https://github.com/...，
+        // 在这一层判白名单会把所有代理候选当场判失败（带 expected 的模块安装正好全走这条）。
+        // 后移不降低安全性：DownloadService 仍要求「内层是合法 release 地址」并逐跳校验。
 
         if (onCompleted != null) {
             completionCallbacks[id] = onCompleted

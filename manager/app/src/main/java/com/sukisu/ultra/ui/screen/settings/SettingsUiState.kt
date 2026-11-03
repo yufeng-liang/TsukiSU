@@ -4,6 +4,9 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.saveable.listSaver
 import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamiccolor.ColorSpec
+import com.sukisu.ultra.data.proxy.ProxyEntry
+import com.sukisu.ultra.data.proxy.ProxyHealth
+import com.sukisu.ultra.data.proxy.ProxyMode
 import com.sukisu.ultra.ui.UiMode
 import com.sukisu.ultra.ui.util.BuiltinAppIcons
 import com.sukisu.ultra.ui.util.HomeCardSticker
@@ -113,6 +116,14 @@ data class SettingsUiState(
 
     val pendingImportTheme: com.sukisu.ultra.ui.util.ImportedTheme? = null,
     val showThemeImportDialog: Boolean = false,
+
+    // GitHub 下载加速
+    // 下载链接改写是纯客户端配置，和 root 状态无关，所以放在通用设置的独立卡片里。
+    val proxyMode: String = ProxyMode.OFFICIAL.value,
+    val proxyPinnedId: String = "",
+    val proxyEntries: List<ProxyEntry> = emptyList(),
+    val proxyHealth: List<ProxyHealth> = emptyList(),
+    val proxyTesting: Boolean = false,
 )
 
 /**
@@ -189,4 +200,7 @@ data class SettingsScreenActions(
     val onOpenSusfsConfig: () -> Unit,
     val onOpenBackup: () -> Unit,
     val onOpenExtensions: () -> Unit,
+    val onSetProxyMode: (String) -> Unit,
+    val onSetProxyPinnedId: (String) -> Unit,
+    val onTestProxies: () -> Unit,
 )

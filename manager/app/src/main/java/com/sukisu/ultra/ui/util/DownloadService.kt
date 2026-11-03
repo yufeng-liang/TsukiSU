@@ -25,6 +25,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import com.sukisu.ultra.R
+import com.sukisu.ultra.data.proxy.ProxyEntry
+import com.sukisu.ultra.data.proxy.ProxyRuntime
+import com.sukisu.ultra.data.proxy.ProxyUrl
 import com.sukisu.ultra.data.registry.DownloadVerificationException
 import com.sukisu.ultra.data.registry.ExpectedFile
 import com.sukisu.ultra.data.registry.RegistryDownloadStore
@@ -152,12 +155,16 @@ class DownloadService : Service() {
     /**
      * Registry downloads ([expected] != null) may only come from GitHub Release download URLs
      * and their CDN redirect targets; every hop is checked.
+     *
+     * 走下载加速时代理本身就是被请求的主机，它不在 GitHub 的域名表里，所以额外放行
+     * 「本次候选列表里确实存在的代理地址」。判定仍然要求它包着一个白名单内层地址，
+     * 见 [isAllowedRegistryHop]。
      */
-    private fun registryClient(): OkHttpClient = ksuApp.okhttpClient.newBuilder()
+    private fun registryClient(proxies: List<ProxyEntry>): OkHttpClient = ksuApp.okhttpClient.newBuilder()
         .followSslRedirects(false)
         .addNetworkInterceptor { chain ->
             val requestUrl = chain.request().url
-            if (!RegistryUrls.isAllowedDownloadHop(requestUrl.toString())) {
+            if (!isAllowedRegistryHop(requestUrl.toString(), proxies)) {
                 throw DownloadVerificationException(
                     DownloadVerificationException.Reason.URL_NOT_ALLOWED,
                     "Download host not allowed: ${requestUrl.host}"
@@ -166,6 +173,19 @@ class DownloadService : Service() {
             chain.proceed(chain.request())
         }
         .build()
+
+    /**
+     * 单跳放行规则：白名单域名，或「代理前缀 + 白名单内层地址」。
+     *
+     * 后半段由 [ProxyUrl.unwrap] 保证：它只认 [proxies] 里那些 https、无路径的代理前缀，
+     * 且内层地址必须自己通过 [RegistryUrls.isAllowedReleaseDownloadUrl]——
+     * 所以放行代理域名不会变成放行任意 host。
+     */
+    private fun isAllowedRegistryHop(url: String, proxies: List<ProxyEntry>): Boolean {
+        if (RegistryUrls.isAllowedDownloadHop(url)) return true
+        if (proxies.isEmpty()) return false
+        return ProxyUrl.unwrap(url, proxies) != null
+    }
 
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun startDownload(
@@ -306,9 +326,21 @@ class DownloadService : Service() {
      * Registry release ZIP: only GitHub Release URLs (and their CDN redirect targets), streamed
      * into app-private storage while size + SHA-256 are checked. A mismatching file is deleted
      * and never published; the flash step re-verifies the stored bytes before installing.
+     *
+     * 允许的地址有两类：直连的 GitHub Release 地址，以及「已知加速代理 + 白名单内层地址」。
+     * 后者只是换一条到同一个 release 资产的路，sha256 仍然由直连拿到的登记值把关，
+     * 所以代理看到/改写内容也骗不过校验。
      */
-    private fun CoroutineScope.downloadVerified(id: Int, url: String, fileName: String, expected: ExpectedFile): Uri {
-        if (!RegistryUrls.isAllowedReleaseDownloadUrl(url)) {
+    private suspend fun CoroutineScope.downloadVerified(id: Int, url: String, fileName: String, expected: ExpectedFile): Uri {
+        // 直连不需要代理列表；只有加速地址才去加载它，避免为了一次普通下载读配置。
+        val direct = RegistryUrls.isAllowedReleaseDownloadUrl(url)
+        val proxies: List<ProxyEntry> = if (direct) {
+            emptyList()
+        } else {
+            runCatching { ProxyRuntime.list.load() }.getOrDefault(emptyList())
+        }
+        // 不是直连、也不属于「已知代理包着白名单地址」：拒绝，这条链路不接受任意 host。
+        if (!direct && ProxyUrl.unwrap(url, proxies) == null) {
             throw DownloadVerificationException(
                 DownloadVerificationException.Reason.URL_NOT_ALLOWED,
                 "Download URL not allowed"
@@ -316,7 +348,7 @@ class DownloadService : Service() {
         }
         val root = registryStoreRoot()
         runCatching { RegistryDownloadStore.cleanup(root, REGISTRY_DOWNLOAD_MAX_AGE_MS) }
-        val call = registryClient().newCall(Request.Builder().url(url).build())
+        val call = registryClient(proxies).newCall(Request.Builder().url(url).build())
         activeCalls[id] = call
         ensureActive()
         val file = call.execute().use { resp ->

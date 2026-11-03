@@ -1657,4 +1657,17 @@
     <string name="column_wizard_keybox_title">Key material (keybox.xml) required</string>
     <string name="column_wizard_keybox_body">Play Integrity needs a Google-attested keybox. The store never stores, forwards, or uploads it: the file you pick is written straight to your device\'s TrickyStore / TEESimulator folder.</string>
     <string name="column_wizard_keybox_pick">Choose keybox.xml</string>
+    <!-- GitHub 下载加速 -->
+    <string name="settings_proxy_title">GitHub download acceleration</string>
+    <string name="settings_proxy_summary">Auto mode speed-tests the direct connection and every proxy, then uses the fastest one. With a system proxy or VPN on, the direct connection is preferred.</string>
+    <string name="settings_proxy_mode_official">Official direct</string>
+    <string name="settings_proxy_mode_auto">Auto (fastest)</string>
+    <string name="settings_proxy_mode_pinned">Pinned proxy</string>
+    <string name="settings_proxy_latency">%1$d ms</string>
+    <string name="settings_proxy_unavailable">Unavailable</string>
+    <string name="settings_proxy_untested">Not tested</string>
+    <string name="settings_proxy_test_all">Test all</string>
+    <string name="settings_proxy_testing">Testing…</string>
+    <string name="settings_proxy_pinned_hint">No proxy picked yet, downloads fall back to the official direct connection.</string>
+    <string name="settings_proxy_empty">No proxies loaded yet. Tap Test all to load them.</string>
 </resources>

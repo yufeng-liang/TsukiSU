@@ -84,6 +84,18 @@ import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import com.sukisu.ultra.data.proxy.ProxyHealth
+import com.sukisu.ultra.data.proxy.ProxyMode
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.preference.RadioButtonPreference
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
  * @author weishu
@@ -236,6 +248,121 @@ fun SettingPagerMiuix(
                             onClick = actions.onOpenTheme
                         )
 
+                    }
+
+                    // GitHub 下载加速：和 Material 页共用同一份状态，纯客户端配置，不需要 root。
+                    val proxyMode = ProxyMode.from(uiState.proxyMode)
+                    val proxyPinned = proxyMode == ProxyMode.PINNED
+                    val proxyHealthById = uiState.proxyHealth.associateBy { it.id }
+                    AppCard(
+                        modifier = Modifier
+                            .padding(top = 12.dp)
+                            .fillMaxWidth(),
+                        colors = backgroundAwareCardColors(),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.settings_proxy_title),
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp),
+                            color = colorScheme.onBackground,
+                            fontSize = MiuixTheme.textStyles.body1.fontSize,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_proxy_summary),
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp),
+                            color = colorScheme.onSurfaceVariantSummary,
+                            fontSize = MiuixTheme.textStyles.footnote1.fontSize,
+                        )
+                        RadioButtonPreference(
+                            title = stringResource(R.string.settings_proxy_mode_official),
+                            selected = proxyMode == ProxyMode.OFFICIAL,
+                            onClick = { actions.onSetProxyMode(ProxyMode.OFFICIAL.value) },
+                        )
+                        RadioButtonPreference(
+                            title = stringResource(R.string.settings_proxy_mode_auto),
+                            selected = proxyMode == ProxyMode.AUTO,
+                            onClick = { actions.onSetProxyMode(ProxyMode.AUTO.value) },
+                        )
+                        RadioButtonPreference(
+                            title = stringResource(R.string.settings_proxy_mode_pinned),
+                            selected = proxyPinned,
+                            onClick = { actions.onSetProxyMode(ProxyMode.PINNED.value) },
+                        )
+                        // 选了「指定代理」但还没选具体哪一条时，说明现在实际走的是直连。
+                        if (proxyPinned && uiState.proxyPinnedId.isBlank()) {
+                            Text(
+                                text = stringResource(R.string.settings_proxy_pinned_hint),
+                                modifier = Modifier.padding(
+                                    start = 16.dp,
+                                    end = 16.dp,
+                                    top = 2.dp,
+                                    bottom = 6.dp,
+                                ),
+                                color = colorScheme.onSurfaceVariantSummary,
+                                fontSize = MiuixTheme.textStyles.footnote1.fontSize,
+                            )
+                        }
+                        if (uiState.proxyEntries.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.settings_proxy_empty),
+                                modifier = Modifier.padding(
+                                    start = 16.dp,
+                                    end = 16.dp,
+                                    top = 2.dp,
+                                    bottom = 6.dp,
+                                ),
+                                color = colorScheme.onSurfaceVariantSummary,
+                                fontSize = MiuixTheme.textStyles.footnote1.fontSize,
+                            )
+                        }
+                        uiState.proxyEntries.forEach { entry ->
+                            val health = proxyHealthById[entry.id]
+                            RadioButtonPreference(
+                                title = entry.name,
+                                summary = entry.note.takeIf { it.isNotBlank() },
+                                selected = entry.id == uiState.proxyPinnedId,
+                                onClick = { actions.onSetProxyPinnedId(entry.id) },
+                                // 只有「指定代理」模式下才允许选某一条
+                                enabled = proxyPinned,
+                                startAction = { MiuixProxyStatusDot(health) },
+                                endActions = {
+                                    Text(
+                                        text = miuixProxyLatencyLabel(health),
+                                        color = colorScheme.onSurfaceVariantSummary,
+                                        fontSize = MiuixTheme.textStyles.footnote1.fontSize,
+                                    )
+                                },
+                            )
+                        }
+                        ArrowPreference(
+                            title = stringResource(
+                                if (uiState.proxyTesting) {
+                                    R.string.settings_proxy_testing
+                                } else {
+                                    R.string.settings_proxy_test_all
+                                }
+                            ),
+                            startAction = {
+                                Icon(
+                                    Icons.Rounded.Refresh,
+                                    modifier = Modifier.padding(end = 6.dp),
+                                    contentDescription = stringResource(R.string.settings_proxy_test_all),
+                                    tint = colorScheme.onBackground,
+                                )
+                            },
+                            endActions = {
+                                if (uiState.proxyTesting) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.padding(start = 4.dp),
+                                        size = 16.dp,
+                                        strokeWidth = 2.dp,
+                                    )
+                                }
+                            },
+                            onClick = actions.onTestProxies,
+                            // 测速中禁用，避免重复点出好几轮并发探测
+                            enabled = !uiState.proxyTesting,
+                        )
                     }
 
                     KsuIsValid {
@@ -685,3 +812,32 @@ fun SettingPagerMiuix(
         }
     }
 }
+
+/** 延迟文案：未测 / 不可用 / 具体毫秒，避免把内部值（-1）直接显示出来。 */
+@Composable
+private fun miuixProxyLatencyLabel(health: ProxyHealth?): String = when {
+    health == null -> stringResource(R.string.settings_proxy_untested)
+    !health.reachable -> stringResource(R.string.settings_proxy_unavailable)
+    else -> stringResource(R.string.settings_proxy_latency, health.latencyMs)
+}
+
+/** 状态点：绿=可连通、红=不可用、灰=未测。文案已经说了状态，这里只补一个一眼可见的颜色。 */
+@Composable
+private fun MiuixProxyStatusDot(health: ProxyHealth?) {
+    val color = when {
+        health == null -> colorScheme.onSurfaceVariantSummary.copy(alpha = 0.4f)
+        health.reachable -> MiuixProxyReachableGreen
+        else -> MiuixProxyUnreachableRed
+    }
+    Box(
+        modifier = Modifier
+            .padding(end = 6.dp)
+            .size(8.dp)
+            .clip(CircleShape)
+            .background(color)
+    )
+}
+
+/** Miuix 配色里没有稳定的成功/错误语义色，测速结果又与主题无关，直接用固定色。 */
+private val MiuixProxyReachableGreen = Color(0xFF2E7D32)
+private val MiuixProxyUnreachableRed = Color(0xFFB3261E)

@@ -87,6 +87,9 @@ fun SettingPager(
         onOpenSusfsConfig = { navigator.push(Route.SuSFS()) },
         onOpenBackup = { navigator.push(Route.Backup) },
         onOpenExtensions = { navigator.push(Route.Extensions) },
+        onSetProxyMode = viewModel::setProxyMode,
+        onSetProxyPinnedId = viewModel::setProxyPinnedId,
+        onTestProxies = viewModel::testProxies,
     )
 
     when (LocalUiMode.current) {

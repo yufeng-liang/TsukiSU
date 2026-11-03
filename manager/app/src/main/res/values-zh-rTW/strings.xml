@@ -1383,4 +1383,17 @@
     <string name="column_wizard_keybox_title">需要密鑰材料（keybox.xml）</string>
     <string name="column_wizard_keybox_body">Play Integrity 三綠需要一份 Google 認證密鑰。商店不儲存、不轉存、不上傳：你選的檔案只寫進本機的 TrickyStore / TEESimulator 目錄。</string>
     <string name="column_wizard_keybox_pick">選擇 keybox.xml</string>
+    <!-- GitHub 下載加速 -->
+    <string name="settings_proxy_title">GitHub 下載加速</string>
+    <string name="settings_proxy_summary">自動模式會同時為直連與每個代理測速，誰快用誰；開啟系統代理或 VPN 時優先走直連。</string>
+    <string name="settings_proxy_mode_official">官方直連</string>
+    <string name="settings_proxy_mode_auto">自動選優</string>
+    <string name="settings_proxy_mode_pinned">指定代理</string>
+    <string name="settings_proxy_latency">%1$d 毫秒</string>
+    <string name="settings_proxy_unavailable">無法使用</string>
+    <string name="settings_proxy_untested">未測</string>
+    <string name="settings_proxy_test_all">測試全部</string>
+    <string name="settings_proxy_testing">正在測速…</string>
+    <string name="settings_proxy_pinned_hint">尚未選擇代理，下載會回退到官方直連。</string>
+    <string name="settings_proxy_empty">目前沒有可用代理，點「測試全部」重新載入。</string>
 </resources>
