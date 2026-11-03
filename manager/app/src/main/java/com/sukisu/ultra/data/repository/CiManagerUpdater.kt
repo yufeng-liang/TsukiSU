@@ -16,6 +16,7 @@ import com.sukisu.ultra.BuildConfig
 import com.sukisu.ultra.R
 import com.sukisu.ultra.data.proxy.GithubProxyRouter
 import com.sukisu.ultra.data.proxy.ProxyEntry
+import com.sukisu.ultra.data.proxy.ProxyMode
 import com.sukisu.ultra.data.proxy.ProxyRuntime
 import com.sukisu.ultra.data.proxy.ProxyUrl
 import com.sukisu.ultra.ksuApp
@@ -132,7 +133,9 @@ class CiManagerUpdater(private val context: Context) {
         val expectedSha256 = expectedSha256Of(update.sha256)
         val originalUrl = update.downloadUrl
         // sha256 为空 = 没有校验依据：候选列表只有直连，绝不套代理（代理能改包，改完也无从发现）。
-        val candidates = if (expectedSha256 == null) {
+        // 用户选了「官方直连」时同理：不竞速、不把请求打到第三方。
+        val mode = ProxyRuntime.prefs.mode()
+        val candidates = if (expectedSha256 == null || mode == ProxyMode.OFFICIAL) {
             listOf(originalUrl)
         } else {
             // 竞速排序（含直连）可能为空：拿不到就交给路由的保守默认顺序。
@@ -141,7 +144,7 @@ class CiManagerUpdater(private val context: Context) {
             }
             GithubProxyRouter.candidates(
                 originalUrl = originalUrl,
-                mode = ProxyRuntime.prefs.mode(),
+                mode = mode,
                 entries = entries,
                 pinnedId = ProxyRuntime.prefs.pinnedId(),
                 lastGoodId = ProxyRuntime.prefs.lastGoodId(),

@@ -44,8 +44,9 @@ suspend fun download(
     onDownloading()
 
     // 主地址在前、备用地址在后，各自展开；代理全挂才会轮到备用地址，直连是每条链路最后的兜底。
+    // expected 为空的下载不参与加速（expandCandidates 里直接短路）。
     val origins = listOfNotNull(url, altUrl?.takeIf { it.isNotBlank() && it != url })
-    val (candidates, proxies) = expandCandidates(origins)
+    val (candidates, proxies) = expandCandidates(origins, expected)
 
     var lastState: DownloadManager.DownloadState? = null
     for ((index, candidate) in candidates.withIndex()) {
@@ -94,7 +95,14 @@ suspend fun download(
  * 不同原始地址之间也会去重（主地址与备用地址可能指向同一个资产）。代理配置读不到时
  * 退回「只下原始地址」：加速是锦上添花，不能因为它把正常下载挡死。
  */
-private suspend fun expandCandidates(origins: List<String>): Pair<List<String>, List<ProxyEntry>> {
+private suspend fun expandCandidates(
+    origins: List<String>,
+    expected: ExpectedFile?,
+): Pair<List<String>, List<ProxyEntry>> {
+    // 没有哈希就别套代理：代理是 TLS 终点，能读也能改。校验不了的字节不该经过第三方，
+    // 尤其是模块 zip——落地后直接进刷入流程。这条是硬约束，不是优化。
+    if (expected?.sha256.isNullOrBlank()) return origins to emptyList()
+
     val proxies = runCatching { ProxyRuntime.list.load() }.getOrDefault(emptyList())
     val expanded = runCatching {
         val mode = ProxyRuntime.prefs.mode()

@@ -229,7 +229,7 @@ class ColumnModuleFetcher(
             throw ColumnFetchException("无法创建下载目录：${destination.parentFile?.absolutePath ?: "（未知）"}")
         }
 
-        val (candidates, proxies) = downloadCandidates(url)
+        val (candidates, proxies) = downloadCandidates(url, verifiable = expectedSha256.isNotEmpty())
         var lastError: Exception? = null
         for (candidate in candidates) {
             // 只有「确实是代理包出来的」地址才计入代理健康度；直连地址不写粘性记忆。
@@ -256,7 +256,14 @@ class ColumnModuleFetcher(
      * 代理配置读不到（远程 json 坏掉、还没初始化）时退回「只下原始地址」：
      * 加速是锦上添花，不能因为它把正常下载挡死。
      */
-    private suspend fun downloadCandidates(url: String): Pair<List<String>, List<ProxyEntry>> {
+    private suspend fun downloadCandidates(
+        url: String,
+        verifiable: Boolean,
+    ): Pair<List<String>, List<ProxyEntry>> {
+        // 索引没登记 sha256 时只许直连：代理是 TLS 终点，能改内容，而模块包落地后直接进刷入。
+        // 想给这个模块开加速，就先把 sha256 补进 columns.json。
+        if (!verifiable) return listOf(url) to emptyList()
+
         val proxies = runCatching { ProxyRuntime.list.load() }.getOrDefault(emptyList())
         val candidates = runCatching {
             val mode = ProxyRuntime.prefs.mode()

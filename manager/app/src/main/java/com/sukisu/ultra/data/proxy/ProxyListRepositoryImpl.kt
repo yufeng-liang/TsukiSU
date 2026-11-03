@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.CacheControl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -86,7 +87,13 @@ class ProxyListRepositoryImpl : ProxyListRepository {
             // 已验证，硬检查会把明明能上网的机器判成离线。
             if (!hasAnyNetwork(ksuApp)) throw IOException("no network available")
 
-            val request = Request.Builder().url(PROXIES_JSON_URL).build()
+            // jsDelivr 对 @main 回 max-age=604800：走共享 OkHttp 的磁盘缓存会把旧列表钉住最长 7 天，
+            // 「远程更新」就等于失效。noCache 只是不走本地缓存，仍带 ETag/If-None-Match，
+            // 内容没变时服务端只回 304，代价很小。
+            val request = Request.Builder()
+                .url(PROXIES_JSON_URL)
+                .cacheControl(CacheControl.Builder().noCache().build())
+                .build()
             val body = client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
                 readLimitedBody(response)

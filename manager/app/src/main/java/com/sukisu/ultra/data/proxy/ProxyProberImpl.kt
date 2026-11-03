@@ -1,5 +1,6 @@
 package com.sukisu.ultra.data.proxy
 
+import android.util.Log
 import com.sukisu.ultra.ksuApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
@@ -87,9 +88,15 @@ class ProxyProberImpl(
             if (cached.isNotEmpty()) return cached
         }
         val measured = race(originalUrl, proxies.load())
+        if (measured.isNotEmpty()) {
+            prefs.setRanking(measured)
+            return measured
+        }
         // 全部失败（断网、样本地址失效）时不覆盖缓存：留一份旧排序，比留一份空的更有用。
-        if (measured.isNotEmpty()) prefs.setRanking(measured)
-        return measured
+        // 返回空列表会让调用方以为「从没测过」，于是一次下载里对每个 origin 各跑一遍竞速。
+        val stale = prefs.ranking()
+        Log.w("ProxyProber", "竞速全部失败，沿用上次排序（${stale.size} 条）")
+        return stale
     }
 
     /**

@@ -148,6 +148,7 @@ fun ModuleRepoDetailScreen(module: RepoModuleArg) {
                                         a.size,
                                         a.downloadCount,
                                         a.downloadUrlFallback,
+                                        a.sha256,
                                     )
                                 },
                                 descriptionHTML = r.descriptionHTML

@@ -11,6 +11,27 @@ data class ExpectedFile(val size: Long, val sha256: String) {
     /** Same expectation regardless of hash spelling. */
     fun sameAs(other: ExpectedFile?): Boolean =
         other != null && size == other.size && sha256.equals(other.sha256, ignoreCase = true)
+
+    companion object {
+        private val SHA256_HEX = Regex("^[0-9a-f]{64}$")
+
+        /**
+         * 把索引里的哈希写法归一化成校验器认的形状；拿不到可信值就返回 null。
+         *
+         * 索引给的是 `sha256:<64 hex>`（GitHub release asset 的 digest 形状），而 [DownloadVerifier]
+         * 只认裸 64 位小写十六进制。这里宁可返回 null（下游据此退回直连、不套代理），也不猜。
+         */
+        fun parse(size: Long, digest: String): ExpectedFile? {
+            if (size <= 0L) return null
+            val hex = digest.trim()
+                .removePrefix("sha256:")
+                .removePrefix("SHA256:")
+                .trim()
+                .lowercase()
+            if (!SHA256_HEX.matches(hex)) return null
+            return ExpectedFile(size, hex)
+        }
+    }
 }
 
 class DownloadVerificationException(val reason: Reason, message: String) : IOException(message) {

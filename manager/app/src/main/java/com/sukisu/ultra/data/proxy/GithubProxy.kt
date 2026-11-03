@@ -101,6 +101,21 @@ object ProxyUrl {
     fun entryOf(url: String, entries: List<ProxyEntry>): ProxyEntry? = entries.firstOrNull { entry ->
         url.startsWith(entry.baseUrl.trimEnd('/') + "/", ignoreCase = true)
     }
+
+    /**
+     * 只看形状：路径里是否还套着另一个绝对 URL（`https://代理/<https://github.com/...>`）。
+     *
+     * 给「没有哈希、因而必须直连」的下载做纵深防御——这类地址不该经过任何代理。
+     * 不依赖代理列表，所以服务层拿不到 entries 时也能判。
+     */
+    fun looksLikeProxied(url: String): Boolean {
+        val schemeEnd = url.indexOf("://")
+        if (schemeEnd < 0) return false
+        val afterScheme = url.substring(schemeEnd + 3)
+        val pathStart = afterScheme.indexOf('/')
+        if (pathStart < 0) return false
+        return afterScheme.substring(pathStart + 1).contains("://")
+    }
 }
 
 /** 竞速排序里代表「直连」的通道 id。 */
@@ -143,34 +158,45 @@ object GithubProxyRouter {
             ProxyMode.OFFICIAL -> listOf(originalUrl)
 
             ProxyMode.PINNED -> {
-                val pinned = usable.firstOrNull { it.id == pinnedId } ?: return listOf(originalUrl)
+                // 指定的代理被下架或改名了：退回 AUTO 的保守顺序，而不是只剩直连。
+                // 用户选某个代理的动机通常正是直连不通，纯直连等于把这个设置废掉。
+                val pinned = usable.firstOrNull { it.id == pinnedId }
+                    ?: return autoOrder(originalUrl, usable, ranking, lastGoodId)
                 listOfDistinct(ProxyUrl.build(pinned, originalUrl), originalUrl)
             }
 
-            ProxyMode.AUTO -> {
-                val byId = usable.associateBy { it.id }
-                val orderedUrls = buildList {
-                    // 1. 竞速排序优先：直连也在里面，谁实测快谁在前面。
-                    for (id in ranking) {
-                        if (id == DIRECT_ID) {
-                            add(originalUrl)
-                        } else {
-                            byId[id]?.let { add(ProxyUrl.build(it, originalUrl)) }
-                        }
-                    }
-                    // 2. 没测过 / 没排进来的：上次成功的先上，其余按列表顺序。
-                    val rankedIds = ranking.toSet()
-                    val rest = buildList {
-                        usable.firstOrNull { it.id == lastGoodId && it.id !in rankedIds }?.let { add(it) }
-                        usable.forEach { if (it.id != lastGoodId && it.id !in rankedIds) add(it) }
-                    }
-                    rest.forEach { add(ProxyUrl.build(it, originalUrl)) }
-                    // 3. 直连永远兜底。
-                    add(originalUrl)
-                }
-                orderedUrls.distinct()
-            }
+            ProxyMode.AUTO -> autoOrder(originalUrl, usable, ranking, lastGoodId)
         }
+    }
+
+    /** AUTO 与「PINNED 失效」共用的保守顺序：竞速排名 → 上次成功的 → 列表序 → 直连兜底。 */
+    private fun autoOrder(
+        originalUrl: String,
+        usable: List<ProxyEntry>,
+        ranking: List<String>,
+        lastGoodId: String?,
+    ): List<String> {
+        val byId = usable.associateBy { it.id }
+        val orderedUrls = buildList {
+            // 1. 竞速排序优先：直连也在里面，谁实测快谁在前面。
+            for (id in ranking) {
+                if (id == DIRECT_ID) {
+                    add(originalUrl)
+                } else {
+                    byId[id]?.let { add(ProxyUrl.build(it, originalUrl)) }
+                }
+            }
+            // 2. 没测过 / 没排进来的：上次成功的先上，其余按列表顺序。
+            val rankedIds = ranking.toSet()
+            val rest = buildList {
+                usable.firstOrNull { it.id == lastGoodId && it.id !in rankedIds }?.let { add(it) }
+                usable.forEach { if (it.id != lastGoodId && it.id !in rankedIds) add(it) }
+            }
+            rest.forEach { add(ProxyUrl.build(it, originalUrl)) }
+            // 3. 直连永远兜底。
+            add(originalUrl)
+        }
+        return orderedUrls.distinct()
     }
 
     private fun listOfDistinct(vararg items: String): List<String> = items.toList().distinct()

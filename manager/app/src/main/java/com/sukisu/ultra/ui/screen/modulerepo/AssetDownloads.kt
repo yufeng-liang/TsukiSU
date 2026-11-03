@@ -8,6 +8,8 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import com.sukisu.ultra.data.registry.ExpectedFile
+import com.sukisu.ultra.data.registry.RegistryUrls
 import com.sukisu.ultra.ui.util.download
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,11 +50,18 @@ class AssetDownloads internal constructor(
         val url = asset.downloadUrl
         if (of(url).isDownloading) return
         states[url] = AssetDownload(isDownloading = true)
+        // 索引给了整包哈希时才算「可校验」，下载器据此决定能不能走代理；给不出就只走直连。
+        // 这里同时要求地址本身是 GitHub Release：带 expected 的下载会走「只认白名单 host」
+        // 的校验链路，而 registry（modules.kernelsu.org 之类）的资产地址不在那份白名单里，
+        // 传了 expected 反而会被当场拒掉。
+        val expected = ExpectedFile.parse(asset.size, asset.sha256)
+            ?.takeIf { RegistryUrls.isAllowedReleaseDownloadUrl(url) }
         scope.launch(Dispatchers.IO) {
             download(
                 url = url,
                 fileName = asset.name,
                 altUrl = asset.downloadUrlFallback,
+                expected = expected,
                 onDownloaded = { uri ->
                     mutate(url) { it.copy(isDownloading = false, progress = 100, uri = uri) }
                     onCompleted(uri)

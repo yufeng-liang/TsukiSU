@@ -301,7 +301,12 @@ object RepoModuleParser {
             latestReleaseTime = latestTime,
             latestVersionCode = latest?.versionCode ?: 0L,
             latestAsset = latest?.let {
-                ReleaseAsset(name = it.zipUrl.substringAfterLast('/'), downloadUrl = it.zipUrl, size = it.size)
+                ReleaseAsset(
+                    name = it.zipUrl.substringAfterLast('/'),
+                    downloadUrl = it.zipUrl,
+                    size = it.size,
+                    sha256 = it.repoDigest,
+                )
             },
             sourceId = sourceId,
             sourceName = sourceName,

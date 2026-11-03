@@ -12,7 +12,13 @@ data class Author(
 data class ReleaseAsset(
     val name: String,
     val downloadUrl: String,
-    val size: Long
+    val size: Long,
+    /**
+     * 整包哈希，形如 `sha256:` + 64 位小写十六进制；空表示索引没给。
+     *
+     * 有它才敢让下载走第三方代理：代理是 TLS 终点，能读也能改，只有哈希能兜底。
+     */
+    val sha256: String = "",
 )
 
 @Immutable

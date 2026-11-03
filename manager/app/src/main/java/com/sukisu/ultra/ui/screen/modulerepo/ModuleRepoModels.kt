@@ -11,7 +11,13 @@ data class ReleaseAssetArg(
     val size: Long,
     val downloadCount: Int,
     /** Retried when [downloadUrl] fails; see sameOriginAssetFallback. */
-    val downloadUrlFallback: String? = null
+    val downloadUrlFallback: String? = null,
+    /**
+     * 整包哈希，形如 `sha256:<64 hex>`；空表示索引没给。
+     *
+     * 不是装饰：下载器只在有哈希时才允许把请求交给第三方代理，没有就只走直连。
+     */
+    val sha256: String = "",
 ) : Parcelable
 
 @Parcelize
@@ -110,6 +116,7 @@ internal fun repoModuleReleases(module: RepoModule): List<ReleaseArg> {
                         size = version.size,
                         downloadCount = 0,
                         downloadUrlFallback = version.zipUrlFallback,
+                        sha256 = version.repoDigest,
                     )
                 ),
                 changelogUrl = version.changelogUrl,
@@ -129,6 +136,7 @@ internal fun repoModuleReleases(module: RepoModule): List<ReleaseArg> {
                     downloadUrl = asset.downloadUrl,
                     size = asset.size,
                     downloadCount = 0,
+                    sha256 = asset.sha256,
                 )
             ),
         )

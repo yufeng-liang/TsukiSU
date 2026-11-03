@@ -206,6 +206,14 @@ class DownloadService : Service() {
                     // Already stored under its final name: delete it if cancelled before completion.
                     downloadVerified(id, url, fileName, expected).also { pendingUri = it }
                 } else {
+                    // 纵深防御：没有 expected 的下载在上层已经只走直连，这里再挡一次代理封装地址，
+                    // 免得将来有别的调用方又把它送进来——这条分支没有任何哈希可兜底。
+                    if (ProxyUrl.looksLikeProxied(url)) {
+                        throw DownloadVerificationException(
+                            DownloadVerificationException.Reason.URL_NOT_ALLOWED,
+                            "Download URL not allowed"
+                        )
+                    }
                     val call = ksuApp.okhttpClient.newCall(Request.Builder().url(url).apply {
                         cookie?.takeIf { it.isNotEmpty() }?.let { addHeader("Cookie", it) }
                         userAgent?.takeIf { it.isNotEmpty() }?.let { addHeader("User-Agent", it) }

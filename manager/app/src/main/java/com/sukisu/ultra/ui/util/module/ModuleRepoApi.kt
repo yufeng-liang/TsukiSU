@@ -42,7 +42,9 @@ data class ReleaseAssetInfo(
     val downloadUrl: String,
     val size: Long,
     val downloadCount: Int,
-    val downloadUrlFallback: String? = null
+    val downloadUrlFallback: String? = null,
+    /** 整包哈希，形如 `sha256:<64 hex>`；空表示来源没给。 */
+    val sha256: String = "",
 )
 
 private const val MAX_CHANGELOG_FETCHES = 30
@@ -107,7 +109,14 @@ private suspend fun fetchMmrlModuleDetail(module: RepoModuleArg): ModuleDetail? 
                     publishedAt = rel.publishedAt,
                     descriptionHTML = changelog,
                     assets = rel.assets.map { a ->
-                        ReleaseAssetInfo(a.name, a.downloadUrl, a.size, a.downloadCount, a.downloadUrlFallback)
+                        ReleaseAssetInfo(
+                            a.name,
+                            a.downloadUrl,
+                            a.size,
+                            a.downloadCount,
+                            a.downloadUrlFallback,
+                            a.sha256,
+                        )
                     }
                 )
             }
@@ -215,6 +224,8 @@ internal fun parseRegistryDetail(body: String, baseUrl: String, moduleId: String
                     downloadUrl = zipUrl,
                     size = zip.optLong("size", 0L),
                     downloadCount = 0,
+                    sha256 = zip.optString("sha256", "").trim()
+                        .ifEmpty { r.optString("digest", "").trim() },
                 )
             )
         }
