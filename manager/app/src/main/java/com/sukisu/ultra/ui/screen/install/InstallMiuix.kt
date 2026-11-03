@@ -279,14 +279,15 @@ internal fun InstallScreenMiuix(
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
                                         text = stringResource(R.string.install_lkm_kmi_badge, lkmKmi),
-                                        fontSize = 11.sp,
-                                        color = colorScheme.onSecondaryContainer,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = colorScheme.primary,
                                         modifier = Modifier
                                             .background(
-                                                color = colorScheme.secondaryContainer,
-                                                shape = RoundedCornerShape(6.dp)
+                                                color = colorScheme.primary.copy(alpha = 0.12f),
+                                                shape = RoundedCornerShape(50)
                                             )
-                                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                                            .padding(horizontal = 8.dp, vertical = 3.dp),
                                     )
                                 }
                                 (uiState.lkmSelection as? LkmSelection.LkmUri)?.let {

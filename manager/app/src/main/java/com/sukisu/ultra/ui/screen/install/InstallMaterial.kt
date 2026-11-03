@@ -174,13 +174,14 @@ internal fun InstallScreenMaterial(
                                         Text(
                                             text = stringResource(R.string.install_lkm_kmi_badge, kmi),
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier
                                                 .background(
-                                                    color = MaterialTheme.colorScheme.secondaryContainer,
-                                                    shape = RoundedCornerShape(6.dp)
+                                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                                    shape = RoundedCornerShape(50)
                                                 )
-                                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                                                .padding(horizontal = 8.dp, vertical = 3.dp)
                                         )
                                     }
                                     (uiState.lkmSelection as? LkmSelection.LkmUri)?.let {
