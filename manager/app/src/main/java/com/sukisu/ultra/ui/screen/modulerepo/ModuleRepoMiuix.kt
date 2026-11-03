@@ -86,6 +86,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import com.sukisu.ultra.R
+import com.sukisu.ultra.data.model.RepoColumn
 import com.sukisu.ultra.data.repository.RepoSource
 import com.sukisu.ultra.ui.component.ListPopupDefaults
 import top.yukonga.miuix.kmp.utils.PagerNavigationSpringSpec
@@ -561,6 +562,8 @@ fun ModuleRepoScreenMiuix(
                                         coolapkSource = coolapkSource,
                                         filterOptions = filterOptions,
                                         selectedSourceId = state.selectedSourceId,
+                                        columns = state.columns,
+                                        onOpenColumn = actions.onOpenColumn,
                                         onSetSourceEnabled = actions.onSetSourceEnabled,
                                         onSelectSource = actions.onSelectSource,
                                     )
@@ -926,6 +929,8 @@ private fun MiuixStoreHeader(
     coolapkSource: RepoSource?,
     filterOptions: List<RepoSourceFilterOption>,
     selectedSourceId: String?,
+    columns: List<RepoColumn>,
+    onOpenColumn: (RepoColumn) -> Unit,
     onSetSourceEnabled: (String, Boolean) -> Unit,
     onSelectSource: (String?) -> Unit,
 ) {
@@ -939,6 +944,8 @@ private fun MiuixStoreHeader(
             source = coolapkSource,
             onSetSourceEnabled = onSetSourceEnabled,
         )
+        // 专栏横滑区目前是 Material 实现，Miuix 主题下同样可用；P1 拆执行向导时再各写一套。
+        ModuleColumnStrip(columns = columns, onOpenColumn = onOpenColumn)
         MiuixSourceFilterRow(
             options = filterOptions,
             selectedSourceId = selectedSourceId,

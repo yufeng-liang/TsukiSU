@@ -108,6 +108,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import com.sukisu.ultra.R
+import com.sukisu.ultra.data.model.RepoColumn
 import com.sukisu.ultra.data.model.RepoModule
 import com.sukisu.ultra.data.repository.RepoSource
 import top.yukonga.miuix.kmp.utils.PagerNavigationSpringSpec
@@ -356,6 +357,8 @@ fun ModuleRepoScreenMaterial(
                                 coolapkSource = coolapkSource,
                                 filterOptions = filterOptions,
                                 selectedSourceId = state.selectedSourceId,
+                                columns = state.columns,
+                                onOpenColumn = actions.onOpenColumn,
                                 onSetSourceEnabled = actions.onSetSourceEnabled,
                                 onSelectSource = actions.onSelectSource,
                             )
@@ -718,6 +721,8 @@ private fun RepoStoreHeader(
     coolapkSource: RepoSource?,
     filterOptions: List<RepoSourceFilterOption>,
     selectedSourceId: String?,
+    columns: List<RepoColumn>,
+    onOpenColumn: (RepoColumn) -> Unit,
     onSetSourceEnabled: (String, Boolean) -> Unit,
     onSelectSource: (String?) -> Unit,
 ) {
@@ -726,6 +731,8 @@ private fun RepoStoreHeader(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         CoolapkCommunityEntryCard(source = coolapkSource, onSetSourceEnabled = onSetSourceEnabled)
+        // 专栏排在筛选胶囊之前：它是内容入口，筛选是列表工具，工具不该挡在内容前面。
+        ModuleColumnStrip(columns = columns, onOpenColumn = onOpenColumn)
         RepoSourceFilterRow(
             options = filterOptions,
             selectedSourceId = selectedSourceId,

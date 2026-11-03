@@ -39,6 +39,9 @@ fun ModuleRepoScreen(selectedSourceId: String? = null) {
         if (uiState.modules.isEmpty()) {
             viewModel.refresh()
         }
+        // 专栏和模块列表分两条路：refresh() 只在列表为空时才走，第二次进商店就轮不到它了。
+        // refreshColumns 自己带「拉过就不再拉」的守卫，重复调用是安全的。
+        viewModel.refreshColumns()
         if (installedUiState.moduleList.isEmpty()) {
             installedVm.fetchModuleList()
         }
@@ -94,6 +97,7 @@ fun ModuleRepoScreen(selectedSourceId: String? = null) {
         onRestoreCoolapkSource = viewModel::restoreCoolapkSource,
         onRenameSource = viewModel::renameSource,
         onDismissSourceError = viewModel::dismissSourceError,
+        onOpenColumn = { column -> navigator.push(Route.ModuleColumn(column)) },
         onDisclaimerAccepted = viewModel::acceptDisclaimer,
     )
 

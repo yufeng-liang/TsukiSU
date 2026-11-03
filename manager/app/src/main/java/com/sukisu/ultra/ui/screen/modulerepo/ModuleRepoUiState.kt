@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.res.stringResource
 import com.sukisu.ultra.R
+import com.sukisu.ultra.data.model.RepoColumn
 import com.sukisu.ultra.data.model.RepoModule
 import com.sukisu.ultra.data.repository.RepoSource
 import com.sukisu.ultra.ui.component.SearchStatus
@@ -22,6 +23,19 @@ data class ModuleRepoUiState(
     val sortOrder: RepoSort = RepoSort.UPDATED,
     val offline: Boolean = false,
     val modules: List<RepoModule> = emptyList(),
+    /**
+     * 专栏数据，来自索引仓的 `json/columns.json`，按 `order` 排好序。
+     *
+     * 空表示还没拉到或拉不到。专栏是可选内容：空的时候界面整块隐藏专栏区，不留空占位，也不报错。
+     */
+    val columns: List<RepoColumn> = emptyList(),
+    /**
+     * 专栏成功拿到过一次。
+     *
+     * 只在成功时置 true：失败的请求留给下一次刷新重试，而成功之后同一次会话里不再重复拉——
+     * 专栏内容随索引发布，不会比模块列表变得更快。
+     */
+    val columnsLoaded: Boolean = false,
     val searchStatus: SearchStatus = SearchStatus(""),
     val searchResults: List<RepoModule> = emptyList(),
     val error: Throwable? = null,
@@ -86,6 +100,8 @@ data class ModuleRepoActions(
     val onRenameSource: (String, String) -> Unit,
     /** 关掉一条失败通知；参数是通知里显示的那条失败消息。 */
     val onDismissSourceError: (String) -> Unit,
+    /** 用户点开某个专栏：进专栏详情页。 */
+    val onOpenColumn: (RepoColumn) -> Unit,
     /** 用户在免责说明里勾了"不再提示"：落盘，之后不再弹。不勾则不必调用，下次进入仍会弹。 */
     val onDisclaimerAccepted: () -> Unit,
 )

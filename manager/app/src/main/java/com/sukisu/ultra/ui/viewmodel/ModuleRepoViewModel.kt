@@ -14,6 +14,8 @@ import kotlinx.coroutines.withContext
 import com.sukisu.ultra.R
 import com.sukisu.ultra.data.repository.ModuleRepoRepository
 import com.sukisu.ultra.data.repository.ModuleRepoRepositoryImpl
+import com.sukisu.ultra.data.repository.RepoColumnRepository
+import com.sukisu.ultra.data.repository.RepoColumnRepositoryImpl
 import com.sukisu.ultra.data.repository.RepoSource
 import com.sukisu.ultra.data.repository.RepoSourceRepository
 import com.sukisu.ultra.data.backup.BackupRepository
@@ -35,7 +37,8 @@ import java.util.Locale
 class ModuleRepoViewModel(
     private val repo: ModuleRepoRepository = ModuleRepoRepositoryImpl(),
     private val sourceRepo: RepoSourceRepository = RepoSourceRepositoryImpl(),
-    private val settingsRepo: SettingsRepository = SettingsRepositoryImpl()
+    private val settingsRepo: SettingsRepository = SettingsRepositoryImpl(),
+    private val columnRepo: RepoColumnRepository = RepoColumnRepositoryImpl(),
 ) : ViewModel() {
 
     companion object {
@@ -158,7 +161,46 @@ class ModuleRepoViewModel(
 
     private var pendingRefresh = false
 
+    /**
+     * 是否已有一趟专栏请求在飞。
+     *
+     * 专栏和模块列表是两条独立请求，而 [refresh] 会被连续调用（下拉刷新、切源、增删改源），
+     * 没有这个标记同一份文档就会被并发拉好几遍。
+     */
+    private var columnsRefreshing = false
+
+    /**
+     * 拉一趟专栏。
+     *
+     * 专栏是可选内容：**失败一律静默**——不弹 Toast、不写 [ModuleRepoUiState.error]，它拉不到不该
+     * 让用户以为整个模块商店坏了。成功才写入状态并置 `columnsLoaded`，失败留空等下一次刷新重试。
+     *
+     * @param force true 时忽略 `columnsLoaded` 强制再拉；默认按「已经拉过就不再拉」处理。
+     */
+    fun refreshColumns(force: Boolean = false) {
+        if (!force && _uiState.value.columnsLoaded) return
+        if (columnsRefreshing) return
+        columnsRefreshing = true
+        viewModelScope.launch {
+            try {
+                val result = columnRepo.fetchColumns()
+                withContext(Dispatchers.Main) {
+                    // 失败不留痕：专栏区维持原样（首次就是空），下一次刷新自然会再试一遍。
+                    result.onSuccess { columns ->
+                        _uiState.update { it.copy(columns = columns, columnsLoaded = true) }
+                    }
+                }
+            } finally {
+                // 取消也要放行：否则一次被打断的请求会把这个标记永久占住。
+                columnsRefreshing = false
+            }
+        }
+    }
+
     fun refresh() {
+        // 专栏与模块列表并行拉，互不阻塞；拉不到只是专栏区不显示（见 refreshColumns）。
+        // 放在刷新去重判断之前：被排队的那次刷新也应该把专栏带上。
+        refreshColumns()
         if (_uiState.value.isRefreshing) {
             pendingRefresh = true
             return

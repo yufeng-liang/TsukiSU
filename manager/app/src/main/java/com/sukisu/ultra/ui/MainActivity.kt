@@ -116,6 +116,8 @@ import com.sukisu.ultra.ui.screen.install.InstallScreen
 import com.sukisu.ultra.ui.screen.kernelmodules.KernelModulesScreen
 import com.sukisu.ultra.ui.screen.kpm.KpmScreen
 import com.sukisu.ultra.ui.screen.module.ModulePager
+import com.sukisu.ultra.ui.screen.modulerepo.ColumnWizardScreen
+import com.sukisu.ultra.ui.screen.modulerepo.ModuleColumnScreen
 import com.sukisu.ultra.ui.screen.modulerepo.ModuleRepoDetailScreen
 import com.sukisu.ultra.ui.screen.modulerepo.ModuleRepoScreen
 import com.sukisu.ultra.ui.screen.scriptrun.ScriptRunScreen
@@ -144,6 +146,7 @@ import com.sukisu.ultra.ui.util.getSuperuserCount
 import com.sukisu.ultra.ui.util.install
 import com.sukisu.ultra.ui.util.rememberBlurBackdrop
 import com.sukisu.ultra.ui.util.rememberContentReady
+import com.sukisu.ultra.ui.viewmodel.ColumnWizardViewModel
 import com.sukisu.ultra.ui.viewmodel.MainActivityViewModel
 import com.sukisu.ultra.ui.viewmodel.MainPagerConfig
 import com.sukisu.ultra.ui.viewmodel.ModuleViewModel
@@ -376,6 +379,35 @@ class MainActivity : ComponentActivity() {
                                 ModuleRepoScreen(selectedSourceId = key.selectedSourceId)
                             }
                             entry<Route.ModuleRepoDetail>(swipeDismiss = swipeDismiss) { key -> ModuleRepoDetailScreen(key.module) }
+                            entry<Route.ModuleColumn>(swipeDismiss = swipeDismiss) { key ->
+                                ModuleColumnScreen(
+                                    column = key.column,
+                                    onBack = { navigator.pop() },
+                                    onOpenWizard = { topic ->
+                                        navigator.push(Route.ColumnWizard(key.column, topic.id))
+                                    },
+                                )
+                            }
+                            entry<Route.ColumnWizard>(swipeDismiss = swipeDismiss) { key ->
+                                val topic = key.column.topics.firstOrNull { it.id == key.topicId }
+                                if (topic == null) {
+                                    // 索引更新后专题可能已经不在了，别把用户丢在空白页上
+                                    LaunchedEffect(key.topicId) { navigator.pop() }
+                                } else {
+                                    val wizardViewModel = viewModel<ColumnWizardViewModel>()
+                                    val wizardState by wizardViewModel.uiState.collectAsStateWithLifecycle()
+                                    LaunchedEffect(topic.id) { wizardViewModel.start(topic) }
+                                    ColumnWizardScreen(
+                                        topic = topic,
+                                        state = wizardState,
+                                        onRunStep = wizardViewModel::runStep,
+                                        onSkipStep = wizardViewModel::skipStep,
+                                        onRollback = wizardViewModel::rollback,
+                                        onProvideKeybox = { text -> wizardViewModel.provideKeybox(text) },
+                                        onBack = { navigator.pop() },
+                                    )
+                                }
+                            }
                             entry<Route.Install>(swipeDismiss = swipeDismiss) { key -> InstallScreen(preselectedKernelUri = key.preselectedKernelUri) }
                             entry<Route.Flash>(swipeDismiss = if (flashBackEnabled) swipeDismiss else NavSwipeDirection.None) { key ->
                                 FlashScreen(

@@ -1594,4 +1594,55 @@
     <string name="module_upload_identity_verified">验证通过，以后不用再验证了</string>
 <string name="module_upload_identity_missing">还差 %1$d 步</string>
 <string name="module_upload_identity_ready">条件都齐了，验证后即可上传。</string>
+    <!-- 商店专栏 -->
+    <string name="module_column_section_title">专栏</string>
+    <string name="module_column_topic_count">%1$d 个专题</string>
+    <string name="module_column_readonly_note">当前版本只展示步骤，不代为安装：请按清单自己操作。</string>
+    <string name="module_column_empty">这个专栏还没有专题。</string>
+    <string name="module_column_requires_title">前置条件</string>
+    <string name="module_column_steps_title">步骤</string>
+    <string name="module_column_verify_title">怎么确认生效</string>
+    <string name="module_column_evidence_age">%1$d 天前验证</string>
+    <string name="module_column_evidence_unknown">验证时间未知</string>
+    <string name="module_column_risk_low">风险低</string>
+    <string name="module_column_risk_medium">风险中</string>
+    <string name="module_column_risk_high">风险高</string>
+    <string name="module_column_step_optional">可选</string>
+    <string name="module_column_step_kind_install_module">装模块</string>
+    <string name="module_column_step_kind_write_config">写配置</string>
+    <string name="module_column_step_kind_write_file">写文件</string>
+    <string name="module_column_step_kind_run_command">执行命令</string>
+    <string name="module_column_step_kind_verify">验证</string>
+    <string name="module_column_step_kind_reboot">重启</string>
+    <string name="module_column_step_kind_ask_user">手动操作</string>
+
+    <!-- 专栏执行向导：逐步执行与自检 -->
+    <string name="column_wizard_open">跟着做</string>
+    <string name="column_wizard_start">开始</string>
+    <string name="column_wizard_start_first">开始第一步</string>
+    <string name="column_wizard_run">执行</string>
+    <string name="column_wizard_retry">重试</string>
+    <string name="column_wizard_skip">跳过</string>
+    <string name="column_wizard_done_step">我已处理</string>
+    <string name="column_wizard_progress">%1$d/%2$d</string>
+    <string name="column_wizard_log_title">执行日志</string>
+    <string name="column_wizard_expand_log">展开全部</string>
+    <string name="column_wizard_collapse_log">收起</string>
+    <string name="column_wizard_rollback">回滚本次改动</string>
+    <string name="column_wizard_checks_title">自检结果</string>
+    <string name="column_wizard_check_pass">通过</string>
+    <string name="column_wizard_check_fail">未通过</string>
+    <string name="column_wizard_status_pending">待执行</string>
+    <string name="column_wizard_status_running">执行中</string>
+    <string name="column_wizard_status_success">已完成</string>
+    <string name="column_wizard_status_failed">失败</string>
+    <string name="column_wizard_status_skipped">已跳过</string>
+    <string name="column_wizard_status_needs_user">需要你处理</string>
+    <string name="column_wizard_confirm_title">执行前确认</string>
+    <string name="column_wizard_cancel">取消</string>
+    <string name="column_wizard_readonly_note">点『跟着做』由向导逐步执行，每一步都会先说明再动手。</string>
+    <string name="column_wizard_empty">这个专题还没有可执行的步骤。</string>
+    <string name="column_wizard_keybox_title">需要密钥材料（keybox.xml）</string>
+    <string name="column_wizard_keybox_body">Play Integrity 三绿需要一份 Google 认证密钥。商店不保存、不转存、不上传：你选的文件只写进本机的 TrickyStore / TEESimulator 目录。</string>
+    <string name="column_wizard_keybox_pick">选择 keybox.xml</string>
 </resources>

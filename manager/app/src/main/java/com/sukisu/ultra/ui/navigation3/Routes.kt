@@ -4,10 +4,12 @@ import android.net.Uri
 import android.os.Parcelable
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
+import com.sukisu.ultra.data.model.RepoColumn
 import com.sukisu.ultra.ui.screen.flash.FlashIt
 import com.sukisu.ultra.ui.screen.modulerepo.RepoModuleArg
 import com.sukisu.ultra.ui.screen.scriptrun.ScriptRunArg
 import com.sukisu.ultra.ui.util.FlashItSerializer
+import com.sukisu.ultra.ui.util.RepoColumnSerializer
 import com.sukisu.ultra.ui.util.RepoModuleArgSerializer
 import com.sukisu.ultra.ui.util.ScriptRunArgSerializer
 import com.sukisu.ultra.ui.util.TemplateInfoSerializer
@@ -90,6 +92,29 @@ sealed interface Route : NavKey, Parcelable {
     @Parcelize
     @Serializable
     data class ModuleRepoDetail(@Serializable(with = RepoModuleArgSerializer::class) val module: RepoModuleArg) : Route
+
+    /**
+     * 商店专栏详情。
+     *
+     * 只带一份专栏快照：内容随索引一起发布，进页面时手上这份就是用户点开时看到的那份。
+     * 页面里不重新拉，免得打开过程中内容被换掉。
+     */
+    @Parcelize
+    @Serializable
+    data class ModuleColumn(@Serializable(with = RepoColumnSerializer::class) val column: RepoColumn) : Route
+
+    /**
+     * 专栏专题的执行向导。
+     *
+     * 带整份专栏 + 专题 id，而不是只带专题：向导完成后要回到详情页，那时还得把同一份专栏还回去。
+     * 与 [ModuleColumn] 一样是快照，进页面不再重新拉数据。
+     */
+    @Parcelize
+    @Serializable
+    data class ColumnWizard(
+        @Serializable(with = RepoColumnSerializer::class) val column: RepoColumn,
+        val topicId: String,
+    ) : Route
 
     /**
      * 模块商店。
