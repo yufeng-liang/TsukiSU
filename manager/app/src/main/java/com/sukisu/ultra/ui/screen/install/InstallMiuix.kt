@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -232,17 +233,6 @@ internal fun InstallScreenMiuix(
                         ) {
                             val lkmKmi = uiState.currentKmi
                             BasicComponent(
-                                title = if (lkmKmi.isNotBlank()) {
-                                    stringResource(R.string.install_upload_lkm_file_with_kmi, lkmKmi)
-                                } else {
-                                    stringResource(id = R.string.install_upload_lkm_file)
-                                },
-                                summary = (uiState.lkmSelection as? LkmSelection.LkmUri)?.let {
-                                    stringResource(
-                                        id = R.string.selected_lkm,
-                                        displayNameOf(context, it.uri) ?: "(file)"
-                                    )
-                                },
                                 onClick = actions.onUploadLkm,
                                 startAction = {
                                     Icon(
@@ -278,7 +268,39 @@ internal fun InstallScreenMiuix(
                                         )
                                     }
                                 }
-                            )
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.install_upload_lkm_file),
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = colorScheme.onSurface,
+                                )
+                                if (lkmKmi.isNotBlank()) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = stringResource(R.string.install_lkm_kmi_badge, lkmKmi),
+                                        fontSize = 11.sp,
+                                        color = colorScheme.onSecondaryContainer,
+                                        modifier = Modifier
+                                            .background(
+                                                color = colorScheme.secondaryContainer,
+                                                shape = RoundedCornerShape(6.dp)
+                                            )
+                                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                                    )
+                                }
+                                (uiState.lkmSelection as? LkmSelection.LkmUri)?.let {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = stringResource(
+                                            R.string.selected_lkm,
+                                            displayNameOf(context, it.uri) ?: "(file)"
+                                        ),
+                                        fontSize = 13.sp,
+                                        color = colorScheme.onSurfaceVariantSummary,
+                                    )
+                                }
+                            }
                         }
                     }
 

@@ -56,7 +56,9 @@ import com.sukisu.ultra.ui.component.material.SegmentedDropdownItem
 import com.sukisu.ultra.ui.component.material.SegmentedListItem
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
@@ -163,23 +165,32 @@ internal fun InstallScreenMaterial(
                                 IconTile(Icons.AutoMirrored.Filled.DriveFileMove, null)
                             },
                             headlineContent = {
-                                val kmi = uiState.currentKmi
-                                Text(
-                                    if (kmi.isNotBlank()) {
-                                        stringResource(R.string.install_upload_lkm_file_with_kmi, kmi)
-                                    } else {
-                                        stringResource(R.string.install_upload_lkm_file)
-                                    }
-                                )
+                                Text(stringResource(R.string.install_upload_lkm_file))
                             },
                             supportingContent = {
-                                (uiState.lkmSelection as? LkmSelection.LkmUri)?.let {
-                                    Text(
-                                        stringResource(
-                                            R.string.selected_lkm,
-                                            displayNameOf(context, it.uri) ?: "(file)"
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    val kmi = uiState.currentKmi
+                                    if (kmi.isNotBlank()) {
+                                        Text(
+                                            text = stringResource(R.string.install_lkm_kmi_badge, kmi),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                            modifier = Modifier
+                                                .background(
+                                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                                    shape = RoundedCornerShape(6.dp)
+                                                )
+                                                .padding(horizontal = 8.dp, vertical = 2.dp)
                                         )
-                                    )
+                                    }
+                                    (uiState.lkmSelection as? LkmSelection.LkmUri)?.let {
+                                        Text(
+                                            stringResource(
+                                                R.string.selected_lkm,
+                                                displayNameOf(context, it.uri) ?: "(file)"
+                                            )
+                                        )
+                                    }
                                 }
                             },
                             trailingContent = {
