@@ -175,10 +175,10 @@ internal fun InstallScreenMaterial(
                                             text = stringResource(R.string.install_lkm_kmi_badge, kmi),
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Medium,
-                                            color = MaterialTheme.colorScheme.primary,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
                                             modifier = Modifier
                                                 .background(
-                                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                                    color = MaterialTheme.colorScheme.primaryContainer,
                                                     shape = RoundedCornerShape(50)
                                                 )
                                                 .padding(horizontal = 8.dp, vertical = 3.dp)

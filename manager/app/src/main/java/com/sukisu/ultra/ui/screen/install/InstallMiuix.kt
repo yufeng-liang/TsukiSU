@@ -281,10 +281,10 @@ internal fun InstallScreenMiuix(
                                         text = stringResource(R.string.install_lkm_kmi_badge, lkmKmi),
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium,
-                                        color = colorScheme.primary,
+                                        color = colorScheme.onPrimaryContainer,
                                         modifier = Modifier
                                             .background(
-                                                color = colorScheme.primary.copy(alpha = 0.12f),
+                                                color = colorScheme.primaryContainer,
                                                 shape = RoundedCornerShape(50)
                                             )
                                             .padding(horizontal = 8.dp, vertical = 3.dp),
