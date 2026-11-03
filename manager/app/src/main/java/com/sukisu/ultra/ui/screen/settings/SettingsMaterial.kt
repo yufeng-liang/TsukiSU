@@ -238,6 +238,13 @@ fun SettingPagerMaterial(
             val proxyMode = ProxyMode.from(uiState.proxyMode)
             val proxyPinned = proxyMode == ProxyMode.PINNED
             val proxyHealthById = uiState.proxyHealth.associateBy { it.id }
+            // 存下来的 id 可能已经不在列表里（下发源下线或改了 id）。这时下载会悄悄退回直连，
+            // 界面却还停在「指定代理」上，所以要和「还没选」分开提示。
+            // 列表本身为空时判断不了是 id 失效还是列表没拉到，这种情况交给下面的空态文案。
+            val proxyPinnedMissing = proxyPinned &&
+                uiState.proxyPinnedId.isNotBlank() &&
+                uiState.proxyEntries.isNotEmpty() &&
+                uiState.proxyEntries.none { it.id == uiState.proxyPinnedId }
             SegmentedColumn(
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
                 content = buildList {
@@ -281,12 +288,21 @@ fun SettingPagerMaterial(
                             onClick = { actions.onSetProxyMode(ProxyMode.PINNED.value) }
                         )
                     }
-                    // 选了「指定代理」但还没选具体哪一条时，明确告诉用户现在走的是直连。
-                    if (proxyPinned && uiState.proxyPinnedId.isBlank()) {
+                    // 选了「指定代理」但还没选具体哪一条、或选的那条已经失效时，
+                    // 明确告诉用户现在实际走的是直连，别让人以为还在用某个代理。
+                    if (proxyPinned && (uiState.proxyPinnedId.isBlank() || proxyPinnedMissing)) {
                         add {
                             SegmentedListItem(
                                 headlineContent = {
-                                    Text(stringResource(R.string.settings_proxy_pinned_hint))
+                                    Text(
+                                        stringResource(
+                                            if (proxyPinnedMissing) {
+                                                R.string.settings_proxy_pinned_missing
+                                            } else {
+                                                R.string.settings_proxy_pinned_hint
+                                            }
+                                        )
+                                    )
                                 }
                             )
                         }
@@ -326,7 +342,8 @@ fun SettingPagerMaterial(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(proxyLatencyLabel(health))
                                         Spacer(Modifier.width(8.dp))
-                                        ProxyStatusDot(health)
+                                        // 行的可交互性跟着「指定代理」模式走，状态点同样变灰
+                                        ProxyStatusDot(health, enabled = proxyPinned)
                                     }
                                 }
                             )
@@ -351,7 +368,9 @@ fun SettingPagerMaterial(
                             leadingContent = {
                                 IconTile(
                                     Icons.Filled.Refresh,
-                                    stringResource(R.string.settings_proxy_test_all)
+                                    stringResource(R.string.settings_proxy_test_all),
+                                    // 测速中整行禁用，图标也跟着灰掉，否则看着像还能再点一次
+                                    enabled = !uiState.proxyTesting
                                 )
                             },
                             trailingContent = {
@@ -752,9 +771,12 @@ private fun proxyLatencyLabel(health: ProxyHealth?): String = when {
     else -> stringResource(R.string.settings_proxy_latency, health.latencyMs)
 }
 
-/** 状态点：绿=可连通、红=不可用、灰=未测。文案已经说了状态，这里只补一个一眼可见的颜色。 */
+/**
+ * 状态点：绿=可连通、红=不可用、灰=未测。文案已经说了状态，这里只补一个一眼可见的颜色。
+ * 行不可交互（非「指定代理」模式）时整体降透明度，跟 Material3 的 disabled 令牌对齐。
+ */
 @Composable
-private fun ProxyStatusDot(health: ProxyHealth?) {
+private fun ProxyStatusDot(health: ProxyHealth?, enabled: Boolean = true) {
     val color = when {
         health == null -> MaterialTheme.colorScheme.outline
         health.reachable -> ProxyReachableGreen
@@ -764,7 +786,7 @@ private fun ProxyStatusDot(health: ProxyHealth?) {
         modifier = Modifier
             .size(8.dp)
             .clip(CircleShape)
-            .background(color)
+            .background(if (enabled) color else color.copy(alpha = 0.38f))
     )
 }
 

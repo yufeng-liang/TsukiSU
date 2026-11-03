@@ -1107,9 +1107,11 @@ class SettingsViewModel(
      * 测速全部代理。结果只用于展示；下载选路仍由 [ProxyMode.AUTO] 的排序决定。
      */
     fun testProxies() {
+        // 守卫和置位放在同一线程的同一临界区：先置 proxyTesting 再 launch，
+        // 这样两次点击即便都发生在协程真正开始前，第二次也能被上面的守卫挡掉。
         if (_uiState.value.proxyTesting) return
+        _uiState.update { it.copy(proxyTesting = true) }
         viewModelScope.launch {
-            _uiState.update { it.copy(proxyTesting = true) }
             try {
                 val entries = _uiState.value.proxyEntries.ifEmpty {
                     withContext(Dispatchers.IO) { ProxyRuntime.list.load() }

@@ -7,6 +7,8 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import okhttp3.Call
 import okhttp3.OkHttpClient
@@ -34,6 +36,9 @@ class ProxyProberImpl(
 
     /** 懒初始化：不在构造时碰 [ksuApp]。`newBuilder` 复制的是共享的连接池与线程池。 */
     private val client: OkHttpClient by lazy { ksuApp.okhttpClient }
+
+    /** 竞速互斥：同一时刻只允许一轮竞速在跑，后到的等结果而复用，见 [ranking]。 */
+    private val rankingLock = Mutex()
 
     override suspend fun probeAll(
         entries: List<ProxyEntry>,
@@ -87,16 +92,24 @@ class ProxyProberImpl(
             // 缓存的 id 可能指向已被下架的代理；路由器会跳过不认识的 id，这里原样交出去即可。
             if (cached.isNotEmpty()) return cached
         }
-        val measured = race(originalUrl, proxies.load())
-        if (measured.isNotEmpty()) {
-            prefs.setRanking(measured)
-            return measured
+        // 同时有两次下载（或竞速与下载）撞在一起时只跑一次：竞速要 8 秒，双跑既浪费流量，
+        // 两边还会拿不同结果互相覆盖。拿到锁之后重新判一次新鲜度，后到的那位直接复用先到的结果。
+        return rankingLock.withLock {
+            if (!force && prefs.isRankingFresh()) {
+                val cached = prefs.ranking()
+                if (cached.isNotEmpty()) return@withLock cached
+            }
+            val measured = race(originalUrl, proxies.load())
+            if (measured.isNotEmpty()) {
+                prefs.setRanking(measured)
+                return@withLock measured
+            }
+            // 全部失败（断网、样本地址失效）时不覆盖缓存：留一份旧排序，比留一份空的更有用。
+            // 返回空列表会让调用方以为「从没测过」，于是一次下载里对每个 origin 各跑一遍竞速。
+            val stale = prefs.ranking()
+            Log.w("ProxyProber", "竞速全部失败，沿用上次排序（${stale.size} 条）")
+            stale
         }
-        // 全部失败（断网、样本地址失效）时不覆盖缓存：留一份旧排序，比留一份空的更有用。
-        // 返回空列表会让调用方以为「从没测过」，于是一次下载里对每个 origin 各跑一遍竞速。
-        val stale = prefs.ranking()
-        Log.w("ProxyProber", "竞速全部失败，沿用上次排序（${stale.size} 条）")
-        return stale
     }
 
     /**

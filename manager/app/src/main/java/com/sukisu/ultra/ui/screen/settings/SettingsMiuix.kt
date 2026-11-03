@@ -247,13 +247,22 @@ fun SettingPagerMiuix(
                             },
                             onClick = actions.onOpenTheme
                         )
-
                     }
-
-                    // GitHub 下载加速：和 Material 页共用同一份状态，纯客户端配置，不需要 root。
+                }
+                // GitHub 下载加速单独占一个 item：它和上面的通用卡不是同一组设置，
+                // 拆出来既避免一张卡里塞太多行，也给它自己留出锚点/重组边界。
+                // 状态和 Material 页共用，纯客户端配置，不需要 root。
+                item {
                     val proxyMode = ProxyMode.from(uiState.proxyMode)
                     val proxyPinned = proxyMode == ProxyMode.PINNED
                     val proxyHealthById = uiState.proxyHealth.associateBy { it.id }
+                    // 存下来的 id 可能已经不在列表里（下发源下线或改了 id）。这时下载会悄悄退回直连，
+                    // 界面却还停在「指定代理」上，所以要和「还没选」分开提示。
+                    // 列表本身为空时判断不了是 id 失效还是列表没拉到，交给下面的空态文案。
+                    val proxyPinnedMissing = proxyPinned &&
+                        uiState.proxyPinnedId.isNotBlank() &&
+                        uiState.proxyEntries.isNotEmpty() &&
+                        uiState.proxyEntries.none { it.id == uiState.proxyPinnedId }
                     AppCard(
                         modifier = Modifier
                             .padding(top = 12.dp)
@@ -288,10 +297,17 @@ fun SettingPagerMiuix(
                             selected = proxyPinned,
                             onClick = { actions.onSetProxyMode(ProxyMode.PINNED.value) },
                         )
-                        // 选了「指定代理」但还没选具体哪一条时，说明现在实际走的是直连。
-                        if (proxyPinned && uiState.proxyPinnedId.isBlank()) {
+                        // 选了「指定代理」但还没选具体哪一条、或选的那条已经失效时，
+                        // 说明现在实际走的是直连，别让人以为还在用某个代理。
+                        if (proxyPinned && (uiState.proxyPinnedId.isBlank() || proxyPinnedMissing)) {
                             Text(
-                                text = stringResource(R.string.settings_proxy_pinned_hint),
+                                text = stringResource(
+                                    if (proxyPinnedMissing) {
+                                        R.string.settings_proxy_pinned_missing
+                                    } else {
+                                        R.string.settings_proxy_pinned_hint
+                                    }
+                                ),
                                 modifier = Modifier.padding(
                                     start = 16.dp,
                                     end = 16.dp,
@@ -321,14 +337,19 @@ fun SettingPagerMiuix(
                                 title = entry.name,
                                 summary = entry.note.takeIf { it.isNotBlank() },
                                 selected = entry.id == uiState.proxyPinnedId,
-                                onClick = { actions.onSetProxyPinnedId(entry.id) },
+                                // 和 Material 版对齐：只有「指定代理」模式下点击才写入，避免别的模式下误改配置
+                                onClick = { if (proxyPinned) actions.onSetProxyPinnedId(entry.id) },
                                 // 只有「指定代理」模式下才允许选某一条
                                 enabled = proxyPinned,
-                                startAction = { MiuixProxyStatusDot(health) },
+                                startAction = { MiuixProxyStatusDot(health, enabled = proxyPinned) },
                                 endActions = {
                                     Text(
                                         text = miuixProxyLatencyLabel(health),
-                                        color = colorScheme.onSurfaceVariantSummary,
+                                        // 行的可交互性跟着模式走，禁用时延迟文字一起降透明度；
+                                        // 这里不依赖库里的 LocalContentColor，改动只在本地可见。
+                                        color = colorScheme.onSurfaceVariantSummary.copy(
+                                            alpha = if (proxyPinned) 1f else 0.38f
+                                        ),
                                         fontSize = MiuixTheme.textStyles.footnote1.fontSize,
                                     )
                                 },
@@ -364,7 +385,8 @@ fun SettingPagerMiuix(
                             enabled = !uiState.proxyTesting,
                         )
                     }
-
+                }
+                item {
                     KsuIsValid {
                         AppCard(
                             modifier = Modifier
@@ -821,9 +843,12 @@ private fun miuixProxyLatencyLabel(health: ProxyHealth?): String = when {
     else -> stringResource(R.string.settings_proxy_latency, health.latencyMs)
 }
 
-/** 状态点：绿=可连通、红=不可用、灰=未测。文案已经说了状态，这里只补一个一眼可见的颜色。 */
+/**
+ * 状态点：绿=可连通、红=不可用、灰=未测。文案已经说了状态，这里只补一个一眼可见的颜色。
+ * 行不可交互（非「指定代理」模式）时整体降透明度，和 Material 版保持一致。
+ */
 @Composable
-private fun MiuixProxyStatusDot(health: ProxyHealth?) {
+private fun MiuixProxyStatusDot(health: ProxyHealth?, enabled: Boolean = true) {
     val color = when {
         health == null -> colorScheme.onSurfaceVariantSummary.copy(alpha = 0.4f)
         health.reachable -> MiuixProxyReachableGreen
@@ -834,7 +859,7 @@ private fun MiuixProxyStatusDot(health: ProxyHealth?) {
             .padding(end = 6.dp)
             .size(8.dp)
             .clip(CircleShape)
-            .background(color)
+            .background(if (enabled) color else color.copy(alpha = 0.38f))
     )
 }
 

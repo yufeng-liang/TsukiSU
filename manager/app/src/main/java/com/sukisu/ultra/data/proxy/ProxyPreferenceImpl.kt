@@ -74,8 +74,15 @@ class ProxyPreferenceImpl(
      *
      * 别的代理失败不影响它：一次下载可能先后试了好几个候选，被淘汰的是当前这个，而上次真正
      * 跑通的那个仍然值得优先复用。清掉速度与时间是为了不留下「有记录但已经不可用」的假象。
+     *
+     * 同时把它从竞速排序里摘掉（等于降到队尾）：否则一个刚挂掉的代理会在接下来一小时里继续
+     * 排第一，每次下载都先撞它一次。摘除本身就是一条新事实，顺手刷新时间戳没有坏处。
      */
     override fun recordFailure(entryId: String) {
+        val order = ranking()
+        if (entryId in order) {
+            setRanking(order.filterNot { it == entryId })
+        }
         if (lastGoodId() != entryId) return
         prefs.edit()
             .remove(KEY_LAST_GOOD_ID)
@@ -129,10 +136,15 @@ class ProxyPreferenceImpl(
     }
 
     /**
-     * 当前网络的粗粒度指纹：只分 WIFI / MOBILE / ETHERNET / NONE。
+     * 当前网络的粗粒度指纹：只分 WIFI / MOBILE / ETHERNET / VPN / NONE。
      *
      * 不取 SSID、不取运营商：那需要定位权限，而这里只需要回答「换网了没有」——同一台机器在
      * 家里 WiFi 上跑得通的代理，到了移动网络未必还行，粘性记忆得跟着网络走。
+     *
+     * VPN 单列一类：VPN 网络只报 TRANSPORT_VPN，不报底层传输方式，落到 else 会变成 NONE——
+     * 那样「开梯子」与「断网」会共用同一个指纹，开关梯子永远不触发重测。单列之后，
+     * 开/关梯子至少会被认成换了网络；两个不同的 VPN 之间切换仍然分不出来（系统不给底层信息），
+     * 这是刻意的取舍，不为此去申请额外权限。
      *
      * `activeNetwork` / `getNetworkCapabilities` 都是 API 23 起，项目 minSdk 26，无需再做版本分支。
      */
@@ -141,9 +153,8 @@ class ProxyPreferenceImpl(
             ?: return NETWORK_NONE
         val network = manager.activeNetwork ?: return NETWORK_NONE
         val capabilities = manager.getNetworkCapabilities(network) ?: return NETWORK_NONE
+        if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return NETWORK_VPN
         return when {
-            // 一个 VPN 网络只报 TRANSPORT_VPN，落到 else 变成 NONE：换了底层网络无从判断，
-            // 就当作「不是同一张网」，下次重新测。
             capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "WIFI"
             capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "MOBILE"
             capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ETHERNET"
@@ -153,5 +164,6 @@ class ProxyPreferenceImpl(
 
     private companion object {
         const val NETWORK_NONE = "NONE"
+        const val NETWORK_VPN = "VPN"
     }
 }

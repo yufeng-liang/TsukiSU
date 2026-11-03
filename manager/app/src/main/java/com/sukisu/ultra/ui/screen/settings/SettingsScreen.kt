@@ -46,6 +46,9 @@ fun SettingPager(
     LaunchedEffect(isCurrentPage) {
         if (isCurrentPage) {
             viewModel.refresh()
+            // 代理列表原本只在 ViewModel init 时读一次，远程下发项变了就得杀进程才能刷新；
+            // 每次切回设置页顺带重读一遍，空态文案里的「重进本页」才真的成立。
+            viewModel.refreshProxyEntries()
         }
     }
 

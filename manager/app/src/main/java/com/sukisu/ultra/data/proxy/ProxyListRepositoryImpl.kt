@@ -2,6 +2,7 @@ package com.sukisu.ultra.data.proxy
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.sukisu.ultra.data.registry.RegistryUrls
 import com.sukisu.ultra.ksuApp
 import com.sukisu.ultra.ui.util.hasAnyNetwork
 import kotlinx.coroutines.CoroutineScope
@@ -190,9 +191,13 @@ internal fun parseProxyList(body: String): List<ProxyEntry>? {
         val id = item.text("id")
         val rawUrl = item.text("baseUrl")
         if (id.isEmpty()) continue
+        // `direct` 是「不走代理」的保留 id，远程清单写它等于凭空造一个假代理条目。
+        if (id == DIRECT_ID) continue
         if (!ProxyUrl.isValidBaseUrl(rawUrl)) continue
         // 统一去掉尾斜杠再比较：`https://a.com` 与 `https://a.com/` 是同一个代理。
         val baseUrl = rawUrl.trimEnd('/')
+        // 代理主机与 GitHub 自己的下载主机重名时只会套娃（把请求再发给 GitHub），不可能是真代理。
+        if (hostOf(baseUrl) in RegistryUrls.DOWNLOAD_HOSTS) continue
         if (!seenIds.add(id)) continue
         if (!seenUrls.add(baseUrl)) continue
         out += ProxyEntry(
@@ -208,21 +213,16 @@ internal fun parseProxyList(body: String): List<ProxyEntry>? {
 }
 
 /**
- * 远程条目在前，内置条目里没被远程覆盖的接在后面。
+ * 远程清单生效时**以远程为准**，内置只在远程拿不到东西时兜底。
  *
- * 覆盖双向认：远程只要占了同一个 id 或同一个地址，对应的内置条目就不再出现，免得列表里
- * 出现两个指向同一台机器的条目。远程条目一律 `builtin = false`，界面靠这个标记区分
- * 「官方内置的」与「远程增补的」。
+ * 早先的写法是「远程在前、内置补齐」，后果是远程删掉某条代理也不生效——被删的那条会被内置
+ * 原地顶回来，维护者改 json 像在跟一个看不见的对手拔河。现在：远程非空就照单全收，
+ * 想删就删；远程为空（或文档坏到没有条目）才回退内置，免得一次改错让所有人没代理可用。
+ *
+ * 条目一律 `builtin = false`：界面靠这个标记区分「远程下发的」与「随包内置的」。
  */
-internal fun mergeProxyList(remote: List<ProxyEntry>): List<ProxyEntry> {
-    if (remote.isEmpty()) return BUILTIN_PROXIES
-    val remoteIds = remote.mapTo(HashSet(remote.size)) { it.id }
-    val remoteUrls = remote.mapTo(HashSet(remote.size)) { it.baseUrl.trimEnd('/') }
-    val remainingBuiltin = BUILTIN_PROXIES.filter { entry ->
-        entry.id !in remoteIds && entry.baseUrl.trimEnd('/') !in remoteUrls
-    }
-    return remote + remainingBuiltin
-}
+internal fun mergeProxyList(remote: List<ProxyEntry>): List<ProxyEntry> =
+    if (remote.isEmpty()) BUILTIN_PROXIES else remote
 
 /**
  * 取一个字符串字段并去掉首尾空白；缺失或显式 `null` 都当空串。

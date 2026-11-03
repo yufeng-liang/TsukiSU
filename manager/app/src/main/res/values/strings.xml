@@ -1659,7 +1659,7 @@
     <string name="column_wizard_keybox_pick">Choose keybox.xml</string>
     <!-- GitHub 下载加速 -->
     <string name="settings_proxy_title">GitHub download acceleration</string>
-    <string name="settings_proxy_summary">Auto mode speed-tests the direct connection and every proxy, then uses the fastest one. With a system proxy or VPN on, the direct connection is preferred.</string>
+    <string name="settings_proxy_summary">Auto mode speed-tests the direct connection and every proxy, then uses the fastest one. With a system proxy or VPN on, the direct connection is preferred. The test here is a reference only; auto mode re-tests at download time.</string>
     <string name="settings_proxy_mode_official">Official direct</string>
     <string name="settings_proxy_mode_auto">Auto (fastest)</string>
     <string name="settings_proxy_mode_pinned">Pinned proxy</string>
@@ -1669,5 +1669,6 @@
     <string name="settings_proxy_test_all">Test all</string>
     <string name="settings_proxy_testing">Testing…</string>
     <string name="settings_proxy_pinned_hint">No proxy picked yet, downloads fall back to the official direct connection.</string>
-    <string name="settings_proxy_empty">No proxies loaded yet. Tap Test all to load them.</string>
+    <string name="settings_proxy_pinned_missing">The pinned proxy is no longer available; downloads fall back to the official direct connection.</string>
+    <string name="settings_proxy_empty">No proxies are available right now. Come back to this page later to retry.</string>
 </resources>
