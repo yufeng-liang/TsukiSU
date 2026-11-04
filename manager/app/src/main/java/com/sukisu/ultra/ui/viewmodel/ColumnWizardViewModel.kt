@@ -84,6 +84,12 @@ class ColumnWizardViewModel(
                 )
             },
         )
+        val savedOptedIn = runCatching {
+            progressPrefs().getStringSet(optedKey(topic.id), null)
+        }.getOrNull()
+        if (!savedOptedIn.isNullOrEmpty()) {
+            _uiState.update { it.copy(optedIn = savedOptedIn.toSet()) }
+        }
         if (!restored.isNullOrEmpty()) {
             appendLog("已恢复上次的进度（${restored.size} 步已处理），接着往下做就行")
         }
@@ -99,8 +105,10 @@ class ColumnWizardViewModel(
      */
     fun runAll() {
         if (runningStep) return
+        val optedIn = _uiState.value.optedIn
         val pending = _uiState.value.stepStates
             .filter { !it.status.isSettled }
+            .filter { !it.step.optIn || it.step.id in optedIn }
             .map { it.step }
             .filter { it.isAutoRunnable() }
         if (pending.isEmpty()) {
@@ -192,6 +200,8 @@ class ColumnWizardViewModel(
             .firstOrNull { it.step.id == step.id }
             ?.status == ColumnStepStatus.SUCCESS
         if (done && !force) return
+        // 用户主动点了某个「可选安装」步骤，就等同于勾选它，不再要求先去复选框打勾。
+        if (step.optIn && step.id !in _uiState.value.optedIn) toggleOptIn(step.id)
         runningStep = true
         _uiState.update { it.copy(running = true, error = "") }
         viewModelScope.launch {
@@ -232,6 +242,19 @@ class ColumnWizardViewModel(
         }
         if (result.log.isNotBlank()) appendLog(result.log)
         return result
+    }
+
+    /**
+     * 勾选 / 取消勾选一个「可选安装」步骤。
+     *
+     * 这类步骤（目前是自检检测器）默认一个都不装：商店不替用户决定装哪几个，勾了才会进一键执行。
+     */
+    fun toggleOptIn(stepId: String) {
+        _uiState.update { state ->
+            val next = if (stepId in state.optedIn) state.optedIn - stepId else state.optedIn + stepId
+            state.copy(optedIn = next)
+        }
+        saveProgress()
     }
 
     /** 用户主动跳过一步。只对 optional 步骤有意义，非 optional 的跳过会在日志里留痕。 */
@@ -277,7 +300,9 @@ class ColumnWizardViewModel(
     private fun maybeFinish() {
         val state = _uiState.value
         if (state.done) return
-        val allSettled = state.stepStates.all { it.status.isSettled }
+        val allSettled = state.stepStates.all { item ->
+            item.status.isSettled || (item.step.optIn && item.step.id !in state.optedIn)
+        }
         if (!allSettled) return
         if (state.checks.isEmpty()) runSelfCheck()
         _uiState.update { it.copy(done = true) }
@@ -316,6 +341,7 @@ class ColumnWizardViewModel(
         runCatching {
             progressPrefs().edit()
                 .putString(progressKey(state.topicId), array.toString())
+                .putStringSet(optedKey(state.topicId), state.optedIn.toSet())
                 .apply()
         }
     }
@@ -348,6 +374,9 @@ class ColumnWizardViewModel(
     private fun progressPrefs() = ksuApp.getSharedPreferences(COLUMN_PREFS, android.content.Context.MODE_PRIVATE)
 
     private fun progressKey(topicId: String): String = "wizard_progress_$topicId"
+
+    /** 勾选状态单独存一份：进度是按步骤记的，勾选是「用户想装什么」的偏好，跨进度保留。 */
+    private fun optedKey(topicId: String): String = "wizard_opted_$topicId"
 
     /** 只认已知状态名；RUNNING 之类的中间态一律回落到 PENDING（重启后它确实没在跑了）。 */
     private fun String.toColumnStepStatus(): ColumnStepStatus = when (this) {

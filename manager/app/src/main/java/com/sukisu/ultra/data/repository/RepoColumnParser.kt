@@ -143,6 +143,7 @@ object RepoColumnParser {
             checkId = item.text("checkId"),
             confirm = item.text("confirm"),
             link = item.text("link"),
+            optIn = item.optBoolean("optIn", false),
         )
     }
 

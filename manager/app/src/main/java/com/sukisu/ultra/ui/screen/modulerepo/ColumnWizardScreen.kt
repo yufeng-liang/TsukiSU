@@ -32,6 +32,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -118,6 +119,8 @@ fun ColumnWizardScreen(
     onUpgradeStep: (RepoColumnStep) -> Unit = {},
     /** 一键执行：把不需要人看着的步骤按顺序跑完，遇到需要人工的就停下。 */
     onRunAll: () -> Unit = {},
+    /** 勾选 / 取消勾选一个「可选安装」的步骤。 */
+    onToggleOptIn: (RepoColumnStep) -> Unit = {},
 ) {
     // 两套 UI 共用同一份实现：向导只有「执行 / 跳过 / 回滚」三个动作，没有 Miuix 专有的交互要复刻。
     when (LocalUiMode.current) {
@@ -131,6 +134,7 @@ fun ColumnWizardScreen(
             onProvideKeybox = onProvideKeybox,
             onUpgradeStep = onUpgradeStep,
             onRunAll = onRunAll,
+            onToggleOptIn = onToggleOptIn,
         )
 
         UiMode.Material -> ColumnWizardScreenMaterial(
@@ -143,6 +147,7 @@ fun ColumnWizardScreen(
             onProvideKeybox = onProvideKeybox,
             onUpgradeStep = onUpgradeStep,
             onRunAll = onRunAll,
+            onToggleOptIn = onToggleOptIn,
         )
     }
 }
@@ -158,6 +163,7 @@ private fun ColumnWizardScreenMaterial(
     onProvideKeybox: (String) -> String?,
     onUpgradeStep: (RepoColumnStep) -> Unit,
     onRunAll: () -> Unit,
+    onToggleOptIn: (RepoColumnStep) -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
@@ -302,6 +308,8 @@ private fun ColumnWizardScreenMaterial(
                 WizardStepCard(
                     uiState = uiState,
                     busy = state.running,
+                    optedIn = uiState.step.id in state.optedIn,
+                    onToggleOptIn = { onToggleOptIn(uiState.step) },
                     onRun = { requestRun(uiState.step) },
                     onSkip = { onSkipStep(uiState.step) },
                     onUpgrade = { onUpgradeStep(uiState.step) },
@@ -398,6 +406,8 @@ private fun WizardErrorBanner(message: String) {
 private fun WizardStepCard(
     uiState: ColumnStepUiState,
     busy: Boolean,
+    optedIn: Boolean,
+    onToggleOptIn: () -> Unit,
     onRun: () -> Unit,
     onSkip: () -> Unit,
     onUpgrade: () -> Unit,
@@ -410,6 +420,14 @@ private fun WizardStepCard(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                // 「可选安装」的步骤默认不装：勾上才会进一键执行，或者直接点这一步等同勾选。
+                if (step.optIn) {
+                    Checkbox(
+                        checked = optedIn,
+                        onCheckedChange = { onToggleOptIn() },
+                        enabled = !busy,
+                    )
+                }
                 WizardStepStatusIcon(status = uiState.status)
                 Column(
                     modifier = Modifier.weight(1f),

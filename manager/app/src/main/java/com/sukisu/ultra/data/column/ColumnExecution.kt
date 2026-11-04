@@ -171,6 +171,12 @@ data class ColumnWizardUiState(
      * keybox.xml。商店不保存、不转存这两条路径上的任何字节。
      */
     val keyboxReady: Boolean = false,
+    /**
+     * 用户勾选要装的「可选安装」步骤（[RepoColumnStep.optIn]）。
+     *
+     * 默认空集合 = 一个都不装。勾选只影响一键执行与逐步执行是否放行，不代表商店推荐装什么。
+     */
+    val optedIn: Set<String> = emptySet(),
 )
 
 /** 单步在界面上的状态。 */
