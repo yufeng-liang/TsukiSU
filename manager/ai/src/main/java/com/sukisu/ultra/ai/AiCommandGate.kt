@@ -56,19 +56,36 @@ object AiCommandGate {
             dangerReason(segment, depth = 0)?.let { return blocked(it) }
         }
 
-        // 2) 长度上限：即使内容只读也不放行（见 MAX_COMMAND_LENGTH 注释）。
+        // 2) 动态展开：`$()`、`${}`、反引号、`<()` / `>()` 是执行时才展开的，
+        //    静态分词只能把它们当成字面量，白名单因此不可信。先把展开内容本身
+        //    过一遍危险规则（`cat "$(rm -rf /data)"` 要硬拦），剩下的统一降级确认。
+        val expansion = scanDynamicExpansion(command)
+        for (payload in expansion.payloads) {
+            for (inner in splitSegments(tokenize(payload))) {
+                dangerReason(inner, depth = 0)?.let { return blocked(it) }
+            }
+        }
+
+        // 3) 长度上限：即使内容只读也不放行（见 MAX_COMMAND_LENGTH 注释）。
         if (command.length > MAX_COMMAND_LENGTH) {
             return blocked(
                 "命令长度 ${command.length} 超过 $MAX_COMMAND_LENGTH 字符上限，请拆成更小的步骤"
             )
         }
 
-        // 3) 只读白名单：必须每个子命令都只读，只要有一条不是就降级。
-        if (segments.all { segmentIsReadOnly(it) }) {
+        // 4) 只读白名单：必须每个子命令都只读，只要有一条不是就降级。
+        //    出现动态展开时白名单整体失效：展开以后真正执行的命令没有经过分级。
+        if (!expansion.found && segments.all { segmentIsReadOnly(it) }) {
             return AiCommandVerdict(AiCommandDecision.READ_ONLY, "只读探测")
         }
 
-        // 4) 其余一律需要用户确认。
+        // 5) 其余一律需要用户确认。
+        if (expansion.found) {
+            return AiCommandVerdict(
+                AiCommandDecision.NEEDS_APPROVAL,
+                "命令包含 shell 动态展开（${'$'}()、${'$'}{}、反引号或进程替换），需要确认",
+            )
+        }
         return AiCommandVerdict(AiCommandDecision.NEEDS_APPROVAL, "会修改设备状态，需要确认")
     }
 
@@ -90,6 +107,13 @@ object AiCommandGate {
             if (payload != null) {
                 for (inner in splitSegments(tokenize(payload))) {
                     dangerReason(inner, depth + 1)?.let { return it }
+                }
+                // 外层引号有时只是把整段文字交给内层 shell 再解析
+                // （`su -c 'cat "$(rm -rf /)"'`）：载荷里的动态展开同样要递归检查。
+                for (expanded in scanDynamicExpansion(payload).payloads) {
+                    for (inner in splitSegments(tokenize(expanded))) {
+                        dangerReason(inner, depth + 1)?.let { return it }
+                    }
                 }
             }
         }
@@ -196,6 +220,16 @@ object AiCommandGate {
             if (isSystemRootWrite(target)) {
                 return "禁止写入系统分区或 /init（$target），需要重新打包系统镜像"
             }
+            // 目标由命令替换生成时（`> "$(echo /system/x)"`）最终路径静态看不出来，
+            // 但展开内容里出现的路径同样要过黑名单，不然换个引号写法就绕过。
+            for (payload in scanDynamicExpansion(target).payloads) {
+                val dangerous = splitSegments(tokenize(payload))
+                    .flatten()
+                    .any { isBlockDeviceWrite(it) || isSystemRootWrite(it) }
+                if (dangerous) {
+                    return "禁止把输出重定向写入系统分区或块设备（目标由命令替换生成：$target）"
+                }
+            }
         }
         return null
     }
@@ -244,9 +278,13 @@ object AiCommandGate {
             "resetprop" -> args.size <= 1 && args.none { it.startsWith("-") }
 
             "ls", "cat", "head", "tail", "wc", "grep", "stat", "du", "df",
-            "dumpsys", "getenforce", "id", "uname", "whoami", "pidof",
+            "getenforce", "id", "uname", "whoami", "pidof",
             "sha256sum", "md5sum", "which", "type",
             -> true
+
+            // dumpsys 只有「服务名 + 服务自己的筛选词」是查询；参数里出现路径，
+            // 或像是指定输出/文件的旗标时，某些服务会把状态写盘，降级成人工确认。
+            "dumpsys" -> args.none { isPathArgument(it) || it in DUMPSYS_OUTPUT_FLAGS }
 
             // find 只要带写操作动作就不是只读（起点在根目录时已在上面的危险规则里拦掉）。
             "find" -> args.none { it in FIND_WRITERS }
@@ -426,6 +464,132 @@ object AiCommandGate {
         any { isShortFlag(it) && it.drop(1).contains(letter, ignoreCase = true) }
 
     private fun blocked(reason: String) = AiCommandVerdict(AiCommandDecision.BLOCKED, reason)
+
+    // ---------------------------------------------------------------------
+    // 动态展开扫描（命令替换 / 变量展开 / 反引号 / 进程替换）
+    // ---------------------------------------------------------------------
+
+    /**
+     * [scanDynamicExpansion] 的结果。
+     *
+     * [found] 为 true 说明命令里有 shell 执行时才展开的结构；[payloads] 是这些结构
+     * 内部的原始文本，拿去再过一遍危险规则（`cat "$(rm -rf /)"` 要硬拦而不只是确认）。
+     */
+    private data class ExpansionScan(val found: Boolean, val payloads: List<String>)
+
+    /**
+     * 扫描 shell 动态展开：`$( )`、`${ }`、反引号、`<(`、`>(`。
+     *
+     * 为什么必须单独扫一遍原文：[tokenize] 会把引号里的内容原样聚成一个字面量 token，
+     * `cat "$(rm -rf /data)"` 于是看起来只是「cat 带一个普通参数」而判成只读，
+     * 可 shell 真正执行时会先跑掉 `rm -rf /data` —— 等于任意命令免确认拿 root。
+     * 只读判定前必须先过这道扫描。
+     *
+     * 引号规则：单引号内 shell 不展开，整段跳过；双引号内 `$()`、`${}`、反引号
+     * 照样展开，必须算。[payloads] 的截取按括号嵌套尽力而为（引号嵌套时可能截短），
+     * 但判定只依赖 [found]，少截一段最多是少一次硬拦，不会少一次确认。
+     */
+    private fun scanDynamicExpansion(text: String): ExpansionScan {
+        val payloads = ArrayList<String>()
+        var found = false
+        var index = 0
+        var inDoubleQuote = false
+
+        while (index < text.length) {
+            val char = text[index]
+
+            // 单引号内：shell 原样保留，直接跳到闭合的单引号。
+            if (!inDoubleQuote && char == '\'') {
+                val end = text.indexOf('\'', index + 1)
+                index = if (end < 0) text.length else end + 1
+                continue
+            }
+
+            // 双引号：进出状态要记下来，里面的 `$()` / `${}` / 反引号仍然要检测。
+            if (char == '"') {
+                inDoubleQuote = !inDoubleQuote
+                index++
+                continue
+            }
+
+            val next = if (index + 1 < text.length) text[index + 1] else ' '
+            when {
+                char == '$' && next == '(' -> {
+                    found = true
+                    val end = matchingBracket(text, index + 2, '(', ')')
+                    payloads.add(text.substring(index + 2, end))
+                    index = end + 1
+                }
+
+                char == '$' && next == '{' -> {
+                    found = true
+                    val end = matchingBracket(text, index + 2, '{', '}')
+                    payloads.add(text.substring(index + 2, end))
+                    index = end + 1
+                }
+
+                char == '`' -> {
+                    found = true
+                    val end = text.indexOf('`', index + 1)
+                    if (end < 0) {
+                        // 反引号没闭合：shell 要么报错要么把后面整段吞进去，一样要人看。
+                        payloads.add(text.substring(index + 1))
+                        index = text.length
+                    } else {
+                        payloads.add(text.substring(index + 1, end))
+                        index = end + 1
+                    }
+                }
+
+                // 进程替换：`<(cmd)` / `>(cmd)` 会起一个真实的进程并给它一个 /dev/fd 路径。
+                !inDoubleQuote && (char == '<' || char == '>') && next == '(' -> {
+                    found = true
+                    val end = matchingBracket(text, index + 2, '(', ')')
+                    payloads.add(text.substring(index + 2, end))
+                    index = end + 1
+                }
+
+                else -> index++
+            }
+        }
+        return ExpansionScan(found, payloads)
+    }
+
+    /** 从 [start] 起找与 [open]/[close] 配对的括号位置（计入嵌套），找不到就返回文本末尾。 */
+    private fun matchingBracket(text: String, start: Int, open: Char, close: Char): Int {
+        var depth = 1
+        var index = start
+        while (index < text.length) {
+            val char = text[index]
+            when {
+                char == open -> depth++
+                char == close -> {
+                    depth--
+                    if (depth == 0) return index
+                }
+            }
+            index++
+        }
+        return text.length
+    }
+
+    /**
+     * 参数是否看起来指到某个文件：绝对路径、`./x`、`../x`、`~` 开头，
+     * 或带路径取值的旗标（`--file=/data/x` 的旗标值部分）。
+     */
+    private fun isPathArgument(token: String): Boolean {
+        val value = token.substringAfter('=', token)
+        return value.startsWith("/") || value.startsWith("./") ||
+            value.startsWith("../") || value.startsWith("~")
+    }
+
+    /**
+     * dumpsys 各服务的实现互不相同，出现这些「指定输出/文件」意味的旗标时不能假定它只是
+     * 往 stdout 打一份文本；连同 [isPathArgument] 一起把这类参数降级成人工确认。
+     */
+    private val DUMPSYS_OUTPUT_FLAGS = setOf(
+        "-o", "--output", "--out", "-f", "--file", "--save",
+    )
 
     /**
      * 把命令行切成 token。和 shell 一样处理引号，并把操作符单独拆成 token，

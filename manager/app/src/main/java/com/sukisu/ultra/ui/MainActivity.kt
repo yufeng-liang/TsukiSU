@@ -408,6 +408,7 @@ class MainActivity : ComponentActivity() {
                                         onUpgradeStep = { step -> wizardViewModel.runStep(step, force = true) },
                                         onRunAll = { wizardViewModel.runAll() },
                                         onToggleOptIn = { step -> wizardViewModel.toggleOptIn(step.id) },
+                                        onMarkDone = { step -> wizardViewModel.markDone(step) },
                                         onBack = { navigator.pop() },
                                     )
                                 }

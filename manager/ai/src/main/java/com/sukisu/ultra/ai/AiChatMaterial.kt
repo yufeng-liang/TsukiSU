@@ -795,6 +795,9 @@ private fun AiApprovalDialogMaterial(
     onAllowAlways: () -> Unit,
     onDeny: () -> Unit,
 ) {
+    // run_shell 这类 allowRemember=false 的请求必须每一发都真人确认：
+    // 「本次请求始终允许」对它们不展示，也不生效。
+    val canRemember = pending.request.allowRemember
     var alwaysAllow by remember(pending.request) { mutableStateOf(false) }
     AiExpressiveDialog(
         onDismissRequest = onDeny,
@@ -818,24 +821,26 @@ private fun AiApprovalDialogMaterial(
                         )
                     }
                 }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Checkbox(
-                        checked = alwaysAllow,
-                        onCheckedChange = { alwaysAllow = it },
-                    )
-                    Text(
-                        text = stringResource(R.string.ai_approval_always),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                if (canRemember) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Checkbox(
+                            checked = alwaysAllow,
+                            onCheckedChange = { alwaysAllow = it },
+                        )
+                        Text(
+                            text = stringResource(R.string.ai_approval_always),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                 }
             }
         },
         confirmButton = {
             Button(
-                onClick = { if (alwaysAllow) onAllowAlways() else onAllow() },
+                onClick = { if (canRemember && alwaysAllow) onAllowAlways() else onAllow() },
             ) {
                 Text(stringResource(R.string.ai_approval_allow))
             }

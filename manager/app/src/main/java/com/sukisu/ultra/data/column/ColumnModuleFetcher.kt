@@ -13,6 +13,7 @@ import com.sukisu.ultra.ui.util.hasAnyNetwork
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
@@ -83,6 +84,23 @@ private const val UPDATE_JSON_DIR = "update_json"
  * 「可能被墙、可以手动下载」，后者直接原样展示，不再重复包装。
  */
 private class ColumnFetchException(message: String, cause: Throwable? = null) : IOException(message, cause)
+
+/**
+ * update.json 给出的 zip 直链落在了**另一个主机**上，而索引又没登记 sha256。
+ *
+ * 为什么单独一个类型：这条链路上唯一能锁住字节的东西就是索引里的 sha256。控制 update.json 的
+ * 一方（或 DNS/TLS 中间人）可以把 zipUrl 指到自己的主机，App 下回来只验 4 字节 zip 魔数，
+ * 然后照样报「安装成功」。混合来源（update.json 在一台、zip 在另一台）本身也可能是正常的
+ * CDN 结构，所以不直接拒绝，而是把它变成一个**能被执行器翻译成「停下并说明原因」**的失败，
+ * 由上层决定怎么提示用户；绝不当成普通网络错误再悄悄重试。
+ */
+internal class ColumnCrossHostDownloadException(
+    val fromHost: String,
+    val toHost: String,
+) : IOException(
+    "update.json（$fromHost）里的 zip 直链跳到了另一个主机：$toHost；" +
+        "索引没有登记 sha256，无法校验下载到的字节"
+)
 
 /**
  * 为 `installModule` 步骤准备一个可以交给 `ksud` 的 zip。
@@ -241,6 +259,11 @@ class ColumnModuleFetcher(
      * 这里不做「包内 module.prop 与版本号对齐」的预校验：LSPosed 的 zip 用 XZ（zip method 95）
      * 压缩，Java 的 ZipFile 读不了。改成只校验「下载回来确实是个 zip」，装错包的兜底交给
      * ksud（它自己会校验模块结构）和向导的回滚。
+     *
+     * 两条校验，针对「控制 update.json 就能换包」这条链：
+     * - 索引登记了 sha256 就**透传下去**校验（和 README 里「登记了就校验」的语义一致）；
+     * - 没登记时，zipUrl 与 update.json 不同主机就直接停下（见 [ColumnCrossHostDownloadException]），
+     *   因为这时没有任何东西能证明下回来的字节就是官方的。
      */
     private suspend fun downloadFromUpdateJson(step: RepoColumnStep): Uri {
         val updateUrl = step.source.url.trim()
@@ -261,13 +284,32 @@ class ColumnModuleFetcher(
         if (!zipUrl.startsWith("https://", ignoreCase = true)) {
             throw ColumnFetchException("update.json 没有给出可用的 zip 直链：$updateUrl")
         }
+
+        // 索引登记的哈希优先：给了就校验，没给才走「同主机」的兜底判断。
+        val expectedSha256 = step.source.sha256.trim().lowercase()
+        if (expectedSha256.isNotEmpty() && !SHA256_PATTERN.matches(expectedSha256)) {
+            throw ColumnFetchException(
+                "索引为这一步登记的 sha256 不是 64 位十六进制：${step.source.sha256}，无法校验下载内容"
+            )
+        }
+        val updateHost = hostOf(updateUrl)
+        val zipHost = hostOf(zipUrl)
+        if (expectedSha256.isEmpty() && updateHost.isNotEmpty() && zipHost.isNotEmpty() &&
+            updateHost != zipHost
+        ) {
+            throw ColumnCrossHostDownloadException(updateHost, zipHost)
+        }
+
         val versionCode = json.optInt("versionCode", 0)
         val fileName = if (versionCode > 0) "module-$versionCode.zip" else "module-latest.zip"
         val destination = File(downloadDirFor(UPDATE_JSON_DIR), safeFileName(fileName))
-        download(UPDATE_JSON_DIR, zipUrl, destination, "")
+        download(UPDATE_JSON_DIR, zipUrl, destination, expectedSha256)
         requireZip(destination, zipUrl)
         return Uri.fromFile(destination)
     }
+
+    /** 取 https 地址的主机名（小写）；解析不出来给空串（调用方按「无法比较」处理）。 */
+    private fun hostOf(url: String): String = url.toHttpUrlOrNull()?.host.orEmpty().lowercase()
 
     private fun fetchUpdateJson(url: String): String {
         val request = Request.Builder().url(url).header("Accept", "application/json").build()
@@ -545,6 +587,9 @@ class ColumnModuleFetcher(
         try {
             block()
         } catch (e: ColumnFetchException) {
+            throw e
+        } catch (e: ColumnCrossHostDownloadException) {
+            // 这是「我们自己的结论」，不是网络层错误：不能被改写成「GitHub 可能被墙」。
             throw e
         } catch (e: IOException) {
             throw ColumnFetchException(

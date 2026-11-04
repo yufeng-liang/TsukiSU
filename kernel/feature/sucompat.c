@@ -31,7 +31,7 @@
 #define SU_PATH "/system/bin/su"
 #define SH_PATH "/system/bin/sh"
 
-bool ksu_su_compat_enabled __read_mostly = false;
+bool ksu_su_compat_enabled __read_mostly = true;
 
 static int su_compat_feature_get(u64 *value)
 {

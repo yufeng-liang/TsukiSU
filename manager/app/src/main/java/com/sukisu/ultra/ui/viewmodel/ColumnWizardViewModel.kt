@@ -94,6 +94,9 @@ class ColumnWizardViewModel(
             appendLog("已恢复上次的进度（${restored.size} 步已处理），接着往下做就行")
         }
         prefetchKeybox(topic)
+        // 恢复出来的进度可能已经全部落定（上次做完就退出了），这时要立刻进入完成态，
+        // 否则自检与回滚这两个入口永远不会出现。
+        maybeFinish()
     }
 
     /**
@@ -105,35 +108,59 @@ class ColumnWizardViewModel(
      */
     fun runAll() {
         if (runningStep) return
-        val optedIn = _uiState.value.optedIn
-        val pending = _uiState.value.stepStates
-            .filter { !it.status.isSettled }
-            .filter { !it.step.optIn || it.step.id in optedIn }
-            .map { it.step }
-            .filter { it.isAutoRunnable() }
-        if (pending.isEmpty()) {
-            appendLog("没有可以自动执行的步骤了；剩下的都需要你手动处理")
+        val steps = topic?.steps.orEmpty()
+        if (steps.isEmpty()) return
+        val state = _uiState.value
+        val planned = ArrayList<RepoColumnStep>()
+        var stopReason: String? = null
+        for (step in steps) {
+            val status = state.stepStates.firstOrNull { it.step.id == step.id }?.status
+            // 已经处理过的直接跳过（NEEDS_USER 也算：重跑只会重复下载或重复打开安装器）
+            if (status?.isSettled == true || status == ColumnStepStatus.NEEDS_USER) continue
+            if (step.optIn && step.id !in state.optedIn) continue
+            if (step.optional) {
+                stopReason = "「${step.title}」是可选项，装不装由你决定"
+                break
+            }
+            if (!step.isAutoRunnable()) {
+                stopReason = "「${step.title}」需要你手动做"
+                break
+            }
+            if (step.confirm.isNotBlank()) {
+                stopReason = "「${step.title}」需要你单独确认"
+                break
+            }
+            planned += step
+        }
+        if (planned.isEmpty()) {
+            appendLog(stopReason ?: "没有可以自动执行的步骤了；剩下的都需要你手动处理")
+            maybeFinish()
             return
         }
         runningStep = true
         _uiState.update { it.copy(running = true, error = "") }
-        appendLog("一键执行：${pending.size} 个步骤会自动跑完，遇到需要人工的会停下来")
+        appendLog("一键执行：本次自动处理 ${planned.size} 个步骤")
         viewModelScope.launch {
-            for ((index, step) in pending.withIndex()) {
-                if (!isActive) break
-                val result = executeStep(step, force = false)
-                if (result.isFailure) {
-                    runningStep = false
-                    _uiState.update { it.copy(running = false, error = result.message) }
-                    appendLog("步骤「${step.title}」失败，一键执行停在这里（修正后可以重试这一步）")
-                    return@launch
+            try {
+                for ((index, step) in planned.withIndex()) {
+                    if (!isActive) break
+                    val result = executeStep(step, force = false)
+                    if (result.isFailure) {
+                        _uiState.update { it.copy(error = result.message) }
+                        appendLog("步骤「${step.title}」失败，一键执行停在这里（修正后可以重试这一步）")
+                        return@launch
+                    }
+                    appendLog("进度：${index + 1}/${planned.size}")
                 }
-                appendLog("进度：${index + 1}/${pending.size}")
+                maybeFinish()
+                appendLog(
+                    if (stopReason != null) "自动步骤都执行完了；接下来：$stopReason"
+                    else "自动步骤都执行完了；剩下的需要你手动确认",
+                )
+            } finally {
+                runningStep = false
+                _uiState.update { it.copy(running = false) }
             }
-            runningStep = false
-            _uiState.update { it.copy(running = false) }
-            maybeFinish()
-            appendLog("自动步骤都执行完了；剩下的需要你手动确认")
         }
     }
 
@@ -156,6 +183,8 @@ class ColumnWizardViewModel(
         viewModelScope.launch {
             val auto = keyboxFetcher.fetchAuto()
             auto.onSuccess { content ->
+                // 用户在等待期间自己选过文件，就以用户的为准：自动源没有摘要校验，不能静默顶掉手选的
+                if (keyboxContent != null) return@onSuccess
                 keyboxContent = content
                 _uiState.update { it.copy(keyboxReady = true) }
                 appendLog("已自动获取密钥材料（${content.length} 字节，来源：MeowDump 的 GitHub Release 镜像）")
@@ -165,6 +194,7 @@ class ColumnWizardViewModel(
             val declared = topic.keybox
             if (declared != null) {
                 keyboxFetcher.fetch(declared).onSuccess { content ->
+                    if (keyboxContent != null) return@onSuccess
                     keyboxContent = content
                     _uiState.update { it.copy(keyboxReady = true) }
                     appendLog("密钥材料已就绪（${content.length} 字节），sha256 与专栏登记的指纹一致")
@@ -217,13 +247,17 @@ class ColumnWizardViewModel(
         runningStep = true
         _uiState.update { it.copy(running = true, error = "") }
         viewModelScope.launch {
-            val result = executeStep(step, force)
-            runningStep = false
-            _uiState.update { it.copy(running = false, error = if (result.isFailure) result.message else "") }
-            if (result.isFailure) {
-                appendLog("步骤「${step.title}」失败，向导已停在这里；修正后可以重试这一步，或回滚本次改动")
-            } else {
-                maybeFinish()
+            try {
+                val result = executeStep(step, force)
+                _uiState.update { it.copy(error = if (result.isFailure) result.message else "") }
+                if (result.isFailure) {
+                    appendLog("步骤「${step.title}」失败，向导已停在这里；修正后可以重试这一步，或回滚本次改动")
+                } else {
+                    maybeFinish()
+                }
+            } finally {
+                runningStep = false
+                _uiState.update { it.copy(running = false) }
             }
         }
     }
@@ -264,7 +298,8 @@ class ColumnWizardViewModel(
     fun toggleOptIn(stepId: String) {
         _uiState.update { state ->
             val next = if (stepId in state.optedIn) state.optedIn - stepId else state.optedIn + stepId
-            state.copy(optedIn = next)
+            // 完成之后又勾上新的可选步骤：完成状态不再成立，底部的「一键执行」要能重新出现
+            state.copy(optedIn = next, done = if (stepId in next) false else state.done)
         }
         saveProgress()
     }
@@ -273,8 +308,21 @@ class ColumnWizardViewModel(
     fun skipStep(step: RepoColumnStep) {
         if (runningStep) return
         if (_uiState.value.done) return
+        // 非可选项不许跳过：跳过等于「假装做了」，重启和验收会被糊弄过去，最后自检一片红。
+        if (!step.optional) {
+            appendLog("「${step.title}」不是可选项，不能跳过；确实做过了请点「标记为已完成」")
+            return
+        }
         updateStep(step.id) { it.copy(status = ColumnStepStatus.SKIPPED, message = "已跳过") }
-        appendLog("跳过步骤「${step.title}」${if (step.optional) "" else "（该步骤不是可选项）"}")
+        appendLog("跳过步骤「${step.title}」")
+        maybeFinish()
+    }
+
+    /** 用户按提示自己做完了（重启回来、装好了 APK、自己确认过），把这一步标成完成。 */
+    fun markDone(step: RepoColumnStep) {
+        if (runningStep) return
+        updateStep(step.id) { it.copy(status = ColumnStepStatus.SUCCESS, message = "已完成（用户确认）") }
+        appendLog("「${step.title}」已标记为完成")
         maybeFinish()
     }
 
@@ -284,16 +332,34 @@ class ColumnWizardViewModel(
         runningStep = true
         _uiState.update { it.copy(running = true) }
         viewModelScope.launch {
-            val lines = try {
-                rollbackStore.rollback()
-            } catch (error: kotlinx.coroutines.CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                listOf("回滚失败：${error.message ?: "未知错误"}")
+            try {
+                val lines = try {
+                    rollbackStore.rollback()
+                } catch (error: kotlinx.coroutines.CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    listOf("回滚失败：${error.message ?: "未知错误"}")
+                }
+                lines.forEach { appendLog(it) }
+                // 回滚是「回到开始前」，不是「结束」：进度要清掉、步骤要复位，用户才能重新走一遍。
+                val topicId = _uiState.value.topicId
+                runCatching { progressPrefs().edit().remove(progressKey(topicId)).apply() }
+                prefetchedTopicId = null
+                _uiState.update { state ->
+                    state.copy(
+                        done = false,
+                        error = "",
+                        checks = emptyList(),
+                        stepStates = state.stepStates.map {
+                            it.copy(status = ColumnStepStatus.PENDING, message = "", upgrade = null)
+                        },
+                    )
+                }
+                appendLog("已回滚到开始前的状态，可以重新执行")
+            } finally {
+                runningStep = false
+                _uiState.update { it.copy(running = false) }
             }
-            lines.forEach { appendLog(it) }
-            runningStep = false
-            _uiState.update { it.copy(running = false, done = true) }
         }
     }
 
@@ -361,8 +427,8 @@ class ColumnWizardViewModel(
     /**
      * 读回上次的进度。
      *
-     * 只认 [PROGRESS_TTL_MS] 内、且步骤 id 还能对上的记录：专栏内容会更新，
-     * 对不上的旧状态直接丢掉，免得把「已完成」错认到别的步骤上。
+     * 只认步骤 id 还能对上的记录：专栏内容会更新，对不上的旧状态直接丢掉，
+     * 免得把「已完成」错认到别的步骤上。
      */
     private fun restoreProgress(topicId: String): Map<String, Pair<ColumnStepStatus, String>>? {
         val raw = runCatching { progressPrefs().getString(progressKey(topicId), null) }.getOrNull()
@@ -406,10 +472,12 @@ class ColumnWizardViewModel(
         }
     }
 
+    /**
+     * 只把「真的做完了」算落定。NEEDS_USER 是「等你动手」——重启还没做、安装器还开着、
+     * 还要你自己看结果，把它算成完成会让用户在一次都没重启的情况下看到「全部处理完毕」。
+     */
     private val ColumnStepStatus.isSettled: Boolean
-        get() = this == ColumnStepStatus.SUCCESS ||
-            this == ColumnStepStatus.SKIPPED ||
-            this == ColumnStepStatus.NEEDS_USER
+        get() = this == ColumnStepStatus.SUCCESS || this == ColumnStepStatus.SKIPPED
 
     private companion object {
         /** 日志上限：长步骤（模块安装）输出很多，不截断会把内存和 UI 一起拖慢。 */

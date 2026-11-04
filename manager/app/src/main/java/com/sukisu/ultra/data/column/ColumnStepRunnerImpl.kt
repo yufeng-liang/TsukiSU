@@ -15,6 +15,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.IOException
 import kotlin.coroutines.cancellation.CancellationException
 
 /** 单步日志的上限：够看清命令输出，又不至于把一次向导的全部输出都堆在内存/界面里。 */
@@ -36,16 +37,6 @@ private const val KEYBOX_PLACEHOLDER = "\${keybox}"
  * 服务端每次生成目录都带随机后缀（`/data/misc/hide_my_applist_<随机串>`），所以只能按前缀找。
  */
 private const val HMA_DIR_GLOB = "/data/misc/hide_my_applist_*"
-
-/**
- * 设备上还没有 HMA 配置时用的 `configVersion` 兜底值。
- *
- * 正常情况下我们用的是**设备上那份 config.json 里的值**（HMA 自己写的，必然与当前版本一致）；
- * 只有用户装完 HMA 还没重启过、配置文件尚未生成时才会用到这个数字。它对应
- * `frknkrc44/HMA-OSS` 根 `build.gradle.kts` 的 `val configVerCode by extra(93)`，HMA 改配置
- * 结构时这里要跟着改，否则 HMA 会以「版本不符」为由静默不加载。
- */
-private const val HMA_FALLBACK_CONFIG_VERSION = 93
 
 /**
  * 专栏命令的安全边界。
@@ -98,7 +89,7 @@ class ColumnStepRunnerImpl(
         try {
             when (val kind = step.kind.trim().lowercase()) {
                 KIND_INSTALL_MODULE -> installModule(step, ctx, log)
-                KIND_INSTALL_APP -> installApp(step, log)
+                KIND_INSTALL_APP -> installApp(step, ctx, log)
                 KIND_WRITE_CONFIG, KIND_WRITE_FILE -> writeFile(step, ctx, log)
                 KIND_WRITE_HMA_CONFIG -> writeHmaConfig(step, log)
                 KIND_RUN_COMMAND -> runCommand(step, log)
@@ -126,9 +117,14 @@ class ColumnStepRunnerImpl(
      * 商店**不代点安装**：只把包下载好、用 FileProvider 递给系统安装界面，确认按钮永远由用户按。
      * 这样既省掉「自己找地方下 APK」的步骤，又不会出现「点一下商店，后台静默装了个 App」。
      *
-     * 幂等靠包名：APK 的包名只能从安装包本身读，已经在设备上的直接跳过。
+     * 幂等靠包名：APK 的包名只能从安装包本身读，已经在设备上的直接跳过——但 [ColumnRunContext.force]
+     * 要放行，语义和 installModule 一致（用户点了「升级/重装」就该把安装器打开，否则永远停在跳过）。
      */
-    private suspend fun installApp(step: RepoColumnStep, log: StepLog): ColumnStepResult {
+    private suspend fun installApp(
+        step: RepoColumnStep,
+        ctx: ColumnRunContext,
+        log: StepLog,
+    ): ColumnStepResult {
         if (step.source.kind.trim().isEmpty()) {
             return failed("这个步骤没有配置下载来源，无法安装", log)
         }
@@ -153,14 +149,17 @@ class ColumnStepRunnerImpl(
             .orEmpty()
         if (pkg.isNotEmpty()) {
             log.line("包名：$pkg")
-            if (runCatching { pm.getPackageInfo(pkg, 0) }.isSuccess) {
+            val installed = runCatching { pm.getPackageInfo(pkg, 0) }.isSuccess
+            // force 语义与 installModule 一致：用户点了「升级/重做」就把安装器打开，不能永远停在跳过。
+            if (installed && !ctx.force) {
                 log.line("$pkg 已安装，跳过")
                 return ColumnStepResult(
                     ColumnStepStatus.SKIPPED,
-                    "$pkg 已经装了，跳过（要重装请先在系统里卸载）",
+                    "$pkg 已经装了，跳过（要重装请在步骤上点升级/重做）",
                     log.text(),
                 )
             }
+            if (installed) log.line("$pkg 已安装，按用户要求重新打开安装器（覆盖安装）")
         } else {
             log.line("读不出包名，继续交给系统安装器判断")
         }
@@ -205,12 +204,21 @@ class ColumnStepRunnerImpl(
         // 幂等的第一道闸：索引里写了 moduleId 的，先按它查一次，省掉一次几十兆的下载。
         // 第二道在 resolveModuleId 之后（见下），防止索引写的 id 和 zip 里的对不上。
         // 用户点了「升级」（ctx.force）时两道闸都要放行，否则升级永远走不到下载。
+        // 两道闸都只认合法 id：columns.json 是远程数据，非法 id 连查都不查（它会被拼进 shell 路径）。
         val hintedId = step.source.moduleId.trim()
-        if (!ctx.force && hintedId.isNotEmpty() && isModuleInstalled(hintedId)) {
+        if (hintedId.isNotEmpty() && !isValidColumnModuleId(hintedId)) {
+            log.line("索引给的模块 id 不合法，已忽略：$hintedId")
+        }
+        if (!ctx.force && isValidColumnModuleId(hintedId) && isModuleInstalled(hintedId)) {
             return installedResult(step, hintedId, log)
         }
 
-        val uri = fetcher.resolve(step).getOrElse { e ->
+        val uriResult = fetcher.resolve(step)
+        val resolveError = uriResult.exceptionOrNull()
+        if (resolveError is ColumnCrossHostDownloadException) {
+            return failed(crossHostMessage(resolveError), log)
+        }
+        val uri = uriResult.getOrElse { e ->
             return failed("准备模块失败：${e.message ?: e.javaClass.simpleName}", log)
         }
         if (uri.scheme != "file") {
@@ -219,15 +227,19 @@ class ColumnStepRunnerImpl(
         log.line("已准备好模块包：${uri.lastPathSegment ?: uri}")
 
         // 先解析 id：装成功后 zip 会被 flashModule 删掉，那时就来不及读了。
-        val moduleId = resolveModuleId(step, uri)
-        log.line("模块 id：$moduleId")
+        val resolvedId = resolveModuleId(step, uri, log)
+        log.line("模块 id：$resolvedId")
 
         // 幂等的第二道闸：模块已经在设备上了就不再刷一遍。重装会覆盖用户在模块 WebUI 里
         // 做的配置，也会把「跟着做第二遍」变成一轮没必要的下载 + 刷写 + 重启。
-        if (!ctx.force && isModuleInstalled(moduleId)) {
-            return installedResult(step, moduleId, log)
+        if (!ctx.force && isValidColumnModuleId(resolvedId) && isModuleInstalled(resolvedId)) {
+            return installedResult(step, resolvedId, log)
         }
         if (ctx.force) log.line("按用户要求覆盖安装（升级/重做）")
+
+        // 刷写前记下已有模块目录：刷完用它找出 ksud 真正装出来的 id。索引里的 id 只用来「提示」，
+        // 一旦和 zip 里的对不上，按索引 id 记账会让两道幂等闸全部失效（每次重跑都重新下载刷写）。
+        val modulesBefore = installedModuleDirs()
 
         val stdout = mutableListOf<String>()
         val stderr = mutableListOf<String>()
@@ -251,6 +263,16 @@ class ColumnStepRunnerImpl(
                 .ifBlank { result.err.trim() }
                 .ifBlank { "ksud 退出码 ${result.code}" }
             return failed("模块安装失败：$detail", log)
+        }
+        // 回读真实 id：ksud 只认 zip 里的 module.prop，索引写的 id 可能对不上。对不上时若按索引 id
+        // 记账，isModuleInstalled 永远查不到真正的目录，两道幂等闸全失效 → 每次重跑都重新下载刷写。
+        val moduleId = detectInstalledModuleId(modulesBefore, resolvedId, log) ?: resolvedId
+        if (!isValidColumnModuleId(moduleId)) {
+            return failed(
+                "模块装上了，但认不出它的真实模块 id（解析值：$resolvedId），没能记进回滚账本。" +
+                    "请到「模块」页确认这次装的是什么，需要撤销时手动卸载。",
+                log
+            )
         }
         log.line("模块安装成功：$moduleId")
 
@@ -277,30 +299,86 @@ class ColumnStepRunnerImpl(
     /**
      * 尽力解析模块 id：先读 zip 里的 module.prop，再退到索引写的 moduleId，最后用文件名兜底。
      *
-     * 回滚账本只拿 id 调 `ksud module uninstall`，所以「猜错」比「留空」更糟——这里每一层都
-     * 只接受非空值。
+     * 回滚账本只拿 id 调 `ksud module uninstall`，所以「猜错」比「留空」更糟——每一层都只接受
+     * **合法**的非空值（见 [isValidColumnModuleId]）。不合法的值不回落成危险值，统一记日志后继续
+     * 往下找：索引是远程数据，一个带 `;` / `$( )` / 反引号的 id 就是任意 root 命令，绝不能让它
+     * 流进账本、更不能流进 shell。
      */
-    private fun resolveModuleId(step: RepoColumnStep, uri: Uri): String {
+    private fun resolveModuleId(step: RepoColumnStep, uri: Uri, log: StepLog): String {
         val file = uri.path?.let { File(it) }
-        if (file != null && file.isFile) {
-            ModuleProp.parseModuleProp(file)?.id?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        val fromProp = if (file != null && file.isFile) {
+            ModuleProp.parseModuleProp(file)?.id?.trim()?.takeIf { it.isNotEmpty() }
+        } else {
+            null
         }
-        step.source.moduleId.trim().takeIf { it.isNotEmpty() }?.let { return it }
-        return file?.name?.substringBeforeLast('.')?.trim()?.takeIf { it.isNotEmpty() } ?: "unknown-module"
+        if (fromProp != null) {
+            if (isValidColumnModuleId(fromProp)) return fromProp
+            log.line("zip 里的模块 id 不合法，已忽略：$fromProp")
+        }
+        val fromIndex = step.source.moduleId.trim().takeIf { it.isNotEmpty() }
+        if (fromIndex != null) {
+            if (isValidColumnModuleId(fromIndex)) return fromIndex
+            log.line("索引给的模块 id 不合法，已忽略：$fromIndex")
+        }
+        val fromName = file?.name?.substringBeforeLast('.')?.trim()?.takeIf { it.isNotEmpty() }
+        if (fromName != null && isValidColumnModuleId(fromName)) return fromName
+        return "unknown-module"
     }
 
     /**
      * 模块是不是已经装在这台设备上。
      *
      * 用 `/data/adb/modules/<id>` 目录存在与否判断——这是 Magisk / KernelSU / APatch 共同的
-     * 「已安装」标志。解析不出 id（`unknown-module`）时一律当作没装：宁可多装一次，也不能
-     * 因为有一步猜错 id 就跳过该装的模块。
+     * 「已安装」标志。解析不出 id（`unknown-module`）或 id 不合法时一律当作没装：宁可多装一次，
+     * 也不能因为有一步猜错 id 就跳过该装的模块。
      */
     private fun isModuleInstalled(moduleId: String): Boolean {
         val id = moduleId.trim()
         if (id.isEmpty() || id == "unknown-module") return false
+        if (!isValidColumnModuleId(id)) return false
         return ColumnRootIo.isDirectory("/data/adb/modules/$id")
     }
+
+    /** `/data/adb/modules` 下现有的模块目录名（`ls -1` 不含隐藏项）。 */
+    private fun installedModuleDirs(): Set<String> {
+        val outcome = ColumnRootIo.exec("ls -1 /data/adb/modules 2>/dev/null")
+        if (!outcome.isSuccess) return emptySet()
+        return outcome.out.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    }
+
+    /**
+     * 用「刷写前后的目录差」找出 ksud 真正装出来的 id。
+     *
+     * 只认「恰好多了一个目录」这种明确情形；没多、多装都回落到索引解析值（调用方再决定怎么处理）。
+     * 这一步的意义是：模块 id 以 zip 里的 `module.prop` 为准，索引写的只是提示。
+     */
+    private fun detectInstalledModuleId(before: Set<String>, expected: String, log: StepLog): String? {
+        val added = installedModuleDirs() - before
+        if (added.size != 1) {
+            if (added.isEmpty()) {
+                log.line("刷写后没看到新的模块目录，按解析出的 id 记账：$expected")
+            } else {
+                log.line("刷写后新增了多个模块目录（${added.joinToString("、")}），按解析出的 id 记账：$expected")
+            }
+            return null
+        }
+        val real = added.first()
+        if (!real.equals(expected, ignoreCase = true)) {
+            log.line("注意：zip 里实际的模块 id 是 $real（解析成了 $expected），已按实际 id 记账")
+        }
+        return real
+    }
+
+    /**
+     * update.json 与 zip 不在同一主机、且索引没登记 sha256 时的说明。
+     *
+     * 选 FAILED 而不是 NEEDS_USER：向导把 NEEDS_USER 当成「已了结」，runAll 会继续往下走，
+     * 用户会以为这一步装上了；失败才会停下来，并给出「让索引登记 sha256」的明确出路。
+     */
+    private fun crossHostMessage(e: ColumnCrossHostDownloadException): String =
+        "update.json（${e.fromHost}）给出的下载地址指向了另一个主机（${e.toHost}），" +
+            "而索引没有为这一步登记 sha256，无法确认下回来的是同一个包。" +
+            "为安全起见没有下载、没有安装任何东西；如果确认可信，请让索引登记 sha256 后重试。"
 
     /**
      * 已装时给用户的结论。
@@ -317,9 +395,16 @@ class ColumnStepRunnerImpl(
         val localText = local?.first?.takeIf { it.isNotEmpty() } ?: "未知版本"
         log.line("模块 $moduleId 已安装（$localText），检查上游版本")
 
-        val remote = runCatching {
+        // 只吞「查不到」的常规异常；协程取消必须继续往上抛（runCatching 会把 CancellationException
+        // 也吞掉，导致用户点了取消、这一步却当成「查完、按已装跳过」）。
+        val remote = try {
             withTimeoutOrNull(UPGRADE_CHECK_TIMEOUT_MS) { fetcher.latestVersion(step) }
-        }.getOrNull()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.line("查询上游版本失败：${e.message ?: e.javaClass.simpleName}")
+            null
+        }
         if (remote == null) {
             log.line("拿不到上游版本，按已装跳过")
             return skippedInstalled(moduleId, log)
@@ -434,7 +519,18 @@ class ColumnStepRunnerImpl(
 
         // 幂等：内容已经一致就不要再写。重写会刷新 mtime，也可能触发依赖这个文件的模块
         // 重新生成配置；账本那边还会多一条没用的备份记录（虽然去重后不会真的多备份）。
-        val current = runCatching { ColumnRootIo.readText(path) }.getOrNull()
+        // 读之前先过「不是 /proc、不是超大文件、不是目录」：filePath 来自远程索引，指到 4 GiB 的镜像
+        // 或 /proc/kmsg 时，base64 读法会把向导卡死/撑爆，而且写下去也没有意义。
+        val current = try {
+            ColumnRootIo.requireTextFileWithinLimit(path)
+            ColumnRootIo.readText(path)
+        } catch (e: IOException) {
+            // 文件不存在（要新建）不算错误；存在但读不了/超限则是明确的拒绝。
+            if (ColumnRootIo.exists(path) || ColumnRootIo.isSymlink(path)) {
+                return failed("拒绝写入 $path：${e.message ?: "无法读取目标文件"}", log)
+            }
+            null
+        }
         if (current == content) {
             log.line("内容已一致，跳过写入：$path")
             return ColumnStepResult(
@@ -494,6 +590,16 @@ class ColumnStepRunnerImpl(
             return failed("HMA 配置包不是合法 JSON：${e.message ?: e.javaClass.simpleName}", log)
         }
 
+        // 索引下发的配置包先按 HMA 的 schema 过一遍：少 argumentCount / isWhitelist 这类 HMA 要求
+        // 必填的字段就补上默认值（并写日志），补不出来的（类型不对、appList 缺失）直接停手。
+        // 不校验就写下去的后果是 HMA 整份配置解析失败被丢弃，用户的隐藏规则全挂，而向导报 SUCCESS。
+        val normalizedPack = try {
+            normalizeHmaPack(pack, log::line)
+        } catch (e: HmaSchemaException) {
+            return failed("HMA 配置包不符合 HMA-OSS 的 schema：${e.message}；未写入任何内容", log)
+        }
+        val templateName = normalizedPack.getString("templateName")
+
         val dirOutcome = ColumnRootIo.exec("ls -d $HMA_DIR_GLOB 2>/dev/null")
         val dir = dirOutcome.out.map { it.trim() }.firstOrNull { it.startsWith("/") }
             ?: return failed(
@@ -504,28 +610,63 @@ class ColumnStepRunnerImpl(
         val configPath = "$dir/config.json"
         log.line("HMA 配置目录：$dir")
 
-        val existingText = runCatching { ColumnRootIo.readText(configPath) }.getOrNull()
-        val existing = existingText?.takeIf { it.isNotBlank() }?.let {
-            runCatching { JSONObject(it) }.getOrNull()
+        // 必须有既有的 config.json：configVersion 只能由 HMA 自己写。向导猜一个版本号写进去，
+        // HMA 在版本不符时会「Config version mismatch, need to reload」然后直接 return，
+        // 整份配置不加载——隐藏全挂，而这一步还报成功。所以这里选择失败并要求用户先开一次 HMA。
+        if (!ColumnRootIo.isFile(configPath)) {
+            return failed(
+                "设备上还没有 $configPath。请先打开一次 HMA-OSS（或重启设备）让它生成配置，再执行这一步；" +
+                    "向导不会替你猜 configVersion。",
+                log,
+            )
         }
-        if (existingText != null && existingText.isNotBlank() && existing == null) {
+        val existingText = try {
+            ColumnRootIo.readText(configPath)
+        } catch (e: IOException) {
+            // 读不出来（太大、在 /proc 下、不是普通文件）都停手，不要走到「新建一份」那条路上。
+            return failed("读取 $configPath 失败：${e.message ?: e.javaClass.simpleName}", log)
+        }
+        if (existingText.isBlank()) {
+            return failed("$configPath 是空文件（HMA 可能还没写完配置）。请先打开一次 HMA-OSS 再执行这一步。", log)
+        }
+        val existing = try {
+            JSONObject(existingText)
+        } catch (e: Exception) {
             // 文件坏了就停手：猜着覆盖等于把用户原来的隐藏规则一次性抹掉。
             return failed("$configPath 无法解析为 JSON，已停止（请先在 HMA 里导出配置确认文件完好）", log)
         }
-        if (existing != null) {
-            log.line("读取现有配置：${existingText.orEmpty().toByteArray(Charsets.UTF_8).size} 字节")
-        } else {
-            log.line("设备上还没有 config.json，将新建一份")
+        log.line("读取现有配置：${existingText.toByteArray(Charsets.UTF_8).size} 字节")
+
+        // 设备上的这份也要校验：它已经不符合 schema 时（多半是别的工具写坏的），HMA 现在就没在生效，
+        // 我们往里补东西只会让它丢得更彻底。停手让用户自己修。
+        try {
+            validateHmaConfig(existing, log::line, "设备上的 $configPath")
+        } catch (e: HmaSchemaException) {
+            return failed(
+                "$configPath 本身就不符合 HMA-OSS 的 schema：${e.message}；已停止，未写入任何内容",
+                log,
+            )
+        }
+        if (!existing.has("configVersion")) {
+            return failed(
+                "$configPath 里没有 configVersion，HMA 无法判断配置版本；已停止，未写入任何内容。" +
+                    "请先打开一次 HMA-OSS 让它重写配置。",
+                log,
+            )
         }
 
-        val merged = mergeHmaConfig(existing, pack, log)
+        val merged = try {
+            mergeHmaConfig(existing, normalizedPack, log)
+        } catch (e: HmaSchemaException) {
+            return failed("合并 HMA 配置失败：${e.message}；未写入任何内容", log)
+        }
         val mergedText = merged.toString()
 
-        if (existingText != null && existingText.trim() == mergedText) {
+        if (existingText.trim() == mergedText) {
             log.line("配置已包含本次内容，跳过写入")
             return ColumnStepResult(
                 status = ColumnStepStatus.SKIPPED,
-                message = "HMA 配置已经包含「${pack.optString("templateName")}」，无需重复写入",
+                message = "HMA 配置已经包含「$templateName」，无需重复写入",
                 log = log.text(),
             )
         }
@@ -557,22 +698,23 @@ class ColumnStepRunnerImpl(
     /**
      * 把配置包合并进设备现有的 HMA 配置，返回合并后的对象。
      *
-     * 纯内存操作；[existing] 为 null 表示设备上还没有配置文件。合并策略是「只补不改」：
-     * 用户已经有的模板、目标应用、全局开关全部保留，我们只加自己没有的那部分。
+     * 纯内存操作。[existing] 是调用方已经读过并校验过的 config.json（本函数不再处理「文件不存在」），
+     * [pack] 必须是 [normalizeHmaPack] 的产物。合并策略是「只补不改」：用户已经有的模板、目标应用、
+     * 全局开关全部保留，我们只加自己没有的那部分。结构上仍有冲突（类型不对、缺 configVersion）时抛
+     * [HmaSchemaException]，由调用方翻译成失败——绝不「顺手覆盖成我们认为对的值」。
      */
     private fun mergeHmaConfig(
-        existing: JSONObject?,
+        existing: JSONObject,
         pack: JSONObject,
         log: StepLog,
     ): JSONObject {
-        val out = existing?.let { runCatching { JSONObject(it.toString()) }.getOrNull() } ?: JSONObject()
+        val out = JSONObject(existing.toString())
 
-        // 1. configVersion：设备上那份说了算，绝不拿索引里的数字覆盖。
+        // 1. configVersion：设备上那份说了算，绝不拿索引里的数字覆盖，也不猜。
         if (!out.has("configVersion")) {
-            val fromPack = pack.optInt("configVersion", 0)
-            val version = if (fromPack > 0) fromPack else HMA_FALLBACK_CONFIG_VERSION
-            out.put("configVersion", version)
-            log.line("设备上没有 configVersion，用 $version")
+            throw HmaSchemaException(
+                "config.json 缺少 configVersion，无法在不猜版本号的前提下写入（版本猜错时 HMA 会丢弃整份配置）"
+            )
         }
 
         // 2. 全局开关：只补缺失的，不覆盖用户改过的。
@@ -588,9 +730,9 @@ class ColumnStepRunnerImpl(
         }
 
         // 3. 模板：同名模板已存在就保留用户那份。
-        val templateName = pack.optString("templateName").trim()
-        val template = pack.optJSONObject("template")
-        if (templateName.isNotEmpty() && template != null) {
+        val templateName = pack.getString("templateName")
+        val template = requireJsonObject(pack.get("template"), "template")
+        run {
             val templates = out.optJSONObject("templates")
                 ?: JSONObject().also { out.put("templates", it) }
             if (!templates.has(templateName)) {
@@ -602,8 +744,7 @@ class ColumnStepRunnerImpl(
         }
 
         // 4. 目标应用：新目标整段照搬；已存在的只补 applyTemplates。
-        val packScope = pack.optJSONObject("scope")
-        if (packScope != null && templateName.isNotEmpty()) {
+        pack.optJSONObject("scope")?.let { packScope ->
             val scope = out.optJSONObject("scope") ?: JSONObject().also { out.put("scope", it) }
             val keys = packScope.keys()
             while (keys.hasNext()) {
@@ -615,6 +756,13 @@ class ColumnStepRunnerImpl(
                     log.line("新增目标应用：$target")
                 } else {
                     // 用户已经配过这个目标：保留他的开关，只保证我们的模板也应用上。
+                    // 已有值类型不对时 optJSONArray 会给 null——那会被下面当成「没有」新建一个数组，
+                    // 悄悄改掉用户的东西，所以这里显式检查。
+                    if (current.has("applyTemplates") && current.optJSONArray("applyTemplates") == null) {
+                        throw HmaSchemaException(
+                            "scope[$target].applyTemplates 必须是字符串数组，实际是${jsonTypeName(current.get("applyTemplates"))}"
+                        )
+                    }
                     val applied = current.optJSONArray("applyTemplates")
                         ?: JSONArray().also { current.put("applyTemplates", it) }
                     if (!jsonArrayContains(applied, templateName)) {
@@ -758,7 +906,9 @@ private fun jsonArrayContains(array: JSONArray, value: String): Boolean {
     return false
 }
 
-/** `disabledHooks` 里是否已有同一个 hook（按 className + methodName 判重，argumentCount 可不同）。 */
+/**
+ * `disabledHooks` 里是否已有同一个 hook（按 className + methodName 判重，argumentCount 可不同）。
+ */
 private fun jsonHookContains(array: JSONArray, hook: JSONObject): Boolean {
     val className = hook.optString("className")
     val methodName = hook.optString("methodName")
@@ -767,4 +917,255 @@ private fun jsonHookContains(array: JSONArray, hook: JSONObject): Boolean {
         if (item.optString("className") == className && item.optString("methodName") == methodName) return true
     }
     return false
+}
+
+// ── HMA-OSS 配置的 schema 校验 ────────────────────────────────────────────────
+//
+// 为什么要这么啰嗦：HMA-OSS 的 `common/.../JsonConfig.kt` 里
+// `data class Template(val isWhitelist: Boolean, val appList: Set<String>)` 和
+// `data class HookItem(val className: String, val methodName: String, val argumentCount: Int)`
+// **所有字段都没有默认值**，而它解码用的 kotlinx Json 一旦遇到缺字段的对象就整个 `parse` 抛异常，
+// `HMAService` 那边只打一行「Failed to parse config json, skip it」把**整份配置丢掉**。
+// 索引契约（contrib/repo/README.md）只要求 hook 有 className + methodName——少一个 argumentCount
+// 就会让用户的隐藏静默全挂，而向导报的是 SUCCESS。所以下面在写盘之前，按 HMA 的 schema
+// 逐项校验、补缺省值，补不动的就停下来报错（报错必须点名是哪一项、缺什么）。
+
+/** HMA 配置结构不符合 HMA-OSS 的解析要求。异常信息面向用户，必须能指出具体是哪一项。 */
+private class HmaSchemaException(message: String) : Exception(message)
+
+/** `AppConfig` 里的字符串数组字段（键名与 HMA-OSS `JsonConfig.AppConfig` 一致）。 */
+private val HMA_APP_STRING_ARRAY_FIELDS = listOf(
+    "applyTemplates",
+    "applyPresets",
+    "applySettingTemplates",
+    "applySettingsPresets",
+    "extraAppList",
+    "extraOppositeAppList",
+)
+
+/** `AppConfig` 里的布尔字段。 */
+private val HMA_APP_BOOLEAN_FIELDS = listOf(
+    "useWhitelist",
+    "excludeSystemApps",
+    "hideInstallationSource",
+    "hideSystemInstallationSource",
+    "excludeTargetInstallationSource",
+    "invertActivityLaunchProtection",
+    "excludeVoldIsolation",
+)
+
+/** 类型名（中文），用于「这里期望数组、实际给了字符串」这类报错。 */
+private fun jsonTypeName(value: Any?): String = when (value) {
+    null, JSONObject.NULL -> "null"
+    is JSONObject -> "对象"
+    is JSONArray -> "数组"
+    is String -> "字符串"
+    is Boolean -> "布尔值"
+    is Number -> "数字"
+    else -> value.javaClass.simpleName
+}
+
+private fun requireJsonObject(value: Any?, field: String): JSONObject =
+    value as? JSONObject ?: throw HmaSchemaException("$field 必须是对象，实际是${jsonTypeName(value)}")
+
+private fun requireJsonText(obj: JSONObject, key: String, field: String): String {
+    val value = obj.opt(key)
+    if (value == null || value == JSONObject.NULL) {
+        throw HmaSchemaException("$field 缺少 $key（HMA 要求该字段必须存在）")
+    }
+    if (value !is String) {
+        throw HmaSchemaException("$field.$key 必须是字符串，实际是${jsonTypeName(value)}")
+    }
+    if (value.isEmpty()) throw HmaSchemaException("$field.$key 不能是空字符串")
+    return value
+}
+
+/** 校验字符串数组并去重（HMA 侧是 `Set<String>`，重复项只会静默合并，这里提前去掉）。 */
+private fun requireStringArray(value: Any?, field: String): JSONArray {
+    val array = value as? JSONArray ?: throw HmaSchemaException(
+        "$field 必须是字符串数组，实际是${jsonTypeName(value)}"
+    )
+    val unique = LinkedHashSet<String>(array.length())
+    for (i in 0 until array.length()) {
+        val item = array.opt(i)
+        if (item !is String) {
+            throw HmaSchemaException("$field[$i] 必须是字符串，实际是${jsonTypeName(item)}")
+        }
+        unique.add(item)
+    }
+    val out = JSONArray()
+    unique.forEach { out.put(it) }
+    return out
+}
+
+/**
+ * 规范化一条 `disabledHooks`：`className` / `methodName` 必须有，
+ * `argumentCount` 缺失时补 **-1**（HMA 的界面里 -1 表示「任意参数个数」），类型不对就报错。
+ */
+private fun normalizeHook(value: Any?, index: Int, log: (String) -> Unit): JSONObject {
+    val field = "disabledHooks[$index]"
+    val hook = requireJsonObject(value, field)
+    val className = requireJsonText(hook, "className", field)
+    val methodName = requireJsonText(hook, "methodName", field)
+    val argumentCount = when (val raw = hook.opt("argumentCount")) {
+        null, JSONObject.NULL -> {
+            log("$field 缺少 argumentCount，按 -1（任意参数个数）补上")
+            -1
+        }
+
+        is Int -> raw
+        is Long -> raw.toInt()
+        is Double -> {
+            if (raw % 1.0 != 0.0) throw HmaSchemaException("$field.argumentCount 必须是整数，实际是 $raw")
+            raw.toInt()
+        }
+
+        else -> throw HmaSchemaException("$field.argumentCount 必须是整数，实际是${jsonTypeName(raw)}")
+    }
+    return JSONObject().apply {
+        put("className", className)
+        put("methodName", methodName)
+        put("argumentCount", argumentCount)
+    }
+}
+
+/**
+ * 规范化一个模板：`isWhitelist` 缺失补 **true**（HMA 默认「隐藏名单」语义，与向导模板一致），
+ * `appList` 必须有且是字符串数组。返回只含这两个键的对象——多余键 HMA 不认识，留着反而有风险。
+ */
+private fun normalizeTemplate(value: Any?, name: String, log: (String) -> Unit): JSONObject {
+    val field = "templates[$name]"
+    val template = requireJsonObject(value, field)
+    val isWhitelist = when (val raw = template.opt("isWhitelist")) {
+        null, JSONObject.NULL -> {
+            log("模板 $name 缺少 isWhitelist，按 true（隐藏名单）补上")
+            true
+        }
+
+        is Boolean -> raw
+        else -> throw HmaSchemaException("$field.isWhitelist 必须是布尔值，实际是${jsonTypeName(raw)}")
+    }
+    val rawAppList = template.opt("appList")
+        ?: throw HmaSchemaException("$field 缺少 appList（HMA 要求该字段必须存在）")
+    val appList = requireStringArray(rawAppList, "$field.appList")
+    return JSONObject().apply {
+        put("isWhitelist", isWhitelist)
+        put("appList", appList)
+    }
+}
+
+/**
+ * 校验 `scope` 里某个应用的配置。缺的字段可以缺（HMA 的 `AppConfig` 全都有默认值），
+ * 但**存在且类型不对**就必须停手：那会让 HMA 整份配置解析失败。未知的键保留——
+ * HMA 用 `ignoreUnknownKeys = true`，那是它自己的扩展字段，我们不该替它删。
+ */
+private fun validateAppConfig(value: Any?, target: String): JSONObject {
+    val field = "scope[$target]"
+    val app = requireJsonObject(value, field)
+    HMA_APP_STRING_ARRAY_FIELDS.forEach { key ->
+        if (app.has(key)) requireStringArray(app.get(key), "$field.$key")
+    }
+    HMA_APP_BOOLEAN_FIELDS.forEach { key ->
+        if (app.has(key) && app.get(key) !is Boolean) {
+            throw HmaSchemaException("$field.$key 必须是布尔值，实际是${jsonTypeName(app.get(key))}")
+        }
+    }
+    if (app.has("restrictedZygotePermissions")) {
+        val raw = app.get("restrictedZygotePermissions")
+        val array = raw as? JSONArray
+            ?: throw HmaSchemaException("$field.restrictedZygotePermissions 必须是整数数组，实际是${jsonTypeName(raw)}")
+        for (i in 0 until array.length()) {
+            val item = array.opt(i)
+            if (item !is Int && item !is Long) {
+                throw HmaSchemaException("$field.restrictedZygotePermissions[$i] 必须是整数，实际是${jsonTypeName(item)}")
+            }
+        }
+    }
+    return app
+}
+
+/**
+ * 按 HMA 的 schema 校验并就地规范化一份 config.json（设备上已有的、或合并后的结果）。
+ *
+ * 校验不过直接抛 [HmaSchemaException]：这份文件是用户正在用的隐藏配置，格式已经不对时
+ * 「再往里补」只会让 HMA 丢得更彻底，必须停手让人去修。
+ */
+private fun validateHmaConfig(config: JSONObject, log: (String) -> Unit, where: String) {
+    (config.opt("templates") as? JSONObject)?.let { templates ->
+        val normalized = JSONObject()
+        val keys = templates.keys()
+        while (keys.hasNext()) {
+            val name = keys.next()
+            normalized.put(name, normalizeTemplate(templates.get(name), name, log))
+        }
+        config.put("templates", normalized)
+    }
+    config.opt("disabledHooks")?.let { raw ->
+        val array = raw as? JSONArray
+            ?: throw HmaSchemaException("$where 的 disabledHooks 必须是数组，实际是${jsonTypeName(raw)}")
+        val normalized = JSONArray()
+        for (i in 0 until array.length()) normalized.put(normalizeHook(array.get(i), i, log))
+        config.put("disabledHooks", normalized)
+    }
+    (config.opt("scope") as? JSONObject)?.let { scope ->
+        val keys = scope.keys()
+        while (keys.hasNext()) {
+            val target = keys.next()
+            validateAppConfig(scope.get(target), target)
+        }
+    }
+    if (config.has("detailLog") && config.get("detailLog") !is Boolean) {
+        throw HmaSchemaException("$where 的 detailLog 必须是布尔值，实际是${jsonTypeName(config.get("detailLog"))}")
+    }
+}
+
+/**
+ * 校验索引给的「HMA 配置包」（`step.fileContent` 解析出来的对象）并返回规范化副本。
+ *
+ * 契约见 `contrib/repo/README.md`：必须有 `templateName` 与非空 `template.appList`；
+ * `scope` 的值是对象；`disabledHooks` 每项要有 className + methodName。
+ */
+private fun normalizeHmaPack(pack: JSONObject, log: (String) -> Unit): JSONObject {
+    val templateName = pack.opt("templateName")
+    if (templateName !is String || templateName.isBlank()) {
+        throw HmaSchemaException("配置包缺少 templateName（或不是非空字符串）")
+    }
+    val template = pack.opt("template")
+        ?: throw HmaSchemaException("配置包缺少 template（模板内容）")
+    val normalized = JSONObject()
+    normalized.put("templateName", templateName)
+    normalized.put("template", normalizeTemplate(template, templateName, log))
+
+    pack.opt("globals")?.let { raw ->
+        val globals = requireJsonObject(raw, "globals")
+        val keys = globals.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            // HMA 的全局项都是标量（Boolean / Int），给成对象或数组说明索引写错了层级。
+            val value = globals.get(key)
+            if (value is JSONObject || value is JSONArray || value == JSONObject.NULL) {
+                throw HmaSchemaException("globals.$key 必须是布尔值或数字，实际是${jsonTypeName(value)}")
+            }
+        }
+        normalized.put("globals", globals)
+    }
+
+    pack.opt("disabledHooks")?.let { raw ->
+        val array = raw as? JSONArray
+            ?: throw HmaSchemaException("配置包的 disabledHooks 必须是数组，实际是${jsonTypeName(raw)}")
+        val hooks = JSONArray()
+        for (i in 0 until array.length()) hooks.put(normalizeHook(array.get(i), i, log))
+        normalized.put("disabledHooks", hooks)
+    }
+
+    pack.opt("scope")?.let { raw ->
+        val scope = requireJsonObject(raw, "scope")
+        val keys = scope.keys()
+        while (keys.hasNext()) {
+            val target = keys.next()
+            validateAppConfig(scope.get(target), target)
+        }
+        normalized.put("scope", scope)
+    }
+    return normalized
 }

@@ -1669,4 +1669,5 @@
     <string name="module_column_tier_integrity">三绿</string>
     <string name="module_column_tier_game">游戏</string>
     <string name="module_column_tier_tool">工具</string>
+    <string name="column_wizard_mark_done">标记为已完成</string>
 </resources>

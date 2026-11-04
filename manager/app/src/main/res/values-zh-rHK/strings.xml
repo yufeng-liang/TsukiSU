@@ -653,4 +653,5 @@
     <string name="module_column_tier_integrity">三綠</string>
     <string name="module_column_tier_game">遊戲</string>
     <string name="module_column_tier_tool">工具</string>
+    <string name="column_wizard_mark_done">標記為已完成</string>
 </resources>

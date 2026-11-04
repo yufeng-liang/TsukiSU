@@ -490,7 +490,11 @@ class AiChatViewModel : ViewModel() {
 
     /** Skip every remaining approval dialog until this user request finishes. */
     fun approveAlwaysForRequest() {
-        autoApproveForRequest = true
+        // 只对「允许记住」的请求打开自动通过：run_shell 的 allowRemember=false，
+        // 即使这个入口被误触，也不会把后续 root shell 写操作变成自动放行。
+        if (_uiState.value.pendingApproval?.request?.allowRemember == true) {
+            autoApproveForRequest = true
+        }
         approvalDeferred?.complete(true)
     }
 
@@ -946,7 +950,9 @@ class AiChatViewModel : ViewModel() {
     }
 
     private suspend fun requestApproval(request: AiApprovalRequest): Boolean {
-        if (autoApproveForRequest) return true
+        // run_shell 这类 allowRemember=false 的请求每次都要真人点确认，
+        // 不能被本轮之前打开的「始终允许」顺带放行。
+        if (autoApproveForRequest && request.allowRemember) return true
         val deferred = CompletableDeferred<Boolean>()
         approvalDeferred = deferred
         _uiState.update { it.copy(pendingApproval = AiPendingApproval(request)) }

@@ -290,6 +290,9 @@ fun AiChatMiuix(
     }
 
     state.pendingApproval?.let { pending ->
+        // run_shell 这类 allowRemember=false 的请求必须每一发都真人确认：
+        // 「本次请求始终允许」对它们不展示，也不生效。
+        val canRemember = pending.request.allowRemember
         var alwaysAllow by remember(pending.request) { mutableStateOf(false) }
         OverlayDialog(
             show = true,
@@ -320,19 +323,21 @@ fun AiChatMiuix(
                         )
                     }
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Checkbox(
-                        state = ToggleableState(alwaysAllow),
-                        onClick = { alwaysAllow = !alwaysAllow },
-                    )
-                    Text(
-                        text = stringResource(R.string.ai_approval_always),
-                        style = MiuixTheme.textStyles.body1,
-                    )
+                if (canRemember) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Checkbox(
+                            state = ToggleableState(alwaysAllow),
+                            onClick = { alwaysAllow = !alwaysAllow },
+                        )
+                        Text(
+                            text = stringResource(R.string.ai_approval_always),
+                            style = MiuixTheme.textStyles.body1,
+                        )
+                    }
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -346,7 +351,7 @@ fun AiChatMiuix(
                     TextButton(
                         text = stringResource(R.string.ai_approval_allow),
                         onClick = {
-                            if (alwaysAllow) actions.onApproveAlways else actions.onApprove()
+                            if (canRemember && alwaysAllow) actions.onApproveAlways else actions.onApprove()
                         },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.textButtonColorsPrimary(),

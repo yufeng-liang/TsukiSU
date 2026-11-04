@@ -1681,4 +1681,5 @@
     <string name="module_column_tier_integrity">Play Integrity</string>
     <string name="module_column_tier_game">Game</string>
     <string name="module_column_tier_tool">Tool</string>
+    <string name="column_wizard_mark_done">Mark as done</string>
 </resources>

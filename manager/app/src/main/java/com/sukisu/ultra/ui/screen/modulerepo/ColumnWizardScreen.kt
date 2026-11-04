@@ -121,6 +121,8 @@ fun ColumnWizardScreen(
     onRunAll: () -> Unit = {},
     /** 勾选 / 取消勾选一个「可选安装」的步骤。 */
     onToggleOptIn: (RepoColumnStep) -> Unit = {},
+    /** 用户按提示自己做完了（重启回来 / 装好 APK / 自己确认过），把这一步标成完成。 */
+    onMarkDone: (RepoColumnStep) -> Unit = {},
 ) {
     // 两套 UI 共用同一份实现：向导只有「执行 / 跳过 / 回滚」三个动作，没有 Miuix 专有的交互要复刻。
     when (LocalUiMode.current) {
@@ -135,6 +137,7 @@ fun ColumnWizardScreen(
             onUpgradeStep = onUpgradeStep,
             onRunAll = onRunAll,
             onToggleOptIn = onToggleOptIn,
+            onMarkDone = onMarkDone,
         )
 
         UiMode.Material -> ColumnWizardScreenMaterial(
@@ -148,6 +151,7 @@ fun ColumnWizardScreen(
             onUpgradeStep = onUpgradeStep,
             onRunAll = onRunAll,
             onToggleOptIn = onToggleOptIn,
+            onMarkDone = onMarkDone,
         )
     }
 }
@@ -164,6 +168,7 @@ private fun ColumnWizardScreenMaterial(
     onUpgradeStep: (RepoColumnStep) -> Unit,
     onRunAll: () -> Unit,
     onToggleOptIn: (RepoColumnStep) -> Unit,
+    onMarkDone: (RepoColumnStep) -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
@@ -313,6 +318,7 @@ private fun ColumnWizardScreenMaterial(
                     onRun = { requestRun(uiState.step) },
                     onSkip = { onSkipStep(uiState.step) },
                     onUpgrade = { onUpgradeStep(uiState.step) },
+                    onMarkDone = { onMarkDone(uiState.step) },
                 )
             }
             if (state.log.isNotEmpty()) {
@@ -411,6 +417,7 @@ private fun WizardStepCard(
     onRun: () -> Unit,
     onSkip: () -> Unit,
     onUpgrade: () -> Unit,
+    onMarkDone: () -> Unit,
 ) {
     val step = uiState.step
     val skipped = uiState.status == ColumnStepStatus.SKIPPED
@@ -523,6 +530,7 @@ private fun WizardStepCard(
                     enabled = !busy,
                     onRun = onRun,
                     onSkip = onSkip,
+                    onMarkDone = onMarkDone,
                 )
             }
             // 命令原文单独占一整行：右侧按钮占掉宽度后，窄列里折行的 shell 命令既难读也容易被误抄。
@@ -541,13 +549,16 @@ private fun WizardStepActions(
     enabled: Boolean,
     onRun: () -> Unit,
     onSkip: () -> Unit,
+    onMarkDone: () -> Unit,
 ) {
+    // NEEDS_USER 是「等你动手」，点它是「我做完了」，不是「重跑一遍」——重跑只会再下载一次、
+    // 再弹一次安装器。所以这里接的是 onMarkDone，不是 onRun。
     val runLabel = when (status) {
         ColumnStepStatus.PENDING -> R.string.column_wizard_run
         // 跑着的这一步保留按钮但禁用：按钮突然消失会让人以为「可以点下一步了」。
         ColumnStepStatus.RUNNING -> R.string.column_wizard_run
         ColumnStepStatus.FAILED -> R.string.column_wizard_retry
-        ColumnStepStatus.NEEDS_USER -> R.string.column_wizard_done_step
+        ColumnStepStatus.NEEDS_USER -> R.string.column_wizard_mark_done
         ColumnStepStatus.SUCCESS, ColumnStepStatus.SKIPPED -> null
     }
     val canSkip = optional && (
@@ -562,7 +573,7 @@ private fun WizardStepActions(
     ) {
         if (runLabel != null) {
             Button(
-                onClick = onRun,
+                onClick = if (status == ColumnStepStatus.NEEDS_USER) onMarkDone else onRun,
                 enabled = enabled && status != ColumnStepStatus.RUNNING,
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
             ) {

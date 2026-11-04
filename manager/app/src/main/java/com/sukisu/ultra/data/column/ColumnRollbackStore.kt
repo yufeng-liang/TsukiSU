@@ -25,6 +25,38 @@ private const val WRITE_CHUNK_CHARS = 64 * 1024
 
 private const val TAG = "ColumnRollback"
 
+/**
+ * 单次读取/备份的文本文件上限。
+ *
+ * 账本、HMA 配置、模块属性都是几十 KB 级别；1 MiB 已经非常宽松。没有上限时 `base64` 会把整个
+ * 文件读进内存（4/3 倍放大），而指向 `/proc/kmsg` 这类节点的「文件」根本读不完——两者都能把向导
+ * 卡死或 OOM。超过就拒绝这一步，让人去看看到底写了什么路径。
+ */
+internal const val MAX_TEXT_FILE_BYTES = 1L * 1024 * 1024
+
+/** 新建文件的默认权限：只有 root 可读写。 */
+private const val DEFAULT_NEW_FILE_MODE = "600"
+
+/** 只接受八进制权限位；`stat`/索引给的值在拼进命令前必须先过这一关。 */
+private val FILE_MODE_PATTERN = Regex("^[0-7]{3,4}$")
+
+/** 伪文件系统：内容由内核动态生成，「文件大小」和「读完」都不成立，向导一律不碰。 */
+private val PSEUDO_FS_PREFIXES = listOf("/proc", "/sys")
+
+/**
+ * 模块 id 是否合法。
+ *
+ * 与 ksud 自己的约束一致（`userspace/ksud/src/module.rs`：`^[a-zA-Z][a-zA-Z0-9._-]+$`），
+ * 另外加一条长度上限 64。这不是「好看」的问题：module id 来自**远程索引**，而它会被拼进
+ * `ksud module uninstall <id>` 这类 root 命令行；一个带 `;` / `$( )` / 反引号的 id 就是任意
+ * root 命令。ksud 自己的正则挡不住，因为注入发生在 shell 层、进 ksud 之前。
+ */
+internal fun isValidColumnModuleId(value: String): Boolean {
+    val id = value.trim()
+    if (id.isEmpty() || id.length > 64) return false
+    return id.matches(Regex("^[A-Za-z][A-Za-z0-9._-]*$"))
+}
+
 /** `/data/adb/.config/hide_env/rollback.json` 里的一条文件记录。 */
 internal data class ColumnWrittenFile(
     val path: String,
@@ -94,8 +126,55 @@ internal object ColumnRootIo {
     fun move(from: String, to: String): Boolean =
         exec("mv -f ${shellQuote(from)} ${shellQuote(to)}").isSuccess
 
-    /** 把文件读成 UTF-8 文本；不存在或读不出来都抛 [IOException]。 */
+    /**
+     * 拒绝伪文件系统路径（`/proc`、`/sys`）。
+     *
+     * 这些路径下面的「文件」是内核现场生成的：`wc -c` 可能永远等不到 EOF，`base64` 更读不完。
+     * 向导的读写目标只应该是真实存在的配置文件，碰这类路径一定是索引写错了。
+     */
+    fun requireNotPseudoFs(path: String) {
+        val normalized = path.trim()
+        PSEUDO_FS_PREFIXES.forEach { prefix ->
+            if (normalized == prefix || normalized.startsWith("$prefix/")) {
+                throw IOException("$path 在 $prefix 下，内容是内核动态生成的，向导不读写这类路径")
+            }
+        }
+    }
+
+    /**
+     * 读之前先确认「这是一个体积可控的普通文件」。
+     *
+     * 顺序很重要：**先**判伪文件系统，**再**取大小。反过来的话，`wc -c < /proc/kmsg` 会直接卡住，
+     * 连「拒绝」都走不到。路径不存在时直接返回（调用方要新建文件是正常情况）。
+     */
+    fun requireTextFileWithinLimit(path: String) {
+        requireNotPseudoFs(path)
+        if (!exists(path)) return
+        if (isDirectory(path)) throw IOException("$path 是目录，不能按文本文件处理")
+        val bytes = size(path)
+        if (bytes < 0) {
+            throw IOException("无法读取 $path 的大小，已拒绝（无法确认它是不是超大文件）")
+        }
+        if (bytes > MAX_TEXT_FILE_BYTES) {
+            throw IOException(
+                "$path 有 $bytes 字节，超过单文件 ${MAX_TEXT_FILE_BYTES / (1024 * 1024)} MiB 上限，已拒绝" +
+                    "（避免把整份内容读进内存/备份）"
+            )
+        }
+    }
+
+    /** 目标文件当前的权限位（八进制字符串）；文件不存在或读不到时给 null。 */
+    private fun fileMode(path: String): String? {
+        val outcome = exec("stat -c %a ${shellQuote(path)} 2>/dev/null")
+        if (!outcome.isSuccess) return null
+        val mode = outcome.out.firstOrNull()?.trim().orEmpty()
+        return mode.takeIf { FILE_MODE_PATTERN.matches(it) }
+    }
+
+    /** 把文件读成 UTF-8 文本；不存在、太大、在 /proc 下或读不出来都抛 [IOException]。 */
     fun readText(path: String): String {
+        // 先卡体积与伪文件系统，再动 base64：这两类路径一旦开始读就没有「读完」这回事。
+        requireTextFileWithinLimit(path)
         val quoted = shellQuote(path)
         if (!exec("test -f $quoted").isSuccess) throw IOException("文件不存在或不是普通文件：$path")
         // base64 输出里可能带换行（不同实现 wrap 宽度不同），先去掉再解码。
@@ -124,10 +203,17 @@ internal object ColumnRootIo {
         val parent = path.substringBeforeLast('/', "")
         if (parent.isNotEmpty() && !mkdirs(parent)) throw IOException("无法创建目录：$parent")
 
+        // 权限：向导写的东西常常是敏感的（keybox 私钥、HMA 隐藏名单），新建文件一律 600（只 root 可读）。
+        // 已存在的文件沿用原 mode——它可能是某个模块或系统组件按既有权限读取的配置，硬改成 600 会把
+        // 「那边读不到」变成新的故障。读不到原 mode 时退回 600（保守：宁可自己看不了，不让别人看）。
+        val mode = fileMode(path) ?: DEFAULT_NEW_FILE_MODE
+
         val bytes = content.toByteArray(Charsets.UTF_8)
         if (bytes.isEmpty()) {
             // 空内容也要真的建出文件（后面的「大小 > 0」校验会拦住这种情况，但不该让写空文件本身失败）。
-            if (!exec(": > ${shellQuote(path)}").isSuccess) throw IOException("写入文件失败：$path")
+            if (!exec(": > ${shellQuote(path)} && chmod $mode ${shellQuote(path)}").isSuccess) {
+                throw IOException("写入文件失败：$path")
+            }
             return
         }
 
@@ -146,7 +232,7 @@ internal object ColumnRootIo {
             if (!exec("base64 -d ${shellQuote(base64Path)} > ${shellQuote(tempPath)}").isSuccess) {
                 throw IOException("写入文件失败：$path（base64 解码出错）")
             }
-            if (!exec("chmod 644 ${shellQuote(tempPath)} && mv -f ${shellQuote(tempPath)} ${shellQuote(path)}").isSuccess) {
+            if (!exec("chmod $mode ${shellQuote(tempPath)} && mv -f ${shellQuote(tempPath)} ${shellQuote(path)}").isSuccess) {
                 throw IOException("写入文件失败：$path（无法替换目标文件）")
             }
         } finally {
@@ -195,9 +281,48 @@ class ColumnRollbackStore(
     /** 账本是「读-改-写」，同一时刻只允许一个操作，否则两次 record 会互相覆盖。 */
     private val mutex = Mutex()
 
+    /**
+     * 本进程里账本损坏后的归档路径；非空表示「账本已不可信」。
+     *
+     * 损坏的账本会被改名留档（见 [brokenLedger]），但**不能**就当成空账本继续用：上一次的记录一旦
+     * 静默作废，用户点回滚只会得到「没有需要回滚的记录」，改动永久留在设备上。所以这里记住归档
+     * 路径，在用户处理完（删掉归档文件、重启应用）之前，拒绝一切新的记账与回滚。
+     */
+    @Volatile
+    private var quarantinedLedger: String? = null
+
+    /** 隔离状态下拒绝记账；返回的异常会由执行器翻译成一次「步骤失败」，不会静默吞掉。 */
+    private fun requireLedgerUsable() {
+        val broken = quarantinedLedger ?: return
+        throw IOException(quarantineMessage(broken, "损坏的账本已被隔离"))
+    }
+
+    /**
+     * 找残留的损坏账本归档（`rollback.json.broken-*`）。
+     *
+     * 用于覆盖「上次损坏后应用被杀，这次重启后 [quarantinedLedger] 是空的」这种情况：账本文件不在、
+     * 但归档还在，说明上一次的记录没被处理过，不能当成「没有记录」。
+     */
+    private fun leftoverArchive(): String? {
+        val outcome = ColumnRootIo.exec("ls -1 $ledgerPath.broken-* 2>/dev/null")
+        if (!outcome.isSuccess) return null
+        return outcome.out.firstOrNull { it.trim().isNotEmpty() }?.trim()
+    }
+
+    private fun quarantineMessage(archivePath: String, reason: String): String =
+        "回滚账本需要人工处理（$reason）：$archivePath。" +
+            "在删除它并重启应用之前，向导不会记录新的回滚点、也不会执行回滚" +
+            "（否则上一次的改动会被漏掉）。请检查该文件（必要时手动恢复其中的记录），确认处理完毕后删除它。"
+
     override suspend fun recordInstalledModule(moduleId: String): Unit = withContext(Dispatchers.IO) {
+        requireLedgerUsable()
         val id = moduleId.trim()
         if (id.isEmpty()) throw IOException("模块 id 为空，无法记录回滚账本")
+        // 账本里的 id 以后会被拼进 `ksud module uninstall <id>`：这里就挡住非法值，
+        // 不让它进账本（也避免回滚时被当成 shell 片段执行）。
+        if (!isValidColumnModuleId(id)) {
+            throw IOException("模块 id 不合法（需匹配 ^[A-Za-z][A-Za-z0-9._-]{0,63}$）：$id，无法记账")
+        }
 
         mutex.withLock {
             val ledger = load(strict = false)
@@ -214,11 +339,16 @@ class ColumnRollbackStore(
      * 的样子，而不是还原到第一次写的那一版。
      */
     override suspend fun recordWrittenFile(path: String): Unit = withContext(Dispatchers.IO) {
+        requireLedgerUsable()
         val normalized = ColumnRootIo.normalizeFilePath(path)
 
         mutex.withLock {
             val ledger = load(strict = false)
             if (ledger.writtenFiles.any { it.path == normalized }) return@withLock
+
+            // 备份前先卡「是普通文件、不是伪文件系统、不超过 1 MiB」：备份用 `cp -p`，目标是个
+            // 读不完的节点或几十 GB 的镜像时，卡住的是 root shell，留的是一整份无用的副本。
+            ColumnRootIo.requireTextFileWithinLimit(normalized)
 
             if (!ColumnRootIo.mkdirs(backupDir)) {
                 throw IOException("无法创建备份目录：$backupDir")
@@ -274,6 +404,7 @@ class ColumnRollbackStore(
      * 单条失败不影响后续条目，失败项会写回账本，用户修好环境后可以再点一次回滚。
      */
     override suspend fun rollback(): List<String> = withContext(Dispatchers.IO) {
+        requireLedgerUsable()
         mutex.withLock {
             val ledger = load(strict = true)
             if (ledger.isEmpty) return@withLock listOf("没有需要回滚的记录")
@@ -283,8 +414,16 @@ class ColumnRollbackStore(
             val failedFiles = mutableListOf<ColumnWrittenFile>()
 
             ledger.installedModules.asReversed().forEach { moduleId ->
+                // 账本里的 id 可能是旧版本写的、被人手改的、或者更早的漏洞版本从远程索引抄进来的。
+                // 不合法的 id 绝不执行：它会被拼进 root 命令行（见 KsuCli.uninstallModule）。
+                if (!isValidColumnModuleId(moduleId)) {
+                    messages += "跳过非法的模块 id：$moduleId（未执行任何卸载命令；请手动检查该模块）"
+                    return@forEach
+                }
                 val uninstalled = try {
-                    uninstallModule(moduleId)
+                    // 这一层转义是「防御纵深」：KsuCli 那边仍然拼的是 `module uninstall <参数>`，
+                    // 加上 shell 引号后，即使将来有人在 id 里塞了 `;`，也只会是一个普通参数。
+                    uninstallModule(ColumnRootIo.shellQuote(moduleId))
                 } catch (e: Exception) {
                     Log.w(TAG, "卸载模块失败：$moduleId", e)
                     false
@@ -355,12 +494,19 @@ class ColumnRollbackStore(
     /**
      * 读账本。
      *
-     * [strict] = true（回滚）时，文件存在但读不出/解析不了就抛异常：账本损坏的情况下继续回滚
-     * 等于闭着眼睛删东西。`strict` = false（记录）时把损坏的账本改名留档，然后按空账本继续，
-     * 至少别让新的一次执行完全没法记录。
+     * 文件存在但读不出/解析不了 = 账本已损坏，**两种模式都抛异常**：
+     * - [strict] = true（回滚）：损坏时继续回滚等于闭着眼睛删东西。
+     * - strict = false（记账）：以前是「改名留档 + 当成空账本继续」，那是静默丢历史——上一次的记录
+     *   一旦作废，用户点回滚只会得到「没有需要回滚的记录」，改动永久留在设备上。现在改成抛错并进入
+     *   隔离状态（见 [quarantinedLedger]），由执行器翻译成一次可见的步骤失败。
      */
     private fun load(strict: Boolean): ColumnRollbackLedger {
-        if (!ColumnRootIo.exists(ledgerPath)) return ColumnRollbackLedger()
+        if (!ColumnRootIo.exists(ledgerPath)) {
+            // 账本不在，但有归档：上一次跑的时候损坏过，用户还没处理。不能当成「没有记录」。
+            val archived = leftoverArchive() ?: return ColumnRollbackLedger()
+            quarantinedLedger = archived
+            throw IOException(quarantineMessage(archived, "账本文件不存在"))
+        }
 
         val text = try {
             ColumnRootIo.readText(ledgerPath)
@@ -386,10 +532,18 @@ class ColumnRollbackStore(
                     "为避免误删，已停止回滚；请手动检查该文件，确认后删除再重试。"
             )
         }
+        // 记账路径：把损坏的账本改名留档（内容还可能有用，不能直接覆盖或删除），然后同样抛错。
+        // 抛错 + quarantinedLedger 的组合，保证「静默作废」变成「显式失败并且不再新增记录」。
         val brokenPath = "$ledgerPath.broken-${System.currentTimeMillis()}"
-        ColumnRootIo.move(ledgerPath, brokenPath)
-        Log.w(TAG, "回滚账本损坏（$reason），已改名到 $brokenPath，本次按空账本继续")
-        return ColumnRollbackLedger()
+        val archived = ColumnRootIo.move(ledgerPath, brokenPath)
+        val keepPath = if (archived) brokenPath else ledgerPath
+        quarantinedLedger = keepPath
+        val detail = if (archived) "已归档到 $brokenPath" else "归档失败（原文件仍在 $ledgerPath）"
+        Log.w(TAG, "回滚账本损坏（$reason），$detail，已停止本次执行并进入隔离状态")
+        throw IOException(
+            "回滚账本已损坏（$reason），$detail。上一次的记录不可信，已停止记账与回滚：" +
+                "请先检查 $keepPath（必要时手动恢复其中的记录），确认处理完毕后删除它并重启应用再继续。"
+        )
     }
 
     private fun parseLedger(text: String): ColumnRollbackLedger {

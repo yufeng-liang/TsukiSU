@@ -2,6 +2,7 @@ package com.sukisu.ultra.ai
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -117,6 +118,61 @@ class AiCommandGateTest {
         assertDecision(AiCommandDecision.NEEDS_APPROVAL, "su -c \"getprop ro.debuggable\"")
         assertDecision(AiCommandDecision.NEEDS_APPROVAL, "su -c \"getprop a | grep b\"")
         assertDecision(AiCommandDecision.NEEDS_APPROVAL, "sh -c \"ls /data\"")
+    }
+
+    // ---------------------------------------------------------------------
+    // 动态展开：引号里的 $()/反引号同样会执行，不能当字面量放行
+    // ---------------------------------------------------------------------
+
+    @Test
+    fun shellExpansionNeverReadOnly() {
+        val notReadOnly = listOf(
+            // 双引号里的命令替换：分词后是字面量，但 shell 会先执行它。
+            "cat \"\$(rm -rf /data)\"",
+            // 反引号：成对、落单都算。
+            "cat `id`",
+            "echo `id`",
+            // 裸命令替换。
+            "cat \$(getprop ro.build.version.release)",
+            "grep \$(cat /data/adb/x) /tmp/a",
+            // 变量展开同样可能在执行时才定型。
+            "cat \"\${PATH}\"",
+            "getprop \${",
+            // 进程替换。
+            "ls <(id)",
+            "cat >(id)",
+            // 重定向目标由命令替换生成：最终写到哪里无法静态判断。
+            "ls > \"\$(echo /system/x)\"",
+            "ls > \$(echo /dev/block/by-name/boot)",
+            // 静态路径的重定向同样不能只读（回归锚点）。
+            "ls > /system/x",
+        )
+        for (command in notReadOnly) {
+            assertNotEquals(
+                "命令 `$command` 不能判成 READ_ONLY",
+                AiCommandDecision.READ_ONLY,
+                AiCommandGate.classify(command).decision,
+            )
+        }
+    }
+
+    @Test
+    fun singleQuotedExpansionStaysLiteral() {
+        // 单引号内 shell 不展开，按字面量处理，可以继续只读。
+        assertDecision(AiCommandDecision.READ_ONLY, "grep '\$(id)' /proc/cpuinfo")
+        assertDecision(AiCommandDecision.READ_ONLY, "grep '`id`' /proc/cpuinfo")
+    }
+
+    @Test
+    fun dumpsysArgumentsStayNarrow() {
+        // 纯服务名 / 服务自己的筛选词保持只读。
+        assertDecision(AiCommandDecision.READ_ONLY, "dumpsys display")
+        assertDecision(AiCommandDecision.READ_ONLY, "dumpsys package com.sukisu.ultra")
+        assertDecision(AiCommandDecision.READ_ONLY, "dumpsys -l")
+        // 带路径或输出/文件旗标时降级确认。
+        assertDecision(AiCommandDecision.NEEDS_APPROVAL, "dumpsys package /data/local/tmp/x")
+        assertDecision(AiCommandDecision.NEEDS_APPROVAL, "dumpsys activity --file=/data/local/tmp/d.txt")
+        assertDecision(AiCommandDecision.NEEDS_APPROVAL, "dumpsys cpuinfo -o /data/local/tmp/o.txt")
     }
 
     // ---------------------------------------------------------------------
