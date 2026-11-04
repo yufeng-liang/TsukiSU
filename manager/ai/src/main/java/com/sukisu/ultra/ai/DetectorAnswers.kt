@@ -181,11 +181,16 @@ internal object DetectorAnswers {
         this[key]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
 
     private fun JsonObject.stringList(key: String): List<String> {
-        val array = this[key]?.let { element -> runCatching { element.jsonArray }.getOrNull() }
-            ?: return emptyList()
-        return array.mapNotNull { element ->
-            runCatching { element.jsonPrimitive.contentOrNull }.getOrNull()
+        val element = this[key] ?: return emptyList()
+        // 正常形态是数组；也兼容早期版本的「单条字符串」写法，
+        // 否则 CDN 上的旧数据会被读成空，模型只能看到半条记录。
+        runCatching { element.jsonArray }.getOrNull()?.let { array ->
+            return array.mapNotNull { item ->
+                runCatching { item.jsonPrimitive.contentOrNull }.getOrNull()
+            }
         }
+        val single = runCatching { element.jsonPrimitive.contentOrNull }.getOrNull()
+        return if (single.isNullOrBlank()) emptyList() else listOf(single.trim())
     }
 
     /**
