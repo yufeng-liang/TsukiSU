@@ -144,22 +144,34 @@ class ColumnWizardViewModel(
     }
 
     /**
-     * 预取专题声明的密钥材料。失败不阻塞向导：日志里说明一句，相关步骤自己会要求用户提供文件。
+     * 预取密钥材料：先试自动源，失败再试专题里登记的地址，都失败才让用户自己选文件。
+     *
+     * 失败不阻塞向导——日志里说明一句，涉及密钥的步骤会自己要求用户提供文件。
      */
     private fun prefetchKeybox(topic: RepoColumnTopic) {
-        val keybox = topic.keybox ?: return
         if (prefetchedTopicId == topic.id) return
+        val hasKeyboxStep = topic.steps.any { it.fileContent.contains("\${keybox}") }
+        if (topic.keybox == null && !hasKeyboxStep) return
         prefetchedTopicId = topic.id
         viewModelScope.launch {
-            keyboxFetcher.fetch(keybox)
-                .onSuccess { content ->
+            val auto = keyboxFetcher.fetchAuto()
+            auto.onSuccess { content ->
+                keyboxContent = content
+                _uiState.update { it.copy(keyboxReady = true) }
+                appendLog("已自动获取密钥材料（${content.length} 字节，来源：MeowDump 的 GitHub Release 镜像）")
+                return@launch
+            }
+            var reason = auto.exceptionOrNull()?.message
+            val declared = topic.keybox
+            if (declared != null) {
+                keyboxFetcher.fetch(declared).onSuccess { content ->
                     keyboxContent = content
                     _uiState.update { it.copy(keyboxReady = true) }
                     appendLog("密钥材料已就绪（${content.length} 字节），sha256 与专栏登记的指纹一致")
-                }
-                .onFailure { error ->
-                    appendLog("密钥材料未能自动获取：${error.message ?: "未知原因"}；涉及密钥的步骤会要求你自己提供文件")
-                }
+                    return@launch
+                }.onFailure { reason = it.message }
+            }
+            appendLog("没能自动获取密钥材料：${reason ?: "未知原因"}；涉及密钥的步骤会要求你自己选择文件")
         }
     }
 
