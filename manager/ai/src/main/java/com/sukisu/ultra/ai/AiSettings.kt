@@ -53,6 +53,36 @@ enum class AiProviderFormat {
 }
 
 /**
+ * 单个模型的能力信息。id 是请求里使用的模型标识，name 是界面展示名。
+ */
+@Serializable
+data class AiModelInfo(
+    val id: String,
+    val name: String = "",
+    /** 上下文窗口（token），0 表示未知/不限制。 */
+    val contextWindow: Int = 0,
+    /** 单次最大输出（token），0 表示未知/不限制。 */
+    val maxOutput: Int = 0,
+    /** 是否支持推理（reasoning）能力。 */
+    val reasoning: Boolean = false,
+    /** 是否支持图片输入。 */
+    val supportsImages: Boolean = false,
+)
+
+/**
+ * 一个模型供应商及其模型目录。endpoint/apiKey 为空时回落到 [AiConfig] 的旧字段。
+ */
+@Serializable
+data class AiProvider(
+    val id: String,
+    val name: String = "",
+    val format: AiProviderFormat = AiProviderFormat.AUTO,
+    val endpoint: String = "",
+    val apiKey: String = "",
+    val models: List<AiModelInfo> = emptyList(),
+)
+
+/**
  * Everything the assistant needs to talk to a model. Endpoint is the only field
  * without a usable default; a local Ollama server works with just the address
  * and model name.
@@ -112,6 +142,12 @@ data class AiConfig(
     val advancedMode: Boolean = false,
     /** JSON object of [AiAdvancedOptions]; parsed only in advanced mode. */
     val advancedOptionsJson: String = "",
+    /** 多供应商列表；为空时使用旧的 endpoint/apiKey/model 单配置字段。 */
+    val providers: List<AiProvider> = emptyList(),
+    /** 当前选中的供应商 id；空 = 取第一个供应商。 */
+    val currentProviderId: String = "",
+    /** 当前选中的模型 id；空 = 取第一个模型。 */
+    val currentModelId: String = "",
 ) {
     val isConfigured: Boolean
         get() = endpoint.isNotBlank() && model.isNotBlank()
@@ -231,6 +267,9 @@ object AiSettings {
     private const val KEY_SYSTEM_PROMPT = "system_prompt"
     private const val KEY_ADVANCED_MODE = "advanced_mode"
     private const val KEY_ADVANCED_OPTIONS = "advanced_options"
+    private const val KEY_PROVIDERS = "providers_json"
+    private const val KEY_CURRENT_PROVIDER = "current_provider_id"
+    private const val KEY_CURRENT_MODEL = "current_model_id"
     private const val KEY_HISTORY = "chat_history"
     private const val KEY_SESSION_TITLE = "session_title"
 
@@ -255,7 +294,7 @@ object AiSettings {
 
     fun load(): AiConfig {
         val p = prefs()
-        return AiConfig(
+        val stored = AiConfig(
             endpoint = p.getString(KEY_ENDPOINT, "").orEmpty(),
             apiKey = p.getString(KEY_API_KEY, "").orEmpty(),
             model = p.getString(KEY_MODEL, "").orEmpty(),
@@ -297,7 +336,13 @@ object AiSettings {
             systemPrompt = p.getString(KEY_SYSTEM_PROMPT, "").orEmpty(),
             advancedMode = p.getBoolean(KEY_ADVANCED_MODE, false),
             advancedOptionsJson = p.getString(KEY_ADVANCED_OPTIONS, "").orEmpty(),
+            providers = loadProviders(),
+            currentProviderId = loadCurrentProviderId(),
+            currentModelId = loadCurrentModelId(),
         )
+        // 旧单配置迁移：providers 为空且旧 endpoint 非空时生成 legacy 供应商。
+        val (providers, currentProviderId) = migrateLegacyToProviders(stored)
+        return stored.copy(providers = providers, currentProviderId = currentProviderId)
     }
 
     fun save(config: AiConfig) {
@@ -341,7 +386,104 @@ object AiSettings {
             putString(KEY_SYSTEM_PROMPT, config.systemPrompt)
             putBoolean(KEY_ADVANCED_MODE, config.advancedMode)
             putString(KEY_ADVANCED_OPTIONS, config.advancedOptionsJson)
+            putString(KEY_PROVIDERS, json.encodeToString(config.providers))
+            putString(KEY_CURRENT_PROVIDER, config.currentProviderId.trim())
+            putString(KEY_CURRENT_MODEL, config.currentModelId.trim())
         }
+    }
+
+    fun loadProviders(): List<AiProvider> {
+        val stored = prefs().getString(KEY_PROVIDERS, null) ?: return emptyList()
+        return runCatching { json.decodeFromString<List<AiProvider>>(stored) }.getOrDefault(emptyList())
+    }
+
+    fun saveProviders(list: List<AiProvider>) {
+        prefs().edit { putString(KEY_PROVIDERS, json.encodeToString(list)) }
+    }
+
+    fun loadCurrentProviderId(): String = prefs().getString(KEY_CURRENT_PROVIDER, "").orEmpty()
+
+    fun saveCurrentProviderId(id: String) {
+        prefs().edit { putString(KEY_CURRENT_PROVIDER, id.trim()) }
+    }
+
+    fun loadCurrentModelId(): String = prefs().getString(KEY_CURRENT_MODEL, "").orEmpty()
+
+    fun saveCurrentModelId(id: String) {
+        prefs().edit { putString(KEY_CURRENT_MODEL, id.trim()) }
+    }
+
+    /**
+     * 旧单配置迁移：providers 为空且旧 endpoint 非空时构造 legacy 供应商。
+     * 返回迁移后的供应商列表与当前供应商 id。
+     */
+    fun migrateLegacyToProviders(config: AiConfig): Pair<List<AiProvider>, String> {
+        if (config.providers.isNotEmpty() || config.endpoint.isBlank()) {
+            return config.providers to config.currentProviderId
+        }
+        val provider = AiProvider(
+            id = "legacy",
+            name = hostOf(config.endpoint).ifBlank { "默认" },
+            format = config.format,
+            endpoint = config.endpoint,
+            apiKey = config.apiKey,
+            models = listOf(AiModelInfo(id = config.model)),
+        )
+        return listOf(provider) to "legacy"
+    }
+
+    /** 当前供应商：优先 currentProviderId，其次第一个，最后用旧字段合成 legacy 供应商。 */
+    fun activeProvider(config: AiConfig): AiProvider? {
+        if (config.providers.isNotEmpty()) {
+            if (config.currentProviderId.isNotBlank()) {
+                config.providers.firstOrNull { it.id == config.currentProviderId }?.let { return it }
+            }
+            return config.providers.first()
+        }
+        if (config.endpoint.isBlank() && config.model.isBlank()) return null
+        return AiProvider(
+            id = "legacy",
+            name = hostOf(config.endpoint).ifBlank { "默认" },
+            format = config.format,
+            endpoint = config.endpoint,
+            apiKey = config.apiKey,
+            models = listOf(AiModelInfo(id = config.model)),
+        )
+    }
+
+    /** 当前模型：优先 currentModelId，其次与旧 model 同名，最后取第一个。 */
+    fun activeModel(config: AiConfig): AiModelInfo? {
+        val provider = activeProvider(config) ?: return null
+        if (config.currentModelId.isNotBlank()) {
+            provider.models.firstOrNull { it.id == config.currentModelId }?.let { return it }
+        }
+        if (config.model.isNotBlank()) {
+            provider.models.firstOrNull { it.id == config.model || it.name == config.model }?.let { return it }
+        }
+        return provider.models.firstOrNull()
+    }
+
+    /** 统一取值口：当前供应商优先，缺失时回落到旧 endpoint 字段。 */
+    fun resolveEndpoint(config: AiConfig): String =
+        activeProvider(config)?.endpoint?.takeIf { it.isNotBlank() } ?: config.endpoint
+
+    fun resolveApiKey(config: AiConfig): String =
+        activeProvider(config)?.apiKey?.takeIf { it.isNotBlank() } ?: config.apiKey
+
+    fun resolveModel(config: AiConfig): String =
+        activeModel(config)?.id?.takeIf { it.isNotBlank() } ?: config.model
+
+    /** 从 endpoint 提取 host，用于迁移时生成供应商展示名。 */
+    private fun hostOf(endpoint: String): String {
+        val raw = endpoint.trim()
+        if (raw.isEmpty()) return ""
+        val withScheme =
+            if (raw.startsWith("http://", true) || raw.startsWith("https://", true)) {
+                raw
+            } else {
+                "http://$raw"
+            }
+        return runCatching { URI(withScheme).host.orEmpty() }.getOrDefault("")
     }
 
     fun loadHistory(): List<AiTurn> {

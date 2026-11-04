@@ -100,6 +100,10 @@ data class AiPendingApproval(
 data class AiChatUiState(
     val config: AiConfig = AiConfig(),
     val messages: List<AiChatMessage> = emptyList(),
+    /** 会话列表（最近更新在前）。 */
+    val sessions: List<AiSession> = emptyList(),
+    /** 当前会话 id。 */
+    val activeSessionId: String = "",
     /** AI 生成的会话标题；空 = 顶栏退回首条用户消息。 */
     val sessionTitle: String = "",
     val input: String = "",
@@ -140,8 +144,9 @@ class AiChatViewModel : ViewModel() {
 
     private fun initialState(): AiChatUiState {
         val config = AiSettings.load()
+        val session = if (config.keepHistory) AiSessionStore.ensureActive() else AiSessionStore.create()
         val restored = if (config.keepHistory) {
-            AiSettings.loadHistory().map { turn ->
+            session.turns.map { turn ->
                 AiChatMessage(
                     id = newId(),
                     role = if (turn.role == "assistant") AiMessageRole.ASSISTANT else AiMessageRole.USER,
@@ -154,9 +159,59 @@ class AiChatViewModel : ViewModel() {
         return AiChatUiState(
             config = config,
             messages = restored,
-            sessionTitle = if (config.keepHistory) AiSettings.loadSessionTitle() else "",
+            sessions = if (config.keepHistory) AiSessionStore.list() else emptyList(),
+            activeSessionId = session.id,
+            sessionTitle = if (config.keepHistory) session.title else "",
             suggestions = defaultSuggestions(),
         )
+    }
+
+    /** 新建会话：先把当前会话落盘，再切到一个空会话。 */
+    fun newSession() {
+        persistHistory()
+        val created = AiSessionStore.create()
+        AiSessionStore.save(created)
+        AiSessionStore.setActiveId(created.id)
+        _uiState.update {
+            it.copy(
+                messages = emptyList(),
+                sessionTitle = "",
+                activeSessionId = created.id,
+                sessions = AiSessionStore.list(),
+            )
+        }
+    }
+
+    /** 切换会话：先落盘当前，再载入目标会话的轮次。 */
+    fun switchSession(id: String) {
+        if (id == _uiState.value.activeSessionId) return
+        persistHistory()
+        val target = AiSessionStore.load(id) ?: return
+        AiSessionStore.setActiveId(id)
+        _uiState.update {
+            it.copy(
+                messages = target.turns.map { turn ->
+                    AiChatMessage(
+                        id = newId(),
+                        role = if (turn.role == "assistant") AiMessageRole.ASSISTANT else AiMessageRole.USER,
+                        content = turn.content,
+                    )
+                },
+                sessionTitle = target.title,
+                activeSessionId = id,
+                sessions = AiSessionStore.list(),
+            )
+        }
+    }
+
+    /** 删除会话；删的是当前会话就顺带开一个新的。 */
+    fun deleteSession(id: String) {
+        AiSessionStore.delete(id)
+        if (id == _uiState.value.activeSessionId) {
+            newSession()
+        } else {
+            _uiState.update { it.copy(sessions = AiSessionStore.list()) }
+        }
     }
 
     fun refreshConfig() {
@@ -1106,6 +1161,18 @@ class AiChatViewModel : ViewModel() {
             .takeLast(config.advancedOptions().maxHistoryTurns)
             .map { AiTurn(role = if (it.role == AiMessageRole.ASSISTANT) "assistant" else "user", content = it.content) }
         AiSettings.saveHistory(turns)
+        val activeId = _uiState.value.activeSessionId
+        if (activeId.isNotEmpty()) {
+            val existing = AiSessionStore.load(activeId) ?: AiSessionStore.create()
+            AiSessionStore.save(
+                existing.copy(
+                    turns = turns,
+                    updatedAt = System.currentTimeMillis(),
+                    title = _uiState.value.sessionTitle.ifBlank { existing.title },
+                )
+            )
+            _uiState.update { it.copy(sessions = AiSessionStore.list()) }
+        }
     }
 
     /**
@@ -1123,6 +1190,13 @@ class AiChatViewModel : ViewModel() {
             if (_uiState.value.sessionTitle.isNotBlank()) return@launch
             _uiState.update { it.copy(sessionTitle = title) }
             AiSettings.saveSessionTitle(title)
+        val activeId = _uiState.value.activeSessionId
+        if (activeId.isNotEmpty()) {
+            AiSessionStore.load(activeId)?.let { session ->
+                AiSessionStore.save(session.copy(title = title, updatedAt = System.currentTimeMillis()))
+                _uiState.update { it.copy(sessions = AiSessionStore.list()) }
+            }
+        }
         }
     }
 
