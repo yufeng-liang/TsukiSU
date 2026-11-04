@@ -31,7 +31,7 @@ import java.io.IOException
 import java.security.MessageDigest
 import java.util.zip.ZipFile
 
-/** Shared in-app release/CI installer. Keeps a verified APK in public Downloads before installing. */
+
 class CiManagerUpdater(private val context: Context) {
     fun updateAndInstall(update: LatestVersionInfo): Boolean {
         // 传进来的地址可能已经被上一跳套了代理前缀（下载链路会做候选展开）。前缀校验必须针对

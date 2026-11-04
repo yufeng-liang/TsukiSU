@@ -103,8 +103,10 @@ fun HomePager(
     val startUpdate: () -> Unit = {
         scope.launch {
             val hasRoot = withContext(Dispatchers.IO) { rootAvailable() }
+            val installsBlocked = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                !context.packageManager.canRequestPackageInstalls()
             when {
-                !hasRoot && !context.packageManager.canRequestPackageInstalls() -> {
+                !hasRoot && installsBlocked -> {
                     Toast.makeText(context, R.string.ci_update_install_permission, Toast.LENGTH_LONG).show()
                     context.startActivity(Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                         android.net.Uri.parse("package:${context.packageName}")))

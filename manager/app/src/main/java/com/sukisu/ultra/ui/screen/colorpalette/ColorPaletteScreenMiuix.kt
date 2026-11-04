@@ -7,6 +7,7 @@ import android.net.Uri
 import java.io.File
 import android.os.Build
 import com.sukisu.ultra.ui.util.customText
+import com.sukisu.ultra.ui.util.customTextGroupsIn
 import com.sukisu.ultra.ui.util.CustomTextKey
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -129,8 +130,8 @@ import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Slider
 import top.yukonga.miuix.kmp.basic.SliderDefaults
-import top.yukonga.miuix.kmp.basic.TabRow
 import top.yukonga.miuix.kmp.basic.TabRowDefaults
+import top.yukonga.miuix.kmp.basic.TabRowWithContour
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
@@ -233,6 +234,7 @@ fun ColorPaletteScreenMiuix(
         state.hideHomeCardStatusText,
         state.hideHomeCardDecoration,
         state.homeCardStickers,
+        state.appearance,
     ) {
         ThemePreviewSpec(
             keyColor = state.keyColor,
@@ -254,6 +256,7 @@ fun ColorPaletteScreenMiuix(
             hideHomeCardText = state.hideHomeCardStatusText,
             hideHomeCardDecoration = state.hideHomeCardDecoration,
             homeCardStickers = state.homeCardStickers,
+            appearance = state.appearance,
         )
     }
     var showExportDialog by rememberSaveable { mutableStateOf(false) }
@@ -329,7 +332,7 @@ fun ColorPaletteScreenMiuix(
         val colorsSectionExpanded = state.colorsSectionExpanded
         var stickerEditorExpanded by rememberSaveable { mutableStateOf(false) }
         var stickerDraft by remember { mutableStateOf(state.homeCardStickers) }
-        var selectedSticker by rememberSaveable { mutableStateOf(0) }
+        var selectedSticker by rememberSaveable { mutableIntStateOf(0) }
         var lastStickerCount by remember { mutableIntStateOf(state.homeCardStickers.size) }
         LaunchedEffect(state.homeCardStickers) {
             stickerDraft = state.homeCardStickers
@@ -373,8 +376,178 @@ fun ColorPaletteScreenMiuix(
 
                     AppCard(
                         modifier = Modifier
+                            .bringIntoViewRequester(sectionRequester("colors"))
+                            .fillMaxWidth(),
+                    ) {
+                        MiuixSectionHeader(
+                            title = stringResource(R.string.settings_section_colors),
+                            summary = stringResource(R.string.settings_section_colors_summary),
+                            icon = Icons.Rounded.Colorize,
+                            expanded = colorsSectionExpanded,
+                            onClick = {
+                                actions.onSetColorsSectionExpanded(!colorsSectionExpanded)
+                            },
+                        )
+                        AnimatedVisibility(
+                            visible = colorsSectionExpanded,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut(),
+                        ) {
+                            Column {
+                                val themeItems = listOf(
+                                    stringResource(id = R.string.settings_theme_mode_system),
+                                    stringResource(id = R.string.settings_theme_mode_light),
+                                    stringResource(id = R.string.settings_theme_mode_dark),
+                                )
+                                TabRowWithContour(
+                                    tabs = themeItems,
+                                    selectedTabIndex = (if (state.themeMode >= 3) state.themeMode - 3 else state.themeMode).coerceIn(0, 2),
+                                    onTabSelected = { index ->
+                                        actions.onSetThemeMode(index)
+                                    },
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                    colors = TabRowDefaults.tabRowColors(
+                                        // The selector sits inside a surface-container card, where the
+                                        // default surface track is invisible. Use the highest container
+                                        // as the track and the card color as the thumb; both follow the
+                                        // shared card opacity so they stay legible over a custom
+                                        // background as well.
+                                        backgroundColor = backgroundAwareColor(colorScheme.surfaceContainerHighest),
+                                        selectedBackgroundColor = backgroundAwareColor(colorScheme.surfaceContainer),
+                                    ),
+                                )
+                                HorizontalDivider()
+                                SwitchPreference(
+                                    title = stringResource(id = R.string.settings_monet),
+                                    startAction = {
+                                        Icon(
+                                            Icons.Rounded.Wallpaper,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            contentDescription = stringResource(id = R.string.settings_monet),
+                                            tint = colorScheme.onBackground
+                                        )
+                                    },
+                                    checked = state.miuixMonet,
+                                    onCheckedChange = {
+                                        actions.onSetMiuixMonet(it)
+                                    }
+                                )
+
+                                AnimatedVisibility(
+                                    visible = state.miuixMonet
+                                ) {
+                                    Column {
+                                        val colorItems = listOf(
+                                            stringResource(id = R.string.settings_key_color_default),
+                                            stringResource(id = R.string.color_red),
+                                            stringResource(id = R.string.color_pink),
+                                            stringResource(id = R.string.color_purple),
+                                            stringResource(id = R.string.color_deep_purple),
+                                            stringResource(id = R.string.color_indigo),
+                                            stringResource(id = R.string.color_blue),
+                                            stringResource(id = R.string.color_cyan),
+                                            stringResource(id = R.string.color_teal),
+                                            stringResource(id = R.string.color_green),
+                                            stringResource(id = R.string.color_yellow),
+                                            stringResource(id = R.string.color_amber),
+                                            stringResource(id = R.string.color_orange),
+                                            stringResource(id = R.string.color_brown),
+                                            stringResource(id = R.string.color_blue_grey),
+                                            stringResource(id = R.string.color_sakura),
+                                        )
+                                        val colorValues = listOf(0) + keyColorOptions
+                                        OverlayDropdownPreference(
+                                            title = stringResource(id = R.string.settings_key_color),
+                                            items = colorItems,
+                                            startAction = {
+                                                Icon(
+                                                    Icons.Rounded.Colorize,
+                                                    modifier = Modifier.padding(end = 6.dp),
+                                                    contentDescription = stringResource(id = R.string.settings_key_color),
+                                                    tint = colorScheme.onBackground
+                                                )
+                                            },
+                                            // A background-derived seed is not one of the fixed options, so it
+                                            // shows up as the default pick rather than a stale color.
+                                            selectedIndex = colorValues.indexOf(
+                                                if (state.extractColorFromBackground) 0 else state.keyColor
+                                            ).takeIf { it >= 0 } ?: 0,
+                                            onSelectedIndexChange = { index ->
+                                                actions.onSetKeyColor(colorValues[index])
+                                            }
+                                        )
+
+                                        AnimatedVisibility(
+                                            visible = state.keyColor != 0
+                                        ) {
+                                            Column {
+                                                val styles = PaletteStyle.entries
+                                                OverlayDropdownPreference(
+                                                    title = stringResource(R.string.settings_color_style),
+                                                    startAction = {
+                                                        Icon(
+                                                            Icons.Rounded.Style,
+                                                            modifier = Modifier.padding(end = 6.dp),
+                                                            contentDescription = stringResource(id = R.string.settings_color_style),
+                                                            tint = colorScheme.onBackground
+                                                        )
+                                                    },
+                                                    items = styles.map { it.name },
+                                                    selectedIndex = styles.indexOfFirst { it.name == state.colorStyle }.coerceAtLeast(0),
+                                                    onSelectedIndexChange = { index ->
+                                                        actions.onSetColorStyle(styles[index].name)
+                                                    }
+                                                )
+
+                                                val specs = ColorSpec.SpecVersion.entries
+                                                OverlayDropdownPreference(
+                                                    title = stringResource(R.string.settings_color_spec),
+                                                    startAction = {
+                                                        Icon(
+                                                            Icons.Rounded.DesignServices,
+                                                            modifier = Modifier.padding(end = 6.dp),
+                                                            contentDescription = stringResource(id = R.string.settings_color_spec),
+                                                            tint = colorScheme.onBackground
+                                                        )
+                                                    },
+                                                    items = specs.map { it.name },
+                                                    selectedIndex = specs.indexOfFirst { it.name == state.colorSpec }.coerceAtLeast(0),
+                                                    onSelectedIndexChange = { index ->
+                                                        actions.onSetColorSpec(specs[index].name)
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                HorizontalDivider()
+                                ArrowPreference(
+                                    title = stringResource(R.string.appearance_overlay_title),
+                                    summary = stringResource(
+                                        if (state.customAppearanceJson.isNotBlank()) {
+                                            R.string.appearance_overlay_active
+                                        } else {
+                                            R.string.appearance_overlay_summary
+                                        }
+                                    ),
+                                    startAction = {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Palette,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            contentDescription = stringResource(R.string.appearance_overlay_title),
+                                            tint = colorScheme.onBackground,
+                                        )
+                                    },
+                                    onClick = actions.onOpenAppearanceEditor,
+                                )
+                            }
+                        }
+                    }
+
+                    AppCard(
+                        modifier = Modifier
                             .bringIntoViewRequester(sectionRequester("background"))
-                            .padding(bottom = 12.dp)
+                            .padding(top = 12.dp)
                             .fillMaxWidth(),
                         colors = backgroundAwareCardColors(),
                     ) {
@@ -461,6 +634,32 @@ fun ColorPaletteScreenMiuix(
                                         )
                                     }
                                 }
+                                if (usingSystemWallpaper || hasCustomBg) {
+                                    HorizontalDivider()
+                                    SwitchPreference(
+                                        title = stringResource(id = R.string.settings_extract_background_color),
+                                        // Without Monet the Miuix theme ignores the seed entirely, so the
+                                        // switch would look enabled while changing nothing.
+                                        summary = stringResource(
+                                            id = if (state.miuixMonet) {
+                                                R.string.settings_extract_background_color_summary
+                                            } else {
+                                                R.string.settings_extract_background_color_disabled
+                                            }
+                                        ),
+                                        startAction = {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Colorize,
+                                                modifier = Modifier.padding(end = 6.dp),
+                                                contentDescription = stringResource(id = R.string.settings_extract_background_color),
+                                                tint = colorScheme.onBackground
+                                            )
+                                        },
+                                        checked = state.extractColorFromBackground,
+                                        onCheckedChange = actions.onSetExtractColorFromBackground,
+                                    )
+                                }
+
 
                                 val hasCustomBgFile = hasCustomBg && !usingSystemWallpaper
                                 val hasCardBgFile = state.homeCardImagePath.isNotBlank() && File(state.homeCardImagePath).isFile
@@ -490,29 +689,6 @@ fun ColorPaletteScreenMiuix(
                                 }
 
                                 if (usingSystemWallpaper || hasCustomBg) {
-                                    HorizontalDivider()
-                                    SwitchPreference(
-                                        title = stringResource(id = R.string.settings_extract_background_color),
-                                        // Without Monet the Miuix theme ignores the seed entirely, so the
-                                        // switch would look enabled while changing nothing.
-                                        summary = stringResource(
-                                            id = if (state.miuixMonet) {
-                                                R.string.settings_extract_background_color_summary
-                                            } else {
-                                                R.string.settings_extract_background_color_disabled
-                                            }
-                                        ),
-                                        startAction = {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Colorize,
-                                                modifier = Modifier.padding(end = 6.dp),
-                                                contentDescription = stringResource(id = R.string.settings_extract_background_color),
-                                                tint = colorScheme.onBackground
-                                            )
-                                        },
-                                        checked = state.extractColorFromBackground,
-                                        onCheckedChange = actions.onSetExtractColorFromBackground,
-                                    )
                                     HorizontalDivider()
                                     BasicComponent(
                                         title = stringResource(id = R.string.settings_background_appearance),
@@ -608,7 +784,7 @@ fun ColorPaletteScreenMiuix(
                     AppCard(
                         modifier = Modifier
                             .bringIntoViewRequester(sectionRequester("appearance"))
-                            .padding(bottom = 12.dp)
+                            .padding(top = 12.dp)
                             .fillMaxWidth(),
                     ) {
                         MiuixSectionHeader(
@@ -627,6 +803,36 @@ fun ColorPaletteScreenMiuix(
                         ) {
                             Column {
                                 HorizontalDivider()
+                                ArrowPreference(
+                                    title = customText(CustomTextKey.PAGE_APP_ICON),
+                                    summary = stringResource(
+                                        id = BuiltinAppIcons.find(uiState.appIconId).nameRes
+                                    ),
+                                    startAction = {
+                                        BuiltinAppIconPreview(
+                                            icon = BuiltinAppIcons.find(uiState.appIconId),
+                                            modifier = Modifier
+                                                .padding(end = 8.dp)
+                                                .size(28.dp)
+                                                .clip(RoundedCornerShape(8.dp)),
+                                        )
+                                    },
+                                    onClick = actions.onOpenAppIcon,
+                                )
+                                val customTextsTitle = customText(CustomTextKey.PAGE_CUSTOM_TEXTS)
+                                ArrowPreference(
+                                    title = customTextsTitle,
+                                    summary = stringResource(id = R.string.settings_custom_texts_summary),
+                                    startAction = {
+                                        Icon(
+                                            Icons.Rounded.Edit,
+                                            modifier = Modifier.padding(end = 8.dp),
+                                            contentDescription = customTextsTitle,
+                                            tint = colorScheme.onBackground,
+                                        )
+                                    },
+                                    onClick = actions.onOpenCustomTexts,
+                                )
                                 SwitchPreference(
                                     title = stringResource(id = R.string.settings_show_fullstatus),
                                     summary = stringResource(id = R.string.settings_show_fullstatus_summary),
@@ -680,35 +886,6 @@ fun ColorPaletteScreenMiuix(
                                     )
                                 }
 
-                                ArrowPreference(
-                                    title = stringResource(id = R.string.app_icon_title),
-                                    summary = stringResource(
-                                        id = BuiltinAppIcons.find(uiState.appIconId).nameRes
-                                    ),
-                                    startAction = {
-                                        BuiltinAppIconPreview(
-                                            icon = BuiltinAppIcons.find(uiState.appIconId),
-                                            modifier = Modifier
-                                                .padding(end = 8.dp)
-                                                .size(28.dp)
-                                                .clip(RoundedCornerShape(8.dp)),
-                                        )
-                                    },
-                                    onClick = actions.onOpenAppIcon,
-                                )
-                                ArrowPreference(
-                                    title = stringResource(id = R.string.settings_custom_texts),
-                                    summary = stringResource(id = R.string.settings_custom_texts_summary),
-                                    startAction = {
-                                        Icon(
-                                            Icons.Rounded.Edit,
-                                            modifier = Modifier.padding(end = 8.dp),
-                                            contentDescription = stringResource(R.string.settings_custom_texts),
-                                            tint = colorScheme.onBackground,
-                                        )
-                                    },
-                                    onClick = actions.onOpenCustomTexts,
-                                )
                             }
                         }
                     }
@@ -755,6 +932,36 @@ fun ColorPaletteScreenMiuix(
                                         )
                                     },
                                 )
+                                if (state.homeCardImagePath.isNotBlank()) {
+                                    SwitchPreference(
+                                        title = stringResource(id = R.string.settings_hide_home_card_decoration),
+                                        summary = stringResource(R.string.settings_hide_home_card_decoration_summary),
+                                        startAction = {
+                                            Icon(
+                                                Icons.Rounded.Star,
+                                                modifier = Modifier.padding(end = 8.dp),
+                                                contentDescription = stringResource(R.string.settings_hide_home_card_decoration),
+                                                tint = colorScheme.onBackground,
+                                            )
+                                        },
+                                        checked = state.hideHomeCardDecoration,
+                                        onCheckedChange = actions.onSetHideHomeCardDecoration,
+                                    )
+                                    SwitchPreference(
+                                        title = stringResource(id = R.string.settings_hide_home_card_status_text),
+                                        summary = stringResource(R.string.settings_hide_home_card_status_text_summary),
+                                        startAction = {
+                                            Icon(
+                                                Icons.Rounded.Home,
+                                                modifier = Modifier.padding(end = 8.dp),
+                                                contentDescription = stringResource(R.string.settings_hide_home_card_status_text),
+                                                tint = colorScheme.onBackground,
+                                            )
+                                        },
+                                        checked = state.hideHomeCardStatusText,
+                                        onCheckedChange = actions.onSetHideHomeCardStatusText,
+                                    )
+                                }
                                 BasicComponent(
                                     title = stringResource(R.string.settings_home_card_sticker),
                                     summary = (if (state.homeCardStickers.isEmpty()) {
@@ -924,34 +1131,6 @@ fun ColorPaletteScreenMiuix(
                                     }
                                 }
                                 if (state.homeCardImagePath.isNotBlank()) {
-                                    SwitchPreference(
-                                        title = stringResource(id = R.string.settings_hide_home_card_decoration),
-                                        summary = stringResource(R.string.settings_hide_home_card_decoration_summary),
-                                        startAction = {
-                                            Icon(
-                                                Icons.Rounded.Star,
-                                                modifier = Modifier.padding(end = 8.dp),
-                                                contentDescription = stringResource(R.string.settings_hide_home_card_decoration),
-                                                tint = colorScheme.onBackground,
-                                            )
-                                        },
-                                        checked = state.hideHomeCardDecoration,
-                                        onCheckedChange = actions.onSetHideHomeCardDecoration,
-                                    )
-                                    SwitchPreference(
-                                        title = stringResource(id = R.string.settings_hide_home_card_status_text),
-                                        summary = stringResource(R.string.settings_hide_home_card_status_text_summary),
-                                        startAction = {
-                                            Icon(
-                                                Icons.Rounded.Home,
-                                                modifier = Modifier.padding(end = 8.dp),
-                                                contentDescription = stringResource(R.string.settings_hide_home_card_status_text),
-                                                tint = colorScheme.onBackground,
-                                            )
-                                        },
-                                        checked = state.hideHomeCardStatusText,
-                                        onCheckedChange = actions.onSetHideHomeCardStatusText,
-                                    )
                                     ArrowPreference(
                                         title = stringResource(id = R.string.settings_home_card_image_clear),
                                         summary = stringResource(R.string.settings_home_card_image_clear_summary),
@@ -969,151 +1148,6 @@ fun ColorPaletteScreenMiuix(
                             }
                         }
                     }
-                    AppCard(
-                        modifier = Modifier
-                            .bringIntoViewRequester(sectionRequester("colors"))
-                            .padding(top = 12.dp)
-                            .fillMaxWidth(),
-                    ) {
-                        MiuixSectionHeader(
-                            title = stringResource(R.string.settings_section_colors),
-                            summary = stringResource(R.string.settings_section_colors_summary),
-                            icon = Icons.Rounded.Colorize,
-                            expanded = colorsSectionExpanded,
-                            onClick = {
-                                actions.onSetColorsSectionExpanded(!colorsSectionExpanded)
-                            },
-                        )
-                        AnimatedVisibility(
-                            visible = colorsSectionExpanded,
-                            enter = expandVertically() + fadeIn(),
-                            exit = shrinkVertically() + fadeOut(),
-                        ) {
-                            Column {
-                                val themeItems = listOf(
-                                    stringResource(id = R.string.settings_theme_mode_system),
-                                    stringResource(id = R.string.settings_theme_mode_light),
-                                    stringResource(id = R.string.settings_theme_mode_dark),
-                                )
-                                TabRow(
-                                    tabs = themeItems,
-                                    selectedTabIndex = (if (state.themeMode >= 3) state.themeMode - 3 else state.themeMode).coerceIn(0, 2),
-                                    onTabSelected = { index ->
-                                        actions.onSetThemeMode(index)
-                                    },
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                                    colors = TabRowDefaults.tabRowColors(
-                                        backgroundColor = if (hasCustomBackground) Color.Transparent else colorScheme.surface,
-                                        selectedBackgroundColor = backgroundAwareColor(colorScheme.surfaceContainer),
-                                    ),
-                                )
-                                HorizontalDivider()
-                                SwitchPreference(
-                                    title = stringResource(id = R.string.settings_monet),
-                                    startAction = {
-                                        Icon(
-                                            Icons.Rounded.Wallpaper,
-                                            modifier = Modifier.padding(end = 6.dp),
-                                            contentDescription = stringResource(id = R.string.settings_monet),
-                                            tint = colorScheme.onBackground
-                                        )
-                                    },
-                                    checked = state.miuixMonet,
-                                    onCheckedChange = {
-                                        actions.onSetMiuixMonet(it)
-                                    }
-                                )
-
-                                AnimatedVisibility(
-                                    visible = state.miuixMonet
-                                ) {
-                                    Column {
-                                        val colorItems = listOf(
-                                            stringResource(id = R.string.settings_key_color_default),
-                                            stringResource(id = R.string.color_red),
-                                            stringResource(id = R.string.color_pink),
-                                            stringResource(id = R.string.color_purple),
-                                            stringResource(id = R.string.color_deep_purple),
-                                            stringResource(id = R.string.color_indigo),
-                                            stringResource(id = R.string.color_blue),
-                                            stringResource(id = R.string.color_cyan),
-                                            stringResource(id = R.string.color_teal),
-                                            stringResource(id = R.string.color_green),
-                                            stringResource(id = R.string.color_yellow),
-                                            stringResource(id = R.string.color_amber),
-                                            stringResource(id = R.string.color_orange),
-                                            stringResource(id = R.string.color_brown),
-                                            stringResource(id = R.string.color_blue_grey),
-                                            stringResource(id = R.string.color_sakura),
-                                        )
-                                        val colorValues = listOf(0) + keyColorOptions
-                                        OverlayDropdownPreference(
-                                            title = stringResource(id = R.string.settings_key_color),
-                                            items = colorItems,
-                                            startAction = {
-                                                Icon(
-                                                    Icons.Rounded.Colorize,
-                                                    modifier = Modifier.padding(end = 6.dp),
-                                                    contentDescription = stringResource(id = R.string.settings_key_color),
-                                                    tint = colorScheme.onBackground
-                                                )
-                                            },
-                                            // A background-derived seed is not one of the fixed options, so it
-                                            // shows up as the default pick rather than a stale color.
-                                            selectedIndex = colorValues.indexOf(
-                                                if (state.extractColorFromBackground) 0 else state.keyColor
-                                            ).takeIf { it >= 0 } ?: 0,
-                                            onSelectedIndexChange = { index ->
-                                                actions.onSetKeyColor(colorValues[index])
-                                            }
-                                        )
-
-                                        AnimatedVisibility(
-                                            visible = state.keyColor != 0
-                                        ) {
-                                            Column {
-                                                val styles = PaletteStyle.entries
-                                                OverlayDropdownPreference(
-                                                    title = stringResource(R.string.settings_color_style),
-                                                    startAction = {
-                                                        Icon(
-                                                            Icons.Rounded.Style,
-                                                            modifier = Modifier.padding(end = 6.dp),
-                                                            contentDescription = stringResource(id = R.string.settings_color_style),
-                                                            tint = colorScheme.onBackground
-                                                        )
-                                                    },
-                                                    items = styles.map { it.name },
-                                                    selectedIndex = styles.indexOfFirst { it.name == state.colorStyle }.coerceAtLeast(0),
-                                                    onSelectedIndexChange = { index ->
-                                                        actions.onSetColorStyle(styles[index].name)
-                                                    }
-                                                )
-
-                                                val specs = ColorSpec.SpecVersion.entries
-                                                OverlayDropdownPreference(
-                                                    title = stringResource(R.string.settings_color_spec),
-                                                    startAction = {
-                                                        Icon(
-                                                            Icons.Rounded.DesignServices,
-                                                            modifier = Modifier.padding(end = 6.dp),
-                                                            contentDescription = stringResource(id = R.string.settings_color_spec),
-                                                            tint = colorScheme.onBackground
-                                                        )
-                                                    },
-                                                    items = specs.map { it.name },
-                                                    selectedIndex = specs.indexOfFirst { it.name == state.colorSpec }.coerceAtLeast(0),
-                                                    onSelectedIndexChange = { index ->
-                                                        actions.onSetColorSpec(specs[index].name)
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
 
                     AppCard(
                         modifier = Modifier
@@ -1123,7 +1157,28 @@ fun ColorPaletteScreenMiuix(
                     ) {
                         MiuixSectionHeader(
                             title = stringResource(R.string.settings_section_theme_package),
-                            summary = stringResource(R.string.settings_section_theme_package_summary),
+                            summary = when {
+                                state.adaptiveDraftComplete ->
+                                    stringResource(R.string.theme_adaptive_draft_ready)
+
+                                state.adaptiveThemeActive && !state.currentColorMode.isSystem ->
+                                    stringResource(
+                                        R.string.theme_adaptive_active_forced,
+                                        stringResource(
+                                            if (state.currentColorMode.isDark) {
+                                                R.string.theme_adaptive_mode_dark
+                                            } else {
+                                                R.string.theme_adaptive_mode_light
+                                            },
+                                        ),
+                                    )
+
+                                state.adaptiveThemeActive ->
+                                    stringResource(R.string.theme_adaptive_active)
+
+                                else ->
+                                    stringResource(R.string.settings_section_theme_package_summary)
+                            },
                             icon = Icons.Rounded.Palette,
                             expanded = themePackageSectionExpanded,
                             onClick = {
@@ -1138,30 +1193,17 @@ fun ColorPaletteScreenMiuix(
                             Column {
                                 HorizontalDivider()
                                 BasicComponent(
-                                    title = stringResource(id = R.string.theme_reset),
-                                    summary = stringResource(id = R.string.theme_reset_summary),
+                                    title = customText(CustomTextKey.PAGE_THEME_STORE),
+                                    summary = stringResource(id = R.string.theme_store_summary),
                                     startAction = {
                                         Icon(
-                                            Icons.Rounded.Restore,
+                                            Icons.Rounded.Palette,
                                             modifier = Modifier.padding(end = 6.dp),
-                                            contentDescription = stringResource(id = R.string.theme_reset),
+                                            contentDescription = customText(CustomTextKey.PAGE_THEME_STORE),
                                             tint = colorScheme.onBackground
                                         )
                                     },
-                                    onClick = { showResetThemeDialog.value = true },
-                                )
-                                BasicComponent(
-                                    title = stringResource(id = R.string.theme_clear_all),
-                                    summary = stringResource(id = R.string.theme_clear_all_summary),
-                                    startAction = {
-                                        Icon(
-                                            Icons.Rounded.Delete,
-                                            modifier = Modifier.padding(end = 6.dp),
-                                            contentDescription = stringResource(id = R.string.theme_clear_all),
-                                            tint = colorScheme.onBackground
-                                        )
-                                    },
-                                    onClick = { showClearAllDialog.value = true },
+                                    onClick = actions.onOpenThemeStore,
                                 )
                                 BasicComponent(
                                     title = stringResource(id = R.string.theme_import),
@@ -1200,6 +1242,47 @@ fun ColorPaletteScreenMiuix(
                                     onClick = {
                                         showExportDialog = true
                                     },
+                                )
+                                BasicComponent(
+                                    title = stringResource(id = R.string.theme_adaptive_builder_title),
+                                    summary = stringResource(id = R.string.theme_adaptive_builder_summary),
+                                    startAction = {
+                                        Icon(
+                                            Icons.Rounded.AutoAwesome,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            contentDescription = stringResource(
+                                                id = R.string.theme_adaptive_builder_title,
+                                            ),
+                                            tint = colorScheme.onBackground
+                                        )
+                                    },
+                                    onClick = actions.onOpenAdaptiveThemeBuilder,
+                                )
+                                BasicComponent(
+                                    title = stringResource(id = R.string.theme_reset),
+                                    summary = stringResource(id = R.string.theme_reset_summary),
+                                    startAction = {
+                                        Icon(
+                                            Icons.Rounded.Restore,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            contentDescription = stringResource(id = R.string.theme_reset),
+                                            tint = colorScheme.onBackground
+                                        )
+                                    },
+                                    onClick = { showResetThemeDialog.value = true },
+                                )
+                                BasicComponent(
+                                    title = stringResource(id = R.string.theme_clear_all),
+                                    summary = stringResource(id = R.string.theme_clear_all_summary),
+                                    startAction = {
+                                        Icon(
+                                            Icons.Rounded.Delete,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            contentDescription = stringResource(id = R.string.theme_clear_all),
+                                            tint = colorScheme.onBackground
+                                        )
+                                    },
+                                    onClick = { showClearAllDialog.value = true },
                                 )
                             }
                         }
@@ -1542,13 +1625,16 @@ fun ColorPaletteScreenMiuix(
         hasCardImage = state.homeCardImagePath.isNotBlank(),
         hasStickers = state.homeCardStickers.isNotEmpty(),
         hasAppIcon = true,
-        hasCustomTexts = uiState.customTexts.isNotEmpty() || uiState.customHomeTitle.isNotBlank(),
+        availableCustomTextGroups = customTextGroupsIn(uiState.customTexts, uiState.customHomeTitle),
         onDismissRequest = { showExportDialog = false },
         onConfirm = { options ->
             showExportDialog = false
             pendingExportOptions = options
             exportThemeLauncher.launch(ThemePackageStorage.packageFileName())
         },
+        adaptive = state.adaptiveThemeActive || state.adaptiveDraftComplete,
+        hasCustomColors = state.customColorsPresent,
+        hasImageEffects = state.imageEffectsPresent,
     )
 }
 

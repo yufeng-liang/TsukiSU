@@ -9,7 +9,7 @@ import com.sukisu.ultra.ksuApp
 import java.io.File
 import java.nio.file.Files
 
-/** Deletion only happens when the user opted in and ksud reported a successful install. */
+
 internal fun shouldDeleteSourceAfterInstall(enabled: Boolean, installSucceeded: Boolean): Boolean =
     enabled && installSucceeded
 
@@ -21,6 +21,7 @@ internal fun shouldDeleteSourceAfterInstall(enabled: Boolean, installSucceeded: 
  * A provider that refuses deletion leaves the ZIP untouched.
  */
 fun deleteInstalledModuleZip(uri: Uri): Boolean {
+    if (LegacyDownloadFiles.delete(uri)) return true
     val deleted = deleteModuleZip(
         scheme = uri.scheme,
         filePath = uri.path,
@@ -50,7 +51,7 @@ internal fun deleteModuleZip(
     else -> false
 }
 
-/** Only app-private ZIPs are deleted directly; canonical paths keep symlinks from escaping. */
+
 internal fun deletePrivateZip(path: String?, filesDir: File, cacheDir: File): Boolean {
     val raw = path?.let(::File) ?: return false
     // A symlink is never deleted: canonical paths resolve links on Linux/Android but not on

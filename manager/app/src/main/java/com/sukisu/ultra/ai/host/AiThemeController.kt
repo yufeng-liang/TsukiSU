@@ -15,6 +15,8 @@ import com.sukisu.ultra.data.repository.SettingsRepository
 import com.sukisu.ultra.data.repository.SettingsRepositoryImpl
 import com.sukisu.ultra.ksuApp
 import com.sukisu.ultra.ui.theme.ColorMode
+import com.sukisu.ultra.ui.util.AdaptiveThemeStore
+import com.sukisu.ultra.ui.util.AppearanceOverlayStore
 import com.sukisu.ultra.ui.util.BuiltinAppIcons
 import com.sukisu.ultra.ui.util.CustomTextKey
 import com.sukisu.ultra.ui.util.ImageStorage
@@ -243,7 +245,7 @@ object AiThemeController : AiThemeService {
         read()
     }
 
-    /** Equivalent to Settings > Appearance "Reset" (card alpha/blur/scrim and home card text). */
+    
     override suspend fun resetAppearance(): String = withContext(Dispatchers.IO) {
         repo.cardBackgroundAlphaPercent = ImageStorage.DEFAULT_CARD_ALPHA
         repo.customBackgroundBlurPercent = ImageStorage.defaultBackgroundBlurPercent(ksuApp)
@@ -288,6 +290,7 @@ object AiThemeController : AiThemeService {
             backgroundFile = currentBackgroundFile(),
             cardBackgroundFile = currentHomeCardFile(),
             cardStickerFiles = currentStickerFiles(),
+            adaptive = AdaptiveThemeStore.exportPayload(repo),
         ).getOrThrow()
         "Theme package exported to the selected location."
     }
@@ -300,6 +303,7 @@ object AiThemeController : AiThemeService {
             backgroundFile = currentBackgroundFile(),
             cardBackgroundFile = currentHomeCardFile(),
             cardStickerFiles = currentStickerFiles(),
+            adaptive = AdaptiveThemeStore.exportPayload(repo),
         ).getOrThrow()
         val uri = FileProvider.getUriForFile(
             ksuApp,
@@ -357,6 +361,7 @@ object AiThemeController : AiThemeService {
             moduleSortManual = repo.moduleSortManual,
             customHomeTitle = repo.customHomeTitle.takeIf { it.isNotBlank() },
             customTexts = repo.customTexts.takeIf { it.isNotEmpty() },
+            appearance = AppearanceOverlayStore.data(repo),
         )
     }
 
@@ -379,7 +384,7 @@ object AiThemeController : AiThemeService {
 
     private fun hasHomeCardImage(): Boolean = repo.homeCardImagePath.isNotBlank()
 
-    /** Full list of custom text keys, so the model can choose a valid one. */
+    
     override fun customTextKeysJson(): String = buildJsonArray {
         CustomTextKey.entries.forEach { key ->
             add(
@@ -392,7 +397,7 @@ object AiThemeController : AiThemeService {
         }
     }.toString()
 
-    /** Compact appearance summary used in the environment snapshot. */
+    
     override suspend fun summaryJson(): String = withContext(Dispatchers.IO) {
         buildJsonObject {
             put("ui_mode", repo.uiMode)
@@ -420,7 +425,7 @@ object AiThemeController : AiThemeService {
         }.toString()
     }
 
-    /** Allowed values for the fixed-choice theme keys. */
+    
     override fun optionsJson(): String = buildJsonObject {
         put("keys", buildJsonArray {
             listOf(

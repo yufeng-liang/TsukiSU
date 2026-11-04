@@ -25,12 +25,25 @@ interface SettingsRepository {
     var colorsSectionExpanded: Boolean
     var customHomeTitle: String
     var customTexts: Map<String, String>
+    var themeStoreBaseUrl: String
+    var themeStoreToken: String
+    var themeStoreAuthorId: String
+    var themeStoreAuthorName: String
+    var themeStoreAdminUrl: String
+    var themeStoreExtraSources: List<com.sukisu.ultra.data.model.ThemeStoreSourceConfig>
+    var themeStoreUploadSource: String
+    var themeStoreGridLayout: Boolean
     var homeCardImagePath: String
     /** Hide the working text and version line on the home status card while a card image is set. */
     var hideHomeCardStatusText: Boolean
     /** Hide the check icon (Miuix) or ring decoration (Material) on the home status card. */
     var hideHomeCardDecoration: Boolean
     var homeCardStickers: List<HomeCardSticker>
+    var adaptiveThemeJson: String
+    var adaptiveAppliedMode: Int
+    var adaptiveDraftJson: String
+    /** Canonical JSON for the static colour/image-effect overlay; empty when disabled. */
+    var customAppearanceJson: String
     var uiMode: String
     var appLanguage: String
     var checkUpdate: Boolean

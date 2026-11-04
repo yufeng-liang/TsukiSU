@@ -8,6 +8,7 @@ import com.sukisu.ultra.ui.screen.settings.ThemePackageOptions
 import com.sukisu.ultra.ui.theme.ColorMode
 import com.sukisu.ultra.ui.util.HomeCardSticker
 import com.sukisu.ultra.ui.util.HomeCardStickerTransform
+import com.sukisu.ultra.ui.util.ResolvedAppearance
 
 /**
  * Everything the appearance page renders, resolved once in
@@ -43,6 +44,11 @@ data class ColorPaletteUiState(
     val hideHomeCardStatusText: Boolean = false,
     val hideHomeCardDecoration: Boolean = false,
     val homeCardStickers: List<HomeCardSticker> = emptyList(),
+    
+    val adaptiveThemeActive: Boolean = false,
+    val adaptiveDraftLightCaptured: Boolean = false,
+    val adaptiveDraftDarkCaptured: Boolean = false,
+    val adaptiveDraftComplete: Boolean = false,
     // The rows below the preview.
     val themeMode: Int = 0,
     val colorStyle: String = "",
@@ -58,6 +64,11 @@ data class ColorPaletteUiState(
     val hideHomeWarnings: Boolean = false,
     val showAiHomeCard: Boolean = false,
     val moduleDescriptionMaxLines: Int = 4,
+    /** Resolved static overlay used by the preview; null when no overlay is active. */
+    val appearance: ResolvedAppearance? = null,
+    val customAppearanceJson: String = "",
+    val customColorsPresent: Boolean = false,
+    val imageEffectsPresent: Boolean = false,
 )
 
 @Immutable
@@ -113,6 +124,9 @@ data class ColorPaletteScreenActions(
     val onSetCustomText: (String, String) -> Unit = { _, _ -> },
     val onResetAllCustomTexts: () -> Unit = {},
     val onOpenCustomTexts: () -> Unit = {},
+    val onOpenThemeStore: () -> Unit = {},
+    val onOpenAdaptiveThemeBuilder: () -> Unit = {},
     val onResetBackgroundAppearance: () -> Unit = {},
     val onClearAllAppearance: () -> Unit = {},
+    val onOpenAppearanceEditor: () -> Unit = {},
 )

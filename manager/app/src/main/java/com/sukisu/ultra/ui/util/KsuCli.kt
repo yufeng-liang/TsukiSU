@@ -2,7 +2,6 @@ package com.sukisu.ultra.ui.util
 
 import android.content.ContentResolver
 import android.content.Context
-import android.database.Cursor
 import android.net.Uri
 import android.os.Environment
 import android.os.Parcelable
@@ -71,17 +70,18 @@ inline fun <T> withNewRootShell(
     return createRootShell(globalMnt).use(block)
 }
 
-fun Uri.getFileName(context: Context): String? {
-    var fileName: String? = null
-    val contentResolver: ContentResolver = context.contentResolver
-    val cursor: Cursor? = contentResolver.query(this, null, null, null, null)
-    cursor?.use {
-        if (it.moveToFirst()) {
-            fileName = it.getString(it.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
-        }
+fun Uri.getFileName(context: Context): String? = runCatching {
+    context.contentResolver.query(
+        this,
+        arrayOf(OpenableColumns.DISPLAY_NAME),
+        null,
+        null,
+        null,
+    )?.use { cursor ->
+        val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+        if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
     }
-    return fileName
-}
+}.getOrNull()
 
 fun createRootShell(globalMnt: Boolean = false): Shell {
     Shell.enableVerboseLogging = BuildConfig.DEBUG
@@ -239,13 +239,13 @@ data class ExtensionOverviewEntry(
     val value: Long,
     val managed: Boolean,
     val sticky: Boolean,
-    /** Extension ABI the kernel speaks; 0 when it predates the probe. */
+    
     val apiVersion: Int = 0,
-    /** Whether the sticky value is replayed from `.extension_config` at boot. */
+    
     val persistent: Boolean = false,
-    /** Whether the extension's state is scoped per uid. */
+    
     val perUid: Boolean = false,
-    /** Whether changes only land after a reboot. */
+    
     val needsReboot: Boolean = false,
 )
 
@@ -567,7 +567,7 @@ fun runOneshotScript(
     return result.code
 }
 
-/** Removes a script's extraction directory, including files the script created as root. */
+
 fun removeAsRoot(path: String): Boolean {
     val escaped = "'" + path.replace("'", "'\\''") + "'"
     return ShellUtils.fastCmdResult(getRootShell(), "rm -rf $escaped")
@@ -613,7 +613,7 @@ private fun isValidBlockModuleName(name: String): Boolean =
     name.isNotEmpty() && name.length <= 64 &&
         name.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it == '_' }
 
-/** Parse the comma-separated block-modules field into the non-empty names. */
+
 fun parseBlockModules(input: String): List<String> =
     input.split(',').map { it.trim() }.filter { it.isNotEmpty() }
 
@@ -622,7 +622,7 @@ fun parseBlockModules(input: String): List<String> =
 // unblocked. Reject it here too.
 private const val MAX_BLOCK_MODULES_LEN = 255
 
-/** Whether every name in the block-modules field is valid (empty is valid). */
+
 fun isBlockModulesValid(input: String): Boolean {
     val names = parseBlockModules(input)
     return names.all(::isValidBlockModuleName) &&
@@ -1314,7 +1314,7 @@ fun removeUmountPath(path: String): Boolean {
     return result
 }
 
-/** Quote a value for the root shell; paths may contain spaces or metacharacters. */
+
 private fun String.ksuShellQuote(): String = "'" + replace("'", "'\\''") + "'"
 
 fun listUmountPaths(): String {

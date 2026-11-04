@@ -222,6 +222,7 @@ android {
     }
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = androidSourceCompatibility
         targetCompatibility = androidTargetCompatibility
     }
@@ -247,8 +248,13 @@ base {
 }
 
 dependencies {
+    // java.time and java.nio.file are used throughout the manager but only exist
+    // from Android 8.0; desugaring keeps them available on Android 7.
+    coreLibraryDesugaring(libs.desugar.jdk.libs.nio)
+
     // Stable bridge shared with the optional assistant AAR.
     implementation(project(":ai-api"))
+    implementation(libs.androidx.exifinterface)
 
     // The assistant itself is optional: a drop-in app/libs/ai.aar wins,
     // otherwise the :ai module is used when it is part of the build. Without

@@ -9,6 +9,7 @@ import com.sukisu.ultra.data.proxy.ProxyHealth
 import com.sukisu.ultra.data.proxy.ProxyMode
 import com.sukisu.ultra.ui.UiMode
 import com.sukisu.ultra.ui.util.BuiltinAppIcons
+import com.sukisu.ultra.ui.util.CustomTextGroup
 import com.sukisu.ultra.ui.util.HomeCardSticker
 
 @Immutable
@@ -109,6 +110,12 @@ data class SettingsUiState(
     val colorsSectionExpanded: Boolean = true,
     val customHomeTitle: String = "",
     val customTexts: Map<String, String> = emptyMap(),
+    val themeStoreBaseUrl: String = "",
+    val themeStoreToken: String = "",
+    val themeStoreAuthorId: String = "",
+    val themeStoreAuthorName: String = "",
+    val themeStoreAdminUrl: String = "",
+    val themeStoreExtraSources: List<com.sukisu.ultra.data.model.ThemeStoreSourceConfig> = emptyList(),
     val homeCardImagePath: String = "",
     val hideHomeCardStatusText: Boolean = false,
     val hideHomeCardDecoration: Boolean = false,
@@ -116,6 +123,19 @@ data class SettingsUiState(
 
     val pendingImportTheme: com.sukisu.ultra.ui.util.ImportedTheme? = null,
     val showThemeImportDialog: Boolean = false,
+
+    val adaptiveThemeActive: Boolean = false,
+    val adaptiveDraftLightCaptured: Boolean = false,
+    val adaptiveDraftDarkCaptured: Boolean = false,
+    val adaptiveDraftComplete: Boolean = false,
+    val adaptiveDraftRevision: Int = 0,
+
+    /** Canonical JSON of the static colour / image-effect overlay, empty when disabled. */
+    val customAppearanceJson: String = "",
+    val customColorsPresent: Boolean = false,
+    val imageEffectsPresent: Boolean = false,
+    val appearance: com.sukisu.ultra.ui.util.ResolvedAppearance? = null,
+    val appearanceData: com.sukisu.ultra.ui.util.AppearanceOverlayData? = null,
 
     // GitHub 下载加速
     // 下载链接改写是纯客户端配置，和 root 状态无关，所以放在通用设置的独立卡片里。
@@ -140,7 +160,13 @@ data class ThemePackageOptions(
     val homeCardDisplay: Boolean = true,
     val appIcon: Boolean = true,
     val customTexts: Boolean = true,
-    val customConfig: Boolean = true,
+    val customTextGroups: Set<CustomTextGroup> = CustomTextGroup.entries.toSet(),
+    val interfaceMode: Boolean = true,
+    val interfaceSwitches: Boolean = true,
+    val interactionBehavior: Boolean = true,
+    val moduleDisplay: Boolean = true,
+    val customColors: Boolean = true,
+    val imageEffects: Boolean = true,
 )
 
 val ThemePackageOptionsSaver = listSaver<ThemePackageOptions, Boolean>(
@@ -154,7 +180,16 @@ val ThemePackageOptionsSaver = listSaver<ThemePackageOptions, Boolean>(
             it.homeCardDisplay,
             it.appIcon,
             it.customTexts,
-            it.customConfig,
+            it.customTextGroups.contains(CustomTextGroup.HOME),
+            it.customTextGroups.contains(CustomTextGroup.PAGE_MAIN),
+            it.customTextGroups.contains(CustomTextGroup.PAGE_FEATURE),
+            it.customTextGroups.contains(CustomTextGroup.SETTINGS),
+            it.interfaceMode,
+            it.interfaceSwitches,
+            it.interactionBehavior,
+            it.moduleDisplay,
+            it.customColors,
+            it.imageEffects,
         )
     },
     restore = {
@@ -167,7 +202,18 @@ val ThemePackageOptionsSaver = listSaver<ThemePackageOptions, Boolean>(
             homeCardDisplay = it[5],
             appIcon = it[6],
             customTexts = it[7],
-            customConfig = it[8],
+            customTextGroups = buildSet {
+                if (it.getOrElse(8) { true }) add(CustomTextGroup.HOME)
+                if (it.getOrElse(9) { true }) add(CustomTextGroup.PAGE_MAIN)
+                if (it.getOrElse(10) { true }) add(CustomTextGroup.PAGE_FEATURE)
+                if (it.getOrElse(11) { true }) add(CustomTextGroup.SETTINGS)
+            },
+            interfaceMode = it.getOrElse(12) { true },
+            interfaceSwitches = it.getOrElse(13) { true },
+            interactionBehavior = it.getOrElse(14) { true },
+            moduleDisplay = it.getOrElse(15) { true },
+            customColors = it.getOrElse(16) { true },
+            imageEffects = it.getOrElse(17) { true },
         )
     },
 )

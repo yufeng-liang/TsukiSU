@@ -1,8 +1,14 @@
 package com.sukisu.ultra.ui.screen.colorpalette
 
+import android.net.Uri
 import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -19,7 +25,7 @@ import com.sukisu.ultra.ui.viewmodel.SettingsViewModel
 import com.sukisu.ultra.ui.component.themeimport.ThemeImportDialog
 
 @Composable
-fun ColorPaletteScreen(section: String? = null) {
+fun ColorPaletteScreen(section: String? = null, importUri: String? = null) {
     val navigator = LocalNavigator.current
     val context = LocalContext.current
     val activity = LocalActivity.current
@@ -27,9 +33,25 @@ fun ColorPaletteScreen(section: String? = null) {
     // The page state is projected in the view model, so nothing is parsed while composing.
     val state by viewModel.colorPaletteState.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var consumedImportUri by rememberSaveable { mutableStateOf<String?>(null) }
+
+    // A package opened from another app is forwarded through the route so the dialog is shown
+    // by the destination's own view model instead of the activity-scoped dispatcher one.
+    LaunchedEffect(importUri) {
+        if (!importUri.isNullOrBlank() && consumedImportUri != importUri) {
+            consumedImportUri = importUri
+            viewModel.importTheme(context, Uri.parse(importUri))
+        }
+    }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         viewModel.refreshBackgroundAppearance()
+        viewModel.refreshAdaptiveAppearance()
+        viewModel.refreshCustomAppearance()
+    }
+    // The activity handles uiMode itself, so re-apply the adaptive half when the system flips.
+    LaunchedEffect(isSystemInDarkTheme()) {
+        viewModel.refreshAdaptiveAppearance()
     }
     val actions = ColorPaletteScreenActions(
         onBack = dropUnlessResumed { navigator.pop() },
@@ -107,8 +129,11 @@ fun ColorPaletteScreen(section: String? = null) {
         onSetCustomText = viewModel::setCustomText,
         onResetAllCustomTexts = viewModel::resetAllCustomTexts,
         onOpenCustomTexts = { navigator.push(Route.CustomTexts) },
+        onOpenThemeStore = { navigator.push(Route.ThemeStore) },
+        onOpenAdaptiveThemeBuilder = { navigator.push(Route.AdaptiveThemeBuilder) },
         onResetBackgroundAppearance = viewModel::resetBackgroundAppearance,
         onClearAllAppearance = viewModel::clearAllAppearance,
+        onOpenAppearanceEditor = { navigator.push(Route.AppearanceOverlay) },
     )
 
     ThemeImportDialog(

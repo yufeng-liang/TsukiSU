@@ -32,8 +32,11 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
 import com.sukisu.ultra.ui.theme.LocalAppBackgroundBackdrop
+import com.sukisu.ultra.ui.theme.LocalAppSettings
+import com.sukisu.ultra.ui.theme.MaterialExpressivePalette
 import com.sukisu.ultra.ui.theme.LocalBackgroundImagePath
 import com.sukisu.ultra.ui.theme.LocalCardBackgroundAlpha
+import com.sukisu.ultra.ui.theme.appearanceImageEffects
 import java.io.File
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -72,6 +75,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -102,10 +106,15 @@ import com.sukisu.ultra.ai.api.AiFeatureBridge
 import com.sukisu.ultra.ai.host.ManagerAiTarget
 import com.sukisu.ultra.ui.screen.appicon.AppIconScreen
 import com.sukisu.ultra.ui.screen.customtext.CustomTextScreen
+import com.sukisu.ultra.ui.screen.account.AccountScreen
+import com.sukisu.ultra.ui.screen.themestore.ThemeStoreScreen
+import com.sukisu.ultra.ui.screen.themestore.ThemeStoreSourcesScreen
 import com.sukisu.ultra.ui.util.LocalCustomTexts
 import com.sukisu.ultra.ui.screen.appprofile.AppProfileScreen
 import com.sukisu.ultra.ui.screen.backgroundcrop.BackgroundCropScreen
+import com.sukisu.ultra.ui.screen.colorpalette.AdaptiveThemeBuilderScreen
 import com.sukisu.ultra.ui.screen.colorpalette.ColorPaletteScreen
+import com.sukisu.ultra.ui.screen.appearanceoverlay.AppearanceOverlayScreen
 import com.sukisu.ultra.ui.screen.dynamicmanagers.DynamicManagersScreen
 import com.sukisu.ultra.ui.screen.extensions.ExtensionsScreen
 import com.sukisu.ultra.ui.screen.extensions.CpuSpoofScreen
@@ -145,6 +154,7 @@ import com.sukisu.ultra.ui.theme.LocalModuleDescriptionMaxLines
 import com.sukisu.ultra.ui.util.BackgroundNavTransition
 import com.sukisu.ultra.ui.util.ImageStorage
 import com.sukisu.ultra.ui.util.LocaleHelper
+import com.sukisu.ultra.ui.util.ThemeTrialManager
 import com.sukisu.ultra.ui.util.getSuperuserCount
 import com.sukisu.ultra.ui.util.install
 import com.sukisu.ultra.ui.util.rememberBlurBackdrop
@@ -153,6 +163,7 @@ import com.sukisu.ultra.ui.viewmodel.ColumnWizardViewModel
 import com.sukisu.ultra.ui.viewmodel.MainActivityViewModel
 import com.sukisu.ultra.ui.viewmodel.MainPagerConfig
 import com.sukisu.ultra.ui.viewmodel.ModuleViewModel
+import com.sukisu.ultra.ui.viewmodel.SettingsViewModel
 import com.sukisu.ultra.ui.viewmodel.SuperUserViewModel
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.blur.layerBackdrop
@@ -188,6 +199,12 @@ class MainActivity : ComponentActivity() {
         val splashScreen = installSplashScreen()
         splashStartedAt = SystemClock.uptimeMillis()
         super.onCreate(savedInstanceState)
+        if (ThemeTrialManager.isActive(this)) {
+            ViewModelProvider(this)[SettingsViewModel::class.java]
+                .restoreThemeTrial(this, taskId)
+        } else {
+            ThemeTrialManager.cleanupOrphan(this)
+        }
         splashScreen.setKeepOnScreenCondition {
             !contentReady || SystemClock.uptimeMillis() - splashStartedAt < splashAnimationDurationMs
         }
@@ -255,6 +272,14 @@ class MainActivity : ComponentActivity() {
             // Pick up launcher wallpaper changes while the "use system wallpaper" option is on.
             LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
                 viewModel.refreshSystemWallpaper()
+                // Also covers a mode change that happened while the app was in the background.
+                viewModel.syncAdaptiveTheme(darkMode)
+            }
+
+            // Adaptive theme packages carry a light and a dark half; swap them with the effective
+            // light/dark mode (system-following or a forced app mode).
+            LaunchedEffect(darkMode) {
+                viewModel.syncAdaptiveTheme(darkMode)
             }
 
             DisposableEffect(darkMode) {
@@ -294,10 +319,14 @@ class MainActivity : ComponentActivity() {
             val captureAppBackground = uiMode == UiMode.Miuix && uiState.enableBlur &&
                 uiState.customBackgroundUri.isNotEmpty()
 
+            val themedAppSettings = remember(appSettings, uiState.keyColorOverride) {
+                uiState.keyColorOverride?.let { appSettings.copy(keyColor = it) } ?: appSettings
+            }
             CompositionLocalProvider(
                 LocalNavigator provides navigator,
                 LocalDensity provides density,
                 LocalColorMode provides appSettings.colorMode.value,
+                LocalAppSettings provides themedAppSettings,
                 LocalEnableBlur provides uiState.enableBlur,
                 LocalEnableFloatingBottomBar provides uiState.enableFloatingBottomBar,
                 LocalEnableFloatingBottomBarBlur provides uiState.enableFloatingBottomBarBlur,
@@ -309,9 +338,6 @@ class MainActivity : ComponentActivity() {
                 LocalUiMode provides uiMode,
                 LocalCustomTexts provides uiState.customTexts,
             ) {
-                val themedAppSettings = remember(appSettings, uiState.keyColorOverride) {
-                    uiState.keyColorOverride?.let { appSettings.copy(keyColor = it) } ?: appSettings
-                }
                 KernelSUTheme(appSettings = themedAppSettings, uiMode = uiMode) {
                     IntentDispatcher(intentChannel = intentChannel)
                     val swipeDismiss = if (uiState.enableSwipeDismiss) {
@@ -369,8 +395,28 @@ class MainActivity : ComponentActivity() {
                             entry<Route.Main>(swipeDismiss = swipeDismiss) { mainScreenEntry() }
                             entry<Route.About>(swipeDismiss = swipeDismiss) { AboutScreen() }
                             entry<Route.Sulog>(swipeDismiss = swipeDismiss) { SulogScreen() }
-                            entry<Route.ColorPalette>(swipeDismiss = swipeDismiss) { key -> ColorPaletteScreen(key.section) }
+                            entry<Route.ColorPalette>(swipeDismiss = swipeDismiss) { key -> ColorPaletteScreen(key.section, key.importUri) }
+                            entry<Route.AppearanceOverlay>(swipeDismiss = swipeDismiss) {
+                                AppearanceOverlayScreen(onBack = { navigator.pop() })
+                            }
                             entry<Route.CustomTexts>(swipeDismiss = swipeDismiss) { CustomTextScreen() }
+                            entry<Route.ThemeStore>(swipeDismiss = swipeDismiss) {
+                                MaterialExpressivePalette { ThemeStoreScreen() }
+                            }
+                            entry<Route.ThemeStoreAdaptiveUpload>(swipeDismiss = swipeDismiss) {
+                                MaterialExpressivePalette {
+                                    ThemeStoreScreen(startAdaptiveUpload = true)
+                                }
+                            }
+                            entry<Route.ThemeStoreSources>(swipeDismiss = swipeDismiss) {
+                                MaterialExpressivePalette { ThemeStoreSourcesScreen() }
+                            }
+                            entry<Route.ThemeAccount>(swipeDismiss = swipeDismiss) {
+                                MaterialExpressivePalette { AccountScreen() }
+                            }
+                            entry<Route.AdaptiveThemeBuilder>(swipeDismiss = swipeDismiss) {
+                                MaterialExpressivePalette { AdaptiveThemeBuilderScreen() }
+                            }
                             entry<Route.AppIcon>(swipeDismiss = swipeDismiss) { AppIconScreen() }
                             entry<Route.BackgroundCrop>(swipeDismiss = NavSwipeDirection.None) { key ->
                                 BackgroundCropScreen(key.sourcePath)
@@ -560,6 +606,7 @@ class MainActivity : ComponentActivity() {
                         val backgroundBlurRadius = (
                             ImageStorage.BACKGROUND_BLUR_MAX_RADIUS_DP * uiState.customBackgroundBlurPercent / 100f
                         ).dp
+                        val backgroundEffects = themedAppSettings.appearance?.background
                         Crossfade(
                             modifier = if (captureAppBackground) {
                                 Modifier.layerBackdrop(appBackgroundBackdrop)
@@ -589,6 +636,12 @@ class MainActivity : ComponentActivity() {
                                             } else {
                                                 Modifier
                                             }
+                                        )
+                                        // Sharpen after a blur would just fight the blur, so only
+                                        // apply it while the background is unblurred.
+                                        .appearanceImageEffects(
+                                            backgroundEffects,
+                                            allowSharpen = backgroundBlurRadius <= 0.dp,
                                         )
                                 )
                                 val scrimPercent = uiState.customBackgroundScrimPercent

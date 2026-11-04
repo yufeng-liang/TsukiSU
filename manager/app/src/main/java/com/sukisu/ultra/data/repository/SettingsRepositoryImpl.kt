@@ -40,6 +40,10 @@ internal const val KEY_HOME_CARD_IMAGE_PATH = "home_card_image_path"
 internal const val KEY_HIDE_HOME_CARD_STATUS_TEXT = "hide_home_card_status_text"
 internal const val KEY_HIDE_HOME_CARD_DECORATION = "hide_home_card_decoration"
 internal const val KEY_HOME_CARD_STICKERS = "home_card_stickers"
+internal const val KEY_ADAPTIVE_THEME = "adaptive_theme"
+internal const val KEY_ADAPTIVE_APPLIED_MODE = "adaptive_applied_mode"
+internal const val KEY_ADAPTIVE_DRAFT = "adaptive_theme_draft"
+internal const val KEY_CUSTOM_APPEARANCE = "custom_appearance_json"
 
 /** Prefer soft reboot: always in jailbreak mode, or when the setting is enabled. */
 fun isSoftRebootPreferred(): Boolean =
@@ -212,6 +216,50 @@ class SettingsRepositoryImpl : SettingsRepository {
             prefs.edit { putString(KEY_CUSTOM_TEXTS, jsonStr) }
         }
 
+    override var themeStoreBaseUrl: String
+        get() = prefs.getString("theme_store_base_url", "") ?: ""
+        set(value) = prefs.edit { putString("theme_store_base_url", value.trim()) }
+
+    override var themeStoreToken: String
+        get() = prefs.getString("theme_store_token", "") ?: ""
+        set(value) = prefs.edit { putString("theme_store_token", value.trim()) }
+
+    override var themeStoreAuthorId: String
+        get() = prefs.getString("theme_store_author_id", "") ?: ""
+        set(value) = prefs.edit { putString("theme_store_author_id", value.trim()) }
+
+    override var themeStoreAuthorName: String
+        get() = prefs.getString("theme_store_author_name", "") ?: ""
+        set(value) = prefs.edit { putString("theme_store_author_name", value.trim()) }
+
+    override var themeStoreAdminUrl: String
+        get() = prefs.getString("theme_store_admin_url", "") ?: ""
+        set(value) = prefs.edit { putString("theme_store_admin_url", value.trim()) }
+
+    override var themeStoreExtraSources: List<com.sukisu.ultra.data.model.ThemeStoreSourceConfig>
+        get() {
+            val raw = prefs.getString("theme_store_extra_sources", null) ?: return emptyList()
+            return runCatching {
+                Json.decodeFromString<List<com.sukisu.ultra.data.model.ThemeStoreSourceConfig>>(raw)
+            }.getOrDefault(emptyList())
+        }
+        set(value) {
+            prefs.edit {
+                putString(
+                    "theme_store_extra_sources",
+                    Json.encodeToString(value),
+                )
+            }
+        }
+
+    override var themeStoreUploadSource: String
+        get() = prefs.getString("theme_store_upload_source", "") ?: ""
+        set(value) = prefs.edit { putString("theme_store_upload_source", value.trim()) }
+
+    override var themeStoreGridLayout: Boolean
+        get() = prefs.getBoolean("theme_store_grid_layout", true)
+        set(value) = prefs.edit { putBoolean("theme_store_grid_layout", value) }
+
     override var homeCardImagePath: String
         get() = prefs.getString(KEY_HOME_CARD_IMAGE_PATH, "") ?: ""
         set(value) = prefs.edit { putString(KEY_HOME_CARD_IMAGE_PATH, value) }
@@ -235,6 +283,22 @@ class SettingsRepositoryImpl : SettingsRepository {
             val jsonStr = Json.encodeToString(value.take(HomeCardSticker.MAX_COUNT))
             prefs.edit { putString(KEY_HOME_CARD_STICKERS, jsonStr) }
         }
+
+    override var adaptiveThemeJson: String
+        get() = prefs.getString(KEY_ADAPTIVE_THEME, "") ?: ""
+        set(value) = prefs.edit { putString(KEY_ADAPTIVE_THEME, value) }
+
+    override var adaptiveAppliedMode: Int
+        get() = prefs.getInt(KEY_ADAPTIVE_APPLIED_MODE, -1)
+        set(value) = prefs.edit { putInt(KEY_ADAPTIVE_APPLIED_MODE, value) }
+
+    override var adaptiveDraftJson: String
+        get() = prefs.getString(KEY_ADAPTIVE_DRAFT, "") ?: ""
+        set(value) = prefs.edit { putString(KEY_ADAPTIVE_DRAFT, value) }
+
+    override var customAppearanceJson: String
+        get() = prefs.getString(KEY_CUSTOM_APPEARANCE, "") ?: ""
+        set(value) = prefs.edit { putString(KEY_CUSTOM_APPEARANCE, value) }
 
     override var uiMode: String
         get() = prefs.getString("ui_mode", null) ?: initialUiMode().also { mode ->
