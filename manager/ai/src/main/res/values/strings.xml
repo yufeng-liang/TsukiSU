@@ -276,4 +276,7 @@
     <string name="ai_regenerate">Regenerate</string>
     <string name="ai_tool_expand">Show output</string>
     <string name="ai_tool_collapse">Hide output</string>
+    <string name="ai_edit_message">Edit message</string>
+    <string name="ai_edit_send">Resend</string>
+    <string name="ai_edit_cancel">Cancel</string>
 </resources>

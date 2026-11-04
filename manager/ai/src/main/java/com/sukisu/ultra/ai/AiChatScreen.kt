@@ -219,6 +219,7 @@ data class AiChatActions(
     val onRunCode: (String) -> Unit,
     val onDeleteMessage: (String) -> Unit,
     val onRegenerate: () -> Unit,
+    val onEditResend: (String, String) -> Unit = { _, _ -> },
     val onDismissError: () -> Unit,
     val onRefreshSuggestions: () -> Unit,
     val onNavigate: (AiNavigationTarget) -> Unit,

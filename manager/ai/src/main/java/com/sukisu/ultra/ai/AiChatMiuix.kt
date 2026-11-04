@@ -1,5 +1,9 @@
 package com.sukisu.ultra.ai
 
+import androidx.compose.material3.TextButton as MaterialTextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+
 import com.sukisu.ultra.ai.api.AiNavigationTarget
 
 import androidx.activity.compose.BackHandler
@@ -263,6 +267,7 @@ fun AiChatMiuix(
                             isLastAssistant = message.id == state.messages
                                 .lastOrNull { it.role == AiMessageRole.ASSISTANT }?.id,
                             onRegenerate = actions.onRegenerate,
+                onEditResend = actions.onEditResend,
                         )
                     }
                 }
@@ -489,16 +494,24 @@ private fun AiMessageBubbleMiuix(
     onRunCode: (String) -> Unit,
     isLastAssistant: Boolean = false,
     onRegenerate: () -> Unit = {},
+    onEditResend: (String, String) -> Unit = { _, _ -> },
+
 ) {
     val copy = rememberAiCopyText()
     var pendingRiskCapability by remember { mutableStateOf<AiCapability?>(null) }
     var pendingRootGrant by remember { mutableStateOf(false) }
     when (message.role) {
         AiMessageRole.USER -> {
+            var editing by remember(message.id) { mutableStateOf(false) }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                TextButton(
+                    text = stringResource(R.string.ai_edit_message),
+                    onClick = { editing = true },
+                )
                 Box(
                     modifier = Modifier
                         .clip(
@@ -518,6 +531,31 @@ private fun AiMessageBubbleMiuix(
                         color = colorScheme.onPrimary,
                     )
                 }
+            }
+            if (editing) {
+                var draft by remember(message.id, editing) { mutableStateOf(message.content) }
+                AlertDialog(
+                    onDismissRequest = { editing = false },
+                    title = { Text(stringResource(R.string.ai_edit_message)) },
+                    text = {
+                        OutlinedTextField(
+                            value = draft,
+                            onValueChange = { draft = it },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    },
+                    confirmButton = {
+                        MaterialTextButton(onClick = {
+                            if (draft.isNotBlank()) {
+                                editing = false
+                                onEditResend(message.id, draft)
+                            }
+                        }) { Text(stringResource(R.string.ai_edit_send)) }
+                    },
+                    dismissButton = {
+                        MaterialTextButton(onClick = { editing = false }) { Text(stringResource(R.string.ai_edit_cancel)) }
+                    },
+                )
             }
         }
 
