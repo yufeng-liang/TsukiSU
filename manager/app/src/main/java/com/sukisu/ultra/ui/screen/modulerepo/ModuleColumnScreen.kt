@@ -452,6 +452,7 @@ private fun StepRow(index: Int, step: RepoColumnStep) {
 internal fun stepKindLabel(kind: String): String = stringResource(
     when (kind) {
         "installModule" -> R.string.module_column_step_kind_install_module
+        "installApp" -> R.string.module_column_step_kind_install_app
         "writeConfig" -> R.string.module_column_step_kind_write_config
         "writeFile" -> R.string.module_column_step_kind_write_file
         "runCommand" -> R.string.module_column_step_kind_run_command
@@ -466,6 +467,7 @@ private fun stepSourceLabel(step: RepoColumnStep): String = when (step.source.ki
         .filter { it.isNotEmpty() }
         .joinToString(" · ")
 
+    "updateJson" -> step.source.url
     "store" -> step.source.moduleId
     else -> ""
 }

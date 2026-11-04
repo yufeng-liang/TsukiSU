@@ -1,5 +1,7 @@
 package com.sukisu.ultra.ui.screen.modulerepo
 
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -40,6 +42,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
@@ -439,6 +442,24 @@ private fun WizardStepCard(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                    // 官方只肯走群/网盘发的检测器（春秋），商店给不了直链，但能把官方入口摆出来；
+                    // 链接来自索引仓，只放行 http/https，点了也只是打开浏览器，不执行任何东西。
+                    if (step.link.isNotEmpty()) {
+                        val context = LocalContext.current
+                        TextButton(
+                            onClick = {
+                                runCatching {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(step.link)))
+                                }
+                            },
+                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.column_wizard_open_link),
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                        }
                     }
                     if (uiState.message.isNotEmpty()) {
                         Text(

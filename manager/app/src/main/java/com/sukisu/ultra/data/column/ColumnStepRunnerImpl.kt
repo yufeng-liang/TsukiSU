@@ -1,8 +1,11 @@
 package com.sukisu.ultra.data.column
 
+import android.content.Intent
 import android.net.Uri
+import androidx.core.content.FileProvider
 import com.sukisu.ultra.data.model.RepoColumnStep
 import com.sukisu.ultra.data.model.RepoColumnTopic
+import com.sukisu.ultra.ksuApp
 import com.sukisu.ultra.ui.util.ModuleProp
 import com.sukisu.ultra.ui.util.flashModule
 import kotlinx.coroutines.Dispatchers
@@ -68,6 +71,7 @@ class ColumnStepRunnerImpl(
         try {
             when (val kind = step.kind.trim().lowercase()) {
                 KIND_INSTALL_MODULE -> installModule(step, log)
+                KIND_INSTALL_APP -> installApp(step, log)
                 KIND_WRITE_CONFIG, KIND_WRITE_FILE -> writeFile(step, ctx, log)
                 KIND_RUN_COMMAND -> runCommand(step, log)
                 KIND_VERIFY -> verify(step)
@@ -82,6 +86,79 @@ class ColumnStepRunnerImpl(
             // 仍然要变成一次「步骤失败」，不能把整个向导带崩。
             failed("步骤执行异常：${e.message ?: e.javaClass.simpleName}", log)
         }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // installApp
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * 下载一个 APK 并交给系统安装器。
+     *
+     * 商店**不代点安装**：只把包下载好、用 FileProvider 递给系统安装界面，确认按钮永远由用户按。
+     * 这样既省掉「自己找地方下 APK」的步骤，又不会出现「点一下商店，后台静默装了个 App」。
+     *
+     * 幂等靠包名：APK 的包名只能从安装包本身读，已经在设备上的直接跳过。
+     */
+    private suspend fun installApp(step: RepoColumnStep, log: StepLog): ColumnStepResult {
+        if (step.source.kind.trim().isEmpty()) {
+            return failed("这个步骤没有配置下载来源，无法安装", log)
+        }
+
+        val uri = fetcher.resolve(step).getOrElse { e ->
+            return failed("准备安装包失败：${e.message ?: e.javaClass.simpleName}", log)
+        }
+        if (uri.scheme != "file") {
+            return failed("安装包地址不是本地文件：$uri", log)
+        }
+        val file = uri.path?.let(::File)
+        if (file == null || !file.isFile) {
+            return failed("安装包不存在：${uri.lastPathSegment ?: uri}", log)
+        }
+        log.line("已下载安装包：${file.name}（${file.length() / 1024} KB）")
+
+        val pm = ksuApp.packageManager
+        @Suppress("DEPRECATION")
+        val pkg = runCatching { pm.getPackageArchiveInfo(file.absolutePath, 0)?.packageName }
+            .getOrNull()
+            ?.trim()
+            .orEmpty()
+        if (pkg.isNotEmpty()) {
+            log.line("包名：$pkg")
+            if (runCatching { pm.getPackageInfo(pkg, 0) }.isSuccess) {
+                log.line("$pkg 已安装，跳过")
+                return ColumnStepResult(
+                    ColumnStepStatus.SKIPPED,
+                    "$pkg 已经装了，跳过（要重装请先在系统里卸载）",
+                    log.text(),
+                )
+            }
+        } else {
+            log.line("读不出包名，继续交给系统安装器判断")
+        }
+
+        val contentUri = try {
+            FileProvider.getUriForFile(ksuApp, "${ksuApp.packageName}.fileprovider", file)
+        } catch (e: Exception) {
+            return failed("无法把安装包交给系统：${e.message ?: e.javaClass.simpleName}", log)
+        }
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(contentUri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            ksuApp.startActivity(intent)
+        } catch (e: Exception) {
+            return failed("打不开系统安装器：${e.message ?: e.javaClass.simpleName}", log)
+        }
+
+        // NEEDS_USER 而不是 SUCCESS：确认安装这一步不在商店手里，向导要停下等用户点完回来。
+        return ColumnStepResult(
+            ColumnStepStatus.NEEDS_USER,
+            "已打开系统安装界面，请在弹窗里确认安装（装完回来说一声继续）",
+            log.text(),
+        )
     }
 
     // ---------------------------------------------------------------------------------------
@@ -365,6 +442,7 @@ class ColumnStepRunnerImpl(
 
     private companion object {
         const val KIND_INSTALL_MODULE = "installmodule"
+        const val KIND_INSTALL_APP = "installapp"
         const val KIND_WRITE_CONFIG = "writeconfig"
         const val KIND_WRITE_FILE = "writefile"
         const val KIND_RUN_COMMAND = "runcommand"

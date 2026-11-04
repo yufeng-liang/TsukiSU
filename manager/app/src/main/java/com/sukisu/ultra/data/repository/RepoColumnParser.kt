@@ -21,6 +21,7 @@ object RepoColumnParser {
     /** 步骤类型的规范写法；比较时忽略大小写，交给界面的一定是这里面的某一个。 */
     private val STEP_KINDS = listOf(
         "installModule",
+        "installApp",
         "writeConfig",
         "writeFile",
         "runCommand",
@@ -140,6 +141,7 @@ object RepoColumnParser {
             fileContent = item.rawText("fileContent"),
             checkId = item.text("checkId"),
             confirm = item.text("confirm"),
+            link = item.text("link"),
         )
     }
 
