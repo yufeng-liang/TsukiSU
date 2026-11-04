@@ -59,6 +59,12 @@ private val UNSAFE_FILE_NAME_CHARS = Regex("[^A-Za-z0-9._-]")
 /** GitHub 的仓库标识只能是 `owner/repo` 两段。 */
 private val REPO_PATTERN = Regex("^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 
+/** 合法的整包 sha256（小写十六进制）。 */
+private val SHA256_PATTERN = Regex("^[0-9a-f]{64}$")
+
+/** update.json 来源的模块缓存在这个子目录里。 */
+private const val UPDATE_JSON_DIR = "update_json"
+
 /**
  * 已经把「用户接下来该怎么办」写进 message 的失败。
  *
@@ -111,6 +117,7 @@ class ColumnModuleFetcher(
     private suspend fun resolveOrThrow(step: RepoColumnStep): Uri =
         when (val kind = step.source.kind.trim().lowercase()) {
             SOURCE_UPSTREAM -> downloadUpstream(step)
+            SOURCE_UPDATE_JSON -> downloadFromUpdateJson(step)
             SOURCE_STORE -> throw ColumnFetchException("商店模块安装请用模块页，专栏暂不支持 store 来源")
             "" -> throw ColumnFetchException("步骤 ${step.id} 没有给出模块来源（source.kind），无法安装")
             else -> throw ColumnFetchException("未知的模块来源类型：$kind")
@@ -135,8 +142,86 @@ class ColumnModuleFetcher(
         val release = findRelease(repo, url, step.source.pinnedVersion.trim())
         val asset = findAsset(repo, release, pattern)
         val destination = File(downloadDirFor(repo), safeFileName(asset.name))
-        download(repo, asset.url, destination, step.source.sha256.trim())
+        // 索引里不再锁版本/哈希（用户要求每次都拿最新版）。没有登记值时就退回 GitHub API
+        // 给这个资产的 digest（sha256）——API 是直连的，哈希不经过任何代理。
+        val expectedSha256 = step.source.sha256.trim().ifEmpty { asset.digest }
+        download(repo, asset.url, destination, expectedSha256)
         return Uri.fromFile(destination)
+    }
+
+    /**
+     * 从模块自带的 update.json 取最新版并下载。
+     *
+     * LSPosed 2.x 不在 GitHub 发版（只在 Telegram 频道 @lsposed 公告），但官方维护了 update.json：
+     * `{"version":"v2.2.1","versionCode":7912,"zipUrl":"https://lsposed.zip",...}`。读它就能永远
+     * 拿到最新版，不用等人改索引核对。
+     *
+     * 这里不做「包内 module.prop 与版本号对齐」的预校验：LSPosed 的 zip 用 XZ（zip method 95）
+     * 压缩，Java 的 ZipFile 读不了。改成只校验「下载回来确实是个 zip」，装错包的兜底交给
+     * ksud（它自己会校验模块结构）和向导的回滚。
+     */
+    private suspend fun downloadFromUpdateJson(step: RepoColumnStep): Uri {
+        val updateUrl = step.source.url.trim()
+        if (!updateUrl.startsWith("https://", ignoreCase = true)) {
+            throw ColumnFetchException("模块的 update.json 地址必须是 https：${updateUrl.ifBlank { "（空）" }}")
+        }
+        if (!hasAnyNetwork(ksuApp)) {
+            throw ColumnFetchException("当前没有可用网络，无法读取模块的 update.json")
+        }
+
+        val body = fetchUpdateJson(updateUrl)
+        val json = try {
+            JSONObject(body)
+        } catch (e: Exception) {
+            throw ColumnFetchException("模块的 update.json 不是合法 JSON：$updateUrl", e)
+        }
+        val zipUrl = json.optString("zipUrl").trim()
+        if (!zipUrl.startsWith("https://", ignoreCase = true)) {
+            throw ColumnFetchException("update.json 没有给出可用的 zip 直链：$updateUrl")
+        }
+        val versionCode = json.optInt("versionCode", 0)
+        val fileName = if (versionCode > 0) "module-$versionCode.zip" else "module-latest.zip"
+        val destination = File(downloadDirFor(UPDATE_JSON_DIR), safeFileName(fileName))
+        download(UPDATE_JSON_DIR, zipUrl, destination, "")
+        requireZip(destination, zipUrl)
+        return Uri.fromFile(destination)
+    }
+
+    private fun fetchUpdateJson(url: String): String {
+        val request = Request.Builder().url(url).header("Accept", "application/json").build()
+        return guarded(url, "读取模块的 update.json") {
+            apiClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    throw ColumnFetchException("读取 update.json 失败：HTTP ${response.code}（$url）")
+                }
+                val bytes = response.peekBody(MAX_RELEASES_BODY_BYTES + 1).bytes()
+                if (bytes.size > MAX_RELEASES_BODY_BYTES) {
+                    throw ColumnFetchException(
+                        "update.json 超过 ${MAX_RELEASES_BODY_BYTES / (1024 * 1024)} MiB，已中止"
+                    )
+                }
+                String(bytes, Charsets.UTF_8)
+            }
+        }
+    }
+
+    /** zip 魔数校验：没有哈希可对的来源，至少确认下载回来的不是一段 HTML 错误页。 */
+    private fun requireZip(file: File, url: String) {
+        val header = ByteArray(4)
+        val read = runCatching { file.inputStream().use { it.read(header) } }.getOrDefault(0)
+        val isZip = read == 4 && header[0] == 0x50.toByte() && header[1] == 0x4B.toByte() &&
+            header[2] == 0x03.toByte() && header[3] == 0x04.toByte()
+        if (!isZip) {
+            file.delete()
+            throw ColumnFetchException("从 $url 下载回来的不是 zip 包，已删除")
+        }
+    }
+
+    /** 从 release asset 里取 `"digest": "sha256:<64hex>"`；没有或不合法时给空串（走直连）。 */
+    private fun sha256OfAsset(asset: JSONObject): String {
+        val raw = if (asset.isNull("digest")) "" else asset.optString("digest", "").trim()
+        val value = raw.removePrefix("sha256:").removePrefix("SHA256:").lowercase()
+        return if (SHA256_PATTERN.matches(value)) value else ""
     }
 
     /**
@@ -202,7 +287,7 @@ class ColumnModuleFetcher(
             if (!matcher.matches(name)) continue
             val downloadUrl = asset.optString("browser_download_url").trim()
             if (downloadUrl.isEmpty()) continue
-            return RemoteAsset(name, downloadUrl)
+            return RemoteAsset(name, downloadUrl, sha256OfAsset(asset))
         }
 
         val tag = release.optString("tag_name").ifBlank { "（未知版本）" }
@@ -356,7 +441,11 @@ class ColumnModuleFetcher(
     )
 
     private fun httpFailure(repo: String, code: Int): IOException {
-        val hint = "可手动到 https://github.com/$repo/releases 下载后自行安装"
+        val hint = if (repo.contains('/')) {
+            "可手动到 https://github.com/$repo/releases 下载后自行安装"
+        } else {
+            "请检查网络后重试"
+        }
         return when (code) {
             403 -> ColumnFetchException("GitHub 接口返回 HTTP 403（可能触发限流，或网络被拦截），$hint")
             404 -> ColumnFetchException("GitHub 上找不到 $repo 的 release（仓库可能已改名/转为私有，或网络被拦截），$hint")
@@ -410,10 +499,11 @@ class ColumnModuleFetcher(
         return Regex(builder.toString(), RegexOption.IGNORE_CASE)
     }
 
-    private data class RemoteAsset(val name: String, val url: String)
+    private data class RemoteAsset(val name: String, val url: String, val digest: String)
 
     private companion object {
         const val SOURCE_UPSTREAM = "upstream"
         const val SOURCE_STORE = "store"
+        const val SOURCE_UPDATE_JSON = "updatejson"
     }
 }

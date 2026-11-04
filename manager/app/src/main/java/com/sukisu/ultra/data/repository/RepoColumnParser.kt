@@ -159,6 +159,7 @@ object RepoColumnParser {
         pinnedVersion = item.text("pinnedVersion"),
         sha256 = item.text("sha256"),
         moduleId = item.text("moduleId"),
+        url = item.text("url"),
     )
 
     private fun emptyStepSource(): RepoColumnStepSource = RepoColumnStepSource(
@@ -168,6 +169,7 @@ object RepoColumnParser {
         pinnedVersion = "",
         sha256 = "",
         moduleId = "",
+        url = "",
     )
 
     /**

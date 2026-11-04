@@ -152,6 +152,13 @@ data class RepoColumnStepSource(
     val sha256: String,
     /** 商店索引里的模块 id，[kind] 为 store 时有意义。 */
     val moduleId: String,
+    /**
+     * 模块自带的 `update.json` 地址，[kind] 为 updateJson 时有意义。
+     *
+     * 这类模块不在 GitHub 发版（LSPosed 的 2.x 只走 Telegram 频道），但官方提供了 updateJson：
+     * 里面写着当前版本号与 zip 直链。商店读它就能永远装最新版，不用等人改索引。
+     */
+    val url: String = "",
 ) : Parcelable
 
 /** 证据的时效档位：越旧越不该被读成「现在还能用」。 */
