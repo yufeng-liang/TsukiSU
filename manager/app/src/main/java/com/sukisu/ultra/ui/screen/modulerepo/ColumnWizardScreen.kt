@@ -1,5 +1,10 @@
 package com.sukisu.ultra.ui.screen.modulerepo
 
+import com.sukisu.ultra.ui.component.miuix.AppCard
+import com.sukisu.ultra.ui.UiMode
+import com.sukisu.ultra.ui.LocalUiMode
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.layout.Spacer
 import com.sukisu.ultra.data.column.ColumnPreflight
@@ -357,9 +362,35 @@ private fun ColumnWizardScreenMaterial(
  * 三绿（Play Integrity）绕不开一份 Google 认证密钥，而这份材料既不能由商店托管、也不该让用户去
  * 来路不明的地方下载。所以这里只做一件事：让用户选自己信任的那份 keybox.xml，说明它会被写到哪里。
  */
+
+/**
+ * 向导里的卡片外壳：Miuix 下用 AppCard，Material 下用 TonalCard。
+ *
+ * 内容和行为完全共用，只换外壳——两套主题的圆角、底色与点击反馈各自符合自己的设计语言。
+ */
+@Composable
+private fun WizardCard(
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceBright,
+    content: @Composable () -> Unit,
+) {
+    if (LocalUiMode.current == UiMode.Miuix) {
+        AppCard(
+            modifier = if (onClick != null) modifier.clickable(onClick = onClick) else modifier,
+        ) {
+            Column { content() }
+        }
+    } else {
+        TonalCard(modifier = modifier, containerColor = containerColor, onClick = onClick) {
+            Column { content() }
+        }
+    }
+}
+
 @Composable
 private fun WizardKeyboxCard(error: String, onPick: () -> Unit) {
-    TonalCard {
+    WizardCard {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -432,7 +463,7 @@ private fun WizardStepCard(
 ) {
     val step = uiState.step
     val skipped = uiState.status == ColumnStepStatus.SKIPPED
-    TonalCard(modifier = Modifier.fillMaxWidth()) {
+    WizardCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -698,7 +729,7 @@ private fun WizardLogCard(
     }
     // 拼接也只随日志内容变化重算，避免每帧都 join 整份日志。
     val logText = remember(visible) { visible.joinToString("\n") }
-    TonalCard(modifier = Modifier.fillMaxWidth()) {
+    WizardCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -752,7 +783,7 @@ private fun WizardChecksCard(
 ) {
     // 回滚会卸载模块、覆盖文件，误触代价高：先弹一次确认，确认后才真正执行。
     var confirmRollback by remember { mutableStateOf(false) }
-    TonalCard(modifier = Modifier.fillMaxWidth()) {
+    WizardCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -932,7 +963,7 @@ private fun successGreen(): Color = if (MaterialTheme.colorScheme.surfaceBright.
  */
 @Composable
 private fun ColumnHealthCard(report: ColumnHealthReport) {
-    TonalCard(
+    WizardCard(
         modifier = Modifier.fillMaxWidth(),
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
     ) {
