@@ -6,6 +6,7 @@ import com.sukisu.ultra.data.column.ColumnCheckIds
 import com.sukisu.ultra.data.column.ColumnKeyboxFetcher
 import com.sukisu.ultra.data.column.ColumnModuleFetcher
 import com.sukisu.ultra.data.column.ColumnRollbackStore
+import com.sukisu.ultra.data.column.ColumnRootIo
 import com.sukisu.ultra.data.column.ColumnRunContext
 import com.sukisu.ultra.data.column.ColumnSelfCheckRunner
 import com.sukisu.ultra.data.column.ColumnSelfCheckRunnerImpl
@@ -15,16 +16,19 @@ import com.sukisu.ultra.data.column.ColumnStepRunnerImpl
 import com.sukisu.ultra.data.column.ColumnStepStatus
 import com.sukisu.ultra.data.column.ColumnStepUiState
 import com.sukisu.ultra.data.column.ColumnWizardUiState
+import com.sukisu.ultra.data.column.isValidColumnModuleId
 import com.sukisu.ultra.data.model.RepoColumnStep
 import com.sukisu.ultra.data.model.RepoColumnTopic
 import com.sukisu.ultra.ksuApp
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -53,6 +57,9 @@ class ColumnWizardViewModel(
     private val _uiState = MutableStateFlow(ColumnWizardUiState())
     val uiState: StateFlow<ColumnWizardUiState> = _uiState.asStateFlow()
 
+    /** 当前专题所属的专栏 id；进度 key 带上它，避免不同专栏里的同名专题互相串进度。 */
+    private var columnId: String? = null
+
     /** 当前专题，[runStep] 需要把它一起交给执行器（步骤共享专题级的 keybox 信息）。 */
     private var topic: RepoColumnTopic? = null
 
@@ -66,10 +73,14 @@ class ColumnWizardViewModel(
     private var prefetchedTopicId: String? = null
 
     /**
-     * 进入向导时调用。同一专题重复调用不会重置已有进度（导航返回再进来还能看到上次跑到哪）。
+     * 进入向导时调用。同一专栏下的同一专题重复调用不会重置已有进度（导航返回再进来还能看到上次跑到哪）。
+     *
+     * 进度按「专栏 id + 专题 id」区分：不同专栏里可能有同名专题（如 self-check），
+     * 只按 topicId 存会让两个专栏互相覆盖进度。
      */
-    fun start(topic: RepoColumnTopic) {
-        if (this.topic?.id == topic.id && _uiState.value.stepStates.isNotEmpty()) return
+    fun start(columnId: String, topic: RepoColumnTopic) {
+        if (this.columnId == columnId && this.topic?.id == topic.id && _uiState.value.stepStates.isNotEmpty()) return
+        this.columnId = columnId
         this.topic = topic
         this.keyboxContent = null
         val restored = restoreProgress(topic.id)
@@ -97,7 +108,77 @@ class ColumnWizardViewModel(
         // 恢复出来的进度可能已经全部落定（上次做完就退出了），这时要立刻进入完成态，
         // 否则自检与回滚这两个入口永远不会出现。
         maybeFinish()
+        // SUCCESS 只是上次的记录；设备可能已经刷机或卸载，根目录复核要异步做，不能阻塞主线程。
+        verifyRestoredInstallSteps()
     }
+
+    /**
+     * 复核恢复出来的 installModule 成功记录。
+     *
+     * 上次的 SUCCESS 只说明「当时装上了」：用户可能刷过机、手动卸载过，或者模块被别的工具清掉。
+     * 这里用 root 看一眼 `/data/adb/modules/<id>`：目录不在就退回 PENDING 让用户重做；
+     * root 不可用或模块 id 无法校验时没法下结论，只在文案上标注「上次记录」，不冒充当前事实。
+     */
+    private fun verifyRestoredInstallSteps() {
+        val candidates = _uiState.value.stepStates.filter {
+            it.status == ColumnStepStatus.SUCCESS &&
+                it.step.kind.trim().equals("installModule", ignoreCase = true)
+        }
+        if (candidates.isEmpty()) return
+        viewModelScope.launch {
+            val verdicts = withContext(Dispatchers.IO) {
+                // ColumnRootIo 会把异常收敛成 isSuccess=false，先单独探一次 root，
+                // 否则「目录不存在」和「没有 root」会混成同一种结果。
+                val rootAvailable = ColumnRootIo.exec("true").isSuccess
+                candidates.map { item ->
+                    val moduleId = item.step.source.moduleId.trim()
+                    val verdict = if (!rootAvailable || !isValidColumnModuleId(moduleId)) {
+                        RestoreVerdict.Unverifiable(moduleId)
+                    } else if (ColumnRootIo.isDirectory("/data/adb/modules/$moduleId")) {
+                        RestoreVerdict.Installed
+                    } else {
+                        RestoreVerdict.Missing(moduleId)
+                    }
+                    item.step.id to verdict
+                }
+            }
+            // 复核跑在 IO 线程上时用户可能已经重做并成功，落回状态前再确认一次，
+            // 别把刚拿到的 SUCCESS 又覆盖成 PENDING（或给新说明追加旧记录标注）。
+            val currentStatuses = _uiState.value.stepStates.associate { it.step.id to it.status }
+            var downgraded = false
+            verdicts.forEach { (stepId, verdict) ->
+                if (currentStatuses[stepId] != ColumnStepStatus.SUCCESS) return@forEach
+                when (verdict) {
+                    RestoreVerdict.Installed -> Unit
+                    is RestoreVerdict.Missing -> {
+                        updateStep(stepId) {
+                            it.copy(
+                                status = ColumnStepStatus.PENDING,
+                                message = "上次记录为已完成，但设备上找不到模块「${verdict.moduleId}」，请重做这一步",
+                            )
+                        }
+                        appendLog("恢复进度：模块「${verdict.moduleId}」已不在 /data/adb/modules 下，该步骤退回待执行")
+                        downgraded = true
+                    }
+                    is RestoreVerdict.Unverifiable -> {
+                        updateStep(stepId) { it.copy(message = markAsStale(it.message)) }
+                        appendLog(
+                            "恢复进度：无法复核模块「${verdict.moduleId.ifEmpty { "（未知）" }}」的安装状态" +
+                                "（root 不可用或模块 id 无法校验），保留上次记录并标注",
+                        )
+                    }
+                }
+            }
+            if (downgraded) {
+                // 有步骤其实没做成，之前的完成态不再成立，底部操作条要重新出现。
+                _uiState.update { it.copy(done = false) }
+            }
+        }
+    }
+
+    /** 无法复核时只能在文案上说明「这是旧记录」，避免用户把上次结论当成现在的设备状态。 */
+    private fun markAsStale(message: String): String =
+        if (message.contains(STALE_RECORD_NOTE)) message else message + STALE_RECORD_NOTE
 
     /**
      * 一键执行：按顺序把「不需要人看着」的步骤跑完，遇到需要人工的（重启、验收、确认）就停下，
@@ -451,10 +532,16 @@ class ColumnWizardViewModel(
 
     private fun progressPrefs() = ksuApp.getSharedPreferences(COLUMN_PREFS, android.content.Context.MODE_PRIVATE)
 
-    private fun progressKey(topicId: String): String = "wizard_progress_$topicId"
+    /**
+     * 进度 key 统一在这里拼：必须同时带专栏 id 和专题 id，同名专题（如 self-check）才不会串。
+     */
+    private fun wizardKey(prefix: String, topicId: String): String =
+        "${prefix}_${columnId.orEmpty()}_$topicId"
+
+    private fun progressKey(topicId: String): String = wizardKey("wizard_progress", topicId)
 
     /** 勾选状态单独存一份：进度是按步骤记的，勾选是「用户想装什么」的偏好，跨进度保留。 */
-    private fun optedKey(topicId: String): String = "wizard_opted_$topicId"
+    private fun optedKey(topicId: String): String = wizardKey("wizard_opted", topicId)
 
     /** 只认已知状态名；RUNNING 之类的中间态一律回落到 PENDING（重启后它确实没在跑了）。 */
     private fun String.toColumnStepStatus(): ColumnStepStatus = when (this) {
@@ -479,6 +566,13 @@ class ColumnWizardViewModel(
     private val ColumnStepStatus.isSettled: Boolean
         get() = this == ColumnStepStatus.SUCCESS || this == ColumnStepStatus.SKIPPED
 
+    /** 恢复进度复核结果：确实装着 / 已经不在了 / root 不可用或 id 非法，无法确认。 */
+    private sealed interface RestoreVerdict {
+        object Installed : RestoreVerdict
+        data class Missing(val moduleId: String) : RestoreVerdict
+        data class Unverifiable(val moduleId: String) : RestoreVerdict
+    }
+
     private companion object {
         /** 日志上限：长步骤（模块安装）输出很多，不截断会把内存和 UI 一起拖慢。 */
         const val MAX_LOG_LINES = 400
@@ -491,5 +585,8 @@ class ColumnWizardViewModel(
 
         /** 每条步骤状态里存的说明文字上限，只为让人看懂上次停在哪，不承担完整日志职责。 */
         const val MAX_SAVED_MESSAGE_CHARS = 300
+
+        /** 无法复核设备状态时追加在旧说明后的提示；重复恢复时不重复追加。 */
+        const val STALE_RECORD_NOTE = "（上次记录，设备状态可能已变）"
     }
 }

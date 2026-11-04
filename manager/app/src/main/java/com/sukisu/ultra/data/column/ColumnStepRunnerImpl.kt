@@ -74,6 +74,9 @@ private val DANGEROUS_COMMAND_PATTERNS: List<Regex> = listOf(
 class ColumnStepRunnerImpl(
     private val fetcher: ColumnModuleFetcher,
     private val rollback: ColumnRollbackStore,
+    // 验收步骤要真的去查设备状态，不能只给一句「请自行确认」：索引写了 checkId
+    // 就意味着「这一项可以自动验证」，那就在这里跑它。
+    private val selfCheck: ColumnSelfCheckRunner = ColumnSelfCheckRunnerImpl(),
 ) : ColumnStepRunner {
 
     override suspend fun run(
@@ -654,6 +657,15 @@ class ColumnStepRunnerImpl(
                 log,
             )
         }
+        // 版本号必须是整数：HMA 用 Int 反序列化，写成字符串会让它整份配置解析失败。
+        val configVersion = existing.get("configVersion")
+        if (configVersion !is Int && configVersion !is Long) {
+            return failed(
+                "$configPath 的 configVersion 不是整数（实际是${jsonTypeName(configVersion)}）；" +
+                    "已停止，未写入任何内容。请先打开一次 HMA-OSS 让它重写配置。",
+                log,
+            )
+        }
 
         val merged = try {
             mergeHmaConfig(existing, normalizedPack, log)
@@ -831,18 +843,30 @@ class ColumnStepRunnerImpl(
     // 只提示、不动设备的步骤
     // ---------------------------------------------------------------------------------------
 
-    private fun verify(step: RepoColumnStep): ColumnStepResult {
+    private suspend fun verify(step: RepoColumnStep): ColumnStepResult {
         val checkId = step.checkId.trim()
         if (checkId.isEmpty()) {
             val message = step.note.trim().ifBlank { "请按说明自行确认" }
             return ColumnStepResult(ColumnStepStatus.NEEDS_USER, message)
         }
-        val hint = if (checkId in ColumnCheckIds.ALL) {
-            "请在下方自检里确认：$checkId"
-        } else {
-            "请在下方自检里确认：$checkId（该自检项未登记，请按说明手动确认）"
+        if (checkId !in ColumnCheckIds.ALL) {
+            return ColumnStepResult(
+                ColumnStepStatus.NEEDS_USER,
+                "请在下方自检里确认：$checkId（该自检项未登记，请按说明手动确认）",
+            )
         }
-        return ColumnStepResult(ColumnStepStatus.NEEDS_USER, hint)
+        val result = try {
+            selfCheck.check(listOf(checkId)).firstOrNull()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return ColumnStepResult(ColumnStepStatus.FAILED, "自检调用失败：${e.message ?: e::class.java.simpleName}")
+        } ?: return ColumnStepResult(ColumnStepStatus.FAILED, "自检没有返回结果：$checkId")
+        return if (result.passed) {
+            ColumnStepResult(ColumnStepStatus.SUCCESS, "自检通过：${result.detail}")
+        } else {
+            ColumnStepResult(ColumnStepStatus.FAILED, "自检未通过：${result.detail}")
+        }
     }
 
     private fun reboot(step: RepoColumnStep): ColumnStepResult {
@@ -1014,9 +1038,16 @@ private fun normalizeHook(value: Any?, index: Int, log: (String) -> Unit): JSONO
         }
 
         is Int -> raw
-        is Long -> raw.toInt()
+        is Long -> {
+            if (raw < Int.MIN_VALUE || raw > Int.MAX_VALUE) {
+                throw HmaSchemaException("$field.argumentCount 超出 Int 范围：$raw")
+            }
+            raw.toInt()
+        }
         is Double -> {
-            if (raw % 1.0 != 0.0) throw HmaSchemaException("$field.argumentCount 必须是整数，实际是 $raw")
+            if (raw % 1.0 != 0.0 || raw < Int.MIN_VALUE || raw > Int.MAX_VALUE) {
+                throw HmaSchemaException("$field.argumentCount 必须是 Int 范围内的整数，实际是 $raw")
+            }
             raw.toInt()
         }
 
@@ -1091,7 +1122,8 @@ private fun validateAppConfig(value: Any?, target: String): JSONObject {
  * 「再往里补」只会让 HMA 丢得更彻底，必须停手让人去修。
  */
 private fun validateHmaConfig(config: JSONObject, log: (String) -> Unit, where: String) {
-    (config.opt("templates") as? JSONObject)?.let { templates ->
+    if (config.has("templates")) {
+        val templates = requireJsonObject(config.get("templates"), "$where 的 templates")
         val normalized = JSONObject()
         val keys = templates.keys()
         while (keys.hasNext()) {
@@ -1107,7 +1139,10 @@ private fun validateHmaConfig(config: JSONObject, log: (String) -> Unit, where: 
         for (i in 0 until array.length()) normalized.put(normalizeHook(array.get(i), i, log))
         config.put("disabledHooks", normalized)
     }
-    (config.opt("scope") as? JSONObject)?.let { scope ->
+    if (config.has("scope")) {
+        // 类型检查放在这里而不是 `as? JSONObject` 静默跳过：scope 是字符串时跳过校验，
+        // 后面的合并会把用户的整份 scope 当成「没有」覆盖掉。
+        val scope = requireJsonObject(config.get("scope"), "$where 的 scope")
         val keys = scope.keys()
         while (keys.hasNext()) {
             val target = keys.next()

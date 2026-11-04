@@ -58,7 +58,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -71,8 +70,6 @@ import com.sukisu.ultra.data.column.ColumnStepUiState
 import com.sukisu.ultra.data.column.ColumnWizardUiState
 import com.sukisu.ultra.data.model.RepoColumnStep
 import com.sukisu.ultra.data.model.RepoColumnTopic
-import com.sukisu.ultra.ui.LocalUiMode
-import com.sukisu.ultra.ui.UiMode
 import com.sukisu.ultra.ui.component.material.ExpressiveConfirmDialog
 import com.sukisu.ultra.ui.component.material.ExpressiveScaffold
 import com.sukisu.ultra.ui.component.material.TonalCard
@@ -124,36 +121,21 @@ fun ColumnWizardScreen(
     /** 用户按提示自己做完了（重启回来 / 装好 APK / 自己确认过），把这一步标成完成。 */
     onMarkDone: (RepoColumnStep) -> Unit = {},
 ) {
-    // 两套 UI 共用同一份实现：向导只有「执行 / 跳过 / 回滚」三个动作，没有 Miuix 专有的交互要复刻。
-    when (LocalUiMode.current) {
-        UiMode.Miuix -> ColumnWizardScreenMaterial(
-            topic = topic,
-            state = state,
-            onRunStep = onRunStep,
-            onSkipStep = onSkipStep,
-            onRollback = onRollback,
-            onBack = onBack,
-            onProvideKeybox = onProvideKeybox,
-            onUpgradeStep = onUpgradeStep,
-            onRunAll = onRunAll,
-            onToggleOptIn = onToggleOptIn,
-            onMarkDone = onMarkDone,
-        )
-
-        UiMode.Material -> ColumnWizardScreenMaterial(
-            topic = topic,
-            state = state,
-            onRunStep = onRunStep,
-            onSkipStep = onSkipStep,
-            onRollback = onRollback,
-            onBack = onBack,
-            onProvideKeybox = onProvideKeybox,
-            onUpgradeStep = onUpgradeStep,
-            onRunAll = onRunAll,
-            onToggleOptIn = onToggleOptIn,
-            onMarkDone = onMarkDone,
-        )
-    }
+    // P0/P1 共用 Material 实现：向导只有「执行 / 跳过 / 回滚」三个动作，
+    // 两套界面没有行为差异，没必要维护两份逐参转发的副本。
+    ColumnWizardScreenMaterial(
+        topic = topic,
+        state = state,
+        onRunStep = onRunStep,
+        onSkipStep = onSkipStep,
+        onRollback = onRollback,
+        onBack = onBack,
+        onProvideKeybox = onProvideKeybox,
+        onUpgradeStep = onUpgradeStep,
+        onRunAll = onRunAll,
+        onToggleOptIn = onToggleOptIn,
+        onMarkDone = onMarkDone,
+    )
 }
 
 @Composable
@@ -332,7 +314,11 @@ private fun ColumnWizardScreenMaterial(
             }
             if (state.done) {
                 item(key = "wizard-checks") {
-                    WizardChecksCard(checks = state.checks, onRollback = onRollback)
+                    WizardChecksCard(
+                        checks = state.checks,
+                        onRollback = onRollback,
+                        busy = state.running,
+                    )
                 }
             }
         }
@@ -681,7 +667,12 @@ private fun WizardLogCard(
     onToggle: () -> Unit,
 ) {
     // 折叠时只露最后几行：日志是「刚才发生了什么」，最新的永远在最下面。
-    val visible = if (expanded) log else log.takeLast(LOG_COLLAPSED_LINES)
+    // 用 remember 缓存裁剪结果：日志每追加一行都会重组整张卡片，没必要每次都重算。
+    val visible = remember(log, expanded) {
+        if (expanded) log else log.takeLast(LOG_COLLAPSED_LINES)
+    }
+    // 拼接也只随日志内容变化重算，避免每帧都 join 整份日志。
+    val logText = remember(visible) { visible.joinToString("\n") }
     TonalCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -718,7 +709,7 @@ private fun WizardLogCard(
             }
             SelectionContainer {
                 Text(
-                    text = visible.joinToString("\n"),
+                    text = logText,
                     style = MaterialTheme.typography.labelSmall,
                     fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -729,7 +720,13 @@ private fun WizardLogCard(
 }
 
 @Composable
-private fun WizardChecksCard(checks: List<ColumnCheckResult>, onRollback: () -> Unit) {
+private fun WizardChecksCard(
+    checks: List<ColumnCheckResult>,
+    onRollback: () -> Unit,
+    busy: Boolean,
+) {
+    // 回滚会卸载模块、覆盖文件，误触代价高：先弹一次确认，确认后才真正执行。
+    var confirmRollback by remember { mutableStateOf(false) }
     TonalCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -746,8 +743,10 @@ private fun WizardChecksCard(checks: List<ColumnCheckResult>, onRollback: () -> 
             }
             // 回滚放在自检结果下面：先让用户看到「哪几项没过」，再决定要不要整体撤销。
             OutlinedButton(
-                onClick = onRollback,
+                onClick = { confirmRollback = true },
                 modifier = Modifier.fillMaxWidth(),
+                // 有步骤在跑时禁用：一边执行一边回滚会把账本和正在写的文件搅在一起。
+                enabled = !busy,
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = MaterialTheme.colorScheme.error,
                 ),
@@ -755,6 +754,19 @@ private fun WizardChecksCard(checks: List<ColumnCheckResult>, onRollback: () -> 
                 Text(text = stringResource(R.string.column_wizard_rollback))
             }
         }
+    }
+    if (confirmRollback) {
+        ExpressiveConfirmDialog(
+            title = stringResource(R.string.column_wizard_rollback_confirm_title),
+            message = stringResource(R.string.column_wizard_rollback_confirm_body),
+            confirmText = stringResource(R.string.column_wizard_rollback_confirm_confirm),
+            dismissText = stringResource(R.string.column_wizard_cancel),
+            onConfirm = {
+                confirmRollback = false
+                onRollback()
+            },
+            onDismiss = { confirmRollback = false },
+        )
     }
 }
 

@@ -1642,6 +1642,9 @@
     <string name="column_wizard_expand_log">Show all</string>
     <string name="column_wizard_collapse_log">Collapse</string>
     <string name="column_wizard_rollback">Roll back this run</string>
+    <string name="column_wizard_rollback_confirm_title">Roll back this run?</string>
+    <string name="column_wizard_rollback_confirm_body">This will uninstall the modules installed during this run and restore the files it wrote. A reboot is required for the uninstall to fully take effect. Continue?</string>
+    <string name="column_wizard_rollback_confirm_confirm">Roll back</string>
     <string name="column_wizard_checks_title">Self-check</string>
     <string name="column_wizard_check_pass">Passed</string>
     <string name="column_wizard_check_fail">Failed</string>

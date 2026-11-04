@@ -1630,6 +1630,9 @@
     <string name="column_wizard_expand_log">展开全部</string>
     <string name="column_wizard_collapse_log">收起</string>
     <string name="column_wizard_rollback">回滚本次改动</string>
+    <string name="column_wizard_rollback_confirm_title">确认回滚本次改动？</string>
+    <string name="column_wizard_rollback_confirm_body">将卸载本次安装的模块、还原本次写过的文件；卸载需要重启后才会彻底生效。继续？</string>
+    <string name="column_wizard_rollback_confirm_confirm">确认回滚</string>
     <string name="column_wizard_checks_title">自检结果</string>
     <string name="column_wizard_check_pass">通过</string>
     <string name="column_wizard_check_fail">未通过</string>

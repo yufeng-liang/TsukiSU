@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
+import android.util.Log
 import android.view.View
 import android.view.animation.PathInterpolator
 import androidx.activity.ComponentActivity
@@ -117,9 +118,11 @@ import com.sukisu.ultra.ui.screen.kernelmodules.KernelModulesScreen
 import com.sukisu.ultra.ui.screen.kpm.KpmScreen
 import com.sukisu.ultra.ui.screen.module.ModulePager
 import com.sukisu.ultra.ui.screen.modulerepo.ColumnWizardScreen
+import com.sukisu.ultra.ui.screen.modulerepo.ModuleColumnLoading
 import com.sukisu.ultra.ui.screen.modulerepo.ModuleColumnScreen
 import com.sukisu.ultra.ui.screen.modulerepo.ModuleRepoDetailScreen
 import com.sukisu.ultra.ui.screen.modulerepo.ModuleRepoScreen
+import com.sukisu.ultra.ui.screen.modulerepo.rememberColumnById
 import com.sukisu.ultra.ui.screen.scriptrun.ScriptRunScreen
 import com.sukisu.ultra.ui.screen.settings.SettingPager
 import com.sukisu.ultra.ui.screen.settings.backup.BackupScreen
@@ -381,36 +384,54 @@ class MainActivity : ComponentActivity() {
                             entry<Route.ModuleRepoDetail>(swipeDismiss = swipeDismiss) { key -> ModuleRepoDetailScreen(key.module) }
                             entry<Route.ModuleColumn>(swipeDismiss = swipeDismiss) { key ->
                                 ModuleColumnScreen(
-                                    column = key.column,
+                                    columnId = key.columnId,
                                     onBack = { navigator.pop() },
                                     onOpenWizard = { topic ->
-                                        navigator.push(Route.ColumnWizard(key.column, topic.id))
+                                        navigator.push(Route.ColumnWizard(key.columnId, topic.id))
                                     },
                                 )
                             }
                             entry<Route.ColumnWizard>(swipeDismiss = swipeDismiss) { key ->
-                                val topic = key.column.topics.firstOrNull { it.id == key.topicId }
-                                if (topic == null) {
-                                    // 索引更新后专题可能已经不在了，别把用户丢在空白页上
-                                    LaunchedEffect(key.topicId) { navigator.pop() }
-                                } else {
-                                    val wizardViewModel = viewModel<ColumnWizardViewModel>()
-                                    val wizardState by wizardViewModel.uiState.collectAsStateWithLifecycle()
-                                    LaunchedEffect(topic.id) { wizardViewModel.start(topic) }
-                                    ColumnWizardScreen(
-                                        topic = topic,
-                                        state = wizardState,
-                                        onRunStep = wizardViewModel::runStep,
-                                        onSkipStep = wizardViewModel::skipStep,
-                                        onRollback = wizardViewModel::rollback,
-                                        onProvideKeybox = { text -> wizardViewModel.provideKeybox(text) },
-                                        // 升级：用户在步骤卡上明确点了「升级到 vX」，才带 force 覆盖安装
-                                        onUpgradeStep = { step -> wizardViewModel.runStep(step, force = true) },
-                                        onRunAll = { wizardViewModel.runAll() },
-                                        onToggleOptIn = { step -> wizardViewModel.toggleOptIn(step.id) },
-                                        onMarkDone = { step -> wizardViewModel.markDone(step) },
-                                        onBack = { navigator.pop() },
-                                    )
+                                // 导航 key 只带 id；专栏与专题都从仓库列表按 id 还原，避免大对象撑爆 Binder。
+                                val column = rememberColumnById(
+                                    columnId = key.columnId,
+                                    onMissing = { navigator.pop() },
+                                )
+                                val topic = column?.topics?.firstOrNull { it.id == key.topicId }
+                                when {
+                                    column == null -> ModuleColumnLoading(onBack = { navigator.pop() })
+                                    topic == null -> {
+                                        // 索引更新后专题可能已经不在了，别把用户丢在空白页上
+                                        LaunchedEffect(key.topicId) {
+                                            Log.w(
+                                                "MainActivity",
+                                                "专题 ${key.topicId} 已不在专栏 ${key.columnId} 中，返回上一页",
+                                            )
+                                            navigator.pop()
+                                        }
+                                    }
+                                    else -> {
+                                        val wizardViewModel = viewModel<ColumnWizardViewModel>()
+                                        val wizardState by wizardViewModel.uiState.collectAsStateWithLifecycle()
+                                        // 进度按「专栏 + 专题」存，start 必须同时收到两个 id。
+                                        LaunchedEffect(key.columnId, topic.id) {
+                                            wizardViewModel.start(key.columnId, topic)
+                                        }
+                                        ColumnWizardScreen(
+                                            topic = topic,
+                                            state = wizardState,
+                                            onRunStep = wizardViewModel::runStep,
+                                            onSkipStep = wizardViewModel::skipStep,
+                                            onRollback = wizardViewModel::rollback,
+                                            onProvideKeybox = { text -> wizardViewModel.provideKeybox(text) },
+                                            // 升级：用户在步骤卡上明确点了「升级到 vX」，才带 force 覆盖安装
+                                            onUpgradeStep = { step -> wizardViewModel.runStep(step, force = true) },
+                                            onRunAll = { wizardViewModel.runAll() },
+                                            onToggleOptIn = { step -> wizardViewModel.toggleOptIn(step.id) },
+                                            onMarkDone = { step -> wizardViewModel.markDone(step) },
+                                            onBack = { navigator.pop() },
+                                        )
+                                    }
                                 }
                             }
                             entry<Route.Install>(swipeDismiss = swipeDismiss) { key -> InstallScreen(preselectedKernelUri = key.preselectedKernelUri) }

@@ -9,7 +9,6 @@ import com.sukisu.ultra.ui.screen.flash.FlashIt
 import com.sukisu.ultra.ui.screen.modulerepo.RepoModuleArg
 import com.sukisu.ultra.ui.screen.scriptrun.ScriptRunArg
 import com.sukisu.ultra.ui.util.FlashItSerializer
-import com.sukisu.ultra.ui.util.RepoColumnSerializer
 import com.sukisu.ultra.ui.util.RepoModuleArgSerializer
 import com.sukisu.ultra.ui.util.ScriptRunArgSerializer
 import com.sukisu.ultra.ui.util.TemplateInfoSerializer
@@ -96,23 +95,25 @@ sealed interface Route : NavKey, Parcelable {
     /**
      * 商店专栏详情。
      *
-     * 只带一份专栏快照：内容随索引一起发布，进页面时手上这份就是用户点开时看到的那份。
-     * 页面里不重新拉，免得打开过程中内容被换掉。
+     * 只带专栏 id：整份专栏（话题、证据、长文案）序列化进 Route 受 Binder 体积上限约束，
+     * 内容大时导航会抛 TransactionTooLargeException；页面按 id 从仓库列表里取回。
      */
     @Parcelize
     @Serializable
-    data class ModuleColumn(@Serializable(with = RepoColumnSerializer::class) val column: RepoColumn) : Route
+    data class ModuleColumn(val columnId: String) : Route {
+        /** 兼容仍按旧方式传整份专栏的调用点：Route 里只保留 id，不保留快照。 */
+        constructor(column: RepoColumn) : this(column.id)
+    }
 
     /**
      * 专栏专题的执行向导。
      *
-     * 带整份专栏 + 专题 id，而不是只带专题：向导完成后要回到详情页，那时还得把同一份专栏还回去。
-     * 与 [ModuleColumn] 一样是快照，进页面不再重新拉数据。
+     * 同样只带 id（专栏 + 专题），向导页自己按 id 找回内容；不再把整份专栏塞进导航 key。
      */
     @Parcelize
     @Serializable
     data class ColumnWizard(
-        @Serializable(with = RepoColumnSerializer::class) val column: RepoColumn,
+        val columnId: String,
         val topicId: String,
     ) : Route
 

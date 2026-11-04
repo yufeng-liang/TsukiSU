@@ -1368,6 +1368,9 @@
     <string name="column_wizard_expand_log">展開全部</string>
     <string name="column_wizard_collapse_log">收起</string>
     <string name="column_wizard_rollback">回滾本次改動</string>
+    <string name="column_wizard_rollback_confirm_title">確認回滾本次改動？</string>
+    <string name="column_wizard_rollback_confirm_body">將解除安裝本次安裝的模組、還原本次寫過的文件；解除安裝需要重新啟動後才會完全生效。繼續？</string>
+    <string name="column_wizard_rollback_confirm_confirm">確認回滾</string>
     <string name="column_wizard_checks_title">自檢結果</string>
     <string name="column_wizard_check_pass">通過</string>
     <string name="column_wizard_check_fail">未通過</string>

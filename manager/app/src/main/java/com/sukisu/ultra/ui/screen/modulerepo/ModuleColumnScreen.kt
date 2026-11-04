@@ -1,5 +1,6 @@
 package com.sukisu.ultra.ui.screen.modulerepo
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
@@ -26,6 +28,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,6 +41,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sukisu.ultra.R
 import com.sukisu.ultra.data.model.EvidenceFreshness
 import com.sukisu.ultra.data.model.RepoColumn
@@ -49,6 +58,8 @@ import com.sukisu.ultra.ui.component.material.ExpressiveScaffold
 import com.sukisu.ultra.ui.component.material.TonalCard
 import com.sukisu.ultra.ui.component.material.TopBarBackButton
 import com.sukisu.ultra.ui.component.material.expressiveTopAppBarColors
+import com.sukisu.ultra.ui.viewmodel.ModuleRepoViewModel
+import kotlinx.coroutines.delay
 
 /**
  * 商店列表头的专栏横滑区。
@@ -120,10 +131,17 @@ private fun ColumnEntryCard(column: RepoColumn, onClick: () -> Unit) {
 /** 专栏详情页：只读展示专题与步骤；想动手就走 [ColumnWizardScreen] 逐步执行。 */
 @Composable
 fun ModuleColumnScreen(
-    column: RepoColumn,
+    columnId: String,
     onBack: () -> Unit,
     onOpenWizard: (RepoColumnTopic) -> Unit = {},
 ) {
+    // Route 只带 id：整份 RepoColumn（含话题、证据、长文案）序列化进 Binder 有体积上限，
+    // 超过就会在导航时抛 TransactionTooLargeException；详情页按 id 从仓库列表里取回。
+    val column = rememberColumnById(columnId, onMissing = { onBack() })
+    if (column == null) {
+        ModuleColumnLoading(onBack = onBack)
+        return
+    }
     // 两套 UI 共用同一份实现：详情页是纯展示，没有 Miuix 专有的交互要复刻。
     when (LocalUiMode.current) {
         UiMode.Miuix -> ModuleColumnScreenMaterial(
@@ -139,6 +157,59 @@ fun ModuleColumnScreen(
         )
     }
 }
+
+/**
+ * 按 id 从仓库列表还原专栏。
+ *
+ * `refreshColumns` 失败是静默的，`columnsLoaded` 会一直是 false；这里最多等 8 秒，
+ * 超时或列表加载完仍找不到就回调 [onMissing]，避免用户永远停在加载态。
+ */
+@Composable
+internal fun rememberColumnById(columnId: String, onMissing: (String) -> Unit): RepoColumn? {
+    val repoViewModel = viewModel<ModuleRepoViewModel>()
+    val state by repoViewModel.uiState.collectAsStateWithLifecycle()
+    LaunchedEffect(columnId) { repoViewModel.refreshColumns() }
+    val column = state.columns.firstOrNull { it.id == columnId }
+    var missing by remember(columnId) { mutableStateOf(false) }
+    LaunchedEffect(columnId, column, state.columnsLoaded) {
+        if (column != null || missing) return@LaunchedEffect
+        if (!state.columnsLoaded) delay(8_000)
+        if (column == null && !missing) {
+            missing = true
+            Log.w(MODULE_COLUMN_TAG, "找不到专栏 $columnId（columnsLoaded=${state.columnsLoaded}），返回上一页")
+            onMissing(columnId)
+        }
+    }
+    return column
+}
+
+@Composable
+internal fun ModuleColumnLoading(onBack: () -> Unit) {
+    // 解析专栏 id 期间给一个明确的加载态，别让返回后的空白看起来像卡死。
+    ExpressiveScaffold(
+        topBar = {
+            LargeFlexibleTopAppBar(
+                title = {},
+                navigationIcon = { TopBarBackButton(onClick = onBack) },
+                colors = expressiveTopAppBarColors(),
+                scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState()),
+            )
+        },
+        contentWindowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal),
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator()
+        }
+    }
+}
+
+/** 找不到专栏时的日志 tag。 */
+private const val MODULE_COLUMN_TAG = "ModuleColumnScreen"
 
 @Composable
 private fun ModuleColumnScreenMaterial(
@@ -424,8 +495,10 @@ internal fun RiskBadge(riskLevel: String) {
 /** 证据行：颜色代表时效，文字说清「多久以前、在哪台机器上验的」。 */
 @Composable
 private fun EvidenceRow(evidence: RepoColumnEvidence) {
-    val freshness = evidence.freshness()
-    val age = evidence.ageDays()
+    // ageDays/freshness 各自默认取一次 now，跨秒时可能得出不一致的结论；这里固定同一个时间点。
+    val now = remember { System.currentTimeMillis() }
+    val freshness = evidence.freshness(now)
+    val age = evidence.ageDays(now)
     val color = freshnessColor(freshness)
     val text = when {
         age == Int.MAX_VALUE -> stringResource(R.string.module_column_evidence_unknown)
