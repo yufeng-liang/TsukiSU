@@ -279,4 +279,5 @@
     <string name="ai_edit_message">Edit message</string>
     <string name="ai_edit_send">Resend</string>
     <string name="ai_edit_cancel">Cancel</string>
+    <string name="ai_sessions">Sessions</string>
 </resources>

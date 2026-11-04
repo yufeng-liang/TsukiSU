@@ -1,5 +1,10 @@
 package com.sukisu.ultra.ai
 
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.foundation.lazy.items
+
 import com.sukisu.ultra.ai.api.AiNavigationTarget
 
 import androidx.activity.compose.BackHandler
@@ -25,7 +30,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -85,6 +89,7 @@ fun AiChatMaterial(
     actions: AiChatActions,
 ) {
     val listState = rememberLazyListState()
+    var showSessions by remember { mutableStateOf(false) }
     BackHandler(enabled = state.pendingQuestion != null) {
         actions.onAnswerQuestion(null)
     }
@@ -141,6 +146,12 @@ fun AiChatMaterial(
                 },
                 navigationIcon = { AiTopBarBackButton(onClick = actions.onBack) },
                 actions = {
+                    TextButton(onClick = { showSessions = true }) {
+                        Text(
+                            text = stringResource(R.string.ai_sessions),
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
                     if (state.config.model.isNotBlank()) {
                         TextButton(onClick = actions.onOpenSettings) {
                             Text(
@@ -266,6 +277,45 @@ onAttachImage = actions.onAttachImage,
 onRemoveImage = actions.onRemoveImage,
                 onDismissError = actions.onDismissError,
             )
+        }
+    }
+
+    if (showSessions) {
+        ModalBottomSheet(
+            onDismissRequest = { showSessions = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(R.string.ai_sessions),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = {
+                        actions.onNewSession()
+                        showSessions = false
+                    }) { Text(stringResource(R.string.ai_new_chat)) }
+                }
+                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+                    items(state.sessions, key = { it.id }) { session ->
+                        NavigationDrawerItem(
+                            label = {
+                                Text(
+                                    text = session.title.ifBlank { stringResource(R.string.ai_new_chat) },
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            },
+                            selected = session.id == state.activeSessionId,
+                            onClick = {
+                                actions.onSwitchSession(session.id)
+                                showSessions = false
+                            },
+                        )
+                    }
+                }
+            }
         }
     }
 

@@ -178,7 +178,10 @@ fun AiChatScreen(
             )
         },
         onDeleteMessage = model::deleteMessage,
-    onRegenerate = model::regenerate,
+        onNewSession = model::newSession,
+        onSwitchSession = model::switchSession,
+        onDeleteSession = model::deleteSession,
+        onRegenerate = model::regenerate,
         onDismissError = model::clearError,
         onRefreshSuggestions = {
             if (disclaimerAccepted) {
@@ -218,6 +221,9 @@ data class AiChatActions(
     val onAnswerQuestion: (String?) -> Unit,
     val onRunCode: (String) -> Unit,
     val onDeleteMessage: (String) -> Unit,
+    val onNewSession: () -> Unit = {},
+    val onSwitchSession: (String) -> Unit = {},
+    val onDeleteSession: (String) -> Unit = {},
     val onRegenerate: () -> Unit,
     val onEditResend: (String, String) -> Unit = { _, _ -> },
     val onDismissError: () -> Unit,
