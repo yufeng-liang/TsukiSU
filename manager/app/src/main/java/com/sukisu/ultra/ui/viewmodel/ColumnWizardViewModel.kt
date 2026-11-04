@@ -6,7 +6,14 @@ import com.sukisu.ultra.data.column.ColumnCheckIds
 import com.sukisu.ultra.data.column.ColumnKeyboxFetcher
 import com.sukisu.ultra.data.column.ColumnModuleFetcher
 import com.sukisu.ultra.data.column.ColumnRollbackStore
+import com.sukisu.ultra.data.column.ColumnHealthReport
+import com.sukisu.ultra.data.column.ColumnPreflight
+import com.sukisu.ultra.data.column.ColumnPreflightAction
+import com.sukisu.ultra.data.column.ColumnPreflightItem
+import com.sukisu.ultra.data.column.ColumnProgressEntry
+import com.sukisu.ultra.data.column.ColumnProgressStore
 import com.sukisu.ultra.data.column.ColumnRootIo
+import com.sukisu.ultra.data.column.buildColumnHealthReport
 import com.sukisu.ultra.data.column.ColumnRunContext
 import com.sukisu.ultra.data.column.ColumnSelfCheckRunner
 import com.sukisu.ultra.data.column.ColumnSelfCheckRunnerImpl
@@ -56,6 +63,9 @@ class ColumnWizardViewModel(
 
     private val _uiState = MutableStateFlow(ColumnWizardUiState())
     val uiState: StateFlow<ColumnWizardUiState> = _uiState.asStateFlow()
+
+    /** 体检是否在跑：重复进专题不该并发开两条 root shell。 */
+    private var healthRunning = false
 
     /** 当前专题所属的专栏 id；进度 key 带上它，避免不同专栏里的同名专题互相串进度。 */
     private var columnId: String? = null
@@ -110,7 +120,150 @@ class ColumnWizardViewModel(
         maybeFinish()
         // SUCCESS 只是上次的记录；设备可能已经刷机或卸载，根目录复核要异步做，不能阻塞主线程。
         verifyRestoredInstallSteps()
+        // 存量用户检测：设备上可能早就配好了一套（甚至用别的工具配的），进专题先看一眼现状。
+        runHealthCheck()
     }
+
+    /**
+     * 进专题时跑一次设备体检。
+     *
+     * 九项探针全是只读的（存在性检查、字符设备读取），不写任何文件；结果只用来在顶部提示
+     * 「你之前好像已经配过一部分」，绝不因此自动跳过任何步骤——探针看不到「配置对不对」。
+     */
+    fun runHealthCheck() {
+        if (healthRunning) return
+        healthRunning = true
+        viewModelScope.launch {
+            try {
+                val results = selfCheck.check(ColumnCheckIds.ALL)
+                _uiState.update { it.copy(health = buildColumnHealthReport(ColumnCheckIds.ALL, results)) }
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                appendLog("设备体检没跑成：${error.message ?: "未知错误"}（不影响后续步骤）")
+            } finally {
+                healthRunning = false
+            }
+        }
+    }
+
+    /**
+     * 「一键执行」的入口：先预检，把「将跳过 / 将覆盖 / 将新增 / 需手动」列清楚。
+     *
+     * 有覆盖动作就停在确认框上，让用户看见要改什么；没有覆盖动作直接开跑。
+     * 存量用户最容易被这一步伤到：他手上的 keybox、denylist 开关会被静默覆盖，而备份他并不知道在哪。
+     */
+    fun requestRunAll() {
+        if (runningStep) return
+        val steps = topic?.steps.orEmpty()
+        if (steps.isEmpty()) return
+        viewModelScope.launch {
+            val plan = try {
+                buildPreflight(steps)
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                appendLog("预检失败（${error.message ?: "未知错误"}），按普通流程继续")
+                runAll()
+                return@launch
+            }
+            if (plan.needsConfirmation) {
+                _uiState.update { it.copy(preflight = plan) }
+            } else {
+                runAll()
+            }
+        }
+    }
+
+    /** 用户在预检框上点了「继续」。 */
+    fun confirmPreflight() {
+        _uiState.update { it.copy(preflight = null) }
+        runAll()
+    }
+
+    /** 用户在预检框上点了「取消」。 */
+    fun dismissPreflight() {
+        _uiState.update { it.copy(preflight = null) }
+        appendLog("已取消，没有执行任何步骤")
+    }
+
+    /**
+     * 生成预检清单。只读操作，全部在 IO 线程上跑，避免每步开一次 su 卡住主线程。
+     */
+    private suspend fun buildPreflight(steps: List<RepoColumnStep>): ColumnPreflight =
+        withContext(Dispatchers.IO) {
+            val state = _uiState.value
+            val items = ArrayList<ColumnPreflightItem>()
+            for (step in steps) {
+                val status = state.stepStates.firstOrNull { it.step.id == step.id }?.status
+                if (status?.isSettled == true) continue
+                if (step.optIn && step.id !in state.optedIn) continue
+                if (!step.isAutoRunnable()) {
+                    items += ColumnPreflightItem(
+                        stepId = step.id,
+                        title = step.title,
+                        action = ColumnPreflightAction.MANUAL,
+                        reason = if (step.optional) "可选项，需要你自己决定" else "需要你手动完成",
+                    )
+                    continue
+                }
+                val verdict = when (step.kind.trim().lowercase()) {
+                    "installmodule" -> {
+                        val id = step.source.moduleId.trim()
+                        if (isValidColumnModuleId(id) && ColumnRootIo.isDirectory("/data/adb/modules/$id")) {
+                            ColumnPreflightAction.SKIP to "模块 $id 已安装，会跳过"
+                        } else {
+                            ColumnPreflightAction.NEW to "会下载并安装"
+                        }
+                    }
+                    "installapp" -> {
+                        val pkg = step.source.moduleId.trim()
+                        if (pkg.isNotEmpty() && packageInstalled(pkg)) {
+                            ColumnPreflightAction.SKIP to "应用已安装，会跳过"
+                        } else {
+                            ColumnPreflightAction.NEW to "会下载并交给系统安装器"
+                        }
+                    }
+                    "writefile" -> {
+                        val path = step.filePath.trim()
+                        val current = runCatching { ColumnRootIo.readText(path) }.getOrNull()
+                        when {
+                            current == null -> ColumnPreflightAction.NEW to "会新建 $path"
+                            step.fileContent.contains("\${keybox}") ->
+                                ColumnPreflightAction.OVERWRITE to "会覆盖 $path（先备份到回滚账本）"
+                            current == step.fileContent -> ColumnPreflightAction.SKIP to "内容一致，会跳过"
+                            else -> ColumnPreflightAction.OVERWRITE to "会覆盖 $path（先备份到回滚账本）"
+                        }
+                    }
+                    "writehmaconfig" -> {
+                        val hasConfig = runCatching {
+                            ColumnRootIo.exec("ls -d /data/misc/hide_my_applist_* 2>/dev/null").isSuccess
+                        }.getOrDefault(false)
+                        if (hasConfig) {
+                            ColumnPreflightAction.OVERWRITE to "会在现有 HMA 配置上合并（保留你已有的模板与目标）"
+                        } else {
+                            ColumnPreflightAction.NEW to "会写入新的 HMA 配置"
+                        }
+                    }
+                    "runcommand" -> ColumnPreflightAction.NEW to "会执行一条命令"
+                    else -> ColumnPreflightAction.MANUAL to "需要你手动完成"
+                }
+                items += ColumnPreflightItem(
+                    stepId = step.id,
+                    title = step.title,
+                    action = verdict.first,
+                    reason = verdict.second,
+                )
+            }
+            ColumnPreflight(items = items)
+        }
+
+    private fun packageInstalled(packageName: String): Boolean = runCatching {
+        @Suppress("DEPRECATION")
+        ksuApp.packageManager.getPackageInfo(packageName, 0)
+        true
+    }.getOrDefault(false)
+
 
     /**
      * 复核恢复出来的 installModule 成功记录。
@@ -425,6 +578,7 @@ class ColumnWizardViewModel(
                 // 回滚是「回到开始前」，不是「结束」：进度要清掉、步骤要复位，用户才能重新走一遍。
                 val topicId = _uiState.value.topicId
                 runCatching { progressPrefs().edit().remove(progressKey(topicId)).apply() }
+                runCatching { ColumnProgressStore.clear(ksuApp, columnId.orEmpty(), topicId) }
                 prefetchedTopicId = null
                 _uiState.update { state ->
                     state.copy(
@@ -502,6 +656,27 @@ class ColumnWizardViewModel(
                 .putString(progressKey(state.topicId), array.toString())
                 .putStringSet(optedKey(state.topicId), state.optedIn.toSet())
                 .apply()
+        }
+        // 汇总一条给主页卡片用：主页不该为了画一张卡去解析每个专题的步骤明细。
+        val currentTopic = topic ?: return
+        val settled = state.stepStates.count { it.status.isSettled }
+        val next = state.stepStates.firstOrNull {
+            !it.status.isSettled && (!it.step.optIn || it.step.id in state.optedIn)
+        }
+        runCatching {
+            ColumnProgressStore.record(
+                ksuApp,
+                ColumnProgressEntry(
+                    columnId = columnId.orEmpty(),
+                    topicId = currentTopic.id,
+                    topicTitle = currentTopic.title,
+                    lastActiveAt = System.currentTimeMillis(),
+                    settledSteps = settled,
+                    totalSteps = state.stepStates.size,
+                    done = state.done,
+                    nextStepTitle = next?.step?.title.orEmpty(),
+                ),
+            )
         }
     }
 

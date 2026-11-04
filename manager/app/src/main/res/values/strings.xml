@@ -1685,4 +1685,22 @@
     <string name="module_column_tier_game">Game</string>
     <string name="module_column_tier_tool">Tool</string>
     <string name="column_wizard_mark_done">Mark as done</string>
+    <string name="home_hide_env_card_title" translatable="true">Hide environment in progress</string>
+    <string name="home_hide_env_card_progress" translatable="true">%1$d / %2$d steps</string>
+    <string name="home_hide_env_card_next" translatable="true">Next: %1$s</string>
+    <string name="home_hide_env_card_more" translatable="true">%1$d more in progress</string>
+    <string name="home_hide_env_card_continue" translatable="true">Continue</string>
+    <string name="column_health_title" translatable="true">This device already has %1$d of %2$d checks passing</string>
+    <string name="column_health_day_ok" translatable="true">Daily-use hiding looks configured</string>
+    <string name="column_health_day_no" translatable="true">Daily-use hiding is not complete yet</string>
+    <string name="column_health_integrity_ok" translatable="true">Play Integrity (three green) looks configured</string>
+    <string name="column_health_integrity_no" translatable="true">Play Integrity (three green) is not set up yet</string>
+    <string name="column_preflight_title" translatable="true">Before we start</string>
+    <string name="column_preflight_overwrite" translatable="true">%1$d step(s) will overwrite existing files</string>
+    <string name="column_preflight_skip" translatable="true">%1$d step(s) will be skipped</string>
+    <string name="column_preflight_new" translatable="true">%1$d step(s) will be added</string>
+    <string name="column_preflight_manual" translatable="true">%1$d step(s) need you to do them by hand</string>
+    <string name="column_preflight_backup_note" translatable="true">Files we overwrite are backed up first and can be restored from the rollback entry.</string>
+    <string name="column_preflight_continue" translatable="true">Continue</string>
+    <string name="column_preflight_cancel" translatable="true">Cancel</string>
 </resources>

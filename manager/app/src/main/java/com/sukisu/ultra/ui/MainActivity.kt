@@ -426,7 +426,10 @@ class MainActivity : ComponentActivity() {
                                             onProvideKeybox = { text -> wizardViewModel.provideKeybox(text) },
                                             // 升级：用户在步骤卡上明确点了「升级到 vX」，才带 force 覆盖安装
                                             onUpgradeStep = { step -> wizardViewModel.runStep(step, force = true) },
-                                            onRunAll = { wizardViewModel.runAll() },
+                                            // 走预检：有会覆盖已有配置的步骤时先让用户确认。
+                                            onRunAll = { wizardViewModel.requestRunAll() },
+                                            onConfirmPreflight = { wizardViewModel.confirmPreflight() },
+                                            onDismissPreflight = { wizardViewModel.dismissPreflight() },
                                             onToggleOptIn = { step -> wizardViewModel.toggleOptIn(step.id) },
                                             onMarkDone = { step -> wizardViewModel.markDone(step) },
                                             onBack = { navigator.pop() },

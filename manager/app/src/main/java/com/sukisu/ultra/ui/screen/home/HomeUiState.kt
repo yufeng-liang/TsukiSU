@@ -2,6 +2,7 @@ package com.sukisu.ultra.ui.screen.home
 
 import androidx.compose.runtime.Immutable
 import com.sukisu.ultra.KernelVersion
+import com.sukisu.ultra.data.column.ColumnProgressEntry
 import com.sukisu.ultra.ui.util.HomeCardSticker
 import com.sukisu.ultra.ui.util.module.LatestVersionInfo
 
@@ -54,6 +55,10 @@ data class HomeUiState(
     val bundledLkmRev: String = "",
     val kernelLkmRev: String = "",
     val showAiHomeCard: Boolean = false,
+    // 主页「隐藏环境进行中」卡片：进行中的专题（重启后回来时提示用户接着做）。
+    // 数据来自 ColumnProgressStore 的汇总记录，不跑 root，纯本地读取。
+    val hideEnvCard: ColumnProgressEntry? = null,
+    val hideEnvRunningCount: Int = 0,
     val customHomeTitle: String = "",
     val homeCardImagePath: String = "",
     val hideHomeCardStatusText: Boolean = false,
@@ -122,6 +127,7 @@ data class HomeActions(
     val onReleaseUpdateClick: () -> Unit = {},
     val onOpenVersionSpoof: () -> Unit = {},
     val onOpenAi: () -> Unit = {},
+    val onOpenHideEnv: () -> Unit = {},
 )
 
 private val LKM_REV_SUFFIX = Regex("""\+lkm\.([0-9a-fA-F]{6,40})\s*$""")

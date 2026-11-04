@@ -1411,4 +1411,22 @@
     <string name="module_column_tier_game">遊戲</string>
     <string name="module_column_tier_tool">工具</string>
     <string name="column_wizard_mark_done">標記為已完成</string>
+    <string name="home_hide_env_card_title" translatable="true">隱藏環境進行中</string>
+    <string name="home_hide_env_card_progress" translatable="true">已完成 %1$d / %2$d 步</string>
+    <string name="home_hide_env_card_next" translatable="true">下一步：%1$s</string>
+    <string name="home_hide_env_card_more" translatable="true">還有 %1$d 個專題在進行中</string>
+    <string name="home_hide_env_card_continue" translatable="true">繼續</string>
+    <string name="column_health_title" translatable="true">這台裝置已經通過 %1$d / %2$d 項檢查</string>
+    <string name="column_health_day_ok" translatable="true">日常級隱藏看起來已經設定好</string>
+    <string name="column_health_day_no" translatable="true">日常級隱藏還沒設定完整</string>
+    <string name="column_health_integrity_ok" translatable="true">Google 三綠看起來已經設定好</string>
+    <string name="column_health_integrity_no" translatable="true">Google 三綠還沒設定</string>
+    <string name="column_preflight_title" translatable="true">開始前先看一下</string>
+    <string name="column_preflight_overwrite" translatable="true">%1$d 步會覆寫既有檔案</string>
+    <string name="column_preflight_skip" translatable="true">%1$d 步會略過</string>
+    <string name="column_preflight_new" translatable="true">%1$d 步會新增</string>
+    <string name="column_preflight_manual" translatable="true">%1$d 步需要你手動完成</string>
+    <string name="column_preflight_backup_note" translatable="true">被覆寫的檔案都會先備份，之後可以從回復入口還原。</string>
+    <string name="column_preflight_continue" translatable="true">繼續</string>
+    <string name="column_preflight_cancel" translatable="true">取消</string>
 </resources>

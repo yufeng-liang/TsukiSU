@@ -1673,4 +1673,22 @@
     <string name="module_column_tier_game">游戏</string>
     <string name="module_column_tier_tool">工具</string>
     <string name="column_wizard_mark_done">标记为已完成</string>
+    <string name="home_hide_env_card_title" translatable="true">隐藏环境进行中</string>
+    <string name="home_hide_env_card_progress" translatable="true">已完成 %1$d / %2$d 步</string>
+    <string name="home_hide_env_card_next" translatable="true">下一步：%1$s</string>
+    <string name="home_hide_env_card_more" translatable="true">还有 %1$d 个专题在进行中</string>
+    <string name="home_hide_env_card_continue" translatable="true">继续</string>
+    <string name="column_health_title" translatable="true">这台设备已经通过 %1$d / %2$d 项检查</string>
+    <string name="column_health_day_ok" translatable="true">日用级隐藏看起来已经配好</string>
+    <string name="column_health_day_no" translatable="true">日用级隐藏还没配全</string>
+    <string name="column_health_integrity_ok" translatable="true">谷歌三绿看起来已经配好</string>
+    <string name="column_health_integrity_no" translatable="true">谷歌三绿还没配</string>
+    <string name="column_preflight_title" translatable="true">开始前先看一眼</string>
+    <string name="column_preflight_overwrite" translatable="true">%1$d 步会覆盖已有文件</string>
+    <string name="column_preflight_skip" translatable="true">%1$d 步会跳过</string>
+    <string name="column_preflight_new" translatable="true">%1$d 步会新增</string>
+    <string name="column_preflight_manual" translatable="true">%1$d 步需要你手动完成</string>
+    <string name="column_preflight_backup_note" translatable="true">被覆盖的文件都会先备份，之后可以从回滚入口还原。</string>
+    <string name="column_preflight_continue" translatable="true">继续</string>
+    <string name="column_preflight_cancel" translatable="true">取消</string>
 </resources>

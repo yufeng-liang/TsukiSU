@@ -1,5 +1,13 @@
 package com.sukisu.ultra.ui.screen.modulerepo
 
+import androidx.compose.foundation.layout.Spacer
+import com.sukisu.ultra.data.column.ColumnPreflight
+import com.sukisu.ultra.data.column.ColumnHealthReport
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -120,6 +128,10 @@ fun ColumnWizardScreen(
     onToggleOptIn: (RepoColumnStep) -> Unit = {},
     /** 用户按提示自己做完了（重启回来 / 装好 APK / 自己确认过），把这一步标成完成。 */
     onMarkDone: (RepoColumnStep) -> Unit = {},
+    /** 预检确认框上点「继续」。 */
+    onConfirmPreflight: () -> Unit = {},
+    /** 预检确认框上点「取消」。 */
+    onDismissPreflight: () -> Unit = {},
 ) {
     // P0/P1 共用 Material 实现：向导只有「执行 / 跳过 / 回滚」三个动作，
     // 两套界面没有行为差异，没必要维护两份逐参转发的副本。
@@ -136,6 +148,13 @@ fun ColumnWizardScreen(
         onToggleOptIn = onToggleOptIn,
         onMarkDone = onMarkDone,
     )
+    state.preflight?.let { plan ->
+        ColumnPreflightDialog(
+            plan = plan,
+            onConfirm = onConfirmPreflight,
+            onDismiss = onDismissPreflight,
+        )
+    }
 }
 
 @Composable
@@ -261,6 +280,11 @@ private fun ColumnWizardScreenMaterial(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            if (state.health != null) {
+                item(key = "wizard-health") {
+                    ColumnHealthCard(report = state.health)
+                }
+            }
             if (needsKeybox && !state.keyboxReady) {
                 item(key = "wizard-keybox") {
                     WizardKeyboxCard(
@@ -897,4 +921,159 @@ private fun successGreen(): Color = if (MaterialTheme.colorScheme.surfaceBright.
     SuccessGreenDark
 } else {
     SuccessGreenLight
+}
+
+/**
+ * 设备现状体检卡。
+ *
+ * 只回答一个问题：「这台机器之前是不是已经配过一部分隐藏环境」。九项探针都是只读的
+ * 存在性检查，它看不出「配置对不对」，所以这里只作提示，绝不用来决定跳过哪一步。
+ */
+@Composable
+private fun ColumnHealthCard(report: ColumnHealthReport) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(
+                text = stringResource(
+                    R.string.column_health_title,
+                    report.passedCount,
+                    report.totalCount,
+                ),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = stringResource(
+                    if (report.dayLevelReady) R.string.column_health_day_ok else R.string.column_health_day_no,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (report.dayLevelReady) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            Text(
+                text = stringResource(
+                    if (report.integrityLevelReady) {
+                        R.string.column_health_integrity_ok
+                    } else {
+                        R.string.column_health_integrity_no
+                    },
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (report.integrityLevelReady) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            val missing = report.checks.filter { !it.passed }
+            if (missing.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                missing.take(3).forEach { check ->
+                    Text(
+                        text = "· ${check.detail}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (missing.size > 3) {
+                    Text(
+                        text = "· …（还有 ${missing.size - 3} 项未通过）",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 一键执行前的预检确认框。
+ *
+ * 存量用户最容易被静默伤到：keybox、denylist 开关、target.txt 都会被覆盖（有备份但用户不知道）。
+ * 这里把「会跳过 / 会覆盖 / 会新增 / 需手动」四类摆出来，让他先看见再决定。
+ */
+@Composable
+private fun ColumnPreflightDialog(
+    plan: ColumnPreflight,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = stringResource(R.string.column_preflight_title)) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                if (plan.overwrites.isNotEmpty()) {
+                    Text(
+                        text = stringResource(R.string.column_preflight_overwrite, plan.overwrites.size),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    plan.overwrites.forEach {
+                        Text(
+                            text = "· ${it.title}：${it.reason}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+                if (plan.skips.isNotEmpty()) {
+                    Text(
+                        text = stringResource(R.string.column_preflight_skip, plan.skips.size),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    plan.skips.forEach {
+                        Text(
+                            text = "· ${it.title}：${it.reason}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+                if (plan.news.isNotEmpty()) {
+                    Text(
+                        text = stringResource(R.string.column_preflight_new, plan.news.size),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                }
+                if (plan.manuals.isNotEmpty()) {
+                    Text(
+                        text = stringResource(R.string.column_preflight_manual, plan.manuals.size),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                }
+                Text(
+                    text = stringResource(R.string.column_preflight_backup_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(text = stringResource(R.string.column_preflight_continue))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = stringResource(R.string.column_preflight_cancel))
+            }
+        },
+    )
 }

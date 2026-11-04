@@ -36,6 +36,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.sukisu.ultra.R
+import com.sukisu.ultra.data.column.ColumnProgressStore
 import com.sukisu.ultra.magica.MagicaService
 import com.sukisu.ultra.ui.LocalMainPagerState
 import com.sukisu.ultra.ui.LocalUiMode
@@ -127,6 +128,17 @@ fun HomePager(
         onReleaseUpdateClick = { startUpdate() },
         onOpenVersionSpoof = { navigator.push(Route.VersionSpoof) },
         onOpenAi = { navigator.push(Route.AiAssistant) },
+        // 一个专题在进行中就直接回向导接着做；多个进行中则回专栏详情页自己挑。
+        onOpenHideEnv = {
+            val card = ColumnProgressStore.latest()
+            if (card != null) {
+                if (ColumnProgressStore.runningCount() > 1) {
+                    navigator.push(Route.ModuleColumn(card.columnId))
+                } else {
+                    navigator.push(Route.ColumnWizard(card.columnId, card.topicId))
+                }
+            }
+        },
         onJailbreakClick = {
             loadingDialog.showLoading()
             context.startService(Intent(context, MagicaService::class.java))

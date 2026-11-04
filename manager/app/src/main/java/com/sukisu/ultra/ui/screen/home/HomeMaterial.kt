@@ -1,5 +1,8 @@
 package com.sukisu.ultra.ui.screen.home
 
+import com.sukisu.ultra.data.column.ColumnProgressEntry
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Card
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -169,6 +172,13 @@ fun HomePagerMaterial(
             }
             if (state.showAiHomeCard && AiFeatureBridge.isAvailable) {
                 AiFeatureBridge.HomeCard(onOpenChat = actions.onOpenAi)
+            }
+            if (state.hideEnvCard != null) {
+                HideEnvCard(
+                    entry = state.hideEnvCard,
+                    runningCount = state.hideEnvRunningCount,
+                    onClick = actions.onOpenHideEnv,
+                )
             }
             StatsRow(state = state, actions = actions)
             InfoCard(systemInfo = state.systemInfo, showFullStatus = state.showFullStatus)
@@ -840,3 +850,73 @@ private fun previewHomeScreenState(
     kernelUAPIVersion = 1,
     managerUAPIVersion = 1,
 )
+
+/**
+ * 主页的「隐藏环境进行中」卡片。
+ *
+ * 只做一件事：告诉用户「上次做到第几步、下一步是什么」，点一下回到向导接着做。
+ * 数据来自 ColumnProgressStore 的本地汇总，不进 root、不触发任何检测。
+ */
+@Composable
+fun HideEnvCard(
+    entry: ColumnProgressEntry,
+    runningCount: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.home_hide_env_card_title),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = entry.topicTitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = stringResource(
+                        R.string.home_hide_env_card_progress,
+                        entry.settledSteps,
+                        entry.totalSteps,
+                    ),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                if (entry.nextStepTitle.isNotBlank()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = stringResource(R.string.home_hide_env_card_next, entry.nextStepTitle),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (runningCount > 1) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = stringResource(R.string.home_hide_env_card_more, runningCount - 1),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Text(
+                text = stringResource(R.string.home_hide_env_card_continue),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}

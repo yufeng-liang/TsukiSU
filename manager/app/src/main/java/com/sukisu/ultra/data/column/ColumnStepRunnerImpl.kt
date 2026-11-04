@@ -518,6 +518,19 @@ class ColumnStepRunnerImpl(
             step.fileContent
         }
 
+        // 硬规则：目标位置已经有一份看起来合法的 keybox 时，默认不覆盖它。
+        // keybox 是「用户自己找来的身份证」，一键执行顺手换掉等于把他手里的东西悄悄作废；
+        // 要换新的，走这一步的「升级/重做」（ctx.force）。
+        if (step.fileContent.contains(KEYBOX_PLACEHOLDER) && !ctx.force) {
+            val existing = runCatching { ColumnRootIo.readText(path) }.getOrNull()
+            if (existing != null && looksLikeKeybox(existing)) {
+                return ColumnStepResult(
+                    status = ColumnStepStatus.SKIPPED,
+                    message = "$path 已经有一份可用的 keybox，按约定不覆盖（要换新的请点这一步的「升级」，或先回滚）",
+                )
+            }
+        }
+
         log.line("准备写入 $path（${content.toByteArray(Charsets.UTF_8).size} 字节）")
 
         // 幂等：内容已经一致就不要再写。重写会刷新 mtime，也可能触发依赖这个文件的模块
@@ -878,6 +891,14 @@ class ColumnStepRunnerImpl(
         val message = step.note.trim().ifBlank { "请确认后继续。" }
         return ColumnStepResult(ColumnStepStatus.NEEDS_USER, message)
     }
+
+
+    /** 粗略判断一段文本是不是 keybox：只用来决定「要不要覆盖已有文件」，不做密码学校验。 */
+    private fun looksLikeKeybox(text: String): Boolean =
+        text.contains("AndroidAttestation") &&
+            text.contains("<Keybox") &&
+            text.contains("DeviceID=") &&
+            (text.contains("algorithm=\"ecdsa\"") || text.contains("algorithm=\"rsa\""))
 
     private fun failed(message: String, log: StepLog? = null): ColumnStepResult =
         ColumnStepResult(ColumnStepStatus.FAILED, message, log?.text().orEmpty())

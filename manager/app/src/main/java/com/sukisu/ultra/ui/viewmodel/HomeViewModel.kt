@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.sukisu.ultra.BuildConfig
+import com.sukisu.ultra.data.column.ColumnProgressStore
 import com.sukisu.ultra.ui.screen.extensions.VersionSpoofProbe
 import com.sukisu.ultra.ui.screen.extensions.VersionSpoofRepository
 import com.sukisu.ultra.Natives
@@ -248,6 +249,8 @@ class HomeViewModel(
             hideHomeCardDecoration = settingsRepo.hideHomeCardDecoration,
             homeCardStickers = existingHomeCardStickers(),
             showAiHomeCard = settingsRepo.showAiHomeCard,
+            hideEnvCard = ColumnProgressStore.latest(),
+            hideEnvRunningCount = ColumnProgressStore.runningCount(),
             showFullStatus = ksuApp.getSharedPreferences("settings", Context.MODE_PRIVATE)
                 .getBoolean("show_fingerprint", true),
             hideHomeWarnings = ksuApp.getSharedPreferences("settings", Context.MODE_PRIVATE)

@@ -202,6 +202,16 @@ fun HomePagerMiuix(
                                 AiFeatureBridge.HomeCard(onOpenChat = actions.onOpenAi)
                             }
                         }
+                        if (state.hideEnvCard != null) {
+                            // 与 AI 卡同理：Miuix 页面里嵌一张 MD3 卡。
+                            AiAssistantMaterialTheme {
+                                HideEnvCard(
+                                    entry = state.hideEnvCard,
+                                    runningCount = state.hideEnvRunningCount,
+                                    onClick = actions.onOpenHideEnv,
+                                )
+                            }
+                        }
                         StatsRow(state = state, actions = actions)
                         InfoCard(
                             systemInfo = state.systemInfo,

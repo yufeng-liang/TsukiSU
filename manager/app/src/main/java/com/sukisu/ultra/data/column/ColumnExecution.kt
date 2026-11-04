@@ -177,7 +177,55 @@ data class ColumnWizardUiState(
      * 默认空集合 = 一个都不装。勾选只影响一键执行与逐步执行是否放行，不代表商店推荐装什么。
      */
     val optedIn: Set<String> = emptySet(),
+    /** 非空时界面弹「执行前预检」确认框；确认或取消后清空。 */
+    val preflight: ColumnPreflight? = null,
+    /** 进专题时跑一次的设备体检结果，用来在顶部提示「你之前已经配过」。 */
+    val health: ColumnHealthReport? = null,
 )
+
+/** 预检时对某一步的判定，决定「一键执行」要不要把它列给用户看。 */
+enum class ColumnPreflightAction {
+    /** 设备上已经有了，执行器会直接跳过。 */
+    SKIP,
+
+    /** 会覆盖已有内容（执行器会先备份到回滚账本）。 */
+    OVERWRITE,
+
+    /** 新增，当前设备上没有可冲突的东西。 */
+    NEW,
+
+    /** 需要用户自己动手：装 APK、重启、去官方页面取包。 */
+    MANUAL,
+}
+
+data class ColumnPreflightItem(
+    val stepId: String,
+    val title: String,
+    val action: ColumnPreflightAction,
+    /** 一句话说明为什么这样判定，直接展示给用户。 */
+    val reason: String,
+)
+
+/**
+ * 一键执行前的预检结果。
+ *
+ * 存在的理由：存量用户的设备上往往已经有 keybox、HMA 配置、denylist 开关，直接跑会静默覆盖。
+ * 这里把「将跳过 / 将覆盖 / 将新增 / 需手动」四类列清楚，让用户在按下去之前就知道会发生什么。
+ */
+data class ColumnPreflight(
+    val items: List<ColumnPreflightItem> = emptyList(),
+) {
+    val skips: List<ColumnPreflightItem> get() = items.filter { it.action == ColumnPreflightAction.SKIP }
+
+    val overwrites: List<ColumnPreflightItem> get() = items.filter { it.action == ColumnPreflightAction.OVERWRITE }
+
+    val news: List<ColumnPreflightItem> get() = items.filter { it.action == ColumnPreflightAction.NEW }
+
+    val manuals: List<ColumnPreflightItem> get() = items.filter { it.action == ColumnPreflightAction.MANUAL }
+
+    /** 有覆盖动作就必须让用户点头，否则「一键」会变成「一键改掉你不知道的东西」。 */
+    val needsConfirmation: Boolean get() = overwrites.isNotEmpty()
+}
 
 /** 单步在界面上的状态。 */
 data class ColumnStepUiState(
