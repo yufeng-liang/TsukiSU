@@ -90,6 +90,9 @@ fun AiChatScreen(
         if (disclaimerAccepted && state.messages.isEmpty()) model.ensureSuggestions()
     }
 
+    val attachScreenshotLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let { model.attachImage(it) } }
     val openImageLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri -> model.onFilePicked(uri) }
@@ -181,6 +184,8 @@ fun AiChatScreen(
                 runWithLocalNetwork { model.refreshSuggestions() }
             }
         },
+        onAttachImage = { attachScreenshotLauncher.launch(arrayOf("image/*")) },
+        onRemoveImage = model::removePendingImage,
         onSetCapability = model::setCapability,
         onNavigate = onNavigate,
     )
@@ -216,4 +221,8 @@ data class AiChatActions(
     val onRefreshSuggestions: () -> Unit,
     val onNavigate: (AiNavigationTarget) -> Unit,
     val onSetCapability: (AiCapability, Boolean) -> Unit,
+    /** Opens the system picker so the user can attach a screenshot. */
+    val onAttachImage: () -> Unit,
+    /** Removes one attached screenshot by index. */
+    val onRemoveImage: (Int) -> Unit,
 )

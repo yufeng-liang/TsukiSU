@@ -249,4 +249,12 @@
     <string name="ai_advanced_reset">Reset advanced options</string>
     <string name="ai_advanced_warning">Incorrect values can break requests or expose data. The developer is not responsible for advanced API misconfiguration.</string>
     <string name="ai_connection_trust">Prompts, device context and your API key are sent to this endpoint. Only use an AI server you trust; the developer does not operate or control third-party AI endpoints.</string>
+    <string name="ai_shell_confirm_title">Run a shell command</string>
+    <string name="ai_composer_attach_image">Attach a screenshot</string>
+    <string name="ai_image_unsupported">This model is not marked as supporting images. Enable it in Assistant settings if your provider accepts them.</string>
+    <string name="ai_shell_denied">The command was not run.</string>
+    <string name="ai_image_only_message">Sent %1$d image(s)</string>
+    <string name="ai_image_unreadable">That image could not be read.</string>
+    <string name="ai_image_limit">You can attach at most %1$d images per message.</string>
+    <string name="ai_image_remove">Remove image</string>
 </resources>

@@ -1,5 +1,6 @@
 package com.sukisu.ultra.ai
 
+import android.util.Log
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
@@ -42,10 +43,18 @@ data class AiToolCall(
 data class AiApiMessage(
     val role: String,
     val content: String = "",
+    /**
+     * 仅 `role == "user"` 的消息会真正带图；assistant / tool / system 的图片会被忽略，
+     * 因为 OpenAI 不接受 assistant 消息里混图片。
+     */
+    val images: List<AiImage> = emptyList(),
     val toolCalls: List<AiToolCall> = emptyList(),
     val toolCallId: String? = null,
     val toolName: String? = null,
 )
+
+/** One inline image attached to a user message. Encoded as base64 without the data-URL prefix. */
+data class AiImage(val mimeType: String, val base64: String)
 
 data class AiToolSpec(
     val name: String,
@@ -76,6 +85,14 @@ object AiApiClient {
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
     private val mediaType = "application/json; charset=utf-8".toMediaType()
+
+    private const val LOG_TAG = "AiApi"
+
+    /** 单条消息最多携带的图片数量（超出部分丢弃）。 */
+    private const val MAX_IMAGES_PER_MESSAGE = 4
+
+    /** 单张图片 base64 的长度上限；base64 全是 ASCII，字符数即字节数。 */
+    private const val MAX_IMAGE_BASE64_BYTES = 4 * 1024 * 1024
 
     private val defaultClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
@@ -400,7 +417,34 @@ object AiApiClient {
                         }
                     }
 
-                    else -> put("content", message.content)
+                    else -> {
+                        val images = message.usableImages()
+                        if (images.isEmpty()) {
+                            put("content", message.content)
+                        } else {
+                            // 带图时 content 从纯字符串换成 part 数组：文本在前、图片在后，
+                            // 不带图的消息保持纯字符串，避免影响现有行为。
+                            put("content", openAiContentParts(message.content, images))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** OpenAI 多模态 content 数组：`[{"type":"text",...},{"type":"image_url",...}]`。 */
+    private fun openAiContentParts(content: String, images: List<AiImage>): JsonArray = buildJsonArray {
+        if (content.isNotEmpty()) {
+            addJsonObject {
+                put("type", "text")
+                put("text", content)
+            }
+        }
+        images.forEach { image ->
+            addJsonObject {
+                put("type", "image_url")
+                putJsonObject("image_url") {
+                    put("url", "data:${image.mimeType};base64,${image.base64}")
                 }
             }
         }
@@ -425,6 +469,12 @@ object AiApiClient {
                     addJsonObject {
                         put("role", message.role)
                         put("content", message.content)
+                        // Ollama 的 images 只接受裸 base64：不带 data: 前缀、也不带 mime，
+                        // 且只对 user 消息生效。
+                        val images = message.usableImages()
+                        if (images.isNotEmpty()) {
+                            putJsonArray("images") { images.forEach { add(it.base64) } }
+                        }
                         if (!message.toolName.isNullOrBlank()) put("tool_name", message.toolName)
                         if (message.toolCalls.isNotEmpty()) {
                             putJsonArray("tool_calls") {
@@ -620,10 +670,17 @@ object AiApiClient {
 
     private fun anthropicMessages(messages: List<AiApiMessage>): JsonArray {
         val grouped = mutableListOf<Pair<String, MutableList<JsonObject>>>()
+        // 上一条分组是否“封口”：带图消息必须单独成条，既不能并进上一条同 role 消息，
+        // 也不再吸收后面同 role 消息的 block。
+        var mergeLocked = false
         fun append(role: String, block: JsonObject) {
             val last = grouped.lastOrNull()
-            if (last != null && last.first == role) last.second.add(block)
-            else grouped.add(role to mutableListOf(block))
+            if (!mergeLocked && last != null && last.first == role) {
+                last.second.add(block)
+            } else {
+                grouped.add(role to mutableListOf(block))
+            }
+            mergeLocked = false
         }
         messages.forEach { message ->
             when (message.role) {
@@ -653,7 +710,22 @@ object AiApiClient {
                     }
                 }
 
-                else -> append("user", textBlock(message.content))
+                else -> {
+                    val images = message.usableImages()
+                    if (images.isEmpty()) {
+                        append("user", textBlock(message.content))
+                    } else {
+                        // 带图消息不参与合并：并进上一条同 role 消息会把图片块塞到别人的文本后面，
+                        // 图片与它自己的文本被拆开、顺序还会随合并漂移。Anthropic 还要求同一条
+                        // 消息里图片在前、文本在后，所以图片块先加、文本后加。
+                        val blocks = buildList {
+                            images.forEach { add(anthropicImageBlock(it)) }
+                            if (message.content.isNotBlank()) add(textBlock(message.content))
+                        }
+                        grouped.add("user" to blocks.toMutableList())
+                        mergeLocked = true
+                    }
+                }
             }
         }
         return buildJsonArray {
@@ -669,6 +741,16 @@ object AiApiClient {
     private fun textBlock(text: String): JsonObject = buildJsonObject {
         put("type", "text")
         put("text", text)
+    }
+
+    /** Anthropic 图片块：`{"type":"image","source":{"type":"base64",...}}`。 */
+    private fun anthropicImageBlock(image: AiImage): JsonObject = buildJsonObject {
+        put("type", "image")
+        putJsonObject("source") {
+            put("type", "base64")
+            put("media_type", image.mimeType)
+            put("data", image.base64)
+        }
     }
 
     private fun parseAnthropicStream(
@@ -928,6 +1010,40 @@ object AiApiClient {
     private fun parseArguments(raw: String): JsonObject =
         runCatching { json.parseToJsonElement(raw.ifBlank { "{}" }) as? JsonObject }.getOrNull()
             ?: buildJsonObject { }
+
+    /**
+     * 过滤出真正要发送的图片：只有 user 消息会带图，单条最多 [MAX_IMAGES_PER_MESSAGE] 张；
+     * 空 base64、或单张超过 [MAX_IMAGE_BASE64_BYTES] 的图直接丢弃并打 warning，
+     * 一张坏图不该让整个请求失败（base64 被截断后本身已是坏数据，发给服务端只会 400）。
+     */
+    private fun AiApiMessage.usableImages(): List<AiImage> {
+        if (role != "user" || images.isEmpty()) return emptyList()
+        if (images.size > MAX_IMAGES_PER_MESSAGE) {
+            Log.w(
+                LOG_TAG,
+                "Dropping ${images.size - MAX_IMAGES_PER_MESSAGE} image(s): at most " +
+                    "$MAX_IMAGES_PER_MESSAGE per message",
+            )
+        }
+        val accepted = ArrayList<AiImage>(minOf(images.size, MAX_IMAGES_PER_MESSAGE))
+        images.forEachIndexed { index, image ->
+            when {
+                index >= MAX_IMAGES_PER_MESSAGE -> Unit
+                image.base64.isBlank() ->
+                    Log.w(LOG_TAG, "Dropping image #$index: empty base64 payload")
+
+                image.base64.length > MAX_IMAGE_BASE64_BYTES ->
+                    Log.w(
+                        LOG_TAG,
+                        "Dropping image #$index (${image.mimeType}): ${image.base64.length} chars " +
+                            "exceeds $MAX_IMAGE_BASE64_BYTES",
+                    )
+
+                else -> accepted += image
+            }
+        }
+        return accepted
+    }
 
     private fun AiToolSpec.toOpenAiJson(): JsonObject = buildJsonObject {
         put("type", "function")

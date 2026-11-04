@@ -278,6 +278,9 @@ fun AiChatMiuix(
                 value = state.input,
                 isSending = state.isSending,
                 error = state.error,
+                pendingImages = state.pendingImages,
+                onAttachImage = actions.onAttachImage,
+                onRemoveImage = actions.onRemoveImage,
                 onValueChange = actions.onInputChange,
                 onSend = actions.onSend,
                 onStop = actions.onStop,
@@ -836,6 +839,9 @@ private fun AiComposerMiuix(
     value: String,
     isSending: Boolean,
     error: String?,
+    pendingImages: List<AiImage>,
+    onAttachImage: () -> Unit,
+    onRemoveImage: (Int) -> Unit,
     onValueChange: (String) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
@@ -874,6 +880,7 @@ private fun AiComposerMiuix(
                 }
             }
         }
+        PendingImagesRow(images = pendingImages, onRemove = onRemoveImage)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -883,6 +890,13 @@ private fun AiComposerMiuix(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            IconButton(onClick = onAttachImage, enabled = !isSending) {
+                Text(
+                    text = "+",
+                    style = MiuixTheme.textStyles.title3,
+                    color = colorScheme.primary,
+                )
+            }
             TextField(
                 value = value,
                 onValueChange = onValueChange,

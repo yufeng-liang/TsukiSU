@@ -248,4 +248,12 @@
     <string name="ai_advanced_reset">重置高级选项</string>
     <string name="ai_advanced_warning">错误的值可能导致请求失败或数据泄露。高级 API 配置错误与开发者无关。</string>
     <string name="ai_connection_trust">提示词、设备上下文和 API Key 会发送到该地址。请只使用你信任的 AI 服务；开发者不运营也不控制第三方 AI 接口。</string>
+    <string name="ai_shell_confirm_title">执行一条 shell 命令</string>
+    <string name="ai_composer_attach_image">附一张截图</string>
+    <string name="ai_image_unsupported">当前模型没有标记为支持图片。如果你的服务商支持，请先在助手设置里打开。</string>
+    <string name="ai_shell_denied">这条命令没有执行。</string>
+    <string name="ai_image_only_message">发送了 %1$d 张图片</string>
+    <string name="ai_image_unreadable">这张图读不出来。</string>
+    <string name="ai_image_limit">每条消息最多附 %1$d 张图片。</string>
+    <string name="ai_image_remove">移除图片</string>
 </resources>

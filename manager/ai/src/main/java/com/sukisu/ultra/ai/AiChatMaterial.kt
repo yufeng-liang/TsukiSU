@@ -233,6 +233,9 @@ fun AiChatMaterial(
                 onValueChange = actions.onInputChange,
                 onSend = actions.onSend,
                 onStop = actions.onStop,
+pendingImages = state.pendingImages,
+onAttachImage = actions.onAttachImage,
+onRemoveImage = actions.onRemoveImage,
                 onDismissError = actions.onDismissError,
             )
         }
@@ -694,6 +697,9 @@ private fun AiComposerMaterial(
     value: String,
     isSending: Boolean,
     error: String?,
+    pendingImages: List<AiImage>,
+    onAttachImage: () -> Unit,
+    onRemoveImage: (Int) -> Unit,
     onValueChange: (String) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
@@ -734,6 +740,7 @@ private fun AiComposerMaterial(
                 }
             }
         }
+        PendingImagesRow(images = pendingImages, onRemove = onRemoveImage)
         Surface(
             shape = RoundedCornerShape(28.dp),
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -743,6 +750,13 @@ private fun AiComposerMaterial(
                 modifier = Modifier.fillMaxWidth().padding(6.dp),
                 verticalAlignment = Alignment.Bottom,
             ) {
+                IconButton(onClick = onAttachImage, enabled = !isSending) {
+                    Text(
+                        text = "+",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 OutlinedTextField(
                     value = value,
                     onValueChange = onValueChange,

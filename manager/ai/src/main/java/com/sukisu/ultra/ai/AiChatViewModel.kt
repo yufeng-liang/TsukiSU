@@ -2,12 +2,17 @@ package com.sukisu.ultra.ai
 
 import com.sukisu.ultra.ai.api.AiNavigationTarget
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
+import android.util.Base64
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sukisu.ultra.ai.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,8 +25,47 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import java.io.ByteArrayOutputStream
 import java.util.UUID
 import kotlin.time.Duration.Companion.milliseconds
+
+/** Longest edge kept when a picked screenshot is re-encoded for upload. */
+private const val MAX_IMAGE_EDGE = 1568
+
+/** How many screenshots may be attached to a single message. */
+private const val MAX_PENDING_IMAGES = 4
+
+/**
+ * Downscales a picked image and re-encodes it as JPEG/80 before base64.
+ *
+ * Vision endpoints reject very large payloads and mobile data makes big bodies
+ * expensive, so the picture is resized rather than sent as-is.
+ */
+private fun decodeForUpload(context: Context, uri: Uri): AiImage {
+    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        ?: error("cannot open picked image")
+    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: error("not an image")
+    val longest = maxOf(bitmap.width, bitmap.height)
+    val scaled = if (longest > MAX_IMAGE_EDGE) {
+        val ratio = MAX_IMAGE_EDGE.toFloat() / longest
+        Bitmap.createScaledBitmap(
+            bitmap,
+            (bitmap.width * ratio).toInt().coerceAtLeast(1),
+            (bitmap.height * ratio).toInt().coerceAtLeast(1),
+            true,
+        )
+    } else {
+        bitmap
+    }
+    val output = ByteArrayOutputStream()
+    scaled.compress(Bitmap.CompressFormat.JPEG, 80, output)
+    if (scaled !== bitmap) scaled.recycle()
+    bitmap.recycle()
+    return AiImage(
+        mimeType = "image/jpeg",
+        base64 = Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP),
+    )
+}
 
 enum class AiMessageRole { USER, ASSISTANT, TOOL, ERROR }
 
@@ -66,6 +110,8 @@ data class AiChatUiState(
     val suggestionsLoading: Boolean = false,
     val pendingFilePicker: AiFilePickerRequest? = null,
     val rootGrantedForRequest: Boolean = false,
+    /** Screenshots the user attached to the next message. */
+    val pendingImages: List<AiImage> = emptyList(),
 )
 
 /**
@@ -475,10 +521,41 @@ class AiChatViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Decodes one picked image, downscales it and keeps it as pending input.
+     *
+     * Screenshots are downscaled to a 1568px long edge and re-encoded as JPEG
+     * before base64, matching what vision endpoints accept and keeping the
+     * request body small enough for mobile networks.
+     */
+    fun attachImage(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val image = runCatching { decodeForUpload(aiContext, uri) }.getOrNull()
+                ?: run {
+                    _uiState.update { it.copy(error = aiContext.getString(R.string.ai_image_unreadable)) }
+                    return@launch
+                }
+            _uiState.update { state ->
+                if (state.pendingImages.size >= MAX_PENDING_IMAGES) {
+                    state.copy(error = aiContext.getString(R.string.ai_image_limit, MAX_PENDING_IMAGES))
+                } else {
+                    state.copy(pendingImages = state.pendingImages + image, error = null)
+                }
+            }
+        }
+    }
+
+    fun removePendingImage(index: Int) {
+        _uiState.update { state ->
+            state.copy(pendingImages = state.pendingImages.filterIndexed { i, _ -> i != index })
+        }
+    }
+
     fun send() {
         if (_uiState.value.isSending) return
         val text = _uiState.value.input.trim()
-        if (text.isEmpty()) return
+        val images = _uiState.value.pendingImages
+        if (text.isEmpty() && images.isEmpty()) return
         val config = AiSettings.load()
         if (!config.enabled) {
             _uiState.update { it.copy(error = aiContext.getString(R.string.ai_error_disabled)) }
@@ -500,10 +577,16 @@ class AiChatViewModel : ViewModel() {
         rootRequestDeferred = null
         _uiState.update { it.copy(rootGrantedForRequest = false) }
         suggestionJob?.cancel()
-        val userMessage = AiChatMessage(newId(), AiMessageRole.USER, text)
+        val bubbleText = if (text.isEmpty()) {
+            aiContext.getString(R.string.ai_image_only_message, images.size)
+        } else {
+            text
+        }
+        val userMessage = AiChatMessage(newId(), AiMessageRole.USER, bubbleText)
         _uiState.update {
             it.copy(
                 input = "",
+                pendingImages = emptyList(),
                 messages = it.messages + userMessage,
                 isSending = true,
                 error = null,
@@ -513,7 +596,7 @@ class AiChatViewModel : ViewModel() {
         val generation = historyGeneration
         chatJob = viewModelScope.launch {
             try {
-                runChat(config, text, generation)
+                runChat(config, text, generation, images)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -532,8 +615,13 @@ class AiChatViewModel : ViewModel() {
         }
     }
 
-    private suspend fun runChat(config: AiConfig, userText: String, generation: Int) {
-        val apiMessages = buildInitialMessages(config, userText)
+    private suspend fun runChat(
+        config: AiConfig,
+        userText: String,
+        generation: Int,
+        images: List<AiImage> = emptyList(),
+    ) {
+        val apiMessages = buildInitialMessages(config, userText, images)
         var round = 0
         var actionRounds = 0
         while (true) {
@@ -730,6 +818,7 @@ class AiChatViewModel : ViewModel() {
     private suspend fun buildInitialMessages(
         config: AiConfig,
         userText: String,
+        images: List<AiImage> = emptyList(),
     ): MutableList<AiApiMessage> {
         val environment = if (config.includeContext) {
             runCatching { AiAssistant.requireHost().environment.snapshot(config.toEnvironmentScopes()) }.getOrNull()
@@ -761,7 +850,7 @@ class AiChatViewModel : ViewModel() {
                 )
             }
         }
-        messages += AiApiMessage("user", userText)
+        messages += AiApiMessage(role = "user", content = userText, images = images)
         return messages
     }
 

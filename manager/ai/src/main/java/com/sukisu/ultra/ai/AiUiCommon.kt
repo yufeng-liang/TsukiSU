@@ -1,7 +1,24 @@
 package com.sukisu.ultra.ai
 
 import android.content.ClipData
+import android.graphics.BitmapFactory
+import android.util.Base64
 import android.widget.Toast
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -18,6 +35,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.dp
 import com.sukisu.ultra.ai.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -150,4 +168,60 @@ internal fun linkifyAiText(text: String, linkColor: Color): AnnotatedString = bu
         index = match.range.last + 1
     }
     if (index < text.length) append(text.substring(index))
+}
+
+
+/**
+ * Thumbnails of the screenshots waiting to be sent with the next message.
+ *
+ * Material and Miuix composers share this row: it only uses foundation widgets,
+ * so it renders the same under both themes.
+ */
+@Composable
+fun PendingImagesRow(
+    images: List<AiImage>,
+    onRemove: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (images.isEmpty()) return
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        images.forEachIndexed { index, image ->
+            val bitmap = remember(image.base64) {
+                runCatching {
+                    val bytes = Base64.decode(image.base64, Base64.DEFAULT)
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                }.getOrNull()
+            }
+            Box {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    tonalElevation = 1.dp,
+                ) {
+                    if (bitmap != null) {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            contentScale = ContentScale.Crop,
+                        )
+                    } else {
+                        Box(Modifier.size(64.dp))
+                    }
+                }
+                IconButton(
+                    onClick = { onRemove(index) },
+                    modifier = Modifier.align(Alignment.TopEnd).size(24.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = stringResource(R.string.ai_image_remove),
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
+            }
+        }
+    }
 }
