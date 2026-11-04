@@ -1,5 +1,7 @@
 package com.sukisu.ultra.ui.screen.home
 
+import com.sukisu.ultra.data.column.ColumnProgressEntry
+import androidx.compose.foundation.background
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -203,14 +205,13 @@ fun HomePagerMiuix(
                             }
                         }
                         if (state.hideEnvCard != null) {
-                            // 与 AI 卡同理：Miuix 页面里嵌一张 MD3 卡。
-                            AiAssistantMaterialTheme {
-                                HideEnvCard(
-                                    entry = state.hideEnvCard,
-                                    runningCount = state.hideEnvRunningCount,
-                                    onClick = actions.onOpenHideEnv,
-                                )
-                            }
+                            // Miuix 专属实现：外壳用 AppCard（跟其它 miuix 卡片同一套圆角与底色），
+                            // 文字与进度条用 miuix 的颜色令牌，不再借用 MD3 卡片。
+                            HideEnvCardMiuix(
+                                entry = state.hideEnvCard,
+                                runningCount = state.hideEnvRunningCount,
+                                onClick = actions.onOpenHideEnv,
+                            )
                         }
                         StatsRow(state = state, actions = actions)
                         InfoCard(
@@ -883,3 +884,87 @@ private fun previewHomeScreenState(
     kernelUAPIVersion = 1,
     managerUAPIVersion = 1,
 )
+
+/**
+ * 主页「隐藏环境进行中」卡片的 Miuix 实现。
+ *
+ * 与 Material 版信息结构一致（进度 → 专题 → 下一步），但外壳用 miuix 的 AppCard、
+ * 颜色全部来自 MiuixTheme，不再在 miuix 页面里嵌一张 MD3 卡片。
+ */
+@Composable
+private fun HideEnvCardMiuix(
+    entry: ColumnProgressEntry,
+    runningCount: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val fraction = (entry.settledSteps.toFloat() / entry.totalSteps.coerceAtLeast(1)).coerceIn(0f, 1f)
+    AppCard(
+        modifier = modifier.fillMaxWidth(),
+        onClick = onClick,
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.home_hide_env_card_title),
+                        color = MiuixTheme.colorScheme.onSurface,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = entry.topicTitle,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                        fontSize = 14.sp,
+                    )
+                }
+                Text(
+                    text = stringResource(
+                        R.string.home_hide_env_card_progress,
+                        entry.settledSteps,
+                        entry.totalSteps,
+                    ),
+                    color = MiuixTheme.colorScheme.primary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(MiuixTheme.colorScheme.onSurface.copy(alpha = 0.10f)),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(fraction)
+                        .height(4.dp)
+                        .background(MiuixTheme.colorScheme.primary),
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (entry.nextStepTitle.isNotBlank()) {
+                    Text(
+                        text = stringResource(R.string.home_hide_env_card_next, entry.nextStepTitle),
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                        fontSize = 12.sp,
+                        modifier = Modifier.weight(1f),
+                    )
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+                if (runningCount > 1) {
+                    Text(
+                        text = stringResource(R.string.home_hide_env_card_more, runningCount - 1),
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+        }
+    }
+}

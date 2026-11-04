@@ -1,5 +1,9 @@
 package com.sukisu.ultra.ui.screen.modulerepo
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -298,10 +302,18 @@ private fun ColumnHeaderCard(column: RepoColumn) {
 @Composable
 private fun TopicCard(topic: RepoColumnTopic, onOpenWizard: (RepoColumnTopic) -> Unit) {
     TonalCard(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
+        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+            // 左侧 4dp 档位色条：列表滚起来时也能一眼分清「这是哪一档」。
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(tierColor(topic.tier)),
+            )
+            Column(
+                modifier = Modifier.weight(1f).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -355,6 +367,7 @@ private fun TopicCard(topic: RepoColumnTopic, onOpenWizard: (RepoColumnTopic) ->
                     Text(text = stringResource(R.string.column_wizard_open))
                 }
             }
+            }
         }
     }
 }
@@ -407,7 +420,7 @@ private fun ColumnGuideCard(guide: List<RepoColumnGuide>) {
     TonalCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
                 text = stringResource(R.string.module_column_guide_title),
@@ -415,20 +428,47 @@ private fun ColumnGuideCard(guide: List<RepoColumnGuide>) {
                 fontWeight = FontWeight.SemiBold,
             )
             guide.forEach { item ->
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                val tint = tierColor(item.tier)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(tint.copy(alpha = 0.10f))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
                     Box(
                         modifier = Modifier
                             .padding(top = 6.dp)
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(tierColor(item.tier)),
+                            .background(tint),
                     )
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            text = item.title,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                        )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                text = item.title,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            if (item.tier == "day") {
+                                Text(
+                                    text = stringResource(R.string.module_column_tier_recommended),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier
+                                        .clip(MaterialTheme.shapes.small)
+                                        .background(tint)
+                                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                                )
+                            }
+                        }
                         if (item.body.isNotEmpty()) {
                             Text(
                                 text = item.body,

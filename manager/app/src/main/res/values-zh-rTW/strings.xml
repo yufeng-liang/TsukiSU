@@ -1435,4 +1435,5 @@
     <string name="column_health_integrity_level" translatable="true">Google 三綠</string>
     <string name="column_health_ready" translatable="true">已就緒</string>
     <string name="column_health_not_ready" translatable="true">未設定</string>
+    <string name="module_column_tier_recommended" translatable="true">最常用</string>
 </resources>

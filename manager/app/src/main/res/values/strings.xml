@@ -1709,4 +1709,5 @@
     <string name="column_health_integrity_level" translatable="true">Google three-green</string>
     <string name="column_health_ready" translatable="true">Ready</string>
     <string name="column_health_not_ready" translatable="true">Not set up</string>
+    <string name="module_column_tier_recommended" translatable="true">Most common</string>
 </resources>
