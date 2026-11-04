@@ -93,6 +93,14 @@ class ColumnStepRunnerImpl(
             return failed("这个步骤没有配置模块来源，无法安装", log)
         }
 
+        // 幂等的第一道闸：索引里写了 moduleId 的，先按它查一次，省掉一次几十兆的下载。
+        // 第二道在 resolveModuleId 之后（见下），防止索引写的 id 和 zip 里的对不上。
+        val hintedId = step.source.moduleId.trim()
+        if (hintedId.isNotEmpty() && isModuleInstalled(hintedId)) {
+            log.line("模块 $hintedId 已安装，跳过")
+            return skippedInstalled(hintedId, log)
+        }
+
         val uri = fetcher.resolve(step).getOrElse { e ->
             return failed("准备模块失败：${e.message ?: e.javaClass.simpleName}", log)
         }
@@ -104,6 +112,13 @@ class ColumnStepRunnerImpl(
         // 先解析 id：装成功后 zip 会被 flashModule 删掉，那时就来不及读了。
         val moduleId = resolveModuleId(step, uri)
         log.line("模块 id：$moduleId")
+
+        // 幂等的第二道闸：模块已经在设备上了就不再刷一遍。重装会覆盖用户在模块 WebUI 里
+        // 做的配置，也会把「跟着做第二遍」变成一轮没必要的下载 + 刷写 + 重启。
+        if (isModuleInstalled(moduleId)) {
+            log.line("模块 $moduleId 已安装，跳过")
+            return skippedInstalled(moduleId, log)
+        }
 
         val stdout = mutableListOf<String>()
         val stderr = mutableListOf<String>()
@@ -165,6 +180,26 @@ class ColumnStepRunnerImpl(
         return file?.name?.substringBeforeLast('.')?.trim()?.takeIf { it.isNotEmpty() } ?: "unknown-module"
     }
 
+    /**
+     * 模块是不是已经装在这台设备上。
+     *
+     * 用 `/data/adb/modules/<id>` 目录存在与否判断——这是 Magisk / KernelSU / APatch 共同的
+     * 「已安装」标志。解析不出 id（`unknown-module`）时一律当作没装：宁可多装一次，也不能
+     * 因为有一步猜错 id 就跳过该装的模块。
+     */
+    private fun isModuleInstalled(moduleId: String): Boolean {
+        val id = moduleId.trim()
+        if (id.isEmpty() || id == "unknown-module") return false
+        return ColumnRootIo.isDirectory("/data/adb/modules/$id")
+    }
+
+    private fun skippedInstalled(moduleId: String, log: StepLog): ColumnStepResult =
+        ColumnStepResult(
+            status = ColumnStepStatus.SKIPPED,
+            message = "模块 $moduleId 已经装了，跳过（要重装请先回滚）",
+            log = log.text(),
+        )
+
     // ---------------------------------------------------------------------------------------
     // writeFile / writeConfig
     // ---------------------------------------------------------------------------------------
@@ -197,6 +232,19 @@ class ColumnStepRunnerImpl(
         }
 
         log.line("准备写入 $path（${content.toByteArray(Charsets.UTF_8).size} 字节）")
+
+        // 幂等：内容已经一致就不要再写。重写会刷新 mtime，也可能触发依赖这个文件的模块
+        // 重新生成配置；账本那边还会多一条没用的备份记录（虽然去重后不会真的多备份）。
+        val current = runCatching { ColumnRootIo.readText(path) }.getOrNull()
+        if (current == content) {
+            log.line("内容已一致，跳过写入：$path")
+            return ColumnStepResult(
+                status = ColumnStepStatus.SKIPPED,
+                message = "$path 内容已一致，无需重复写入",
+                log = log.text(),
+            )
+        }
+
         return try {
             // 顺序不能反：先备份、再写。否则「写了但没备份」等于把用户原配置永久弄丢。
             rollback.recordWrittenFile(path)

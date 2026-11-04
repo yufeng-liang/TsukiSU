@@ -124,6 +124,12 @@ class ColumnWizardViewModel(
     fun runStep(step: RepoColumnStep) {
         val topic = this.topic ?: return
         if (runningStep) return
+        // 已经做成的步骤再点一次就是重装模块、重写文件：向导里每一步都可能是一轮下载或一次
+        // reboot，误触的代价太高。这里直接忽略（要重做请先回滚整次改动，再重新走一遍）。
+        val done = _uiState.value.stepStates
+            .firstOrNull { it.step.id == step.id }
+            ?.status == ColumnStepStatus.SUCCESS
+        if (done) return
         runningStep = true
         updateStep(step.id) { it.copy(status = ColumnStepStatus.RUNNING, message = "") }
         _uiState.update { it.copy(running = true, error = "") }
