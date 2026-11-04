@@ -116,6 +116,8 @@ fun ColumnWizardScreen(
     onProvideKeybox: (String) -> String? = { null },
     /** 用户点「升级」：带 force 重跑这一步，覆盖已装的旧版本。 */
     onUpgradeStep: (RepoColumnStep) -> Unit = {},
+    /** 一键执行：把不需要人看着的步骤按顺序跑完，遇到需要人工的就停下。 */
+    onRunAll: () -> Unit = {},
 ) {
     // 两套 UI 共用同一份实现：向导只有「执行 / 跳过 / 回滚」三个动作，没有 Miuix 专有的交互要复刻。
     when (LocalUiMode.current) {
@@ -128,6 +130,7 @@ fun ColumnWizardScreen(
             onBack = onBack,
             onProvideKeybox = onProvideKeybox,
             onUpgradeStep = onUpgradeStep,
+            onRunAll = onRunAll,
         )
 
         UiMode.Material -> ColumnWizardScreenMaterial(
@@ -139,6 +142,7 @@ fun ColumnWizardScreen(
             onBack = onBack,
             onProvideKeybox = onProvideKeybox,
             onUpgradeStep = onUpgradeStep,
+            onRunAll = onRunAll,
         )
     }
 }
@@ -153,6 +157,7 @@ private fun ColumnWizardScreenMaterial(
     onBack: () -> Unit,
     onProvideKeybox: (String) -> String?,
     onUpgradeStep: (RepoColumnStep) -> Unit,
+    onRunAll: () -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
@@ -237,6 +242,7 @@ private fun ColumnWizardScreenMaterial(
                     finished = finished,
                     started = started,
                     running = state.running,
+                    onRunAll = onRunAll,
                     onStart = {
                         orderedStates
                             .firstOrNull { it.status == ColumnStepStatus.PENDING }
@@ -771,6 +777,7 @@ private fun WizardBottomBar(
     finished: Int,
     started: Boolean,
     running: Boolean,
+    onRunAll: () -> Unit,
     onStart: () -> Unit,
 ) {
     if (total == 0) return
@@ -780,9 +787,18 @@ private fun WizardBottomBar(
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (!started) {
+                // 主按钮是一键执行：先把能自动的全跑完；想一步步看的人走下面那个次要按钮。
                 Button(
+                    onClick = onRunAll,
+                    enabled = !running,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(text = stringResource(R.string.column_wizard_run_all))
+                }
+                TextButton(
                     onClick = onStart,
                     enabled = !running,
                     modifier = Modifier.fillMaxWidth(),
@@ -802,6 +818,14 @@ private fun WizardBottomBar(
                         text = stringResource(R.string.column_wizard_progress, finished, total),
                         style = MaterialTheme.typography.labelLarge,
                     )
+                }
+                // 重启回来接着做时最有用：已经处理过的步骤会被跳过，只跑重启后才允许的那几步。
+                OutlinedButton(
+                    onClick = onRunAll,
+                    enabled = !running,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(text = stringResource(R.string.column_wizard_run_all_rest))
                 }
             }
         }

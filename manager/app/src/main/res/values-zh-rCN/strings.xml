@@ -1663,4 +1663,6 @@
     <string name="settings_proxy_pinned_hint">还没有选择代理，下载会回退到官方直连。</string>
     <string name="settings_proxy_pinned_missing">所选代理已不可用，下载会回退到官方直连。</string>
     <string name="settings_proxy_empty">暂时没有可用代理，稍后重进本页会自动重试。</string>
+    <string name="column_wizard_run_all">一键执行</string>
+    <string name="column_wizard_run_all_rest">一键执行剩余步骤</string>
 </resources>

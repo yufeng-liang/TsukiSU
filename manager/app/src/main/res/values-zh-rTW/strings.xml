@@ -1401,4 +1401,6 @@
     <string name="settings_proxy_pinned_hint">尚未選擇代理，下載會回退到官方直連。</string>
     <string name="settings_proxy_pinned_missing">所選代理已無法使用，下載會回退到官方直連。</string>
     <string name="settings_proxy_empty">目前沒有可用代理，稍後重新進入本頁會自動重試。</string>
+    <string name="column_wizard_run_all">一鍵執行</string>
+    <string name="column_wizard_run_all_rest">一鍵執行剩餘步驟</string>
 </resources>
