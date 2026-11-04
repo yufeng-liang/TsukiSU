@@ -1350,6 +1350,7 @@
     <string name="module_column_step_kind_install_app">安裝應用</string>
     <string name="module_column_step_kind_write_config">寫設定</string>
     <string name="module_column_step_kind_write_file">寫檔案</string>
+    <string name="module_column_step_kind_write_hma_config">寫入 HMA 設定</string>
     <string name="module_column_step_kind_run_command">執行指令</string>
     <string name="module_column_step_kind_verify">驗證</string>
     <string name="module_column_step_kind_reboot">重新開機</string>

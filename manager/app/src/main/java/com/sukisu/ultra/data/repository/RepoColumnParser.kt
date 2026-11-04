@@ -24,6 +24,7 @@ object RepoColumnParser {
         "installApp",
         "writeConfig",
         "writeFile",
+        "writeHmaConfig",
         "runCommand",
         "verify",
         "reboot",

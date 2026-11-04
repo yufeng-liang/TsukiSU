@@ -12,6 +12,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -27,6 +29,23 @@ private const val UPGRADE_CHECK_TIMEOUT_MS = 8_000L
 
 /** `writeFile` / `writeConfig` 里唯一的变量占位符；其余内容一律按字面写入。 */
 private const val KEYBOX_PLACEHOLDER = "\${keybox}"
+
+/**
+ * HMA-OSS 的配置目录通配。
+ *
+ * 服务端每次生成目录都带随机后缀（`/data/misc/hide_my_applist_<随机串>`），所以只能按前缀找。
+ */
+private const val HMA_DIR_GLOB = "/data/misc/hide_my_applist_*"
+
+/**
+ * 设备上还没有 HMA 配置时用的 `configVersion` 兜底值。
+ *
+ * 正常情况下我们用的是**设备上那份 config.json 里的值**（HMA 自己写的，必然与当前版本一致）；
+ * 只有用户装完 HMA 还没重启过、配置文件尚未生成时才会用到这个数字。它对应
+ * `frknkrc44/HMA-OSS` 根 `build.gradle.kts` 的 `val configVerCode by extra(93)`，HMA 改配置
+ * 结构时这里要跟着改，否则 HMA 会以「版本不符」为由静默不加载。
+ */
+private const val HMA_FALLBACK_CONFIG_VERSION = 93
 
 /**
  * 专栏命令的安全边界。
@@ -81,6 +100,7 @@ class ColumnStepRunnerImpl(
                 KIND_INSTALL_MODULE -> installModule(step, ctx, log)
                 KIND_INSTALL_APP -> installApp(step, log)
                 KIND_WRITE_CONFIG, KIND_WRITE_FILE -> writeFile(step, ctx, log)
+                KIND_WRITE_HMA_CONFIG -> writeHmaConfig(step, log)
                 KIND_RUN_COMMAND -> runCommand(step, log)
                 KIND_VERIFY -> verify(step)
                 KIND_REBOOT -> reboot(step)
@@ -448,6 +468,181 @@ class ColumnStepRunnerImpl(
         }
     }
 
+    /**
+     * 自动写入 HMA-OSS 的隐藏配置。
+     *
+     * 索引仓下发一份「配置包」（模板 + 目标应用 + 全局开关 + 要屏蔽的 hook），这里把它**合并**
+     * 进设备上 HMA 已经生成的 `config.json`：
+     * - `configVersion` 以设备上那份为准（HMA 自己写的，必然与当前版本一致）；版本不符 HMA 会
+     *   静默不加载，等于什么都没做，所以绝不拿索引里的数字覆盖它。
+     * - 已有模板、已配置的目标应用、全局开关一律保留用户原来的值，只补缺失项；目标应用已存在
+     *   时只往它的 `applyTemplates` 里追加我们的模板名，不动其它开关。
+     * - `disabledHooks` 按 className + methodName 去重后追加。
+     *
+     * 写完必须重启才生效（HMA 服务启动时才读文件），向导里已有 reboot 步骤。
+     */
+    private suspend fun writeHmaConfig(
+        step: RepoColumnStep,
+        log: StepLog,
+    ): ColumnStepResult {
+        if (step.fileContent.isBlank()) {
+            return failed("HMA 配置为空：步骤没有给出配置内容", log)
+        }
+        val pack = try {
+            JSONObject(step.fileContent)
+        } catch (e: Exception) {
+            return failed("HMA 配置包不是合法 JSON：${e.message ?: e.javaClass.simpleName}", log)
+        }
+
+        val dirOutcome = ColumnRootIo.exec("ls -d $HMA_DIR_GLOB 2>/dev/null")
+        val dir = dirOutcome.out.map { it.trim() }.firstOrNull { it.startsWith("/") }
+            ?: return failed(
+                "没找到 HMA-OSS 的配置目录（$HMA_DIR_GLOB）。请先装 HMA-OSS 并重启一次，" +
+                    "让它生成 config.json 之后再来执行这一步。",
+                log,
+            )
+        val configPath = "$dir/config.json"
+        log.line("HMA 配置目录：$dir")
+
+        val existingText = runCatching { ColumnRootIo.readText(configPath) }.getOrNull()
+        val existing = existingText?.takeIf { it.isNotBlank() }?.let {
+            runCatching { JSONObject(it) }.getOrNull()
+        }
+        if (existingText != null && existingText.isNotBlank() && existing == null) {
+            // 文件坏了就停手：猜着覆盖等于把用户原来的隐藏规则一次性抹掉。
+            return failed("$configPath 无法解析为 JSON，已停止（请先在 HMA 里导出配置确认文件完好）", log)
+        }
+        if (existing != null) {
+            log.line("读取现有配置：${existingText.orEmpty().toByteArray(Charsets.UTF_8).size} 字节")
+        } else {
+            log.line("设备上还没有 config.json，将新建一份")
+        }
+
+        val merged = mergeHmaConfig(existing, pack, log)
+        val mergedText = merged.toString()
+
+        if (existingText != null && existingText.trim() == mergedText) {
+            log.line("配置已包含本次内容，跳过写入")
+            return ColumnStepResult(
+                status = ColumnStepStatus.SKIPPED,
+                message = "HMA 配置已经包含「${pack.optString("templateName")}」，无需重复写入",
+                log = log.text(),
+            )
+        }
+
+        return try {
+            // 顺序不能反：先备份再写，否则覆盖失败时用户的隐藏规则就没了。
+            rollback.recordWrittenFile(configPath)
+            log.line("已记录回滚点：$configPath")
+
+            ColumnRootIo.writeText(configPath, mergedText)
+            if (!ColumnRootIo.isFile(configPath)) {
+                return failed("写入后校验失败：$configPath 不存在或不是普通文件", log)
+            }
+            val size = ColumnRootIo.size(configPath)
+            if (size <= 0) {
+                return failed("写入后校验失败：$configPath 大小为 $size 字节", log)
+            }
+            log.line("写入成功：$configPath（$size 字节）")
+            ColumnStepResult(
+                status = ColumnStepStatus.SUCCESS,
+                message = "已写入 HMA 配置（$size 字节），重启后生效",
+                log = log.text(),
+            )
+        } catch (e: Exception) {
+            failed("写入 HMA 配置失败：${e.message ?: e.javaClass.simpleName}", log)
+        }
+    }
+
+    /**
+     * 把配置包合并进设备现有的 HMA 配置，返回合并后的对象。
+     *
+     * 纯内存操作；[existing] 为 null 表示设备上还没有配置文件。合并策略是「只补不改」：
+     * 用户已经有的模板、目标应用、全局开关全部保留，我们只加自己没有的那部分。
+     */
+    private fun mergeHmaConfig(
+        existing: JSONObject?,
+        pack: JSONObject,
+        log: StepLog,
+    ): JSONObject {
+        val out = existing?.let { runCatching { JSONObject(it.toString()) }.getOrNull() } ?: JSONObject()
+
+        // 1. configVersion：设备上那份说了算，绝不拿索引里的数字覆盖。
+        if (!out.has("configVersion")) {
+            val fromPack = pack.optInt("configVersion", 0)
+            val version = if (fromPack > 0) fromPack else HMA_FALLBACK_CONFIG_VERSION
+            out.put("configVersion", version)
+            log.line("设备上没有 configVersion，用 $version")
+        }
+
+        // 2. 全局开关：只补缺失的，不覆盖用户改过的。
+        pack.optJSONObject("globals")?.let { globals ->
+            val keys = globals.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                if (!out.has(key)) {
+                    out.put(key, globals.get(key))
+                    log.line("补全局开关：$key = ${globals.get(key)}")
+                }
+            }
+        }
+
+        // 3. 模板：同名模板已存在就保留用户那份。
+        val templateName = pack.optString("templateName").trim()
+        val template = pack.optJSONObject("template")
+        if (templateName.isNotEmpty() && template != null) {
+            val templates = out.optJSONObject("templates")
+                ?: JSONObject().also { out.put("templates", it) }
+            if (!templates.has(templateName)) {
+                templates.put(templateName, template)
+                log.line("新增模板：$templateName（${template.optJSONArray("appList")?.length() ?: 0} 个包名）")
+            } else {
+                log.line("模板已存在，保持用户原样：$templateName")
+            }
+        }
+
+        // 4. 目标应用：新目标整段照搬；已存在的只补 applyTemplates。
+        val packScope = pack.optJSONObject("scope")
+        if (packScope != null && templateName.isNotEmpty()) {
+            val scope = out.optJSONObject("scope") ?: JSONObject().also { out.put("scope", it) }
+            val keys = packScope.keys()
+            while (keys.hasNext()) {
+                val target = keys.next()
+                val incoming = packScope.optJSONObject(target) ?: continue
+                val current = scope.optJSONObject(target)
+                if (current == null) {
+                    scope.put(target, incoming)
+                    log.line("新增目标应用：$target")
+                } else {
+                    // 用户已经配过这个目标：保留他的开关，只保证我们的模板也应用上。
+                    val applied = current.optJSONArray("applyTemplates")
+                        ?: JSONArray().also { current.put("applyTemplates", it) }
+                    if (!jsonArrayContains(applied, templateName)) {
+                        applied.put(templateName)
+                        log.line("目标 $target 已存在，追加模板：$templateName")
+                    }
+                }
+            }
+        }
+
+        // 5. disabledHooks：按类名 + 方法名去重后追加。
+        pack.optJSONArray("disabledHooks")?.let { hooks ->
+            if (hooks.length() > 0) {
+                val current = out.optJSONArray("disabledHooks")
+                    ?: JSONArray().also { out.put("disabledHooks", it) }
+                for (i in 0 until hooks.length()) {
+                    val hook = hooks.optJSONObject(i) ?: continue
+                    if (!jsonHookContains(current, hook)) {
+                        current.put(hook)
+                        log.line("新增 hook 屏蔽：${hook.optString("className")}#${hook.optString("methodName")}")
+                    }
+                }
+            }
+        }
+
+        return out
+    }
+
     // ---------------------------------------------------------------------------------------
     // runCommand
     // ---------------------------------------------------------------------------------------
@@ -547,9 +742,29 @@ class ColumnStepRunnerImpl(
         const val KIND_INSTALL_APP = "installapp"
         const val KIND_WRITE_CONFIG = "writeconfig"
         const val KIND_WRITE_FILE = "writefile"
+        const val KIND_WRITE_HMA_CONFIG = "writehmaconfig"
         const val KIND_RUN_COMMAND = "runcommand"
         const val KIND_VERIFY = "verify"
         const val KIND_REBOOT = "reboot"
         const val KIND_ASK_USER = "askuser"
     }
+}
+
+/** `JSONArray` 里是否已有这个字符串（HMA 的 `applyTemplates` 是字符串数组）。 */
+private fun jsonArrayContains(array: JSONArray, value: String): Boolean {
+    for (i in 0 until array.length()) {
+        if (array.optString(i) == value) return true
+    }
+    return false
+}
+
+/** `disabledHooks` 里是否已有同一个 hook（按 className + methodName 判重，argumentCount 可不同）。 */
+private fun jsonHookContains(array: JSONArray, hook: JSONObject): Boolean {
+    val className = hook.optString("className")
+    val methodName = hook.optString("methodName")
+    for (i in 0 until array.length()) {
+        val item = array.optJSONObject(i) ?: continue
+        if (item.optString("className") == className && item.optString("methodName") == methodName) return true
+    }
+    return false
 }

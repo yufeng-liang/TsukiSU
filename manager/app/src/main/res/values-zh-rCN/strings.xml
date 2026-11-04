@@ -1612,6 +1612,7 @@
     <string name="module_column_step_kind_install_app">安装应用</string>
     <string name="module_column_step_kind_write_config">写配置</string>
     <string name="module_column_step_kind_write_file">写文件</string>
+    <string name="module_column_step_kind_write_hma_config">写入 HMA 配置</string>
     <string name="module_column_step_kind_run_command">执行命令</string>
     <string name="module_column_step_kind_verify">验证</string>
     <string name="module_column_step_kind_reboot">重启</string>

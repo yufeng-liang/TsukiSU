@@ -455,6 +455,7 @@ internal fun stepKindLabel(kind: String): String = stringResource(
         "installApp" -> R.string.module_column_step_kind_install_app
         "writeConfig" -> R.string.module_column_step_kind_write_config
         "writeFile" -> R.string.module_column_step_kind_write_file
+        "writeHmaConfig" -> R.string.module_column_step_kind_write_hma_config
         "runCommand" -> R.string.module_column_step_kind_run_command
         "verify" -> R.string.module_column_step_kind_verify
         "reboot" -> R.string.module_column_step_kind_reboot
