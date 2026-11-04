@@ -1597,7 +1597,6 @@
     <!-- 商店专栏 -->
     <string name="module_column_section_title">专栏</string>
     <string name="module_column_topic_count">%1$d 个专题</string>
-    <string name="module_column_readonly_note">当前版本只展示步骤，不代为安装：请按清单自己操作。</string>
     <string name="module_column_empty">这个专栏还没有专题。</string>
     <string name="module_column_requires_title">前置条件</string>
     <string name="module_column_steps_title">步骤</string>
@@ -1642,7 +1641,7 @@
     <string name="column_wizard_status_needs_user">需要你处理</string>
     <string name="column_wizard_confirm_title">执行前确认</string>
     <string name="column_wizard_cancel">取消</string>
-    <string name="column_wizard_readonly_note">点『跟着做』由向导逐步执行，每一步都会先说明再动手。</string>
+    <string name="column_wizard_readonly_note">点「一键执行」，能自动的步骤向导会替你跑完；会改到设备的地方都会先问过你。</string>
     <string name="column_wizard_empty">这个专题还没有可执行的步骤。</string>
     <string name="column_wizard_open_link">打开官方页面</string>
     <string name="column_wizard_upgrade">升级到 %1$s</string>
@@ -1665,4 +1664,9 @@
     <string name="settings_proxy_empty">暂时没有可用代理，稍后重进本页会自动重试。</string>
     <string name="column_wizard_run_all">一键执行</string>
     <string name="column_wizard_run_all_rest">一键执行剩余步骤</string>
+    <string name="module_column_guide_title">你该从哪一档开始</string>
+    <string name="module_column_tier_day">日用级</string>
+    <string name="module_column_tier_integrity">三绿</string>
+    <string name="module_column_tier_game">游戏</string>
+    <string name="module_column_tier_tool">工具</string>
 </resources>

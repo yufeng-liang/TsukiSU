@@ -2,6 +2,7 @@ package com.sukisu.ultra.data.repository
 
 import com.sukisu.ultra.data.model.RepoColumn
 import com.sukisu.ultra.data.model.RepoColumnEvidence
+import com.sukisu.ultra.data.model.RepoColumnGuide
 import com.sukisu.ultra.data.model.RepoColumnKeybox
 import com.sukisu.ultra.data.model.RepoColumnStep
 import com.sukisu.ultra.data.model.RepoColumnStepSource
@@ -76,6 +77,22 @@ object RepoColumnParser {
             // 没写 order 的排最后：解析结果已经排过序，这个值只是让界面自己再排一遍时结论一致。
             order = item.optInt("order", Int.MAX_VALUE),
             topics = item.optJSONArray("topics").toObjects(::parseTopic),
+            guide = item.optJSONArray("guide").toObjects(::parseGuide),
+        )
+    }
+
+    /**
+     * 解析「怎么选」的一条说明。
+     *
+     * 标题为空的直接丢：正文可以缺，标题缺了这条卡在界面上就没有主语。
+     */
+    private fun parseGuide(item: JSONObject): RepoColumnGuide? {
+        val title = item.text("title")
+        if (title.isEmpty()) return null
+        return RepoColumnGuide(
+            tier = item.text("tier").lowercase(),
+            title = title,
+            body = item.text("body"),
         )
     }
 
@@ -97,6 +114,7 @@ object RepoColumnParser {
             verifyHints = item.optJSONArray("verifyHints").toStringList(),
             // 没有 keybox 是常态（大部分专题不需要），只有显式给出 url 才算「这个专题要用密钥材料」。
             keybox = item.optJSONObject("keybox")?.let(::parseKeybox)?.takeIf { it.url.isNotEmpty() },
+            tier = item.text("tier").lowercase(),
         )
     }
 

@@ -1609,7 +1609,6 @@
     <!-- 商店专栏 -->
     <string name="module_column_section_title">Columns</string>
     <string name="module_column_topic_count">%1$d topics</string>
-    <string name="module_column_readonly_note">Read-only for now — follow the steps yourself; nothing is installed automatically.</string>
     <string name="module_column_empty">This column has no topics yet.</string>
     <string name="module_column_requires_title">Before you start</string>
     <string name="module_column_steps_title">Steps</string>
@@ -1654,7 +1653,7 @@
     <string name="column_wizard_status_needs_user">Needs you</string>
     <string name="column_wizard_confirm_title">Confirm this step</string>
     <string name="column_wizard_cancel">Cancel</string>
-    <string name="column_wizard_readonly_note">Tap Follow along and the wizard runs each step for you — every step is explained before it acts.</string>
+    <string name="column_wizard_readonly_note">Tap Run all and the wizard handles every step it can — anything that changes your device asks first.</string>
     <string name="column_wizard_empty">This topic has no steps to run yet.</string>
     <string name="column_wizard_open_link">Open official page</string>
     <string name="column_wizard_upgrade">Upgrade to %1$s</string>
@@ -1677,4 +1676,9 @@
     <string name="settings_proxy_empty">No proxies are available right now. Come back to this page later to retry.</string>
     <string name="column_wizard_run_all">Run all</string>
     <string name="column_wizard_run_all_rest">Run remaining steps</string>
+    <string name="module_column_guide_title">Which level do you need?</string>
+    <string name="module_column_tier_day">Day-to-day</string>
+    <string name="module_column_tier_integrity">Play Integrity</string>
+    <string name="module_column_tier_game">Game</string>
+    <string name="module_column_tier_tool">Tool</string>
 </resources>

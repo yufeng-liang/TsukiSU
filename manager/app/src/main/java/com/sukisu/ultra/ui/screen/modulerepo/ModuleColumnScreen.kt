@@ -38,6 +38,7 @@ import com.sukisu.ultra.R
 import com.sukisu.ultra.data.model.EvidenceFreshness
 import com.sukisu.ultra.data.model.RepoColumn
 import com.sukisu.ultra.data.model.RepoColumnEvidence
+import com.sukisu.ultra.data.model.RepoColumnGuide
 import com.sukisu.ultra.data.model.RepoColumnStep
 import com.sukisu.ultra.data.model.RepoColumnTopic
 import com.sukisu.ultra.data.model.ageDays
@@ -166,6 +167,10 @@ private fun ModuleColumnScreenMaterial(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item(key = "column-header") { ColumnHeaderCard(column) }
+            // 「怎么选」排在专题列表之前：新用户先看这一块，再决定自己做哪一档。
+            if (column.guide.isNotEmpty()) {
+                item(key = "column-guide") { ColumnGuideCard(column.guide) }
+            }
             items(column.topics, key = { it.id }) { topic ->
                 TopicCard(topic = topic, onOpenWizard = onOpenWizard)
             }
@@ -236,6 +241,7 @@ private fun TopicCard(topic: RepoColumnTopic, onOpenWizard: (RepoColumnTopic) ->
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
+                TierBadge(topic.tier)
                 RiskBadge(topic.riskLevel)
             }
             if (topic.summary.isNotEmpty()) {
@@ -318,6 +324,82 @@ private fun TagRow(tags: List<String>) {
             )
         }
     }
+}
+
+/**
+ * 「怎么选」引导卡：一条一档，用最短的话说清「装什么、能过什么、代价是什么」。
+ *
+ * 文案全部来自索引（远程可改，不用发版），这里只负责排版，不替用户做判断。
+ */
+@Composable
+private fun ColumnGuideCard(guide: List<RepoColumnGuide>) {
+    TonalCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.module_column_guide_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            guide.forEach { item ->
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 6.dp)
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(tierColor(item.tier)),
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = item.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        if (item.body.isNotEmpty()) {
+                            Text(
+                                text = item.body,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 档位徽章：写在专题标题旁边，让人一眼看出「这个专题属于哪一档」。tier 为空或未知时不显示。 */
+@Composable
+private fun TierBadge(tier: String) {
+    val labelRes = when (tier) {
+        "day" -> R.string.module_column_tier_day
+        "integrity" -> R.string.module_column_tier_integrity
+        "game" -> R.string.module_column_tier_game
+        "tool" -> R.string.module_column_tier_tool
+        else -> null
+    } ?: return
+    Text(
+        text = stringResource(labelRes),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSecondaryContainer,
+        modifier = Modifier
+            .clip(MaterialTheme.shapes.small)
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
+}
+
+@Composable
+private fun tierColor(tier: String): Color = when (tier) {
+    "day" -> MaterialTheme.colorScheme.primary
+    "integrity" -> MaterialTheme.colorScheme.tertiary
+    "game" -> MaterialTheme.colorScheme.error
+    "tool" -> MaterialTheme.colorScheme.secondary
+    else -> MaterialTheme.colorScheme.outline
 }
 
 /** 风险徽章：详情页与向导页共用，保证同一个专题在两处颜色一致。 */

@@ -1335,7 +1335,6 @@
     <!-- 商店專欄 -->
     <string name="module_column_section_title">專欄</string>
     <string name="module_column_topic_count">%1$d 個專題</string>
-    <string name="module_column_readonly_note">目前版本只顯示步驟，不代為安裝：請照清單自行操作。</string>
     <string name="module_column_empty">這個專欄還沒有專題。</string>
     <string name="module_column_requires_title">前置條件</string>
     <string name="module_column_steps_title">步驟</string>
@@ -1380,7 +1379,7 @@
     <string name="column_wizard_status_needs_user">需要你處理</string>
     <string name="column_wizard_confirm_title">執行前確認</string>
     <string name="column_wizard_cancel">取消</string>
-    <string name="column_wizard_readonly_note">點『跟著做』由向導逐步執行，每一步都會先說明再動手。</string>
+    <string name="column_wizard_readonly_note">點「一鍵執行」，能自動的步驟嚮導會替你跑完；會改到裝置的地方都會先問過你。</string>
     <string name="column_wizard_empty">這個專題還沒有可執行的步驟。</string>
     <string name="column_wizard_open_link">開啟官方頁面</string>
     <string name="column_wizard_upgrade">升級到 %1$s</string>
@@ -1403,4 +1402,9 @@
     <string name="settings_proxy_empty">目前沒有可用代理，稍後重新進入本頁會自動重試。</string>
     <string name="column_wizard_run_all">一鍵執行</string>
     <string name="column_wizard_run_all_rest">一鍵執行剩餘步驟</string>
+    <string name="module_column_guide_title">你該從哪一檔開始</string>
+    <string name="module_column_tier_day">日用級</string>
+    <string name="module_column_tier_integrity">三綠</string>
+    <string name="module_column_tier_game">遊戲</string>
+    <string name="module_column_tier_tool">工具</string>
 </resources>

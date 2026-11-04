@@ -34,6 +34,23 @@ data class RepoColumn(
      */
     val order: Int = Int.MAX_VALUE,
     val topics: List<RepoColumnTopic>,
+    /**
+     * 「怎么选」引导：给完全不懂的用户看的档位说明，一条一档。
+     *
+     * 文案由索引维护（改文案不用发版）；App 只按顺序渲染。空列表表示索引没给，界面就不显示这一块。
+     */
+    val guide: List<RepoColumnGuide> = emptyList(),
+) : Parcelable
+
+/** 专栏顶部的一条「怎么选」说明，例如「日用级：只想让银行 App 能用，选这个」。 */
+@Immutable
+@Parcelize
+data class RepoColumnGuide(
+    /** 档位，取值 day / integrity / game，与 [RepoColumnTopic.tier] 对齐；空表示只是普通说明。 */
+    val tier: String,
+    val title: String,
+    /** 人话说明：装什么、能过什么、代价是什么。 */
+    val body: String,
 ) : Parcelable
 
 /** 专栏里的一个专题，例如「过银行 / 金融类 App」。 */
@@ -57,6 +74,12 @@ data class RepoColumnTopic(
     val verifyHints: List<String>,
     /** 这个专题需要的密钥材料；为空表示不需要（过银行、藏管理器都不需要）。 */
     val keybox: RepoColumnKeybox? = null,
+    /**
+     * 档位，取值 day / integrity / game / tool。
+     *
+     * 只是给人看的分类标签（界面上一个徽章），不参与执行；空表示索引没给。
+     */
+    val tier: String = "",
 ) : Parcelable
 
 /**
