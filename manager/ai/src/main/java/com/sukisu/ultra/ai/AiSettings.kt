@@ -150,10 +150,16 @@ data class AiConfig(
     val currentModelId: String = "",
 ) {
     val isConfigured: Boolean
-        get() = endpoint.isNotBlank() && model.isNotBlank()
+        get() = AiSettings.activeProvider(this)?.let {
+            it.endpoint.isNotBlank() && (it.models.isNotEmpty() || model.isNotBlank())
+        } ?: (endpoint.isNotBlank() && model.isNotBlank())
 
-    fun effectiveFormat(): AiProviderFormat =
-        if (format == AiProviderFormat.AUTO) AiProviderFormat.detect(endpoint) else format
+    fun effectiveFormat(): AiProviderFormat {
+        val provider = AiSettings.activeProvider(this)
+        val rawFormat = provider?.format ?: format
+        val rawEndpoint = provider?.endpoint?.takeIf { it.isNotBlank() } ?: endpoint
+        return if (rawFormat == AiProviderFormat.AUTO) AiProviderFormat.detect(rawEndpoint) else rawFormat
+    }
 
     val isImageConfigured: Boolean
         get() = imageModel.isNotBlank() && effectiveFormat() == AiProviderFormat.OPENAI
@@ -190,7 +196,7 @@ data class AiConfig(
      * plain HTTP because local inference servers rarely have TLS.
      */
     fun resolvedEndpoint(): String {
-        val raw = endpoint.trim()
+        val raw = (AiSettings.activeProvider(this)?.endpoint?.takeIf { it.isNotBlank() } ?: endpoint).trim()
         if (raw.isEmpty()) return ""
         val withScheme = if (raw.startsWith("http://", true) || raw.startsWith("https://", true)) {
             raw
