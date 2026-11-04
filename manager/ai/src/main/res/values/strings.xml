@@ -20,6 +20,14 @@
     <string name="ai_model_hint">e.g. llama3.2, qwen2.5:7b, gpt-4o-mini</string>
     <string name="ai_image_model">Image model (optional)</string>
     <string name="ai_image_model_hint">OpenAI-compatible model for /v1/images/generations; leave empty to disable</string>
+    <string name="ai_title_model">Session title model</string>
+    <string name="ai_title_model_hint">Blank = follow the main model</string>
+    <string name="ai_title_effort">Title reasoning effort</string>
+    <string name="ai_title_effort_auto">Auto</string>
+    <string name="ai_title_effort_off">Off</string>
+    <string name="ai_title_effort_low">Low</string>
+    <string name="ai_title_effort_medium">Medium</string>
+    <string name="ai_title_effort_high">High</string>
     <string name="ai_format">API format</string>
     <string name="ai_format_auto">Auto</string>
     <string name="ai_format_openai">OpenAI compatible</string>

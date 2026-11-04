@@ -400,6 +400,31 @@ internal fun AiConfigEditorMaterial(
         }
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        OutlinedTextField(
+            value = draft.titleModel,
+            onValueChange = { onDraftChange(draft.copy(titleModel = it)) },
+            label = { Text(stringResource(R.string.ai_title_model)) },
+            placeholder = { Text(stringResource(R.string.ai_title_model_hint)) },
+            singleLine = true,
+            shape = MaterialTheme.shapes.large,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            text = stringResource(R.string.ai_title_effort),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            AiThinkingMode.entries.forEach { mode ->
+                FilterChip(
+                    selected = draft.titleEffort == mode,
+                    onClick = { onDraftChange(draft.copy(titleEffort = mode)) },
+                    label = { Text(stringResource(mode.titleEffortLabelRes())) },
+                )
+            }
+        }
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         AiToggleRow(
             title = stringResource(R.string.ai_advanced_mode),
             summary = stringResource(R.string.ai_advanced_mode_summary),
@@ -821,4 +846,12 @@ private fun AiToggleRow(
         }
         AiExpressiveSwitch(checked = checked, onCheckedChange = onCheckedChange)
     }
+}
+
+private fun AiThinkingMode.titleEffortLabelRes(): Int = when (this) {
+    AiThinkingMode.AUTO -> R.string.ai_title_effort_auto
+    AiThinkingMode.OFF -> R.string.ai_title_effort_off
+    AiThinkingMode.LOW -> R.string.ai_title_effort_low
+    AiThinkingMode.MEDIUM -> R.string.ai_title_effort_medium
+    AiThinkingMode.HIGH -> R.string.ai_title_effort_high
 }

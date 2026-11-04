@@ -121,10 +121,12 @@ fun AiChatMaterial(
         }
     }
 
-    val sessionTitle = remember(state.messages) {
+    val fallbackTitle = remember(state.messages) {
         state.messages.firstOrNull { it.role == AiMessageRole.USER }
             ?.content?.trim()?.replace('\n', ' ')?.take(18).orEmpty()
     }
+    // AI 生成的会话标题优先；为空时退回「首条用户消息前 18 字」。
+    val sessionTitle = state.sessionTitle.trim().ifBlank { fallbackTitle }
     AiExpressiveScaffold(
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         topBar = {

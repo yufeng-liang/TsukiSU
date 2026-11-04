@@ -134,10 +134,12 @@ fun AiChatMiuix(
         }
     }
 
-    val sessionTitle = remember(state.messages) {
+    val fallbackTitle = remember(state.messages) {
         state.messages.firstOrNull { it.role == AiMessageRole.USER }
             ?.content?.trim()?.replace('\n', ' ')?.take(18).orEmpty()
     }
+    // AI 生成的会话标题优先；为空时退回「首条用户消息前 18 字」。
+    val sessionTitle = state.sessionTitle.trim().ifBlank { fallbackTitle }
     AiAppScaffold(
         // The assistant is a full-screen tool page: never let the global
         // custom background show through here.
@@ -258,6 +260,9 @@ fun AiChatMiuix(
                             onCapabilityChange = actions.onSetCapability,
                             onGrantRoot = actions.onGrantRoot,
                             onRunCode = actions.onRunCode,
+                            isLastAssistant = message.id == state.messages
+                                .lastOrNull { it.role == AiMessageRole.ASSISTANT }?.id,
+                            onRegenerate = actions.onRegenerate,
                         )
                     }
                 }
@@ -482,6 +487,8 @@ private fun AiMessageBubbleMiuix(
     onCapabilityChange: (AiCapability, Boolean) -> Unit,
     onGrantRoot: () -> Unit,
     onRunCode: (String) -> Unit,
+    isLastAssistant: Boolean = false,
+    onRegenerate: () -> Unit = {},
 ) {
     val copy = rememberAiCopyText()
     var pendingRiskCapability by remember { mutableStateOf<AiCapability?>(null) }
@@ -559,6 +566,12 @@ private fun AiMessageBubbleMiuix(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.End,
                             ) {
+                                if (isLastAssistant) {
+                                    TextButton(
+                                        text = stringResource(R.string.ai_regenerate),
+                                        onClick = onRegenerate,
+                                    )
+                                }
                                 IconButton(
                                     onClick = { copy(message.content) },
                                     modifier = Modifier.size(28.dp),
@@ -772,6 +785,56 @@ private fun AiMessageBubbleMiuix(
 }
 
 @Composable
+private fun AiCapabilityCardsMiuix(
+    onSuggestion: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val cards = listOf(
+        Triple(R.string.ai_home_card_device, R.string.ai_home_card_device_prompt, "\uD83D\uDCF1"),
+        Triple(R.string.ai_home_card_troubleshoot, R.string.ai_home_card_troubleshoot_prompt, "\uD83D\uDD0D"),
+        Triple(R.string.ai_home_card_module_pick, R.string.ai_home_card_module_pick_prompt, "\uD83E\uDDE9"),
+        Triple(R.string.ai_home_card_cleanup, R.string.ai_home_card_cleanup_prompt, "\uD83E\uDDF9"),
+    )
+    FlowRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        maxItemsInEachRow = 2,
+    ) {
+        cards.forEach { (titleRes, promptRes, emoji) ->
+            val title = stringResource(titleRes)
+            val prompt = stringResource(promptRes)
+            AiAppCard(
+                modifier = Modifier.weight(1f).clickable { onSuggestion(prompt) },
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(text = emoji, style = MiuixTheme.textStyles.title3)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = title,
+                            style = MiuixTheme.textStyles.body1,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = prompt,
+                            style = MiuixTheme.textStyles.footnote1,
+                            color = colorScheme.onSurfaceVariantSummary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun AiWelcomeMiuix(
     suggestions: List<String>,
     loading: Boolean,
@@ -806,6 +869,7 @@ private fun AiWelcomeMiuix(
             color = colorScheme.onSurfaceVariantSummary,
             textAlign = TextAlign.Center,
         )
+        AiCapabilityCardsMiuix(onSuggestion = onSuggestion, modifier = Modifier.padding(horizontal = 16.dp))
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             verticalArrangement = Arrangement.spacedBy(4.dp),

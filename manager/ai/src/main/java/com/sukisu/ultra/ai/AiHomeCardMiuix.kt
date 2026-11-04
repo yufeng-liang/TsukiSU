@@ -348,6 +348,33 @@ internal fun AiConfigEditorMiuix(
             }
         }
 
+        TextField(
+            value = draft.titleModel,
+            onValueChange = { onDraftChange(draft.copy(titleModel = it)) },
+            label = stringResource(R.string.ai_title_model),
+            useLabelAsPlaceholder = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            text = stringResource(R.string.ai_title_model_hint),
+            style = MiuixTheme.textStyles.body2,
+            color = colorScheme.onSurfaceVariantSummary,
+        )
+        Text(
+            text = stringResource(R.string.ai_title_effort),
+            style = MiuixTheme.textStyles.body2,
+            color = colorScheme.onSurfaceVariantSummary,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            AiThinkingMode.entries.forEach { mode ->
+                MiuixFormatChip(
+                    selected = draft.titleEffort == mode,
+                    text = stringResource(mode.titleEffortLabelRes()),
+                    onClick = { onDraftChange(draft.copy(titleEffort = mode)) },
+                )
+            }
+        }
+
         AiToggleRowMiuix(
             title = stringResource(R.string.ai_advanced_mode),
             summary = stringResource(R.string.ai_advanced_mode_summary),
@@ -778,4 +805,12 @@ private fun AiToggleRowMiuix(
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
+}
+
+private fun AiThinkingMode.titleEffortLabelRes(): Int = when (this) {
+    AiThinkingMode.AUTO -> R.string.ai_title_effort_auto
+    AiThinkingMode.OFF -> R.string.ai_title_effort_off
+    AiThinkingMode.LOW -> R.string.ai_title_effort_low
+    AiThinkingMode.MEDIUM -> R.string.ai_title_effort_medium
+    AiThinkingMode.HIGH -> R.string.ai_title_effort_high
 }

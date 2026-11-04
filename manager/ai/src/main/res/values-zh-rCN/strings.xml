@@ -19,6 +19,14 @@
     <string name="ai_model_hint">例如 llama3.2、qwen2.5:7b、gpt-4o-mini</string>
     <string name="ai_image_model">生图模型（可选）</string>
     <string name="ai_image_model_hint">用于 /v1/images/generations 的 OpenAI 兼容模型；留空则关闭生图/改图</string>
+    <string name="ai_title_model">会话标题模型</string>
+    <string name="ai_title_model_hint">留空则跟随主模型</string>
+    <string name="ai_title_effort">标题生成推理强度</string>
+    <string name="ai_title_effort_auto">自动</string>
+    <string name="ai_title_effort_off">关闭</string>
+    <string name="ai_title_effort_low">低</string>
+    <string name="ai_title_effort_medium">中</string>
+    <string name="ai_title_effort_high">高</string>
     <string name="ai_format">接口格式</string>
     <string name="ai_format_auto">自动</string>
     <string name="ai_format_openai">OpenAI 兼容</string>

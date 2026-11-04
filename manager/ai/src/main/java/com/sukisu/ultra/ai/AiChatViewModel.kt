@@ -100,6 +100,8 @@ data class AiPendingApproval(
 data class AiChatUiState(
     val config: AiConfig = AiConfig(),
     val messages: List<AiChatMessage> = emptyList(),
+    /** AI 生成的会话标题；空 = 顶栏退回首条用户消息。 */
+    val sessionTitle: String = "",
     val input: String = "",
     val isSending: Boolean = false,
     val pendingApproval: AiPendingApproval? = null,
@@ -152,6 +154,7 @@ class AiChatViewModel : ViewModel() {
         return AiChatUiState(
             config = config,
             messages = restored,
+            sessionTitle = if (config.keepHistory) AiSettings.loadSessionTitle() else "",
             suggestions = defaultSuggestions(),
         )
     }
@@ -428,6 +431,7 @@ class AiChatViewModel : ViewModel() {
         _uiState.update {
             it.copy(
                 messages = emptyList(),
+                sessionTitle = "",
                 input = "",
                 error = null,
                 suggestions = defaultSuggestions(),
@@ -618,6 +622,8 @@ class AiChatViewModel : ViewModel() {
         } else {
             text
         }
+        // 本轮之前没有任何用户消息 = 首轮对话；只有首轮才生成会话标题。
+        val firstTurn = _uiState.value.messages.none { it.role == AiMessageRole.USER }
         val userMessage = AiChatMessage(newId(), AiMessageRole.USER, bubbleText)
         _uiState.update {
             it.copy(
@@ -632,7 +638,7 @@ class AiChatViewModel : ViewModel() {
         val generation = historyGeneration
         chatJob = viewModelScope.launch {
             try {
-                runChat(config, text, generation, images)
+                runChat(config, text, generation, images, firstTurn)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -656,6 +662,7 @@ class AiChatViewModel : ViewModel() {
         userText: String,
         generation: Int,
         images: List<AiImage> = emptyList(),
+        firstTurn: Boolean = false,
     ) {
         val apiMessages = buildInitialMessages(config, userText, images)
         var round = 0
@@ -720,6 +727,8 @@ class AiChatViewModel : ViewModel() {
                 persistHistory(generation)
                 // Keep the follow-up chips coming after every completed answer.
                 refreshSuggestions()
+                // 标题生成独立协程执行，不阻塞 isSending 复位与主回复收尾。
+                if (firstTurn) maybeGenerateSessionTitle(config, userText, completion.text)
                 return
             }
             if (!config.toolCalling) {
@@ -1097,6 +1106,24 @@ class AiChatViewModel : ViewModel() {
             .takeLast(config.advancedOptions().maxHistoryTurns)
             .map { AiTurn(role = if (it.role == AiMessageRole.ASSISTANT) "assistant" else "user", content = it.content) }
         AiSettings.saveHistory(turns)
+    }
+
+    /**
+     * 首轮回复完成后在后台生成会话标题。独立协程执行，失败静默；
+     * 标题生成绝不能影响主回复的 isSending 复位。
+     */
+    private fun maybeGenerateSessionTitle(config: AiConfig, firstUser: String, firstReply: String) {
+        if (_uiState.value.sessionTitle.isNotBlank()) return
+        if (firstReply.isBlank()) return
+        val generation = historyGeneration
+        viewModelScope.launch {
+            val title = AiTitleGenerator.generate(config, firstUser, firstReply) ?: return@launch
+            // 生成期间用户可能已清空会话，不要在空会话上写回旧标题。
+            if (generation != historyGeneration) return@launch
+            if (_uiState.value.sessionTitle.isNotBlank()) return@launch
+            _uiState.update { it.copy(sessionTitle = title) }
+            AiSettings.saveSessionTitle(title)
+        }
     }
 
     private fun newId(): String = UUID.randomUUID().toString()

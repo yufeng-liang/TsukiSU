@@ -62,6 +62,10 @@ data class AiConfig(
     val endpoint: String = "",
     val apiKey: String = "",
     val model: String = "",
+    /** 会话标题生成使用的模型。空 = 跟随主模型。 */
+    val titleModel: String = "",
+    /** 标题生成的推理强度，复用 AiThinkingMode；AUTO 表示不传。 */
+    val titleEffort: AiThinkingMode = AiThinkingMode.AUTO,
     /** Optional OpenAI-compatible image model. Blank disables image generation/editing. */
     val imageModel: String = "",
     val format: AiProviderFormat = AiProviderFormat.AUTO,
@@ -197,6 +201,8 @@ object AiSettings {
     private const val KEY_ENDPOINT = "endpoint"
     private const val KEY_API_KEY = "api_key"
     private const val KEY_MODEL = "model"
+    private const val KEY_TITLE_MODEL = "title_model"
+    private const val KEY_TITLE_EFFORT = "title_effort"
     private const val KEY_IMAGE_MODEL = "image_model"
     private const val KEY_FORMAT = "format"
     private const val KEY_ENABLED = "enabled"
@@ -226,6 +232,7 @@ object AiSettings {
     private const val KEY_ADVANCED_MODE = "advanced_mode"
     private const val KEY_ADVANCED_OPTIONS = "advanced_options"
     private const val KEY_HISTORY = "chat_history"
+    private const val KEY_SESSION_TITLE = "session_title"
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
@@ -252,6 +259,8 @@ object AiSettings {
             endpoint = p.getString(KEY_ENDPOINT, "").orEmpty(),
             apiKey = p.getString(KEY_API_KEY, "").orEmpty(),
             model = p.getString(KEY_MODEL, "").orEmpty(),
+            titleModel = p.getString(KEY_TITLE_MODEL, "").orEmpty(),
+            titleEffort = AiThinkingMode.fromStored(p.getString(KEY_TITLE_EFFORT, null)),
             imageModel = p.getString(KEY_IMAGE_MODEL, "").orEmpty(),
             format = AiProviderFormat.fromStored(p.getString(KEY_FORMAT, null)),
             enabled = p.getBoolean(KEY_ENABLED, true),
@@ -296,6 +305,8 @@ object AiSettings {
             putString(KEY_ENDPOINT, config.endpoint.trim())
             putString(KEY_API_KEY, config.apiKey.trim())
             putString(KEY_MODEL, config.model.trim())
+            putString(KEY_TITLE_MODEL, config.titleModel.trim())
+            putString(KEY_TITLE_EFFORT, config.titleEffort.name)
             putString(KEY_IMAGE_MODEL, config.imageModel.trim())
             putString(KEY_FORMAT, config.format.name)
             putBoolean(KEY_ENABLED, config.enabled)
@@ -343,7 +354,16 @@ object AiSettings {
         prefs().edit { putString(KEY_HISTORY, encoded) }
     }
 
+    fun loadSessionTitle(): String = prefs().getString(KEY_SESSION_TITLE, "").orEmpty()
+
+    fun saveSessionTitle(title: String) {
+        prefs().edit { putString(KEY_SESSION_TITLE, title.trim()) }
+    }
+
     fun clearHistory() {
-        prefs().edit { remove(KEY_HISTORY) }
+        prefs().edit {
+            remove(KEY_HISTORY)
+            remove(KEY_SESSION_TITLE)
+        }
     }
 }
