@@ -256,4 +256,13 @@
     <string name="ai_image_unreadable">这张图读不出来。</string>
     <string name="ai_image_limit">每条消息最多附 %1$d 张图片。</string>
     <string name="ai_image_remove">移除图片</string>
+    <string name="ai_home_card_device">查查这台设备</string>
+    <string name="ai_home_card_device_prompt">帮我看看当前设备的隐藏环境状态，有哪些没配好</string>
+    <string name="ai_home_card_troubleshoot">红项怎么修</string>
+    <string name="ai_home_card_troubleshoot_prompt">春秋检测有红项，帮我看看怎么解决</string>
+    <string name="ai_home_card_module_pick">装什么模块</string>
+    <string name="ai_home_card_module_pick_prompt">推荐几个隐藏 root 的模块，并说明各自的用途</string>
+    <string name="ai_home_card_cleanup">清理痕迹</string>
+    <string name="ai_home_card_cleanup_prompt">帮我清理一下刷机和安装留下的痕迹</string>
+    <string name="ai_regenerate">重新生成</string>
 </resources>

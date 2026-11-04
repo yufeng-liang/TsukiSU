@@ -134,13 +134,17 @@ fun AiChatMiuix(
         }
     }
 
+    val sessionTitle = remember(state.messages) {
+        state.messages.firstOrNull { it.role == AiMessageRole.USER }
+            ?.content?.trim()?.replace('\n', ' ')?.take(18).orEmpty()
+    }
     AiAppScaffold(
         // The assistant is a full-screen tool page: never let the global
         // custom background show through here.
         containerColor = colorScheme.surface,
         topBar = {
             TopAppBar(
-                title = stringResource(R.string.ai_chat_title),
+                title = if (sessionTitle.isEmpty()) stringResource(R.string.ai_chat_title) else sessionTitle,
                 navigationIcon = {
                     IconButton(onClick = actions.onBack) {
                         Icon(
@@ -151,6 +155,12 @@ fun AiChatMiuix(
                     }
                 },
                 actions = {
+                    if (state.config.model.isNotBlank()) {
+                        TextButton(
+                            text = state.config.model.take(12),
+                            onClick = actions.onOpenSettings,
+                        )
+                    }
                     IconButton(onClick = actions.onOpenSettings) {
                         Icon(
                             imageVector = Icons.Rounded.Tune,

@@ -560,6 +560,38 @@ class AiChatViewModel : ViewModel() {
         val text = _uiState.value.input.trim()
         val images = _uiState.value.pendingImages
         if (text.isEmpty() && images.isEmpty()) return
+        startSend(text, images)
+    }
+
+    /** Re-runs the last user turn, dropping the assistant answer it produced. */
+    fun regenerate() {
+        if (_uiState.value.isSending) return
+        val messages = _uiState.value.messages
+        val lastUserIndex = messages.indexOfLast { it.role == AiMessageRole.USER }
+        if (lastUserIndex < 0) return
+        val lastUser = messages[lastUserIndex]
+        val kept = messages.subList(0, lastUserIndex + 1).toList()
+        _uiState.update { it.copy(messages = kept, error = null) }
+        persistHistory()
+        startSend(lastUser.content, emptyList())
+    }
+
+    /** Replaces one user message and re-runs everything after it. */
+    fun editAndResend(messageId: String, newText: String) {
+        if (_uiState.value.isSending) return
+        val messages = _uiState.value.messages
+        val index = messages.indexOfFirst { it.id == messageId && it.role == AiMessageRole.USER }
+        if (index < 0) return
+        val trimmed = newText.trim()
+        if (trimmed.isEmpty()) return
+        val edited = messages[index].copy(content = trimmed, streaming = false)
+        val kept = messages.subList(0, index).toList() + edited
+        _uiState.update { it.copy(messages = kept, error = null) }
+        persistHistory()
+        startSend(trimmed, emptyList())
+    }
+
+    private fun startSend(text: String, images: List<AiImage>) {
         val config = AiSettings.load()
         if (!config.enabled) {
             _uiState.update { it.copy(error = aiContext.getString(R.string.ai_error_disabled)) }

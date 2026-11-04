@@ -257,4 +257,13 @@
     <string name="ai_image_unreadable">That image could not be read.</string>
     <string name="ai_image_limit">You can attach at most %1$d images per message.</string>
     <string name="ai_image_remove">Remove image</string>
+    <string name="ai_home_card_device">Check this device</string>
+    <string name="ai_home_card_device_prompt">Check my current hide-environment status</string>
+    <string name="ai_home_card_troubleshoot">Fix a red item</string>
+    <string name="ai_home_card_troubleshoot_prompt">A detector reported a red item, help me fix it</string>
+    <string name="ai_home_card_module_pick">Pick modules</string>
+    <string name="ai_home_card_module_pick_prompt">Which modules should I install for hiding root</string>
+    <string name="ai_home_card_cleanup">Clean up traces</string>
+    <string name="ai_home_card_cleanup_prompt">Help me clean up flashing traces on this device</string>
+    <string name="ai_regenerate">Regenerate</string>
 </resources>

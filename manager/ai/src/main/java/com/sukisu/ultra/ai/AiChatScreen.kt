@@ -178,6 +178,7 @@ fun AiChatScreen(
             )
         },
         onDeleteMessage = model::deleteMessage,
+    onRegenerate = model::regenerate,
         onDismissError = model::clearError,
         onRefreshSuggestions = {
             if (disclaimerAccepted) {
@@ -217,6 +218,7 @@ data class AiChatActions(
     val onAnswerQuestion: (String?) -> Unit,
     val onRunCode: (String) -> Unit,
     val onDeleteMessage: (String) -> Unit,
+    val onRegenerate: () -> Unit,
     val onDismissError: () -> Unit,
     val onRefreshSuggestions: () -> Unit,
     val onNavigate: (AiNavigationTarget) -> Unit,
