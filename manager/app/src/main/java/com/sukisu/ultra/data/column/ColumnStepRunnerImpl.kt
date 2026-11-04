@@ -11,11 +11,19 @@ import com.sukisu.ultra.ui.util.flashModule
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import kotlin.coroutines.cancellation.CancellationException
 
 /** 单步日志的上限：够看清命令输出，又不至于把一次向导的全部输出都堆在内存/界面里。 */
 private const val MAX_STEP_LOG_CHARS = 32 * 1024
+
+/**
+ * 查上游版本的时限。
+ *
+ * 它只是「已装模块要不要提示升级」的前置查询，查不到就按跳过处理；为它把一步拖十几秒不值。
+ */
+private const val UPGRADE_CHECK_TIMEOUT_MS = 8_000L
 
 /** `writeFile` / `writeConfig` 里唯一的变量占位符；其余内容一律按字面写入。 */
 private const val KEYBOX_PLACEHOLDER = "\${keybox}"
@@ -70,7 +78,7 @@ class ColumnStepRunnerImpl(
         val log = StepLog(ctx.log)
         try {
             when (val kind = step.kind.trim().lowercase()) {
-                KIND_INSTALL_MODULE -> installModule(step, log)
+                KIND_INSTALL_MODULE -> installModule(step, ctx, log)
                 KIND_INSTALL_APP -> installApp(step, log)
                 KIND_WRITE_CONFIG, KIND_WRITE_FILE -> writeFile(step, ctx, log)
                 KIND_RUN_COMMAND -> runCommand(step, log)
@@ -165,17 +173,21 @@ class ColumnStepRunnerImpl(
     // installModule
     // ---------------------------------------------------------------------------------------
 
-    private suspend fun installModule(step: RepoColumnStep, log: StepLog): ColumnStepResult {
+    private suspend fun installModule(
+        step: RepoColumnStep,
+        ctx: ColumnRunContext,
+        log: StepLog,
+    ): ColumnStepResult {
         if (step.source.kind.trim().isEmpty()) {
             return failed("这个步骤没有配置模块来源，无法安装", log)
         }
 
         // 幂等的第一道闸：索引里写了 moduleId 的，先按它查一次，省掉一次几十兆的下载。
         // 第二道在 resolveModuleId 之后（见下），防止索引写的 id 和 zip 里的对不上。
+        // 用户点了「升级」（ctx.force）时两道闸都要放行，否则升级永远走不到下载。
         val hintedId = step.source.moduleId.trim()
-        if (hintedId.isNotEmpty() && isModuleInstalled(hintedId)) {
-            log.line("模块 $hintedId 已安装，跳过")
-            return skippedInstalled(hintedId, log)
+        if (!ctx.force && hintedId.isNotEmpty() && isModuleInstalled(hintedId)) {
+            return installedResult(step, hintedId, log)
         }
 
         val uri = fetcher.resolve(step).getOrElse { e ->
@@ -192,10 +204,10 @@ class ColumnStepRunnerImpl(
 
         // 幂等的第二道闸：模块已经在设备上了就不再刷一遍。重装会覆盖用户在模块 WebUI 里
         // 做的配置，也会把「跟着做第二遍」变成一轮没必要的下载 + 刷写 + 重启。
-        if (isModuleInstalled(moduleId)) {
-            log.line("模块 $moduleId 已安装，跳过")
-            return skippedInstalled(moduleId, log)
+        if (!ctx.force && isModuleInstalled(moduleId)) {
+            return installedResult(step, moduleId, log)
         }
+        if (ctx.force) log.line("按用户要求覆盖安装（升级/重做）")
 
         val stdout = mutableListOf<String>()
         val stderr = mutableListOf<String>()
@@ -270,12 +282,102 @@ class ColumnStepRunnerImpl(
         return ColumnRootIo.isDirectory("/data/adb/modules/$id")
     }
 
+    /**
+     * 已装时给用户的结论。
+     *
+     * 能查到上游版本就比一比：有新版时把 [ColumnUpgrade] 带回去，界面据此给「升级」按钮（用户
+     * 点了才会带 `force` 重跑）；查不到或已是最新就老实说跳过，不把联网失败变成步骤失败。
+     */
+    private suspend fun installedResult(
+        step: RepoColumnStep,
+        moduleId: String,
+        log: StepLog,
+    ): ColumnStepResult {
+        val local = installedVersion(moduleId)
+        val localText = local?.first?.takeIf { it.isNotEmpty() } ?: "未知版本"
+        log.line("模块 $moduleId 已安装（$localText），检查上游版本")
+
+        val remote = runCatching {
+            withTimeoutOrNull(UPGRADE_CHECK_TIMEOUT_MS) { fetcher.latestVersion(step) }
+        }.getOrNull()
+        if (remote == null) {
+            log.line("拿不到上游版本，按已装跳过")
+            return skippedInstalled(moduleId, log)
+        }
+        if (!isNewer(remote, local)) {
+            log.line("已是最新（上游 ${remote.version}）")
+            return skippedInstalled(moduleId, log)
+        }
+
+        log.line("发现新版：已装 $localText，上游 ${remote.version}")
+        return ColumnStepResult(
+            status = ColumnStepStatus.SKIPPED,
+            message = "已装 $localText，上游最新 ${remote.version}，可以升级",
+            log = log.text(),
+            upgrade = ColumnUpgrade(
+                moduleId = moduleId,
+                installedVersion = localText,
+                latestVersion = remote.version,
+            ),
+        )
+    }
+
     private fun skippedInstalled(moduleId: String, log: StepLog): ColumnStepResult =
         ColumnStepResult(
             status = ColumnStepStatus.SKIPPED,
             message = "模块 $moduleId 已经装了，跳过（要重装请先回滚）",
             log = log.text(),
         )
+
+    /** 读设备上已装模块的 `module.prop`，返回「版本名 to versionCode」；读不到给 null。 */
+    private fun installedVersion(moduleId: String): Pair<String, Long>? {
+        val text = runCatching {
+            ColumnRootIo.readText("/data/adb/modules/$moduleId/module.prop")
+        }.getOrNull() ?: return null
+        var version = ""
+        var code = 0L
+        for (raw in text.lineSequence()) {
+            val line = raw.trim()
+            val index = line.indexOf('=')
+            if (index <= 0) continue
+            val value = line.substring(index + 1).trim()
+            when (line.substring(0, index).trim()) {
+                "version" -> version = value
+                "versionCode" -> code = value.toLongOrNull() ?: 0L
+            }
+        }
+        return if (version.isEmpty() && code <= 0L) null else version to code
+    }
+
+    /**
+     * 上游是不是比已装的新。
+     *
+     * 两边都有数字 versionCode 就用它比（update.json 这类来源），否则按版本号里的数字段比
+     * （`v1.5.2` vs `1.5.0`）。拿不准时判「不新」——升级会覆盖用户在模块 WebUI 里的配置，
+     * 误报升级比漏报更烦人。
+     */
+    private fun isNewer(remote: UpstreamVersion, local: Pair<String, Long>?): Boolean {
+        if (local == null) return false
+        if (remote.versionCode > 0L && local.second > 0L) {
+            return remote.versionCode > local.second
+        }
+        return compareVersions(remote.version, local.first) > 0
+    }
+
+    /** 按数字段比版本号：`v1.5.2` > `v1.5.0`，`oss-173` > `oss-172`。非数字段一律忽略。 */
+    private fun compareVersions(a: String, b: String): Int {
+        val left = versionParts(a)
+        val right = versionParts(b)
+        for (i in 0 until maxOf(left.size, right.size)) {
+            val x = left.getOrElse(i) { 0L }
+            val y = right.getOrElse(i) { 0L }
+            if (x != y) return x.compareTo(y)
+        }
+        return 0
+    }
+
+    private fun versionParts(raw: String): List<Long> =
+        Regex("""\d+""").findAll(raw).map { it.value.toLongOrNull() ?: 0L }.toList()
 
     // ---------------------------------------------------------------------------------------
     // writeFile / writeConfig

@@ -404,6 +404,8 @@ class MainActivity : ComponentActivity() {
                                         onSkipStep = wizardViewModel::skipStep,
                                         onRollback = wizardViewModel::rollback,
                                         onProvideKeybox = { text -> wizardViewModel.provideKeybox(text) },
+                                        // 升级：用户在步骤卡上明确点了「升级到 vX」，才带 force 覆盖安装
+                                        onUpgradeStep = { step -> wizardViewModel.runStep(step, force = true) },
                                         onBack = { navigator.pop() },
                                     )
                                 }

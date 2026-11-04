@@ -34,6 +34,20 @@ enum class ColumnStepStatus {
     NEEDS_USER,
 }
 
+/**
+ * 「已装但上游有新版」的信息。
+ *
+ * 只在 [ColumnStepStatus.SKIPPED] 上出现：说明这一步没重装，但设备上那份不是最新的。界面据此
+ * 给一个「升级」按钮，用户点了才带 [ColumnRunContext.force] 重跑这一步。
+ */
+data class ColumnUpgrade(
+    val moduleId: String,
+    /** 设备上 module.prop 写的版本；读不到时是「未知版本」。 */
+    val installedVersion: String,
+    /** 上游给的最新版本标签。 */
+    val latestVersion: String,
+)
+
 /** 一步跑完的结果。 */
 data class ColumnStepResult(
     val status: ColumnStepStatus,
@@ -41,6 +55,8 @@ data class ColumnStepResult(
     val message: String = "",
     /** 完整输出（安装器 stdout/stderr、命令回显），失败时用来定位。 */
     val log: String = "",
+    /** 已装且上游有新版时非空；其余情况为 null。 */
+    val upgrade: ColumnUpgrade? = null,
 ) {
     val isFailure: Boolean get() = status == ColumnStepStatus.FAILED
 }
@@ -58,6 +74,13 @@ class ColumnRunContext(
     val log: (String) -> Unit = {},
     /** 协程被取消时返回 false；长任务（下载）应轮询它主动退出。 */
     val isActive: () -> Boolean = { true },
+    /**
+     * 用户明确点了「升级 / 重做」。
+     *
+     * 执行器平时对「已经在设备上的东西」一律跳过（幂等），只有这个标记能让它真的覆盖一遍。
+     * 它只能由用户点击产生，向导不会自己置位。
+     */
+    val force: Boolean = false,
 )
 
 /** 单步执行器：把 [step] 落到设备上。实现必须自己处理失败，不抛异常给向导。 */
@@ -155,4 +178,6 @@ data class ColumnStepUiState(
     val step: RepoColumnStep,
     val status: ColumnStepStatus = ColumnStepStatus.PENDING,
     val message: String = "",
+    /** 已装但上游有新版时非空，界面据此给「升级」按钮。 */
+    val upgrade: ColumnUpgrade? = null,
 )

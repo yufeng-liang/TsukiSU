@@ -114,6 +114,8 @@ fun ColumnWizardScreen(
     onRollback: () -> Unit,
     onBack: () -> Unit,
     onProvideKeybox: (String) -> String? = { null },
+    /** 用户点「升级」：带 force 重跑这一步，覆盖已装的旧版本。 */
+    onUpgradeStep: (RepoColumnStep) -> Unit = {},
 ) {
     // 两套 UI 共用同一份实现：向导只有「执行 / 跳过 / 回滚」三个动作，没有 Miuix 专有的交互要复刻。
     when (LocalUiMode.current) {
@@ -125,6 +127,7 @@ fun ColumnWizardScreen(
             onRollback = onRollback,
             onBack = onBack,
             onProvideKeybox = onProvideKeybox,
+            onUpgradeStep = onUpgradeStep,
         )
 
         UiMode.Material -> ColumnWizardScreenMaterial(
@@ -135,6 +138,7 @@ fun ColumnWizardScreen(
             onRollback = onRollback,
             onBack = onBack,
             onProvideKeybox = onProvideKeybox,
+            onUpgradeStep = onUpgradeStep,
         )
     }
 }
@@ -148,6 +152,7 @@ private fun ColumnWizardScreenMaterial(
     onRollback: () -> Unit,
     onBack: () -> Unit,
     onProvideKeybox: (String) -> String?,
+    onUpgradeStep: (RepoColumnStep) -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
@@ -293,6 +298,7 @@ private fun ColumnWizardScreenMaterial(
                     busy = state.running,
                     onRun = { requestRun(uiState.step) },
                     onSkip = { onSkipStep(uiState.step) },
+                    onUpgrade = { onUpgradeStep(uiState.step) },
                 )
             }
             if (state.log.isNotEmpty()) {
@@ -388,6 +394,7 @@ private fun WizardStepCard(
     busy: Boolean,
     onRun: () -> Unit,
     onSkip: () -> Unit,
+    onUpgrade: () -> Unit,
 ) {
     val step = uiState.step
     val skipped = uiState.status == ColumnStepStatus.SKIPPED
@@ -457,6 +464,23 @@ private fun WizardStepCard(
                         ) {
                             Text(
                                 text = stringResource(R.string.column_wizard_open_link),
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                        }
+                    }
+                    // 已装但上游有新版：跳过不等于「已经是最新」。只有用户点这里才会带 force
+                    // 覆盖安装——向导不会替他把旧模块换掉。
+                    uiState.upgrade?.let { upgrade ->
+                        TextButton(
+                            onClick = onUpgrade,
+                            enabled = !busy,
+                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                        ) {
+                            Text(
+                                text = stringResource(
+                                    R.string.column_wizard_upgrade,
+                                    upgrade.latestVersion,
+                                ),
                                 style = MaterialTheme.typography.labelLarge,
                             )
                         }

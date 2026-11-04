@@ -1644,6 +1644,7 @@
     <string name="column_wizard_readonly_note">点『跟着做』由向导逐步执行，每一步都会先说明再动手。</string>
     <string name="column_wizard_empty">这个专题还没有可执行的步骤。</string>
     <string name="column_wizard_open_link">打开官方页面</string>
+    <string name="column_wizard_upgrade">升级到 %1$s</string>
     <string name="column_wizard_keybox_title">需要密钥材料（keybox.xml）</string>
     <string name="column_wizard_keybox_body">Play Integrity 三绿需要一份 Google 认证密钥。商店不保存、不转存、不上传：你选的文件只写进本机的 TrickyStore / TEESimulator 目录。</string>
     <string name="column_wizard_keybox_pick">选择 keybox.xml</string>

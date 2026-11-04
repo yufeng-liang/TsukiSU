@@ -120,8 +120,11 @@ class ColumnWizardViewModel(
 
     /**
      * 执行一步。失败时把原因写到该步骤上并停止，用户修正后可以再点这一行重试。
+     *
+     * [force] 是用户明确点「升级 / 重做」时置位的：只有它会绕过「这座模块已经装过」的跳过，
+     * 向导自己永远不会主动置位。
      */
-    fun runStep(step: RepoColumnStep) {
+    fun runStep(step: RepoColumnStep, force: Boolean = false) {
         val topic = this.topic ?: return
         if (runningStep) return
         // 已经做成的步骤再点一次就是重装模块、重写文件：向导里每一步都可能是一轮下载或一次
@@ -129,15 +132,16 @@ class ColumnWizardViewModel(
         val done = _uiState.value.stepStates
             .firstOrNull { it.step.id == step.id }
             ?.status == ColumnStepStatus.SUCCESS
-        if (done) return
+        if (done && !force) return
         runningStep = true
-        updateStep(step.id) { it.copy(status = ColumnStepStatus.RUNNING, message = "") }
+        updateStep(step.id) { it.copy(status = ColumnStepStatus.RUNNING, message = "", upgrade = null) }
         _uiState.update { it.copy(running = true, error = "") }
         viewModelScope.launch {
             val context = ColumnRunContext(
                 keyboxContent = keyboxContent,
                 log = { line -> appendLog("[${step.title}] $line") },
                 isActive = { isActive },
+                force = force,
             )
             val result = try {
                 stepRunner.run(step, topic, context)
@@ -149,7 +153,9 @@ class ColumnWizardViewModel(
                     message = "执行异常：${error.message ?: "未知错误"}",
                 )
             }
-            updateStep(step.id) { it.copy(status = result.status, message = result.message) }
+            updateStep(step.id) {
+                it.copy(status = result.status, message = result.message, upgrade = result.upgrade)
+            }
             if (result.log.isNotBlank()) appendLog(result.log)
             runningStep = false
             _uiState.update { it.copy(running = false, error = if (result.isFailure) result.message else "") }

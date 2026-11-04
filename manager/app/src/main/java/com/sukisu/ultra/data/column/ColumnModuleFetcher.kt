@@ -24,6 +24,17 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.coroutineContext
 
+/**
+ * 上游的最新版本。
+ *
+ * `versionCode` 只在自带数字版本号的来源（update.json）里有值；GitHub release 只有 tag，
+ * 用 0 表示「没有可比对的数字」，比较时退回版本号字符串。
+ */
+data class UpstreamVersion(
+    val version: String,
+    val versionCode: Long = 0L,
+)
+
 /** 下载的模块 zip 放在缓存目录下的这个子目录里，安装完由 flashModule 删掉源文件。 */
 internal const val COLUMN_DOWNLOAD_DIR_NAME = "column_dl"
 
@@ -112,6 +123,44 @@ class ColumnModuleFetcher(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    /**
+     * 只问「上游现在是什么版本」，不下载任何字节。
+     *
+     * 已装模块的跳过判断要用它：拿不到（离线、接口限流、来源不合法）就返回 null，调用方按
+     * 「不知道」处理——查不到版本不该把一步本来无害的跳过变成失败。
+     */
+    suspend fun latestVersion(step: RepoColumnStep): UpstreamVersion? = withContext(Dispatchers.IO) {
+        runCatching {
+            when (step.source.kind.trim().lowercase()) {
+                SOURCE_UPDATE_JSON -> latestFromUpdateJson(step)
+                SOURCE_UPSTREAM -> latestFromRelease(step)
+                else -> null
+            }
+        }.getOrElse { e ->
+            // 取消不是「查不到」：继续往上抛，否则用户中止后向导还会卡在这一步。
+            if (e is CancellationException) throw e
+            null
+        }
+    }
+
+    private fun latestFromUpdateJson(step: RepoColumnStep): UpstreamVersion? {
+        val url = step.source.url.trim()
+        if (!url.startsWith("https://", ignoreCase = true)) return null
+        val json = JSONObject(fetchUpdateJson(url))
+        val version = json.optString("version").trim()
+        val code = json.optLong("versionCode", 0L)
+        return if (version.isEmpty() && code <= 0L) null else UpstreamVersion(version, code)
+    }
+
+    private fun latestFromRelease(step: RepoColumnStep): UpstreamVersion? {
+        val repo = step.source.repo.trim()
+        if (!REPO_PATTERN.matches(repo)) return null
+        val url = "$GITHUB_API_BASE/repos/$repo/releases?per_page=$RELEASES_PER_PAGE"
+        val release = findRelease(repo, url, step.source.pinnedVersion.trim())
+        val tag = release.optString("tag_name").trim()
+        return if (tag.isEmpty()) null else UpstreamVersion(tag, 0L)
     }
 
     private suspend fun resolveOrThrow(step: RepoColumnStep): Uri =
