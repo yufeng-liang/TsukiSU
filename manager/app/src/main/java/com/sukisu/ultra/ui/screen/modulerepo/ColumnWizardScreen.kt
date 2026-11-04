@@ -1,5 +1,6 @@
 package com.sukisu.ultra.ui.screen.modulerepo
 
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.layout.Spacer
 import com.sukisu.ultra.data.column.ColumnPreflight
 import com.sukisu.ultra.data.column.ColumnHealthReport
@@ -931,51 +932,46 @@ private fun successGreen(): Color = if (MaterialTheme.colorScheme.surfaceBright.
  */
 @Composable
 private fun ColumnHealthCard(report: ColumnHealthReport) {
-    Card(
+    TonalCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Text(
-                text = stringResource(
-                    R.string.column_health_title,
-                    report.passedCount,
-                    report.totalCount,
-                ),
-                style = MaterialTheme.typography.titleSmall,
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.column_health_title_short),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = stringResource(
+                        R.string.column_health_score,
+                        report.passedCount,
+                        report.totalCount,
+                    ),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            HealthLevelRow(
+                ok = report.dayLevelReady,
+                title = stringResource(R.string.column_health_day_level),
+                okText = stringResource(R.string.column_health_ready),
+                noText = stringResource(R.string.column_health_not_ready),
             )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = stringResource(
-                    if (report.dayLevelReady) R.string.column_health_day_ok else R.string.column_health_day_no,
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = if (report.dayLevelReady) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            )
-            Text(
-                text = stringResource(
-                    if (report.integrityLevelReady) {
-                        R.string.column_health_integrity_ok
-                    } else {
-                        R.string.column_health_integrity_no
-                    },
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = if (report.integrityLevelReady) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
+            Spacer(Modifier.height(6.dp))
+            HealthLevelRow(
+                ok = report.integrityLevelReady,
+                title = stringResource(R.string.column_health_integrity_level),
+                okText = stringResource(R.string.column_health_ready),
+                noText = stringResource(R.string.column_health_not_ready),
             )
             val missing = report.checks.filter { !it.passed }
             if (missing.isNotEmpty()) {
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(10.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(Modifier.height(8.dp))
                 missing.take(3).forEach { check ->
                     Text(
                         text = "· ${check.detail}",
@@ -985,13 +981,43 @@ private fun ColumnHealthCard(report: ColumnHealthReport) {
                 }
                 if (missing.size > 3) {
                     Text(
-                        text = "· …（还有 ${missing.size - 3} 项未通过）",
+                        text = "· …（还有 ${missing.size - 3} 项）",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun HealthLevelRow(ok: Boolean, title: String, okText: String, noText: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(
+                    if (ok) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.outlineVariant,
+                ),
+        )
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = if (ok) okText else noText,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (ok) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -1034,6 +1060,7 @@ private fun ColumnPreflightDialog(
                     Text(
                         text = stringResource(R.string.column_preflight_skip, plan.skips.size),
                         style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     plan.skips.forEach {
                         Text(
@@ -1048,6 +1075,7 @@ private fun ColumnPreflightDialog(
                     Text(
                         text = stringResource(R.string.column_preflight_new, plan.news.size),
                         style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                     Spacer(Modifier.height(4.dp))
                 }
@@ -1055,6 +1083,7 @@ private fun ColumnPreflightDialog(
                     Text(
                         text = stringResource(R.string.column_preflight_manual, plan.manuals.size),
                         style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.tertiary,
                     )
                     Spacer(Modifier.height(4.dp))
                 }

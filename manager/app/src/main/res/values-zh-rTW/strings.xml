@@ -1429,4 +1429,10 @@
     <string name="column_preflight_backup_note" translatable="true">被覆寫的檔案都會先備份，之後可以從回復入口還原。</string>
     <string name="column_preflight_continue" translatable="true">繼續</string>
     <string name="column_preflight_cancel" translatable="true">取消</string>
+    <string name="column_health_title_short" translatable="true">裝置現況</string>
+    <string name="column_health_score" translatable="true">%1$d / %2$d</string>
+    <string name="column_health_day_level" translatable="true">日常級隱藏</string>
+    <string name="column_health_integrity_level" translatable="true">Google 三綠</string>
+    <string name="column_health_ready" translatable="true">已就緒</string>
+    <string name="column_health_not_ready" translatable="true">未設定</string>
 </resources>

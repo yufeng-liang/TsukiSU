@@ -1691,4 +1691,10 @@
     <string name="column_preflight_backup_note" translatable="true">被覆盖的文件都会先备份，之后可以从回滚入口还原。</string>
     <string name="column_preflight_continue" translatable="true">继续</string>
     <string name="column_preflight_cancel" translatable="true">取消</string>
+    <string name="column_health_title_short" translatable="true">设备现状</string>
+    <string name="column_health_score" translatable="true">%1$d / %2$d</string>
+    <string name="column_health_day_level" translatable="true">日用级隐藏</string>
+    <string name="column_health_integrity_level" translatable="true">谷歌三绿</string>
+    <string name="column_health_ready" translatable="true">已就绪</string>
+    <string name="column_health_not_ready" translatable="true">未配置</string>
 </resources>
