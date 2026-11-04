@@ -1,5 +1,9 @@
 package com.sukisu.ultra.ui.screen.modulerepo
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.basic.TextButton as MiuixTextButton
+import top.yukonga.miuix.kmp.basic.ButtonDefaults as MiuixButtonDefaults
 import com.sukisu.ultra.ui.component.miuix.AppCard
 import com.sukisu.ultra.ui.UiMode
 import com.sukisu.ultra.ui.LocalUiMode
@@ -878,6 +882,17 @@ private fun WizardBottomBar(
     onStart: () -> Unit,
 ) {
     if (total == 0) return
+    if (LocalUiMode.current == UiMode.Miuix) {
+        WizardBottomBarMiuix(
+            total = total,
+            finished = finished,
+            started = started,
+            running = running,
+            onRunAll = onRunAll,
+            onStart = onStart,
+        )
+        return
+    }
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 3.dp) {
         Column(
             modifier = Modifier
@@ -961,6 +976,77 @@ private fun successGreen(): Color = if (MaterialTheme.colorScheme.surfaceBright.
  * 只回答一个问题：「这台机器之前是不是已经配过一部分隐藏环境」。九项探针都是只读的
  * 存在性检查，它看不出「配置对不对」，所以这里只作提示，绝不用来决定跳过哪一步。
  */
+
+/** Miuix 版底部操作条：按钮换成 miuix 的 TextButton，进度条用细线画。 */
+@Composable
+private fun WizardBottomBarMiuix(
+    total: Int,
+    finished: Int,
+    started: Boolean,
+    running: Boolean,
+    onRunAll: () -> Unit,
+    onStart: () -> Unit,
+) {
+    val fraction = if (total == 0) 0f else (finished.toFloat() / total).coerceIn(0f, 1f)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MiuixTheme.colorScheme.surface)
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!started) {
+                MiuixTextButton(
+                    text = stringResource(R.string.column_wizard_run_all),
+                    onClick = onRunAll,
+                    enabled = !running,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = MiuixButtonDefaults.textButtonColorsPrimary(),
+                )
+                MiuixTextButton(
+                    text = stringResource(R.string.column_wizard_start_first),
+                    onClick = onStart,
+                    enabled = !running,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(MiuixTheme.colorScheme.onSurface.copy(alpha = 0.10f)),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(fraction)
+                                .height(4.dp)
+                                .background(MiuixTheme.colorScheme.primary),
+                        )
+                    }
+                    Text(
+                        text = stringResource(R.string.column_wizard_progress, finished, total),
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+                MiuixTextButton(
+                    text = stringResource(R.string.column_wizard_run_all_rest),
+                    onClick = onRunAll,
+                    enabled = !running,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = MiuixButtonDefaults.textButtonColorsPrimary(),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun ColumnHealthCard(report: ColumnHealthReport) {
     WizardCard(
