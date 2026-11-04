@@ -460,6 +460,7 @@ private fun AiMessageBubbleMaterial(
         }
 
         AiMessageRole.TOOL -> {
+            var toolExpanded by remember(message.id) { mutableStateOf(false) }
             Surface(
                 shape = RoundedCornerShape(18.dp),
                 color = MaterialTheme.colorScheme.secondaryContainer,
@@ -489,6 +490,14 @@ private fun AiMessageBubbleMaterial(
                         }
                         Spacer(Modifier.weight(1f))
                         if (message.content.isNotBlank()) {
+                            TextButton(onClick = { toolExpanded = !toolExpanded }) {
+                                Text(
+                                    text = stringResource(
+                                        if (toolExpanded) R.string.ai_tool_collapse else R.string.ai_tool_expand
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
                             IconButton(
                                 onClick = { copy(message.content) },
                                 modifier = Modifier.size(28.dp),
@@ -502,16 +511,18 @@ private fun AiMessageBubbleMaterial(
                             }
                         }
                     }
-                    SelectionContainer {
-                        Text(
-                            text = linkifyAiText(message.content, MaterialTheme.colorScheme.primary),
-                            modifier = Modifier
-                                .heightIn(max = 260.dp)
-                                .verticalScroll(rememberScrollState()),
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        )
+                    if (toolExpanded) {
+                        SelectionContainer {
+                            Text(
+                                text = linkifyAiText(message.content, MaterialTheme.colorScheme.primary),
+                                modifier = Modifier
+                                    .heightIn(max = 260.dp)
+                                    .verticalScroll(rememberScrollState()),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
+                        }
                     }
                     val imagePath = message.imagePath
                     if (imagePath != null) {

@@ -273,4 +273,6 @@
     <string name="ai_home_card_cleanup">清理痕迹</string>
     <string name="ai_home_card_cleanup_prompt">帮我清理一下刷机和安装留下的痕迹</string>
     <string name="ai_regenerate">重新生成</string>
+    <string name="ai_tool_expand">展开输出</string>
+    <string name="ai_tool_collapse">收起输出</string>
 </resources>

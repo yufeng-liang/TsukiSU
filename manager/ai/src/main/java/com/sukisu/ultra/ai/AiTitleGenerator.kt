@@ -20,8 +20,11 @@ object AiTitleGenerator {
     /** 清洗后的标题最长字数。 */
     private const val MAX_TITLE_CHARS = 24
 
-    /** 标题请求的最大 token 数（给推理模型留一点余量）。 */
-    private const val MAX_TITLE_TOKENS = 512
+    /**
+     * 标题请求的最大 token 数。必须大于 Anthropic 高推理档的 budget_tokens(3072)，
+     * 否则接口会直接报 400；正常标题远用不到这么多。
+     */
+    private const val MAX_TITLE_TOKENS = 4096
 
     /** 需要从标题首尾去掉的引号/书名号；空白由 isWhitespace 处理。 */
     private val TITLE_TRIM_CHARS = charArrayOf(

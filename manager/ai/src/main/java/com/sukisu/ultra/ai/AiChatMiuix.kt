@@ -591,6 +591,7 @@ private fun AiMessageBubbleMiuix(
         }
 
         AiMessageRole.TOOL -> {
+            var toolExpanded by remember(message.id) { mutableStateOf(false) }
             AiAppCard(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.defaultColors(color = colorScheme.secondaryContainer),
@@ -619,6 +620,12 @@ private fun AiMessageBubbleMiuix(
                         }
                         Spacer(Modifier.weight(1f))
                         if (message.content.isNotBlank()) {
+                            TextButton(
+                                text = stringResource(
+                                    if (toolExpanded) R.string.ai_tool_collapse else R.string.ai_tool_expand
+                                ),
+                                onClick = { toolExpanded = !toolExpanded },
+                            )
                             IconButton(
                                 onClick = { copy(message.content) },
                                 modifier = Modifier.size(28.dp),
@@ -632,16 +639,18 @@ private fun AiMessageBubbleMiuix(
                             }
                         }
                     }
-                    SelectionContainer {
-                        Text(
-                            text = linkifyAiText(message.content, colorScheme.primary),
-                            modifier = Modifier
-                                .heightIn(max = 260.dp)
-                                .verticalScroll(rememberScrollState()),
-                            style = MiuixTheme.textStyles.body2,
-                            fontFamily = FontFamily.Monospace,
-                            color = colorScheme.onSecondaryContainer,
-                        )
+                    if (toolExpanded) {
+                        SelectionContainer {
+                            Text(
+                                text = linkifyAiText(message.content, colorScheme.primary),
+                                modifier = Modifier
+                                    .heightIn(max = 260.dp)
+                                    .verticalScroll(rememberScrollState()),
+                                style = MiuixTheme.textStyles.body2,
+                                fontFamily = FontFamily.Monospace,
+                                color = colorScheme.onSecondaryContainer,
+                            )
+                        }
                     }
                     val imagePath = message.imagePath
                     if (imagePath != null) {

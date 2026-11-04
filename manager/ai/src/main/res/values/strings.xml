@@ -274,4 +274,6 @@
     <string name="ai_home_card_cleanup">Clean up traces</string>
     <string name="ai_home_card_cleanup_prompt">Help me clean up flashing traces on this device</string>
     <string name="ai_regenerate">Regenerate</string>
+    <string name="ai_tool_expand">Show output</string>
+    <string name="ai_tool_collapse">Hide output</string>
 </resources>
