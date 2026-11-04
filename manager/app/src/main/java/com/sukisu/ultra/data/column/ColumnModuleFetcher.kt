@@ -167,6 +167,7 @@ class ColumnModuleFetcher(
         when (val kind = step.source.kind.trim().lowercase()) {
             SOURCE_UPSTREAM -> downloadUpstream(step)
             SOURCE_UPDATE_JSON -> downloadFromUpdateJson(step)
+            SOURCE_DIRECT -> downloadFromDirectUrl(step)
             SOURCE_STORE -> throw ColumnFetchException("商店模块安装请用模块页，专栏暂不支持 store 来源")
             "" -> throw ColumnFetchException("步骤 ${step.id} 没有给出模块来源（source.kind），无法安装")
             else -> throw ColumnFetchException("未知的模块来源类型：$kind")
@@ -195,6 +196,38 @@ class ColumnModuleFetcher(
         // 给这个资产的 digest（sha256）——API 是直连的，哈希不经过任何代理。
         val expectedSha256 = step.source.sha256.trim().ifEmpty { asset.digest }
         download(repo, asset.url, destination, expectedSha256)
+        return Uri.fromFile(destination)
+    }
+
+    /**
+     * 从固定 https 直链下载（第三方网盘、官方网盘都走这条路）。
+     *
+     * 与 upstream / updateJson 的区别只有一点：这里没有任何「上游版本信息」可查，所以**必须**在索引
+     * 里登记 sha256，没有哈希就直接拒绝。原因：这类地址不在商店的来源／绿标体系里（很可能是别人转载），
+     * 唯一能锁住的就是字节本身；哪天链接被换成别的包，校验会当场失败，而不是装进用户手机。
+     *
+     * 链接本身随时可能失效（网盘删文件、换 CDN 域名），所以失效时要能退回「打开官方页面」那条路——
+     * 索引里保留 link 字段就是为此。
+     */
+    private suspend fun downloadFromDirectUrl(step: RepoColumnStep): Uri {
+        val url = step.source.url.trim()
+        if (!url.startsWith("https://", ignoreCase = true)) {
+            throw ColumnFetchException("直链地址必须是 https：${url.ifBlank { "（空）" }}")
+        }
+        val expected = step.source.sha256.trim().lowercase()
+        if (!SHA256_PATTERN.matches(expected)) {
+            throw ColumnFetchException("从直链装东西必须在索引里登记 sha256（64 位十六进制），否则没法确认下到的就是那个包")
+        }
+        if (!hasAnyNetwork(ksuApp)) {
+            throw ColumnFetchException("当前没有可用网络，无法下载")
+        }
+
+        val fromUrl = url.substringBefore('?').substringAfterLast('/').trim()
+        val name = fromUrl.ifEmpty { step.source.moduleId.trim() }
+        val fileName = if (name.contains('.')) name else "$name.apk"
+        val destination = File(downloadDirFor(SOURCE_DIRECT), safeFileName(fileName))
+        download(SOURCE_DIRECT, url, destination, expected)
+        requireZip(destination, url)
         return Uri.fromFile(destination)
     }
 
@@ -554,5 +587,8 @@ class ColumnModuleFetcher(
         const val SOURCE_UPSTREAM = "upstream"
         const val SOURCE_STORE = "store"
         const val SOURCE_UPDATE_JSON = "updatejson"
+
+        /** 固定 https 直链（第三方网盘 / 官方网盘），必须配 sha256。 */
+        const val SOURCE_DIRECT = "direct"
     }
 }
