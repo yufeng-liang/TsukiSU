@@ -5,7 +5,6 @@ import com.sukisu.ultra.ui.component.miuix.AppCard
 import com.sukisu.ultra.ui.UiMode
 import com.sukisu.ultra.ui.LocalUiMode
 import com.sukisu.ultra.ui.theme.AiAssistantMaterialTheme
-import androidx.compose.foundation.clickable
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.layout.Spacer
 import com.sukisu.ultra.data.column.ColumnPreflight
@@ -21,6 +20,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.add
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -57,6 +60,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
@@ -71,13 +75,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.sukisu.ultra.R
 import com.sukisu.ultra.data.column.ColumnCheckResult
 import com.sukisu.ultra.data.column.ColumnStepStatus
@@ -93,6 +101,30 @@ import com.sukisu.ultra.ui.component.material.expressiveTopAppBarColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.sukisu.ultra.ui.component.miuix.AppScaffold
+import com.sukisu.ultra.ui.theme.LocalBackgroundImagePath
+import com.sukisu.ultra.ui.theme.LocalEnableBlur
+import com.sukisu.ultra.ui.util.BlurredBar
+import com.sukisu.ultra.ui.util.rememberBlurBackdrop
+import top.yukonga.miuix.kmp.basic.Button as MiuixButton
+import top.yukonga.miuix.kmp.basic.ButtonDefaults as MiuixButtonDefaults
+import top.yukonga.miuix.kmp.basic.Checkbox as MiuixCheckbox
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator as MiuixCircularProgressIndicator
+import top.yukonga.miuix.kmp.basic.HorizontalDivider as MiuixHorizontalDivider
+import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.LinearProgressIndicator as MiuixLinearProgressIndicator
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.Surface as MiuixSurface
+import top.yukonga.miuix.kmp.basic.Text as MiuixText
+import top.yukonga.miuix.kmp.basic.TextButton as MiuixTextButton
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
+import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 /** 日志默认折叠时露出的行数。够看到「正在做什么 / 为什么失败」，又不至于把步骤列表挤到屏幕外。 */
 private const val LOG_COLLAPSED_LINES = 5
@@ -143,14 +175,10 @@ fun ColumnWizardScreen(
     /** 预检确认框上点「取消」。 */
     onDismissPreflight: () -> Unit = {},
 ) {
-    // P0/P1 共用 Material 实现：向导只有「执行 / 跳过 / 回滚」三个动作，
-    // 两套界面没有行为差异，没必要维护两份逐参转发的副本。
-    //
-    // Miuix 外壳只提供 MiuixTheme、没有 MaterialTheme，本页的 Material 组件会落回
-    // 框架默认配色（也就是那个用户认出来的紫）。这里补一层同源 MD3 调色板：
-    // Material 模式下 AiAssistantMaterialTheme 直通，不多套一层主题。
-    AiAssistantMaterialTheme {
-        ColumnWizardScreenMaterial(
+    // 两套皮肤各自实现：这里不是换皮那么简单，卡片的构造、按钮的语义在两种设计语言里不一样，
+    // 与其在一个函数里层层 if，不如两份实现共用同一批回调（执行 / 跳过 / 升级 / 回滚）。
+    when (LocalUiMode.current) {
+        UiMode.Miuix -> ColumnWizardScreenMiuix(
             topic = topic,
             state = state,
             onRunStep = onRunStep,
@@ -163,7 +191,26 @@ fun ColumnWizardScreen(
             onToggleOptIn = onToggleOptIn,
             onMarkDone = onMarkDone,
         )
-        state.preflight?.let { plan ->
+
+        UiMode.Material -> ColumnWizardScreenMaterial(
+            topic = topic,
+            state = state,
+            onRunStep = onRunStep,
+            onSkipStep = onSkipStep,
+            onRollback = onRollback,
+            onBack = onBack,
+            onProvideKeybox = onProvideKeybox,
+            onUpgradeStep = onUpgradeStep,
+            onRunAll = onRunAll,
+            onToggleOptIn = onToggleOptIn,
+            onMarkDone = onMarkDone,
+        )
+    }
+    // 预检框两套皮肤共用 Material 版：Miuix 没有可靠的对话框 API，硬造一个只会和行为约定打架。
+    // Material 模式下 AiAssistantMaterialTheme 直通（不多套一层主题），Miuix 模式下它才生成
+    // 同源 MD3 调色板，免得弹框落回框架默认配色——所以统一套一层，不改变 Material 分支的行为。
+    state.preflight?.let { plan ->
+        AiAssistantMaterialTheme {
             ColumnPreflightDialog(
                 plan = plan,
                 onConfirm = onConfirmPreflight,
@@ -171,6 +218,955 @@ fun ColumnWizardScreen(
             )
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Miuix 皮肤
+//
+// 下面这一组和上面对应位置的 Material 版一一对应（命名带 Miuix 后缀），行为、文案、状态机完全一样，
+// 只把外壳换成 Miuix 的语言：AppScaffold / TopAppBar 做骨架，AppCard 做卡片，
+// MiuixButton / TextButton 做动作，颜色全部取自 MiuixTheme.colorScheme。
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Miuix 皮肤下的执行向导。
+ *
+ * 与 Material 版共用同一套状态、同一批回调，只换外壳。两个对话框（高风险步骤确认、一键执行预检）
+ * 仍是 Material 组件：Miuix 没有可靠的对话框 API，硬造一个只会和行为约定打架。调用处用
+ * [AiAssistantMaterialTheme] 单独包一层同源 MD3 调色板，免得弹框落回框架默认配色。
+ */
+@Composable
+private fun ColumnWizardScreenMiuix(
+    topic: RepoColumnTopic,
+    state: ColumnWizardUiState,
+    onRunStep: (RepoColumnStep) -> Unit,
+    onSkipStep: (RepoColumnStep) -> Unit,
+    onRollback: () -> Unit,
+    onBack: () -> Unit,
+    onProvideKeybox: (String) -> String?,
+    onUpgradeStep: (RepoColumnStep) -> Unit,
+    onRunAll: () -> Unit,
+    onToggleOptIn: (RepoColumnStep) -> Unit,
+    onMarkDone: (RepoColumnStep) -> Unit,
+) {
+    val colorScheme = MiuixTheme.colorScheme
+    val scrollBehavior = MiuixScrollBehavior()
+    // 自定义背景图开着时，顶栏要透明、列表要挂上 backdrop，底图才透得上来。
+    val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
+    val backdrop = rememberBlurBackdrop(LocalEnableBlur.current)
+    val barColor = if (backdrop != null || hasCustomBackground) {
+        Color.Transparent
+    } else {
+        colorScheme.surface
+    }
+    val layoutDirection = LocalLayoutDirection.current
+
+    // 以 topic.steps 的顺序为准，state 只提供状态：ViewModel 还没把状态铺开时（刚进页面、状态被重建），
+    // 列表照样完整，「开始第一步」也能点；否则会出现「专题有 8 步、界面一片空白」的假死。
+    val orderedStates = topic.steps.map { step ->
+        state.stepStates.firstOrNull { it.step.id == step.id } ?: ColumnStepUiState(step = step)
+    }
+    val total = orderedStates.size
+    val finished = orderedStates.count {
+        it.status == ColumnStepStatus.SUCCESS || it.status == ColumnStepStatus.SKIPPED
+    }
+    val started = orderedStates.any { it.status != ColumnStepStatus.PENDING }
+
+    // 高风险步骤的确认弹窗；卡片按钮和底部「开始第一步」共用这一条路径，避免漏掉确认。
+    var confirmStep by remember { mutableStateOf<RepoColumnStep?>(null) }
+    fun requestRun(step: RepoColumnStep) {
+        if (step.confirm.isNotEmpty()) confirmStep = step else onRunStep(step)
+    }
+
+    var logExpanded by rememberSaveable { mutableStateOf(false) }
+
+    // 专题里带 ${keybox} 占位（或声明了直链）时，没有可用的密钥材料就走不到最后一步。
+    // 商店只把用户选中的文件原样交给执行器写进设备，不保存、不转存、不上传。
+    val needsKeybox = remember(topic) {
+        topic.keybox != null || topic.steps.any { it.fileContent.contains("\${keybox}") }
+    }
+    var keyboxError by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val keyboxPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val text = runCatching {
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        input.readBytes().toString(Charsets.UTF_8)
+                    }
+                }
+            }.getOrNull()
+            if (text.isNullOrBlank()) {
+                keyboxError = "读取失败：文件是空的，或者没有读取权限"
+                return@launch
+            }
+            keyboxError = onProvideKeybox(text) ?: ""
+        }
+    }
+
+    confirmStep?.let { step ->
+        // 弹框本身是 Material 组件，单独套一层同源调色板（Material 模式下这一层直通）。
+        AiAssistantMaterialTheme {
+            ExpressiveConfirmDialog(
+                title = stringResource(R.string.column_wizard_confirm_title),
+                confirmText = stringResource(R.string.column_wizard_start),
+                message = step.confirm,
+                dismissText = stringResource(R.string.column_wizard_cancel),
+                onConfirm = {
+                    confirmStep = null
+                    onRunStep(step)
+                },
+                onDismiss = { confirmStep = null },
+            )
+        }
+    }
+
+    AppScaffold(
+        topBar = {
+            BlurredBar(backdrop) {
+                TopAppBar(
+                    title = topic.title,
+                    color = barColor,
+                    navigationIcon = {
+                        IconButton(onClick = onBack, minWidth = 36.dp, minHeight = 36.dp) {
+                            MiuixIcon(
+                                modifier = Modifier.graphicsLayer {
+                                    if (layoutDirection == LayoutDirection.Rtl) scaleX = -1f
+                                },
+                                imageVector = MiuixIcons.Back,
+                                contentDescription = null,
+                                tint = colorScheme.onBackground,
+                            )
+                        }
+                    },
+                    actions = {},
+                    scrollBehavior = scrollBehavior,
+                )
+            }
+        },
+        bottomBar = {
+            if (!state.done) {
+                WizardBottomBarMiuix(
+                    total = total,
+                    finished = finished,
+                    started = started,
+                    running = state.running,
+                    onRunAll = onRunAll,
+                    onStart = {
+                        orderedStates
+                            .firstOrNull { it.status == ColumnStepStatus.PENDING }
+                            ?.let { requestRun(it.step) }
+                    },
+                )
+            }
+        },
+        popupHost = {},
+        // 左右让给系统栏与挖孔；上下由顶栏、列表 contentPadding 与底部操作条各自负责，
+        // 否则列表会被顶栏和导航栏各让一次，页面上下多出一截空白。
+        contentWindowInsets = WindowInsets.systemBars.add(WindowInsets.displayCutout)
+            .only(WindowInsetsSides.Horizontal),
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
+                .fillMaxSize()
+                .scrollEndHaptic()
+                .overScrollVertical()
+                // 顶栏的收起动画要靠 nestedScroll 连接列表的滚动：漏了它顶栏就钉死不动。
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
+            contentPadding = PaddingValues(
+                start = innerPadding.calculateStartPadding(layoutDirection) + 16.dp,
+                end = innerPadding.calculateEndPadding(layoutDirection) + 16.dp,
+                top = innerPadding.calculateTopPadding() + 12.dp,
+                bottom = innerPadding.calculateBottomPadding() + 24.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (state.health != null) {
+                item(key = "wizard-health") {
+                    ColumnHealthCardMiuix(report = state.health)
+                }
+            } else {
+                // 体检是 root 探针，需要几秒；给个明确的中态，别让人以为这块忘了渲染。
+                item(key = "wizard-health-scanning") {
+                    MiuixText(
+                        text = stringResource(R.string.column_wizard_health_scanning),
+                        color = colorScheme.onSurfaceVariantSummary,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+                    )
+                }
+            }
+            if (needsKeybox && !state.keyboxReady) {
+                item(key = "wizard-keybox") {
+                    WizardKeyboxCardMiuix(
+                        error = keyboxError,
+                        onPick = {
+                            keyboxError = ""
+                            keyboxPicker.launch(
+                                arrayOf(
+                                    "text/xml",
+                                    "application/xml",
+                                    "text/plain",
+                                    "application/octet-stream",
+                                ),
+                            )
+                        },
+                    )
+                }
+            }
+            if (state.error.isNotEmpty()) {
+                item(key = "wizard-error") { WizardErrorBannerMiuix(state.error) }
+            }
+            if (orderedStates.isEmpty()) {
+                item(key = "wizard-empty") {
+                    MiuixText(
+                        text = stringResource(R.string.column_wizard_empty),
+                        color = colorScheme.onSurfaceVariantSummary,
+                        fontSize = 14.sp,
+                    )
+                }
+            }
+            items(orderedStates, key = { it.step.id }) { uiState ->
+                WizardStepCardMiuix(
+                    uiState = uiState,
+                    busy = state.running,
+                    optedIn = uiState.step.id in state.optedIn,
+                    onToggleOptIn = { onToggleOptIn(uiState.step) },
+                    onRun = { requestRun(uiState.step) },
+                    onSkip = { onSkipStep(uiState.step) },
+                    onUpgrade = { onUpgradeStep(uiState.step) },
+                    onMarkDone = { onMarkDone(uiState.step) },
+                )
+            }
+            if (state.log.isNotEmpty()) {
+                item(key = "wizard-log") {
+                    WizardLogCardMiuix(
+                        log = state.log,
+                        expanded = logExpanded,
+                        onToggle = { logExpanded = !logExpanded },
+                    )
+                }
+            }
+            if (state.done) {
+                item(key = "wizard-checks") {
+                    WizardChecksCardMiuix(
+                        checks = state.checks,
+                        onRollback = onRollback,
+                        busy = state.running,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 设备现状体检卡（Miuix）。只提示「之前配过一部分」，绝不用来决定跳过哪一步。 */
+@Composable
+private fun ColumnHealthCardMiuix(report: ColumnHealthReport) {
+    val colorScheme = MiuixTheme.colorScheme
+    AppCard(
+        modifier = Modifier.fillMaxWidth(),
+        insideMargin = PaddingValues(16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            MiuixText(
+                text = stringResource(R.string.column_health_title_short),
+                modifier = Modifier.weight(1f),
+                color = colorScheme.onSurface,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            MiuixText(
+                text = stringResource(
+                    R.string.column_health_score,
+                    report.passedCount,
+                    report.totalCount,
+                ),
+                color = colorScheme.primary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        HealthLevelRowMiuix(
+            ok = report.dayLevelReady,
+            title = stringResource(R.string.column_health_day_level),
+            okText = stringResource(R.string.column_health_ready),
+            noText = stringResource(R.string.column_health_not_ready),
+        )
+        Spacer(Modifier.height(6.dp))
+        HealthLevelRowMiuix(
+            ok = report.integrityLevelReady,
+            title = stringResource(R.string.column_health_integrity_level),
+            okText = stringResource(R.string.column_health_ready),
+            noText = stringResource(R.string.column_health_not_ready),
+        )
+        val missing = report.checks.filter { !it.passed }
+        if (missing.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            MiuixHorizontalDivider()
+            Spacer(Modifier.height(8.dp))
+            missing.take(3).forEach { check ->
+                MiuixText(
+                    text = "· ${check.detail}",
+                    color = colorScheme.onSurfaceVariantSummary,
+                    fontSize = 13.sp,
+                )
+            }
+            if (missing.size > 3) {
+                MiuixText(
+                    text = "· …（还有 ${missing.size - 3} 项）",
+                    color = colorScheme.onSurfaceVariantSummary,
+                    fontSize = 13.sp,
+                )
+            }
+        }
+    }
+}
+
+/** 体检卡里的一条「档位是否就绪」。 */
+@Composable
+private fun HealthLevelRowMiuix(ok: Boolean, title: String, okText: String, noText: String) {
+    val colorScheme = MiuixTheme.colorScheme
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(if (ok) colorScheme.primary else colorScheme.outline),
+        )
+        MiuixText(
+            text = title,
+            modifier = Modifier.weight(1f),
+            color = colorScheme.onSurface,
+            fontSize = 14.sp,
+        )
+        MiuixText(
+            text = if (ok) okText else noText,
+            color = if (ok) colorScheme.primary else colorScheme.onSurfaceVariantSummary,
+            fontSize = 12.sp,
+        )
+    }
+}
+
+/** 密钥材料提示卡（Miuix）。用户选自己信任的那份 keybox.xml，说明它会被写到哪里。 */
+@Composable
+private fun WizardKeyboxCardMiuix(error: String, onPick: () -> Unit) {
+    val colorScheme = MiuixTheme.colorScheme
+    AppCard(
+        modifier = Modifier.fillMaxWidth(),
+        insideMargin = PaddingValues(16.dp),
+    ) {
+        MiuixText(
+            text = stringResource(R.string.column_wizard_keybox_title),
+            color = colorScheme.onSurface,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(6.dp))
+        MiuixText(
+            text = stringResource(R.string.column_wizard_keybox_body),
+            color = colorScheme.onSurfaceVariantSummary,
+            fontSize = 13.sp,
+        )
+        if (error.isNotEmpty()) {
+            Spacer(Modifier.height(6.dp))
+            MiuixText(text = error, color = colorScheme.error, fontSize = 13.sp)
+        }
+        Spacer(Modifier.height(12.dp))
+        MiuixButton(
+            onClick = onPick,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            MiuixText(text = stringResource(R.string.column_wizard_keybox_pick), fontSize = 15.sp)
+        }
+    }
+}
+
+/** 全局错误条（Miuix）：例如密钥拉取失败导致整个专题都跑不下去，说清原因比让每步各自报错有用。 */
+@Composable
+private fun WizardErrorBannerMiuix(message: String) {
+    val colorScheme = MiuixTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(colorScheme.errorContainer),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            MiuixIcon(
+                imageVector = Icons.Rounded.Warning,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = colorScheme.onErrorContainer,
+            )
+            MiuixText(
+                text = message,
+                modifier = Modifier.weight(1f),
+                color = colorScheme.onErrorContainer,
+                fontSize = 13.sp,
+            )
+        }
+    }
+}
+
+/**
+ * 步骤卡（Miuix）。
+ *
+ * 和 Material 版同样的信息密度：状态图标、标题、kind 标签、状态文字、说明（超 3 行折叠）、
+ * 官方入口、升级提示、失败原因，右侧挂动作；命令原文单独占一整行，免得在窄列里折行。
+ */
+@Composable
+private fun WizardStepCardMiuix(
+    uiState: ColumnStepUiState,
+    busy: Boolean,
+    optedIn: Boolean,
+    onToggleOptIn: () -> Unit,
+    onRun: () -> Unit,
+    onSkip: () -> Unit,
+    onUpgrade: () -> Unit,
+    onMarkDone: () -> Unit,
+) {
+    val colorScheme = MiuixTheme.colorScheme
+    // 「打开官方页面」要用它 startActivity；Composable 里取一次，别在 onClick 里取。
+    val context = LocalContext.current
+    val step = uiState.step
+    val skipped = uiState.status == ColumnStepStatus.SKIPPED
+    val statusColor = wizardStatusColorMiuix(uiState.status)
+    // note 常是整段说明，全展开会把卡片撑得很高：默认只看 3 行，超出时才给「展开 / 收起」。
+    var noteExpanded by rememberSaveable(step.id) { mutableStateOf(false) }
+    var noteOverflows by remember(step.id) { mutableStateOf(false) }
+
+    AppCard(
+        modifier = Modifier.fillMaxWidth(),
+        insideMargin = PaddingValues(16.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            // 「可选安装」的步骤默认不装：勾上才会进一键执行，或者直接点这一步等同勾选。
+            if (step.optIn) {
+                MiuixCheckbox(
+                    state = if (optedIn) ToggleableState.On else ToggleableState.Off,
+                    onClick = onToggleOptIn,
+                    enabled = !busy,
+                )
+            }
+            WizardStepStatusIconMiuix(status = uiState.status)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    MiuixText(
+                        text = step.title,
+                        modifier = Modifier.weight(1f),
+                        color = colorScheme.onSurface,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        textDecoration = if (skipped) TextDecoration.LineThrough else null,
+                    )
+                    if (step.optional) {
+                        MiuixText(
+                            text = stringResource(R.string.module_column_step_optional),
+                            color = colorScheme.onSurfaceVariantSummary,
+                            fontSize = 11.sp,
+                        )
+                    }
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    MiuixText(
+                        text = stepKindLabel(step.kind),
+                        color = colorScheme.primary.copy(alpha = 0.85f),
+                        fontSize = 11.sp,
+                    )
+                    MiuixText(
+                        text = stringResource(statusLabel(uiState.status)),
+                        color = statusColor,
+                        fontSize = 11.sp,
+                    )
+                }
+                if (step.note.isNotEmpty()) {
+                    MiuixText(
+                        text = step.note,
+                        color = colorScheme.onSurfaceVariantSummary,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        maxLines = if (noteExpanded) Int.MAX_VALUE else NOTE_COLLAPSED_LINES,
+                        overflow = TextOverflow.Ellipsis,
+                        onTextLayout = { layout ->
+                            // 折叠时被省略号截断，说明 note 超过 3 行，才需要露出「展开」。
+                            if (!noteExpanded && !noteOverflows && layout.hasVisualOverflow) {
+                                noteOverflows = true
+                            }
+                        },
+                    )
+                    if (noteOverflows) {
+                        MiuixTextButton(
+                            text = stringResource(
+                                if (noteExpanded) {
+                                    R.string.column_wizard_note_less
+                                } else {
+                                    R.string.column_wizard_note_more
+                                },
+                            ),
+                            onClick = { noteExpanded = !noteExpanded },
+                            minWidth = 0.dp,
+                            minHeight = 0.dp,
+                            insideMargin = PaddingValues(horizontal = 0.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+                // 官方只肯走群/网盘发的检测器（春秋），商店给不了直链，但能把官方入口摆出来；
+                // 链接来自索引仓，只放行 http/https，点了也只是打开浏览器，不执行任何东西。
+                if (step.link.isNotEmpty()) {
+                    MiuixTextButton(
+                        text = stringResource(R.string.column_wizard_open_link),
+                        onClick = {
+                            runCatching {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(step.link)))
+                            }
+                        },
+                        minWidth = 0.dp,
+                        minHeight = 0.dp,
+                        insideMargin = PaddingValues(horizontal = 0.dp, vertical = 2.dp),
+                        colors = MiuixButtonDefaults.textButtonColorsPrimary(),
+                    )
+                }
+                // 已装但上游有新版：跳过不等于「已经是最新」。只有用户点这里才会带 force
+                // 覆盖安装——向导不会替他把旧模块换掉。
+                uiState.upgrade?.let { upgrade ->
+                    MiuixTextButton(
+                        text = stringResource(
+                            R.string.column_wizard_upgrade,
+                            upgrade.latestVersion,
+                        ),
+                        onClick = onUpgrade,
+                        enabled = !busy,
+                        minWidth = 0.dp,
+                        minHeight = 0.dp,
+                        insideMargin = PaddingValues(horizontal = 0.dp, vertical = 2.dp),
+                    )
+                }
+                if (uiState.message.isNotEmpty()) {
+                    MiuixText(
+                        text = uiState.message,
+                        color = statusColor,
+                        fontSize = 13.sp,
+                    )
+                }
+            }
+            WizardStepActionsMiuix(
+                status = uiState.status,
+                optional = step.optional,
+                enabled = !busy,
+                onRun = onRun,
+                onSkip = onSkip,
+                onMarkDone = onMarkDone,
+            )
+        }
+        // 命令原文单独占一整行：右侧按钮占掉宽度后，窄列里折行的 shell 命令既难读也容易被误抄。
+        if (step.kind == STEP_KIND_RUN_COMMAND && step.command.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            CommandBlockMiuix(command = step.command)
+        }
+    }
+}
+
+/** 右侧动作区（Miuix）。没动作的步骤（已成功/已跳过）不占位，标题就能多留一点宽度。 */
+@Composable
+private fun WizardStepActionsMiuix(
+    status: ColumnStepStatus,
+    optional: Boolean,
+    enabled: Boolean,
+    onRun: () -> Unit,
+    onSkip: () -> Unit,
+    onMarkDone: () -> Unit,
+) {
+    // NEEDS_USER 是「等你动手」，点它是「我做完了」，不是「重跑一遍」——重跑只会再下载一次、
+    // 再弹一次安装器。所以这里接的是 onMarkDone，不是 onRun。
+    val runLabel = when (status) {
+        ColumnStepStatus.PENDING -> R.string.column_wizard_run
+        // 跑着的这一步保留按钮但禁用：按钮突然消失会让人以为「可以点下一步了」。
+        ColumnStepStatus.RUNNING -> R.string.column_wizard_run
+        ColumnStepStatus.FAILED -> R.string.column_wizard_retry
+        ColumnStepStatus.NEEDS_USER -> R.string.column_wizard_mark_done
+        ColumnStepStatus.SUCCESS -> null
+        ColumnStepStatus.SKIPPED -> null
+    }
+    val canSkip = optional && when (status) {
+        ColumnStepStatus.PENDING,
+        ColumnStepStatus.FAILED,
+        ColumnStepStatus.NEEDS_USER,
+        -> true
+
+        else -> false
+    }
+    if (runLabel == null && !canSkip) return
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        if (runLabel != null) {
+            MiuixTextButton(
+                text = stringResource(runLabel),
+                onClick = if (status == ColumnStepStatus.NEEDS_USER) onMarkDone else onRun,
+                enabled = enabled && status != ColumnStepStatus.RUNNING,
+                minWidth = 0.dp,
+                minHeight = 0.dp,
+                insideMargin = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                colors = MiuixButtonDefaults.textButtonColorsPrimary(),
+            )
+        }
+        if (canSkip) {
+            MiuixTextButton(
+                text = stringResource(R.string.column_wizard_skip),
+                onClick = onSkip,
+                enabled = enabled,
+                minWidth = 0.dp,
+                minHeight = 0.dp,
+                insideMargin = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
+    }
+}
+
+/** 步骤状态图标（Miuix）：空心圆 / 转圈 / 绿勾 / 红叉 / 灰色横线 / 人形。 */
+@Composable
+private fun WizardStepStatusIconMiuix(status: ColumnStepStatus) {
+    val colorScheme = MiuixTheme.colorScheme
+    Box(modifier = Modifier.size(22.dp), contentAlignment = Alignment.Center) {
+        when (status) {
+            ColumnStepStatus.PENDING -> Box(
+                modifier = Modifier
+                    .size(16.dp)
+                    .clip(CircleShape)
+                    .border(width = 1.5.dp, color = colorScheme.outline, shape = CircleShape),
+            )
+
+            ColumnStepStatus.RUNNING -> MiuixCircularProgressIndicator(
+                progress = null,
+                size = 18.dp,
+                strokeWidth = 2.dp,
+            )
+
+            ColumnStepStatus.SUCCESS -> MiuixIcon(
+                imageVector = Icons.Rounded.CheckCircle,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = successGreenMiuix(),
+            )
+
+            ColumnStepStatus.FAILED -> MiuixIcon(
+                imageVector = Icons.Rounded.Close,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = colorScheme.error,
+            )
+
+            ColumnStepStatus.SKIPPED -> Box(
+                modifier = Modifier
+                    .size(16.dp)
+                    .clip(CircleShape)
+                    .background(colorScheme.surfaceContainerHighest),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(8.dp)
+                        .height(2.dp)
+                        .clip(CircleShape)
+                        .background(colorScheme.outline),
+                )
+            }
+
+            ColumnStepStatus.NEEDS_USER -> MiuixIcon(
+                imageVector = Icons.Rounded.Person,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = colorScheme.primary,
+            )
+        }
+    }
+}
+
+/** 命令原文块（Miuix）：等宽字体 + 浅底，长按可以选中复制。 */
+@Composable
+private fun CommandBlockMiuix(command: String) {
+    val colorScheme = MiuixTheme.colorScheme
+    SelectionContainer {
+        MiuixText(
+            text = command,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(colorScheme.onSurface.copy(alpha = 0.06f))
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            color = colorScheme.onSurface,
+            fontSize = 12.sp,
+            fontFamily = FontFamily.Monospace,
+            lineHeight = 18.sp,
+        )
+    }
+}
+
+/** 执行日志卡（Miuix）：默认只露最后几行，展开后整段可复制。 */
+@Composable
+private fun WizardLogCardMiuix(log: List<String>, expanded: Boolean, onToggle: () -> Unit) {
+    val colorScheme = MiuixTheme.colorScheme
+    val visible = remember(log, expanded) {
+        if (expanded) log else log.takeLast(LOG_COLLAPSED_LINES)
+    }
+    val logText = remember(visible) { visible.joinToString("\n") }
+    AppCard(
+        modifier = Modifier.fillMaxWidth(),
+        insideMargin = PaddingValues(16.dp),
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            MiuixText(
+                text = stringResource(R.string.column_wizard_log_title),
+                modifier = Modifier.weight(1f),
+                color = colorScheme.onSurface,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (log.size > LOG_COLLAPSED_LINES) {
+                MiuixTextButton(
+                    text = stringResource(
+                        if (expanded) {
+                            R.string.column_wizard_collapse_log
+                        } else {
+                            R.string.column_wizard_expand_log
+                        },
+                    ),
+                    onClick = onToggle,
+                    minWidth = 0.dp,
+                    minHeight = 0.dp,
+                    insideMargin = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        SelectionContainer {
+            MiuixText(
+                text = logText,
+                color = colorScheme.onSurfaceVariantSummary,
+                fontSize = 12.sp,
+                fontFamily = FontFamily.Monospace,
+                lineHeight = 18.dp.value.sp,
+            )
+        }
+    }
+}
+
+/** 完成后的自检结果 + 回滚（Miuix）。 */
+@Composable
+private fun WizardChecksCardMiuix(
+    checks: List<ColumnCheckResult>,
+    onRollback: () -> Unit,
+    busy: Boolean,
+) {
+    val colorScheme = MiuixTheme.colorScheme
+    var confirmRollback by remember { mutableStateOf(false) }
+    AppCard(
+        modifier = Modifier.fillMaxWidth(),
+        insideMargin = PaddingValues(16.dp),
+    ) {
+        if (checks.isNotEmpty()) {
+            MiuixText(
+                text = stringResource(R.string.column_wizard_checks_title),
+                color = colorScheme.onSurface,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(10.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                checks.forEach { check -> CheckRowMiuix(check = check) }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+        MiuixButton(
+            onClick = { confirmRollback = true },
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth(),
+            colors = MiuixButtonDefaults.buttonColors(
+                color = colorScheme.errorContainer,
+                contentColor = colorScheme.onErrorContainer,
+            ),
+        ) {
+            MiuixText(text = stringResource(R.string.column_wizard_rollback), fontSize = 15.sp)
+        }
+    }
+    if (confirmRollback) {
+        // 回滚是不可撤销的破坏性动作，和 Material 版一样先过一遍确认框。
+        AiAssistantMaterialTheme {
+            ExpressiveConfirmDialog(
+                title = stringResource(R.string.column_wizard_rollback_confirm_title),
+                confirmText = stringResource(R.string.column_wizard_rollback_confirm_confirm),
+                message = stringResource(R.string.column_wizard_rollback_confirm_body),
+                dismissText = stringResource(R.string.column_wizard_cancel),
+                onConfirm = {
+                    confirmRollback = false
+                    onRollback()
+                },
+                onDismiss = { confirmRollback = false },
+            )
+        }
+    }
+}
+
+/** 一条自检结果（Miuix）。 */
+@Composable
+private fun CheckRowMiuix(check: ColumnCheckResult) {
+    val colorScheme = MiuixTheme.colorScheme
+    val tint = if (check.passed) successGreenMiuix() else colorScheme.error
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        MiuixIcon(
+            imageVector = if (check.passed) Icons.Rounded.CheckCircle else Icons.Rounded.Close,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = tint,
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            MiuixText(
+                text = stringResource(
+                    if (check.passed) {
+                        R.string.column_wizard_check_pass
+                    } else {
+                        R.string.column_wizard_check_fail
+                    },
+                ),
+                color = tint,
+                fontSize = 13.sp,
+            )
+            if (check.detail.isNotEmpty()) {
+                MiuixText(
+                    text = check.detail,
+                    color = colorScheme.onSurfaceVariantSummary,
+                    fontSize = 12.sp,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 底部固定操作条（Miuix）。
+ *
+ * 未开始：一个「开始第一步」，省得用户去列表里找第一个按钮；进行中：进度条 + 「3/8」，让人知道还剩
+ * 几步；跑完之后整条隐藏，把屏幕让给自检结果与回滚。
+ */
+@Composable
+private fun WizardBottomBarMiuix(
+    total: Int,
+    finished: Int,
+    started: Boolean,
+    running: Boolean,
+    onRunAll: () -> Unit,
+    onStart: () -> Unit,
+) {
+    if (total == 0) return
+    val colorScheme = MiuixTheme.colorScheme
+    MiuixSurface(color = colorScheme.surfaceContainer) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (!started) {
+                // 主按钮是一键执行：先把能自动的全跑完；想一步步看的人走下面那个次要按钮。
+                MiuixButton(
+                    onClick = onRunAll,
+                    enabled = !running,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    cornerRadius = 24.dp,
+                    colors = MiuixButtonDefaults.buttonColorsPrimary(),
+                ) {
+                    MiuixText(
+                        text = stringResource(R.string.column_wizard_run_all),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+                MiuixTextButton(
+                    text = stringResource(R.string.column_wizard_start_first),
+                    onClick = onStart,
+                    enabled = !running,
+                    modifier = Modifier.fillMaxWidth(),
+                    insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                )
+            } else {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    MiuixLinearProgressIndicator(
+                        progress = if (total == 0) 0f else finished.toFloat() / total,
+                        modifier = Modifier.weight(1f),
+                    )
+                    MiuixText(
+                        text = stringResource(R.string.column_wizard_progress, finished, total),
+                        color = colorScheme.onSurface,
+                        fontSize = 13.sp,
+                    )
+                }
+                // 重启回来接着做时最有用：已经处理过的步骤会被跳过，只跑重启后才允许的那几步。
+                MiuixButton(
+                    onClick = onRunAll,
+                    enabled = !running,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    cornerRadius = 24.dp,
+                ) {
+                    MiuixText(
+                        text = stringResource(R.string.column_wizard_run_all_rest),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 按底色明暗取成功色（Miuix）：AMOLED / 深色主题下用浅一档的绿，浅色主题下用深绿。 */
+@Composable
+private fun successGreenMiuix(): Color =
+    if (MiuixTheme.colorScheme.surface.luminance() < 0.5f) SuccessGreenDark else SuccessGreenLight
+
+/** 步骤状态文字的颜色（Miuix）。Miuix 没有 tertiary，NEEDS_USER 用 primary 顶上。 */
+@Composable
+private fun wizardStatusColorMiuix(status: ColumnStepStatus): Color = when (status) {
+    ColumnStepStatus.SUCCESS -> successGreenMiuix()
+    ColumnStepStatus.FAILED -> MiuixTheme.colorScheme.error
+    ColumnStepStatus.NEEDS_USER -> MiuixTheme.colorScheme.primary
+    else -> MiuixTheme.colorScheme.onSurfaceVariantSummary
 }
 
 @Composable
@@ -372,18 +1368,11 @@ private fun ColumnWizardScreenMaterial(
     }
 }
 
-/** 全局错误条：例如密钥拉取失败导致整个专题都跑不下去，这时候说清楚原因比让每一步各自报错有用。 */
 /**
- * 密钥材料提示卡。
+ * 向导里的卡片外壳（Material 3 Expressive）。
  *
- * 三绿（Play Integrity）绕不开一份 Google 认证密钥，而这份材料既不能由商店托管、也不该让用户去
- * 来路不明的地方下载。所以这里只做一件事：让用户选自己信任的那份 keybox.xml，说明它会被写到哪里。
- */
-
-/**
- * 向导里的卡片外壳：Miuix 下用 AppCard，Material 下用 TonalCard。
- *
- * 内容和行为完全共用，只换外壳——两套主题的圆角、底色与点击反馈各自符合自己的设计语言。
+ * Miuix 皮肤不用这个函数：那边有自己的 WizardStepCardMiuix 等实现，圆角、底色与点击反馈各自
+ * 符合自己的设计语言，不必在一个外壳里分流两套设计语言。
  */
 @Composable
 private fun WizardCard(
@@ -392,19 +1381,17 @@ private fun WizardCard(
     containerColor: Color = MaterialTheme.colorScheme.surfaceBright,
     content: @Composable () -> Unit,
 ) {
-    if (LocalUiMode.current == UiMode.Miuix) {
-        AppCard(
-            modifier = if (onClick != null) modifier.clickable(onClick = onClick) else modifier,
-        ) {
-            Column { content() }
-        }
-    } else {
-        TonalCard(modifier = modifier, containerColor = containerColor, onClick = onClick) {
-            Column { content() }
-        }
+    TonalCard(modifier = modifier, containerColor = containerColor, onClick = onClick) {
+        Column { content() }
     }
 }
 
+/**
+ * 密钥材料提示卡。
+ *
+ * 三绿（Play Integrity）绕不开一份 Google 认证密钥，而这份材料既不能由商店托管、也不该让用户去
+ * 来路不明的地方下载。所以这里只做一件事：让用户选自己信任的那份 keybox.xml，说明它会被写到哪里。
+ */
 @Composable
 private fun WizardKeyboxCard(error: String, onPick: () -> Unit) {
     WizardCard {
@@ -438,6 +1425,7 @@ private fun WizardKeyboxCard(error: String, onPick: () -> Unit) {
     }
 }
 
+/** 全局错误条：例如密钥拉取失败导致整个专题都跑不下去，这时候说清楚原因比让每一步各自报错有用。 */
 @Composable
 private fun WizardErrorBanner(message: String) {
     Surface(
@@ -928,8 +1916,8 @@ private fun WizardBottomBar(
     onStart: () -> Unit,
 ) {
     if (total == 0) return
-    // 本页两套 UI 模式走的都是 Material 实现（见文件头说明），底部条也必须是 Material3：
-    // 之前 Miuix 模式下这里整块换成 miuix 的实心色按钮，夹在 Material 卡片中间非常割裂。
+    // Material 版底部条（Miuix 版见 WizardBottomBarMiuix）：底下的列表是 Material 卡片，
+    // 这里也必须跟同一套设计语言，否则一条实心色按钮夹在卡片中间会很割裂。
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 3.dp) {
         Column(
             modifier = Modifier

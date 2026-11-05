@@ -2,7 +2,9 @@ package com.sukisu.ultra.ai
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,7 +16,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Chat
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Visibility
@@ -22,8 +26,8 @@ import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -290,634 +294,682 @@ internal fun AiConfigEditorMaterial(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        AiToggleRow(
-            title = stringResource(R.string.ai_master_switch),
-            summary = stringResource(R.string.ai_master_switch_summary),
-            checked = draft.enabled,
-            onCheckedChange = { onDraftChange(draft.copy(enabled = it)) },
-        )
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-        Text(
-            text = stringResource(R.string.ai_connection_section),
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Text(
-            text = stringResource(R.string.ai_connection_trust),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = stringResource(R.string.ai_provider_section),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = currentProvider?.name ?: defaultProviderName,
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = { showProviderDialog = true }) {
-                Text(stringResource(R.string.ai_provider_switch))
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            TextButton(onClick = { addProvider() }) {
-                Text(stringResource(R.string.ai_provider_add))
-            }
-            if (draft.providers.size > 1) {
-                TextButton(onClick = { showDeleteProviderDialog = true }) {
-                    Text(stringResource(R.string.ai_provider_delete))
-                }
-            }
-        }
-        OutlinedTextField(
-            value = currentProvider?.name ?: "",
-            onValueChange = { value -> updateCurrentProvider { it.copy(name = value) } },
-            label = { Text(stringResource(R.string.ai_provider_name)) },
-            singleLine = true,
-            shape = MaterialTheme.shapes.large,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Text(
-            text = stringResource(R.string.ai_format),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AiProviderFormat.entries.forEach { format ->
-                FilterChip(
-                    selected = (currentProvider?.format ?: draft.format) == format,
-                    onClick = { updateCurrentProvider { it.copy(format = format) } },
-                    label = { Text(stringResource(format.labelRes())) },
-                )
-            }
-        }
-        OutlinedTextField(
-            value = currentProvider?.endpoint ?: draft.endpoint,
-            onValueChange = { value -> updateCurrentProvider { it.copy(endpoint = value) } },
-            label = { Text(stringResource(R.string.ai_endpoint)) },
-            placeholder = { Text(stringResource(R.string.ai_endpoint_hint)) },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-            shape = MaterialTheme.shapes.large,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        if (detected != null) {
-            Text(
-                text = stringResource(
-                    R.string.ai_format_detected,
-                    stringResource(detected.labelRes()),
-                ) + " · " + draft.resolvedEndpoint(),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+        // ① 启用助手：卡片内容自带标题行，不再叠一层分组标题
+        SettingsSection {
+            AiToggleRow(
+                title = stringResource(R.string.ai_master_switch),
+                summary = stringResource(R.string.ai_master_switch_summary),
+                checked = draft.enabled,
+                onCheckedChange = { onDraftChange(draft.copy(enabled = it)) },
             )
         }
-        OutlinedTextField(
-            value = currentProvider?.apiKey ?: draft.apiKey,
-            onValueChange = { value -> updateCurrentProvider { it.copy(apiKey = value) } },
-            label = { Text(stringResource(R.string.ai_api_key)) },
-            placeholder = { Text(stringResource(R.string.ai_api_key_hint)) },
-            singleLine = true,
-            visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
-            trailingIcon = {
-                IconButton(onClick = { showKey = !showKey }) {
-                    Icon(
-                        imageVector = if (showKey) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                        contentDescription = stringResource(
-                            if (showKey) R.string.ai_hide_key else R.string.ai_show_key
-                        ),
-                    )
-                }
-            },
-            shape = MaterialTheme.shapes.large,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.ai_model),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = AiSettings.activeModel(draft)?.name ?: draft.model,
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-            }
-            TextButton(
-                onClick = {
-                    onFetchModels(false)
-                    fetchProviderModels()
-                },
-                enabled = !fetchingModels && !fetchingProviderModels,
-            ) {
-                if (fetchingModels || fetchingProviderModels) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.padding(end = 6.dp).size(14.dp),
-                        strokeWidth = 2.dp,
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Rounded.Refresh,
-                        contentDescription = null,
-                        modifier = Modifier.padding(end = 6.dp).size(16.dp),
-                    )
-                }
-                Text(
-                    stringResource(
-                        if (fetchingModels || fetchingProviderModels) {
-                            R.string.ai_fetching_models
-                        } else {
-                            R.string.ai_fetch_models
-                        }
-                    )
-                )
-            }
-        }
-        OutlinedTextField(
-            value = draft.imageModel,
-            onValueChange = { onDraftChange(draft.copy(imageModel = it)) },
-            label = { Text(stringResource(R.string.ai_image_model)) },
-            placeholder = { Text(stringResource(R.string.ai_image_model_hint)) },
-            singleLine = true,
-            shape = MaterialTheme.shapes.large,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            TextButton(
-                onClick = { onFetchModels(true) },
-                enabled = !fetchingModels,
-            ) {
-                Text(stringResource(R.string.ai_fetch_image_models))
-            }
-        }
 
-        Text(
-            text = stringResource(R.string.ai_thinking_mode),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AiThinkingMode.entries.forEach { mode ->
-                FilterChip(
-                    selected = draft.thinkingMode == mode,
-                    onClick = { onDraftChange(draft.copy(thinkingMode = mode)) },
-                    label = { Text(stringResource(mode.labelRes())) },
-                )
-            }
-        }
-        Text(
-            text = stringResource(R.string.ai_thinking_summary),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
 
-        OutlinedTextField(
-            value = draft.systemPrompt,
-            onValueChange = { onDraftChange(draft.copy(systemPrompt = it)) },
-            label = { Text(stringResource(R.string.ai_system_prompt)) },
-            placeholder = { Text(stringResource(R.string.ai_system_prompt_hint)) },
-            minLines = 2,
-            maxLines = 4,
-            shape = MaterialTheme.shapes.large,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Text(
-            text = stringResource(
-                R.string.ai_provider_test_hint,
-                currentProvider?.name ?: defaultProviderName,
-            ),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        OutlinedButton(
-            onClick = onTest,
-            enabled = !testState.testing,
-            modifier = Modifier.fillMaxWidth(),
+        // ② AI 提供商：头部一行放切换/新增/删除，下面依次是名称、格式、地址、密钥、模型、图片模型、思考、提示与测试
+        SettingsSection(
+            title = stringResource(R.string.ai_provider_group),
+            subtitle = stringResource(R.string.ai_connection_trust),
         ) {
-            if (testState.testing) {
-                CircularProgressIndicator(
-                    modifier = Modifier.padding(end = 8.dp).size(16.dp),
-                    strokeWidth = 2.dp,
-                )
-                Text(stringResource(R.string.ai_testing))
-            } else {
-                Text(stringResource(R.string.ai_test_connection))
-            }
-        }
-
-        testState.message?.let { message ->
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = if (testState.success) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.errorContainer
-                },
+            // 头部一行放下「当前提供商 + 切换 / 新增 / 删除」，格式与模型做副标题，省掉原来三行独立操作区。
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(36.dp),
                 ) {
-                    Icon(
-                        imageVector = if (testState.success) Icons.Rounded.CheckCircle else Icons.Rounded.ErrorOutline,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = if (testState.success) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onErrorContainer
-                        },
-                    )
-                    Text(
-                        text = message,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                        color = if (testState.success) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onErrorContainer
-                        },
-                    )
-                }
-            }
-        }
-
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-        OutlinedTextField(
-            value = draft.titleModel,
-            onValueChange = { onDraftChange(draft.copy(titleModel = it)) },
-            label = { Text(stringResource(R.string.ai_title_model)) },
-            placeholder = { Text(stringResource(R.string.ai_title_model_hint)) },
-            singleLine = true,
-            shape = MaterialTheme.shapes.large,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Text(
-            text = stringResource(R.string.ai_title_effort),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AiThinkingMode.entries.forEach { mode ->
-                FilterChip(
-                    selected = draft.titleEffort == mode,
-                    onClick = { onDraftChange(draft.copy(titleEffort = mode)) },
-                    label = { Text(stringResource(mode.titleEffortLabelRes())) },
-                )
-            }
-        }
-
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-        AiToggleRow(
-            title = stringResource(R.string.ai_advanced_mode),
-            summary = stringResource(R.string.ai_advanced_mode_summary),
-            checked = draft.advancedMode,
-            onCheckedChange = { enabled ->
-                if (!enabled) {
-                    onDraftChange(draft.copy(advancedMode = false))
-                } else {
-                    requestRisk(AiRiskKind.ADVANCED_API, "ADVANCED") {
-                        onDraftChange(draft.copy(advancedMode = true))
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = (currentProvider?.name ?: defaultProviderName).take(1),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
                     }
                 }
-            },
-        )
-        if (draft.advancedMode) {
-            Text(
-                text = stringResource(R.string.ai_advanced_warning),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-            )
+                Column(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
+                    Text(
+                        text = currentProvider?.name ?: defaultProviderName,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    val modelName = AiSettings.activeModel(draft)?.name ?: draft.model
+                    Text(
+                        text = listOfNotNull(
+                            stringResource((currentProvider?.format ?: draft.format).labelRes()),
+                            modelName.takeIf { it.isNotBlank() },
+                        ).joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                TextButton(onClick = { showProviderDialog = true }) {
+                    Text(stringResource(R.string.ai_provider_switch))
+                }
+                IconButton(onClick = { addProvider() }) {
+                    Icon(
+                        imageVector = Icons.Rounded.Add,
+                        contentDescription = stringResource(R.string.ai_provider_add),
+                    )
+                }
+                if (draft.providers.size > 1) {
+                    IconButton(onClick = { showDeleteProviderDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Rounded.Delete,
+                            contentDescription = stringResource(R.string.ai_provider_delete),
+                        )
+                    }
+                }
+            }
             OutlinedTextField(
-                value = draft.advancedOptionsJson,
-                onValueChange = { onDraftChange(draft.copy(advancedOptionsJson = it)) },
-                label = { Text(stringResource(R.string.ai_advanced_options)) },
-                placeholder = { Text(stringResource(R.string.ai_advanced_options_hint)) },
-                minLines = 4,
-                maxLines = 10,
-                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                value = currentProvider?.name ?: "",
+                onValueChange = { value -> updateCurrentProvider { it.copy(name = value) } },
+                label = { Text(stringResource(R.string.ai_provider_name)) },
+                singleLine = true,
                 shape = MaterialTheme.shapes.large,
                 modifier = Modifier.fillMaxWidth(),
             )
-            val validationError = remember(draft.advancedOptionsJson) {
-                if (draft.advancedOptionsJson.isBlank()) {
-                    null
-                } else {
-                    AiAdvancedOptions.parse(draft.advancedOptionsJson).exceptionOrNull()
+            Text(
+                text = stringResource(R.string.ai_format),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AiProviderFormat.entries.forEach { format ->
+                    FilterChip(
+                        selected = (currentProvider?.format ?: draft.format) == format,
+                        onClick = { updateCurrentProvider { it.copy(format = format) } },
+                        label = { Text(stringResource(format.labelRes())) },
+                    )
                 }
             }
-            if (validationError != null) {
-                Text(
-                    text = stringResource(
-                        R.string.ai_advanced_options_invalid,
-                        validationError.message ?: validationError.javaClass.simpleName,
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
+            OutlinedTextField(
+                value = currentProvider?.endpoint ?: draft.endpoint,
+                onValueChange = { value -> updateCurrentProvider { it.copy(endpoint = value) } },
+                label = { Text(stringResource(R.string.ai_endpoint)) },
+                placeholder = { Text(stringResource(R.string.ai_endpoint_hint)) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                // 识别结果挪进 supportingText，省掉单独一行说明。
+                supportingText = if (detected != null) {
+                    {
+                        Text(
+                            text = stringResource(
+                                R.string.ai_format_detected,
+                                stringResource(detected.labelRes()),
+                            ) + " · " + draft.resolvedEndpoint(),
+                        )
+                    }
+                } else {
+                    null
+                },
+                shape = MaterialTheme.shapes.large,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = currentProvider?.apiKey ?: draft.apiKey,
+                onValueChange = { value -> updateCurrentProvider { it.copy(apiKey = value) } },
+                label = { Text(stringResource(R.string.ai_api_key)) },
+                placeholder = { Text(stringResource(R.string.ai_api_key_hint)) },
+                singleLine = true,
+                visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { showKey = !showKey }) {
+                        Icon(
+                            imageVector = if (showKey) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                            contentDescription = stringResource(
+                                if (showKey) R.string.ai_hide_key else R.string.ai_show_key
+                            ),
+                        )
+                    }
+                },
+                shape = MaterialTheme.shapes.large,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.ai_model),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = AiSettings.activeModel(draft)?.name ?: draft.model,
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+                TextButton(
+                    onClick = {
+                        onFetchModels(false)
+                        fetchProviderModels()
+                    },
+                    enabled = !fetchingModels && !fetchingProviderModels,
+                ) {
+                    if (fetchingModels || fetchingProviderModels) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.padding(end = 6.dp).size(14.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Rounded.Refresh,
+                            contentDescription = null,
+                            modifier = Modifier.padding(end = 6.dp).size(16.dp),
+                        )
+                    }
+                    Text(
+                        stringResource(
+                            if (fetchingModels || fetchingProviderModels) {
+                                R.string.ai_fetching_models
+                            } else {
+                                R.string.ai_fetch_models
+                            }
+                        )
+                    )
+                }
+            }
+            // 图片模型与「获取图片模型」并排，少占一行。
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = draft.imageModel,
+                    onValueChange = { onDraftChange(draft.copy(imageModel = it)) },
+                    label = { Text(stringResource(R.string.ai_image_model)) },
+                    placeholder = { Text(stringResource(R.string.ai_image_model_hint)) },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.large,
+                    modifier = Modifier.weight(1f),
                 )
+                TextButton(
+                    onClick = { onFetchModels(true) },
+                    enabled = !fetchingModels,
+                ) {
+                    Text(stringResource(R.string.ai_fetch_image_models))
+                }
+            }
+
+            Text(
+                text = stringResource(R.string.ai_thinking_mode),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AiThinkingMode.entries.forEach { mode ->
+                    FilterChip(
+                        selected = draft.thinkingMode == mode,
+                        onClick = { onDraftChange(draft.copy(thinkingMode = mode)) },
+                        label = { Text(stringResource(mode.labelRes())) },
+                    )
+                }
             }
             Text(
-                text = stringResource(R.string.ai_advanced_options_help),
+                text = stringResource(R.string.ai_thinking_summary),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(
-                    onClick = {
-                        onDraftChange(
-                            draft.copy(advancedOptionsJson = AiAdvancedOptions.exampleJson())
+
+            OutlinedTextField(
+                value = draft.systemPrompt,
+                onValueChange = { onDraftChange(draft.copy(systemPrompt = it)) },
+                label = { Text(stringResource(R.string.ai_system_prompt)) },
+                placeholder = { Text(stringResource(R.string.ai_system_prompt_hint)) },
+                minLines = 2,
+                maxLines = 4,
+                shape = MaterialTheme.shapes.large,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            // 测试连接收成紧凑按钮：说明放左边，按钮靠右。
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = stringResource(
+                        R.string.ai_provider_test_hint,
+                        currentProvider?.name ?: defaultProviderName,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedButton(
+                    onClick = onTest,
+                    enabled = !testState.testing,
+                ) {
+                    if (testState.testing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.padding(end = 6.dp).size(14.dp),
+                            strokeWidth = 2.dp,
                         )
-                    },
-                ) {
-                    Text(stringResource(R.string.ai_advanced_fill_example))
+                        Text(stringResource(R.string.ai_testing))
+                    } else {
+                        Text(stringResource(R.string.ai_test_connection))
+                    }
                 }
-                TextButton(
-                    onClick = {
-                        onDraftChange(draft.copy(advancedOptionsJson = ""))
+            }
+
+            testState.message?.let { message ->
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = if (testState.success) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.errorContainer
                     },
                 ) {
-                    Text(stringResource(R.string.ai_advanced_reset))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            imageVector = if (testState.success) Icons.Rounded.CheckCircle else Icons.Rounded.ErrorOutline,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = if (testState.success) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onErrorContainer
+                            },
+                        )
+                        Text(
+                            text = message,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = if (testState.success) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onErrorContainer
+                            },
+                        )
+                    }
                 }
             }
         }
 
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-        Text(
-            text = stringResource(R.string.ai_scope_section),
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Text(
-            text = stringResource(R.string.ai_scope_summary),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        AiToggleRow(
-            title = stringResource(R.string.ai_allow_root),
-            summary = stringResource(R.string.ai_allow_root_summary),
-            checked = draft.allowRootAccess,
-            onCheckedChange = { enabled ->
-                if (!enabled) {
-                    onDraftChange(draft.copy(allowRootAccess = false))
-                } else {
-                    requestRisk(AiRiskKind.ROOT) {
-                        onDraftChange(draft.copy(allowRootAccess = true))
-                    }
-                }
-            },
-        )
-        AiToggleRow(
-            title = stringResource(R.string.ai_allow_superuser),
-            summary = stringResource(R.string.ai_allow_superuser_summary),
-            checked = draft.allowSuperuserAccess,
-            onCheckedChange = { onDraftChange(draft.copy(allowSuperuserAccess = it)) },
-        )
-        AiToggleRow(
-            title = stringResource(R.string.ai_allow_module_data),
-            summary = stringResource(R.string.ai_allow_module_data_summary),
-            checked = draft.allowModuleAccess,
-            onCheckedChange = { onDraftChange(draft.copy(allowModuleAccess = it)) },
-        )
-        AiToggleRow(
-            title = stringResource(R.string.ai_allow_extension_data),
-            summary = stringResource(R.string.ai_allow_extension_data_summary),
-            checked = draft.allowExtensionAccess,
-            onCheckedChange = { onDraftChange(draft.copy(allowExtensionAccess = it)) },
-        )
-        AiToggleRow(
-            title = stringResource(R.string.ai_allow_web),
-            summary = stringResource(R.string.ai_allow_web_summary),
-            checked = draft.allowWebAccess,
-            onCheckedChange = { onDraftChange(draft.copy(allowWebAccess = it)) },
-        )
-        AiToggleRow(
-            title = stringResource(R.string.ai_allow_theme_read),
-            summary = stringResource(R.string.ai_allow_theme_read_summary),
-            checked = draft.allowThemeRead,
-            onCheckedChange = { onDraftChange(draft.copy(allowThemeRead = it)) },
-        )
 
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-        Text(
-            text = stringResource(R.string.ai_superuser_section),
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Text(
-            text = stringResource(R.string.ai_superuser_section_summary),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        AiToggleRow(
-            title = stringResource(R.string.ai_allow_superuser_root),
-            summary = stringResource(R.string.ai_allow_superuser_root_summary),
-            checked = draft.allowSuperuserRootControl,
-            onCheckedChange = { enabled ->
-                if (!enabled) {
-                    onDraftChange(draft.copy(allowSuperuserRootControl = false))
-                } else {
-                    requestRisk(AiRiskKind.PERMANENT_ROOT) {
-                        onDraftChange(
-                            draft.copy(
-                                allowSuperuserRootControl = true,
-                                allowSuperuserAccess = true,
-                                allowRootAccess = true,
-                            )
-                        )
-                    }
-                }
-            },
-        )
-        AiToggleRow(
-            title = stringResource(R.string.ai_allow_superuser_temp_root),
-            summary = stringResource(R.string.ai_allow_superuser_temp_root_summary),
-            checked = draft.allowSuperuserTemporaryRoot,
-            onCheckedChange = { enabled ->
-                if (!enabled) {
-                    onDraftChange(draft.copy(allowSuperuserTemporaryRoot = false))
-                } else {
-                    requestRisk(AiRiskKind.TEMPORARY_ROOT) {
-                        onDraftChange(
-                            draft.copy(
-                                allowSuperuserTemporaryRoot = true,
-                                allowSuperuserAccess = true,
-                                allowRootAccess = true,
-                            )
-                        )
-                    }
-                }
-            },
-        )
-        AiToggleRow(
-            title = stringResource(R.string.ai_allow_superuser_switch),
-            summary = stringResource(R.string.ai_allow_superuser_switch_summary),
-            checked = draft.allowSuperuserSwitch,
-            onCheckedChange = { enabled ->
-                if (!enabled) {
-                    onDraftChange(draft.copy(allowSuperuserSwitch = false))
-                } else {
-                    requestRisk(AiRiskKind.GLOBAL_SU) {
-                        onDraftChange(
-                            draft.copy(
-                                allowSuperuserSwitch = true,
-                                allowRootAccess = true,
-                            )
-                        )
-                    }
-                }
-            },
-        )
+        // ③ 联网搜索：服务商单选与 Key
+        SettingsSection(
+            title = stringResource(R.string.ai_search_section),
+            subtitle = stringResource(R.string.ai_search_section_summary),
+        ) {
+            AiSearchSettingsSection()
+        }
 
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-        Text(
-            text = stringResource(R.string.ai_write_section),
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary,
-        )
+        // ④ MCP 服务器：服务器列表与新增
+        SettingsSection(title = stringResource(R.string.ai_mcp_section)) {
+            AiMcpSettingsSection()
+        }
 
-        AiToggleRow(
-            title = stringResource(R.string.ai_allow_theme),
-            summary = stringResource(R.string.ai_allow_theme_summary),
-            checked = draft.allowThemeWrite,
-            onCheckedChange = { enabled ->
-                onDraftChange(
-                    draft.copy(
-                        allowThemeWrite = enabled,
-                        allowThemeRead = enabled || draft.allowThemeRead,
-                        themeWriteFeatures = if (enabled) AiThemeFeature.ALL_IDS else draft.themeWriteFeatures,
+        // ⑤ 会话标题模型与标题思考强度：字段自带标签，卡片不再加标题
+        SettingsSection {
+            OutlinedTextField(
+                value = draft.titleModel,
+                onValueChange = { onDraftChange(draft.copy(titleModel = it)) },
+                label = { Text(stringResource(R.string.ai_title_model)) },
+                placeholder = { Text(stringResource(R.string.ai_title_model_hint)) },
+                singleLine = true,
+                shape = MaterialTheme.shapes.large,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                text = stringResource(R.string.ai_title_effort),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AiThinkingMode.entries.forEach { mode ->
+                    FilterChip(
+                        selected = draft.titleEffort == mode,
+                        onClick = { onDraftChange(draft.copy(titleEffort = mode)) },
+                        label = { Text(stringResource(mode.titleEffortLabelRes())) },
                     )
-                )
-            },
-        )
-        if (draft.allowThemeWrite) {
-            AiThemeFeatureChips(
-                selected = draft.themeWriteFeatures,
-                onToggle = { feature, enabled ->
-                    val updated = draft.themeWriteFeatures.toMutableSet()
-                    if (enabled) updated += feature.id else updated -= feature.id
-                    onDraftChange(draft.copy(themeWriteFeatures = updated))
-                },
-            )
-        }
-        AiToggleRow(
-            title = stringResource(R.string.ai_allow_extensions),
-            summary = stringResource(R.string.ai_allow_extensions_summary),
-            checked = draft.allowExtensionWrite,
-            onCheckedChange = { enabled ->
-                if (!enabled) {
-                    onDraftChange(draft.copy(allowExtensionWrite = false))
-                } else {
-                    requestRisk(AiRiskKind.EXTENSION_WRITE) {
-                        onDraftChange(
-                            draft.copy(
-                                allowExtensionWrite = true,
-                                allowExtensionAccess = true,
-                                extensionWriteFeatures = AiExtensionFeature.ALL_IDS,
-                            )
-                        )
-                    }
                 }
-            },
-        )
-        if (draft.allowExtensionWrite) {
-            AiExtensionFeatureChips(
-                selected = draft.extensionWriteFeatures,
-                onToggle = { feature, enabled ->
-                    val updated = draft.extensionWriteFeatures.toMutableSet()
-                    if (enabled) updated += feature.id else updated -= feature.id
-                    onDraftChange(draft.copy(extensionWriteFeatures = updated))
-                },
-            )
+            }
         }
-        AiToggleRow(
-            title = stringResource(R.string.ai_allow_modules),
-            summary = stringResource(R.string.ai_allow_modules_summary),
-            checked = draft.allowModuleInstall,
-            onCheckedChange = { enabled ->
-                if (!enabled) {
-                    onDraftChange(draft.copy(allowModuleInstall = false))
-                } else {
-                    requestRisk(AiRiskKind.MODULE_INSTALL) {
-                        onDraftChange(
-                            draft.copy(
-                                allowModuleInstall = true,
-                                allowModuleAccess = true,
-                            )
-                        )
-                    }
-                }
-            },
-        )
-        AiToggleRow(
-            title = stringResource(R.string.ai_confirm_actions),
-            summary = stringResource(R.string.ai_confirm_actions_summary),
-            checked = draft.requireConfirmation,
-            onCheckedChange = { onDraftChange(draft.copy(requireConfirmation = it)) },
-        )
 
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-        Text(
-            text = stringResource(R.string.ai_behavior_section),
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        AiToggleRow(
-            title = stringResource(R.string.ai_include_context),
-            summary = stringResource(R.string.ai_include_context_summary),
-            checked = draft.includeContext,
-            onCheckedChange = { onDraftChange(draft.copy(includeContext = it)) },
-        )
-        AiToggleRow(
-            title = stringResource(R.string.ai_streaming),
-            summary = stringResource(R.string.ai_streaming_summary),
-            checked = draft.streaming,
-            onCheckedChange = { onDraftChange(draft.copy(streaming = it)) },
-        )
-        AiToggleRow(
-            title = stringResource(R.string.ai_tool_calling),
-            summary = stringResource(R.string.ai_tool_calling_summary),
-            checked = draft.toolCalling,
-            onCheckedChange = { onDraftChange(draft.copy(toolCalling = it)) },
-        )
-        AiToggleRow(
-            title = stringResource(R.string.ai_allow_code_execution),
-            summary = stringResource(R.string.ai_allow_code_execution_summary),
-            checked = draft.allowCodeExecution,
-            onCheckedChange = { enabled ->
-                if (!enabled) {
-                    onDraftChange(draft.copy(allowCodeExecution = false))
-                } else {
-                    requestRisk(AiRiskKind.CODE_EXECUTION) {
-                        onDraftChange(draft.copy(allowCodeExecution = true))
+
+        // ⑥ 访问范围
+        SettingsSection(
+            title = stringResource(R.string.ai_scope_section),
+            subtitle = stringResource(R.string.ai_scope_summary),
+        ) {
+            AiToggleRow(
+                title = stringResource(R.string.ai_allow_root),
+                summary = stringResource(R.string.ai_allow_root_summary),
+                checked = draft.allowRootAccess,
+                onCheckedChange = { enabled ->
+                    if (!enabled) {
+                        onDraftChange(draft.copy(allowRootAccess = false))
+                    } else {
+                        requestRisk(AiRiskKind.ROOT) {
+                            onDraftChange(draft.copy(allowRootAccess = true))
+                        }
+                    }
+                },
+            )
+            AiToggleRow(
+                title = stringResource(R.string.ai_allow_superuser),
+                summary = stringResource(R.string.ai_allow_superuser_summary),
+                checked = draft.allowSuperuserAccess,
+                onCheckedChange = { onDraftChange(draft.copy(allowSuperuserAccess = it)) },
+            )
+            AiToggleRow(
+                title = stringResource(R.string.ai_allow_module_data),
+                summary = stringResource(R.string.ai_allow_module_data_summary),
+                checked = draft.allowModuleAccess,
+                onCheckedChange = { onDraftChange(draft.copy(allowModuleAccess = it)) },
+            )
+            AiToggleRow(
+                title = stringResource(R.string.ai_allow_extension_data),
+                summary = stringResource(R.string.ai_allow_extension_data_summary),
+                checked = draft.allowExtensionAccess,
+                onCheckedChange = { onDraftChange(draft.copy(allowExtensionAccess = it)) },
+            )
+            AiToggleRow(
+                title = stringResource(R.string.ai_allow_web),
+                summary = stringResource(R.string.ai_allow_web_summary),
+                checked = draft.allowWebAccess,
+                onCheckedChange = { onDraftChange(draft.copy(allowWebAccess = it)) },
+            )
+            AiToggleRow(
+                title = stringResource(R.string.ai_allow_theme_read),
+                summary = stringResource(R.string.ai_allow_theme_read_summary),
+                checked = draft.allowThemeRead,
+                onCheckedChange = { onDraftChange(draft.copy(allowThemeRead = it)) },
+            )
+        }
+
+
+        // ⑦ 超级用户控制
+        SettingsSection(
+            title = stringResource(R.string.ai_superuser_section),
+            subtitle = stringResource(R.string.ai_superuser_section_summary),
+        ) {
+            AiToggleRow(
+                title = stringResource(R.string.ai_allow_superuser_root),
+                summary = stringResource(R.string.ai_allow_superuser_root_summary),
+                checked = draft.allowSuperuserRootControl,
+                onCheckedChange = { enabled ->
+                    if (!enabled) {
+                        onDraftChange(draft.copy(allowSuperuserRootControl = false))
+                    } else {
+                        requestRisk(AiRiskKind.PERMANENT_ROOT) {
+                            onDraftChange(
+                                draft.copy(
+                                    allowSuperuserRootControl = true,
+                                    allowSuperuserAccess = true,
+                                    allowRootAccess = true,
+                                )
+                            )
+                        }
+                    }
+                },
+            )
+            AiToggleRow(
+                title = stringResource(R.string.ai_allow_superuser_temp_root),
+                summary = stringResource(R.string.ai_allow_superuser_temp_root_summary),
+                checked = draft.allowSuperuserTemporaryRoot,
+                onCheckedChange = { enabled ->
+                    if (!enabled) {
+                        onDraftChange(draft.copy(allowSuperuserTemporaryRoot = false))
+                    } else {
+                        requestRisk(AiRiskKind.TEMPORARY_ROOT) {
+                            onDraftChange(
+                                draft.copy(
+                                    allowSuperuserTemporaryRoot = true,
+                                    allowSuperuserAccess = true,
+                                    allowRootAccess = true,
+                                )
+                            )
+                        }
+                    }
+                },
+            )
+            AiToggleRow(
+                title = stringResource(R.string.ai_allow_superuser_switch),
+                summary = stringResource(R.string.ai_allow_superuser_switch_summary),
+                checked = draft.allowSuperuserSwitch,
+                onCheckedChange = { enabled ->
+                    if (!enabled) {
+                        onDraftChange(draft.copy(allowSuperuserSwitch = false))
+                    } else {
+                        requestRisk(AiRiskKind.GLOBAL_SU) {
+                            onDraftChange(
+                                draft.copy(
+                                    allowSuperuserSwitch = true,
+                                    allowRootAccess = true,
+                                )
+                            )
+                        }
+                    }
+                },
+            )
+        }
+
+
+        // ⑧ 写入权限
+        SettingsSection(
+            title = stringResource(R.string.ai_write_section),
+        ) {
+            AiToggleRow(
+                title = stringResource(R.string.ai_allow_theme),
+                summary = stringResource(R.string.ai_allow_theme_summary),
+                checked = draft.allowThemeWrite,
+                onCheckedChange = { enabled ->
+                    onDraftChange(
+                        draft.copy(
+                            allowThemeWrite = enabled,
+                            allowThemeRead = enabled || draft.allowThemeRead,
+                            themeWriteFeatures = if (enabled) AiThemeFeature.ALL_IDS else draft.themeWriteFeatures,
+                        )
+                    )
+                },
+            )
+            if (draft.allowThemeWrite) {
+                AiThemeFeatureChips(
+                    selected = draft.themeWriteFeatures,
+                    onToggle = { feature, enabled ->
+                        val updated = draft.themeWriteFeatures.toMutableSet()
+                        if (enabled) updated += feature.id else updated -= feature.id
+                        onDraftChange(draft.copy(themeWriteFeatures = updated))
+                    },
+                )
+            }
+            AiToggleRow(
+                title = stringResource(R.string.ai_allow_extensions),
+                summary = stringResource(R.string.ai_allow_extensions_summary),
+                checked = draft.allowExtensionWrite,
+                onCheckedChange = { enabled ->
+                    if (!enabled) {
+                        onDraftChange(draft.copy(allowExtensionWrite = false))
+                    } else {
+                        requestRisk(AiRiskKind.EXTENSION_WRITE) {
+                            onDraftChange(
+                                draft.copy(
+                                    allowExtensionWrite = true,
+                                    allowExtensionAccess = true,
+                                    extensionWriteFeatures = AiExtensionFeature.ALL_IDS,
+                                )
+                            )
+                        }
+                    }
+                },
+            )
+            if (draft.allowExtensionWrite) {
+                AiExtensionFeatureChips(
+                    selected = draft.extensionWriteFeatures,
+                    onToggle = { feature, enabled ->
+                        val updated = draft.extensionWriteFeatures.toMutableSet()
+                        if (enabled) updated += feature.id else updated -= feature.id
+                        onDraftChange(draft.copy(extensionWriteFeatures = updated))
+                    },
+                )
+            }
+            AiToggleRow(
+                title = stringResource(R.string.ai_allow_modules),
+                summary = stringResource(R.string.ai_allow_modules_summary),
+                checked = draft.allowModuleInstall,
+                onCheckedChange = { enabled ->
+                    if (!enabled) {
+                        onDraftChange(draft.copy(allowModuleInstall = false))
+                    } else {
+                        requestRisk(AiRiskKind.MODULE_INSTALL) {
+                            onDraftChange(
+                                draft.copy(
+                                    allowModuleInstall = true,
+                                    allowModuleAccess = true,
+                                )
+                            )
+                        }
+                    }
+                },
+            )
+            AiToggleRow(
+                title = stringResource(R.string.ai_confirm_actions),
+                summary = stringResource(R.string.ai_confirm_actions_summary),
+                checked = draft.requireConfirmation,
+                onCheckedChange = { onDraftChange(draft.copy(requireConfirmation = it)) },
+            )
+        }
+
+
+        // ⑨ 行为
+        SettingsSection(
+            title = stringResource(R.string.ai_behavior_section),
+        ) {
+            AiToggleRow(
+                title = stringResource(R.string.ai_include_context),
+                summary = stringResource(R.string.ai_include_context_summary),
+                checked = draft.includeContext,
+                onCheckedChange = { onDraftChange(draft.copy(includeContext = it)) },
+            )
+            AiToggleRow(
+                title = stringResource(R.string.ai_streaming),
+                summary = stringResource(R.string.ai_streaming_summary),
+                checked = draft.streaming,
+                onCheckedChange = { onDraftChange(draft.copy(streaming = it)) },
+            )
+            AiToggleRow(
+                title = stringResource(R.string.ai_tool_calling),
+                summary = stringResource(R.string.ai_tool_calling_summary),
+                checked = draft.toolCalling,
+                onCheckedChange = { onDraftChange(draft.copy(toolCalling = it)) },
+            )
+            AiToggleRow(
+                title = stringResource(R.string.ai_allow_code_execution),
+                summary = stringResource(R.string.ai_allow_code_execution_summary),
+                checked = draft.allowCodeExecution,
+                onCheckedChange = { enabled ->
+                    if (!enabled) {
+                        onDraftChange(draft.copy(allowCodeExecution = false))
+                    } else {
+                        requestRisk(AiRiskKind.CODE_EXECUTION) {
+                            onDraftChange(draft.copy(allowCodeExecution = true))
+                        }
+                    }
+                },
+            )
+            AiToggleRow(
+                title = stringResource(R.string.ai_keep_history),
+                summary = stringResource(R.string.ai_keep_history_summary),
+                checked = draft.keepHistory,
+                onCheckedChange = { onDraftChange(draft.copy(keepHistory = it)) },
+            )
+        }
+
+
+        // ⑩ 高级 API 模式：开关自带标题与摘要，展开内容跟随开关
+        SettingsSection {
+            AiToggleRow(
+                title = stringResource(R.string.ai_advanced_mode),
+                summary = stringResource(R.string.ai_advanced_mode_summary),
+                checked = draft.advancedMode,
+                onCheckedChange = { enabled ->
+                    if (!enabled) {
+                        onDraftChange(draft.copy(advancedMode = false))
+                    } else {
+                        requestRisk(AiRiskKind.ADVANCED_API, "ADVANCED") {
+                            onDraftChange(draft.copy(advancedMode = true))
+                        }
+                    }
+                },
+            )
+            if (draft.advancedMode) {
+                Text(
+                    text = stringResource(R.string.ai_advanced_warning),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                OutlinedTextField(
+                    value = draft.advancedOptionsJson,
+                    onValueChange = { onDraftChange(draft.copy(advancedOptionsJson = it)) },
+                    label = { Text(stringResource(R.string.ai_advanced_options)) },
+                    placeholder = { Text(stringResource(R.string.ai_advanced_options_hint)) },
+                    minLines = 4,
+                    maxLines = 10,
+                    textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    shape = MaterialTheme.shapes.large,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                val validationError = remember(draft.advancedOptionsJson) {
+                    if (draft.advancedOptionsJson.isBlank()) {
+                        null
+                    } else {
+                        AiAdvancedOptions.parse(draft.advancedOptionsJson).exceptionOrNull()
                     }
                 }
-            },
-        )
-        AiToggleRow(
-            title = stringResource(R.string.ai_keep_history),
-            summary = stringResource(R.string.ai_keep_history_summary),
-            checked = draft.keepHistory,
-            onCheckedChange = { onDraftChange(draft.copy(keepHistory = it)) },
-        )
+                if (validationError != null) {
+                    Text(
+                        text = stringResource(
+                            R.string.ai_advanced_options_invalid,
+                            validationError.message ?: validationError.javaClass.simpleName,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.ai_advanced_options_help),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            onDraftChange(
+                                draft.copy(advancedOptionsJson = AiAdvancedOptions.exampleJson())
+                            )
+                        },
+                    ) {
+                        Text(stringResource(R.string.ai_advanced_fill_example))
+                    }
+                    TextButton(
+                        onClick = {
+                            onDraftChange(draft.copy(advancedOptionsJson = ""))
+                        },
+                    ) {
+                        Text(stringResource(R.string.ai_advanced_reset))
+                    }
+                }
+            }
+        }
+
+
 
     }
 
@@ -1029,7 +1081,50 @@ internal fun AiConfigEditorMaterial(
             },
         )
     }
-    AiToolsSettingsSection()
+}
+
+/**
+ * 设置页分组卡片：统一的圆角、内边距与标题样式，替代原先靠分隔线堆叠的长列表。
+ *
+ * @param title 分组标题；为 null 时不画标题区（用于内容自带标题行的分组，避免标题重复）
+ * @param subtitle 可选的补充说明，使用弱化色
+ * @param content 分组内容，内部统一按 12dp 垂直间距排布
+ */
+@Composable
+private fun SettingsSection(
+    title: String? = null,
+    subtitle: String? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (title != null || subtitle != null) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (title != null) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    if (subtitle != null) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            content()
+        }
+    }
 }
 
 @Composable

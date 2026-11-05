@@ -16,7 +16,7 @@ enum class AiSearchProvider {
     /** Firecrawl 官方搜索 API（https://api.firecrawl.dev/v1/search）。 */
     FIRECRAWL,
 
-    /** AnySearch 端点；实际 API 格式尚未确认，请求与解析都按防御式处理。 */
+    /** AnySearch 官方搜索 API（https://api.anysearch.com/v1/search）；端点内置，Key 可选（匿名额度更低）。 */
     ANYSEARCH,
 }
 
@@ -24,8 +24,8 @@ enum class AiSearchProvider {
  * 联网搜索配置。
  *
  * @property provider 搜索服务；[AiSearchProvider.NONE] 表示不启用。
- * @property apiKey 服务鉴权 Key；为空时搜索直接返回提示文案。
- * @property endpoint 自定义端点；留空时 FIRECRAWL 用官方地址，ANYSEARCH 视为未配置。
+ * @property apiKey 服务鉴权 Key；Firecrawl 必填，AnySearch 可留空走匿名额度。
+ * @property endpoint Firecrawl 的自定义端点（留空用官方地址）；AnySearch 恒用内置端点，此字段忽略。
  */
 @Serializable
 data class AiSearchConfig(

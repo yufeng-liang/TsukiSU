@@ -36,4 +36,8 @@ class AiFeatureProviderImpl : AiFeatureProvider {
     override fun homeCard(onOpenChat: () -> Unit): @Composable () -> Unit = {
         AiHomeCardMaterial(onOpenChat = onOpenChat)
     }
+
+    override fun homeCardMiuix(onOpenChat: () -> Unit): @Composable () -> Unit = {
+        AiHomeCardMiuix(onOpenChat = onOpenChat)
+    }
 }

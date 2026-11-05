@@ -5,6 +5,8 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -14,23 +16,26 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -43,7 +48,7 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
-import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.basic.TopAppBar as MiuixTopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
@@ -210,18 +215,21 @@ private fun AiSettingsMaterial(
     onFetchModels: (Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
-    val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     AiExpressiveScaffold(
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         topBar = {
-            LargeFlexibleTopAppBar(
+            // 紧凑顶栏：设置页用固定顶栏即可，右侧用圆点轻量提示启用状态
+            TopAppBar(
                 title = { Text(stringResource(R.string.ai_settings)) },
                 navigationIcon = { AiTopBarBackButton(onClick = onBack) },
+                actions = { AiTopBarStatus(enabled = draft.enabled) },
                 colors = aiExpressiveTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainer,
                     scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
                 ),
-                scrollBehavior = scroll,
+                windowInsets = WindowInsets.safeDrawing.only(
+                    WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
+                ),
             )
         },
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
@@ -230,10 +238,9 @@ private fun AiSettingsMaterial(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .nestedScroll(scroll.nestedScrollConnection)
                 .verticalScroll(rememberScrollState())
                 .imePadding()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
                 .navigationBarsPadding(),
         ) {
             if (AiLocalNetwork.isSupported() && AiLocalNetwork.isLanEndpoint(draft)) {
@@ -256,6 +263,39 @@ private fun AiSettingsMaterial(
     }
 }
 
+/**
+ * 顶栏右侧的启用状态：小圆点 + 状态文字。
+ * 启用时用主题色，未启用时用弱化描边色。
+ */
+@Composable
+private fun AiTopBarStatus(enabled: Boolean) {
+    Row(
+        modifier = Modifier.padding(end = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .background(
+                    color = if (enabled) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.outlineVariant
+                    },
+                    shape = CircleShape,
+                ),
+        )
+        Text(
+            text = stringResource(
+                if (enabled) R.string.ai_state_enabled else R.string.ai_state_disabled,
+            ),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 @Composable
 private fun AiSettingsMiuix(
     draft: AiConfig,
@@ -270,7 +310,7 @@ private fun AiSettingsMiuix(
     AiAppScaffold(
         containerColor = colorScheme.surface,
         topBar = {
-            TopAppBar(
+            MiuixTopAppBar(
                 title = stringResource(R.string.ai_settings),
                 color = colorScheme.surface,
                 navigationIcon = {

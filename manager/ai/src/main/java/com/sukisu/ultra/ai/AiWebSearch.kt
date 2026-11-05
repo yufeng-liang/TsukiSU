@@ -21,13 +21,16 @@ import okhttp3.RequestBody.Companion.toRequestBody
  *
  * 根据 [AiSearchSettings] 里的配置选择服务：
  * - [AiSearchProvider.FIRECRAWL]：调用 Firecrawl 官方 /v1/search；
- * - [AiSearchProvider.ANYSEARCH]：调用用户自填端点，响应格式按多种可能防御式解析。
+ * - [AiSearchProvider.ANYSEARCH]：调用内置的 AnySearch 官方端点（Key 可选，匿名额度更低）。
  *
  * [search] 永远返回给模型看的纯文本，不向调用方抛业务异常；协程取消除外。
  */
 object AiWebSearch {
 
     private const val FIRECRAWL_ENDPOINT = "https://api.firecrawl.dev/v1/search"
+
+    /** AnySearch 官方 REST 端点：用户不需要填写，随版本内置。 */
+    private const val ANYSEARCH_ENDPOINT = "https://api.anysearch.com/v1/search"
     private const val MAX_RESULTS = 5
     private const val MAX_SUMMARY_CHARS = 500
     private const val MAX_OUTPUT_CHARS = 4000
@@ -51,7 +54,7 @@ object AiWebSearch {
 
     /**
      * 执行一次联网搜索，返回给模型看的纯文本（标题 + URL + 摘要，最多 5 条）。
-     * 配置为 NONE / key 为空 -> 返回提示文案而不是抛异常。
+     * 配置为 NONE / Firecrawl 未填 Key -> 返回提示文案而不是抛异常。
      */
     suspend fun search(query: String): String = withContext(Dispatchers.IO) {
         try {
@@ -64,8 +67,9 @@ object AiWebSearch {
             if (config.provider == AiSearchProvider.NONE) {
                 return@withContext "联网搜索未启用：请在 AI 设置中选择搜索服务。"
             }
-            if (config.apiKey.isBlank()) {
-                return@withContext "联网搜索未配置 API Key：请在 AI 设置中填写。"
+            // Firecrawl 必须鉴权；AnySearch 支持匿名访问（额度更低），Key 可留空。
+            if (config.provider == AiSearchProvider.FIRECRAWL && config.apiKey.isBlank()) {
+                return@withContext "Firecrawl 需要 API Key：请在 AI 设置中填写。"
             }
 
             val result = when (config.provider) {
@@ -118,20 +122,16 @@ object AiWebSearch {
     }
 
     /**
-     * AnySearch：端点必填，POST `{endpoint}`，兼容 `results[]` 与 `data.results[]`。
-     * 实际 API 格式未确认，任何解析失败都按「空结果」处理而不是抛异常。
+     * AnySearch：使用内置官方端点，POST `{query, max_results}`，Key 可选。
+     * 响应是 `{code, message, data: {results: [{title, url, content|snippet}]}}`；
+     * 仍然兼容 `results[]` / `data[]` 等变体，解析失败按「空结果」处理而不是抛异常。
      */
     private fun searchAnySearch(query: String, config: AiSearchConfig): String {
-        val endpoint = config.endpoint.trim()
-        if (endpoint.isEmpty()) {
-            return "AnySearch 还没有配置端点"
-        }
-
         val payload = buildJsonObject {
             put("query", query)
             put("max_results", MAX_RESULTS)
         }
-        val (code, responseBody) = postJson(endpoint, config.apiKey.trim(), payload.toString())
+        val (code, responseBody) = postJson(ANYSEARCH_ENDPOINT, config.apiKey.trim(), payload.toString())
         if (code !in 200..299) {
             return httpError(code, responseBody)
         }
@@ -140,9 +140,16 @@ object AiWebSearch {
             .getOrNull()
             ?: return "AnySearch 返回的数据无法解析，未获得搜索结果。"
 
+        // 业务错误码：code 非 0 时 message 是服务端给的原因（额度不足、Key 无效等）。
+        val bizCode = (root["code"] as? JsonPrimitive)?.contentOrNull
+        if (bizCode != null && bizCode != "0") {
+            val message = root.string("message") ?: "错误码 $bizCode"
+            return "AnySearch 搜索失败：$message".take(MAX_OUTPUT_CHARS)
+        }
+
         val resultArray: JsonArray? =
-            (root["results"] as? JsonArray)
-                ?: ((root["data"] as? JsonObject)?.get("results") as? JsonArray)
+            ((root["data"] as? JsonObject)?.get("results") as? JsonArray)
+                ?: (root["results"] as? JsonArray)
                 ?: (root["data"] as? JsonArray)
         if (resultArray == null) {
             return "AnySearch 没有返回可用的搜索结果。"
@@ -155,9 +162,9 @@ object AiWebSearch {
             SearchResult(
                 title = item.string("title").orEmpty().ifBlank { url },
                 url = url,
-                snippet = item.string("snippet").orEmpty()
-                    .ifBlank { item.string("description").orEmpty() }
-                    .ifBlank { item.string("content").orEmpty() },
+                snippet = item.string("content").orEmpty()
+                    .ifBlank { item.string("snippet").orEmpty() }
+                    .ifBlank { item.string("description").orEmpty() },
             )
         }
         if (results.isEmpty()) {
@@ -166,14 +173,16 @@ object AiWebSearch {
         return formatResults(results)
     }
 
-    /** 发一次 JSON POST；返回 HTTP 状态码与响应体原文。 */
+    /** 发一次 JSON POST；返回 HTTP 状态码与响应体原文。apiKey 为空时不带鉴权头（AnySearch 匿名）。 */
     private fun postJson(url: String, apiKey: String, body: String): Pair<Int, String> {
-        val request = Request.Builder()
+        val builder = Request.Builder()
             .url(url)
-            .header("Authorization", "Bearer $apiKey")
             .header("Content-Type", "application/json")
-            .post(body.toRequestBody(jsonMediaType))
-            .build()
+            .header("Accept", "application/json")
+        if (apiKey.isNotBlank()) {
+            builder.header("Authorization", "Bearer $apiKey")
+        }
+        val request = builder.post(body.toRequestBody(jsonMediaType)).build()
         client.newCall(request).execute().use { response ->
             return response.code to response.body.string()
         }

@@ -1,18 +1,25 @@
 package com.sukisu.ultra.ai
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Block
+import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -24,53 +31,48 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 /**
- * AI 设置页里的「联网搜索」与「MCP 服务器」两个小组。
+ * AI 设置页里的「联网搜索」与「MCP 服务器」两个独立分组：
  *
  * 这里刻意只用 Material3 控件：设置页的 Material / Miuix 两套外壳都调用同一个 composable，
  * 避免再维护两份几乎相同的配置界面。两套主题的颜色由外层 theme 决定。
  */
 @Composable
-internal fun AiToolsSettingsSection(modifier: Modifier = Modifier) {
+internal fun AiSearchSettingsSection(modifier: Modifier = Modifier) {
     var searchConfig by remember { mutableStateOf(AiSearchSettings.load()) }
+
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        AiSearchProvider.entries.forEach { provider ->
+            SearchProviderRow(
+                provider = provider,
+                selected = searchConfig.provider == provider,
+                config = searchConfig,
+                onSelect = {
+                    searchConfig = searchConfig.copy(provider = provider)
+                    AiSearchSettings.save(searchConfig)
+                },
+                onApiKey = { value ->
+                    searchConfig = searchConfig.copy(apiKey = value)
+                    AiSearchSettings.save(searchConfig)
+                },
+            )
+        }
+    }
+}
+
+@Composable
+internal fun AiMcpSettingsSection(modifier: Modifier = Modifier) {
     var servers by remember { mutableStateOf(AiMcpSettings.list()) }
     var showAddServer by remember { mutableStateOf(false) }
     var serverDetail by remember { mutableStateOf<AiMcpServer?>(null) }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            AiSearchProvider.entries.forEach { provider ->
-                SearchProviderRow(
-                    provider = provider,
-                    selected = searchConfig.provider == provider,
-                    config = searchConfig,
-                    onSelect = {
-                        searchConfig = searchConfig.copy(provider = provider)
-                        AiSearchSettings.save(searchConfig)
-                    },
-                    onApiKey = { value ->
-                        searchConfig = searchConfig.copy(apiKey = value)
-                        AiSearchSettings.save(searchConfig)
-                    },
-                    onEndpoint = { value ->
-                        searchConfig = searchConfig.copy(endpoint = value)
-                        AiSearchSettings.save(searchConfig)
-                    },
-                )
-            }
-        }
-
-        Text(
-            text = stringResource(R.string.ai_mcp_section),
-            style = MaterialTheme.typography.titleSmall,
-            modifier = Modifier.padding(top = 8.dp),
-        )
         if (servers.isEmpty()) {
             Text(
                 text = stringResource(R.string.ai_mcp_empty),
@@ -155,13 +157,6 @@ internal fun AiToolsSettingsSection(modifier: Modifier = Modifier) {
     }
 }
 
-@Composable
-private fun providerLabel(provider: AiSearchProvider): String = when (provider) {
-    AiSearchProvider.NONE -> stringResource(R.string.ai_search_provider_none)
-    AiSearchProvider.FIRECRAWL -> stringResource(R.string.ai_search_provider_firecrawl)
-    AiSearchProvider.ANYSEARCH -> stringResource(R.string.ai_search_provider_anysearch)
-}
-
 /**
  * 服务器列表行：整行可点进详情，右侧开关直接控制启用。
  */
@@ -172,36 +167,33 @@ private fun McpServerRow(
     onRemove: () -> Unit,
     onOpen: () -> Unit,
 ) {
-    ElevatedCard(
-        onClick = onOpen,
-        modifier = Modifier.fillMaxWidth(),
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onOpen)
+            .padding(horizontal = 4.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(server.name, style = MaterialTheme.typography.titleSmall)
-                    if (!server.enabled) {
-                        Text(
-                            text = stringResource(R.string.ai_mcp_disabled_tag),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 6.dp),
-                        )
-                    }
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(server.name, style = MaterialTheme.typography.titleSmall)
+                if (!server.enabled) {
+                    Text(
+                        text = stringResource(R.string.ai_mcp_disabled_tag),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 6.dp),
+                    )
                 }
-                Text(
-                    server.url,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
-            Switch(checked = server.enabled, onCheckedChange = onToggle)
+            Text(
+                server.url,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
+        Switch(checked = server.enabled, onCheckedChange = onToggle)
     }
 }
 
@@ -369,9 +361,9 @@ internal fun parseHeaders(raw: String): Map<String, String> = raw
     .toMap()
 
 /**
- * 搜索服务商行：单选卡片样式（参考 RikkaHub 的 provider 列表）。
- * 选中的整卡高亮 + 勾选角标；Firecrawl / AnySearch 选中时展开各自的输入框。
- * NONE（内置 DuckDuckGo）没有输入框，只有一行说明。
+ * 搜索服务商行：整行可点选（单选）。
+ * 选中态展开 API Key 输入框与申请入口；AnySearch 端点是内置的、Key 可留空匿名试用，
+ * 所以不再让用户手填端点。
  */
 @Composable
 private fun SearchProviderRow(
@@ -380,61 +372,93 @@ private fun SearchProviderRow(
     config: AiSearchConfig,
     onSelect: () -> Unit,
     onApiKey: (String) -> Unit,
-    onEndpoint: (String) -> Unit,
 ) {
-    ElevatedCard(
-        onClick = onSelect,
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer
-            else MaterialTheme.colorScheme.surfaceVariant,
-        ),
-    ) {
-        Column(
+    val uriHandler = LocalUriHandler.current
+    val keyUrl = when (provider) {
+        AiSearchProvider.FIRECRAWL -> FIRECRAWL_KEY_URL
+        AiSearchProvider.ANYSEARCH -> ANYSEARCH_KEY_URL
+        AiSearchProvider.NONE -> null
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .clip(RoundedCornerShape(12.dp))
+                .clickable(onClick = onSelect)
+                .padding(horizontal = 4.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = providerIcon(provider),
+                contentDescription = null,
+                tint = if (selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = providerTitle(provider),
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (selected) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurface,
                 )
-                if (selected) {
-                    Icon(
-                        imageVector = Icons.Rounded.CheckCircle,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
+                Text(
+                    text = providerDescription(provider),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            Text(
-                text = providerDescription(provider),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (selected && provider != AiSearchProvider.NONE) {
+            RadioButton(selected = selected, onClick = onSelect)
+        }
+        if (selected && provider != AiSearchProvider.NONE) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 34.dp, end = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 OutlinedTextField(
                     value = config.apiKey,
                     onValueChange = onApiKey,
                     label = { Text(stringResource(R.string.ai_search_api_key)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
+                    supportingText = if (provider == AiSearchProvider.ANYSEARCH) {
+                        { Text(stringResource(R.string.ai_search_key_optional)) }
+                    } else {
+                        null
+                    },
                 )
-            }
-            if (selected && provider == AiSearchProvider.ANYSEARCH) {
-                OutlinedTextField(
-                    value = config.endpoint,
-                    onValueChange = onEndpoint,
-                    label = { Text(stringResource(R.string.ai_search_endpoint)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                if (keyUrl != null) {
+                    TextButton(
+                        onClick = { uriHandler.openUri(keyUrl) },
+                        modifier = Modifier.align(Alignment.End),
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            text = stringResource(R.string.ai_search_get_key),
+                            modifier = Modifier.padding(start = 6.dp),
+                        )
+                    }
+                }
             }
         }
     }
+}
+
+/** 两家服务的 Key 申请页；点按钮直接跳浏览器，不用用户自己找。 */
+private const val FIRECRAWL_KEY_URL = "https://www.firecrawl.dev/app/api-keys"
+private const val ANYSEARCH_KEY_URL = "https://www.anysearch.com/console/api-keys"
+
+private fun providerIcon(provider: AiSearchProvider) = when (provider) {
+    AiSearchProvider.NONE -> Icons.Rounded.Block
+    AiSearchProvider.FIRECRAWL -> Icons.Rounded.Language
+    AiSearchProvider.ANYSEARCH -> Icons.Rounded.Search
 }
 
 @Composable
