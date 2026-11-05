@@ -72,6 +72,22 @@ object ColumnProgressStore {
     fun runningCount(context: Context, now: Long = System.currentTimeMillis()): Int =
         readAll(context).count { it.isRunning && now - it.lastActiveAt <= STALE_AFTER_MS }
 
+    /**
+     * 全部未过期的记录（进行中 + 一个月内完成）。
+     * 专栏详情页用它给每个专题画进度角标：做过哪步、做到第几步，用户不用点进向导才知道。
+     */
+    fun snapshot(context: Context, now: Long = System.currentTimeMillis()): List<ColumnProgressEntry> =
+        readAll(context).filter { now - it.lastActiveAt <= STALE_AFTER_MS }
+
+    /** 最近一条「已完成」的记录（默认看 24 小时内）：主页用它做完成态的正反馈。 */
+    fun recentDone(
+        context: Context,
+        withinMs: Long = 24L * 60 * 60 * 1000,
+        now: Long = System.currentTimeMillis(),
+    ): ColumnProgressEntry? = readAll(context)
+        .filter { it.done && now - it.lastActiveAt <= withinMs }
+        .maxByOrNull { it.lastActiveAt }
+
     private fun readAll(context: Context): List<ColumnProgressEntry> {
         val raw = runCatching { prefs(context).getString(KEY, null) }.getOrNull() ?: return emptyList()
         return runCatching {
@@ -123,6 +139,10 @@ object ColumnProgressStore {
     fun latest(): ColumnProgressEntry? = latest(ksuApp)
 
     fun runningCount(): Int = runningCount(ksuApp)
+
+    fun snapshot(): List<ColumnProgressEntry> = snapshot(ksuApp)
+
+    fun recentDone(): ColumnProgressEntry? = recentDone(ksuApp)
 
     /** 记录超过这个时间就不再当作「进行中」。 */
     private const val STALE_AFTER_MS = 30L * 24 * 60 * 60 * 1000

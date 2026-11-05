@@ -58,6 +58,8 @@ data class HomeUiState(
     // 主页「隐藏环境进行中」卡片：进行中的专题（重启后回来时提示用户接着做）。
     // 数据来自 ColumnProgressStore 的汇总记录，不跑 root，纯本地读取。
     val hideEnvCard: ColumnProgressEntry? = null,
+    /** 卡片上这条是进行中（false）还是刚完成（true，24 小时内出现过）。 */
+    val hideEnvCardDone: Boolean = false,
     val hideEnvRunningCount: Int = 0,
     val customHomeTitle: String = "",
     val homeCardImagePath: String = "",

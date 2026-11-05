@@ -297,6 +297,16 @@ private fun ColumnWizardScreenMaterial(
                 item(key = "wizard-health") {
                     ColumnHealthCard(report = state.health)
                 }
+            } else {
+                // 体检是 root 探针，需要几秒；给个明确的中态，别让人以为这块忘了渲染。
+                item(key = "wizard-health-scanning") {
+                    Text(
+                        text = stringResource(R.string.column_wizard_health_scanning),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+                    )
+                }
             }
             if (needsKeybox && !state.keyboxReady) {
                 item(key = "wizard-keybox") {
