@@ -5,6 +5,7 @@ import com.sukisu.ultra.ksuApp
 import com.sukisu.ultra.ui.util.hasAnyNetwork
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.CacheControl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
@@ -50,7 +51,12 @@ class RepoColumnRepositoryImpl(
             // 从不把网络标记成已验证，硬检查会把明明能上网的机器判成离线。
             if (!hasAnyNetwork(ksuApp)) throw IOException("no network available")
 
-            val request = Request.Builder().url(url).build()
+            // 不读本地缓存：jsDelivr 给这类 JSON 的 max-age 是 7 天，走共享客户端的磁盘缓存会
+            // 让运营改过的专栏文案要等一周才生效。noCache 只禁「读缓存」，仍会正常发请求。
+            val request = Request.Builder()
+                .url(url)
+                .cacheControl(CacheControl.Builder().noCache().build())
+                .build()
             val body = client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
                 response.readIndexBody(MAX_COLUMNS_RESPONSE_BYTES)
