@@ -1666,6 +1666,7 @@
     <!-- GitHub 下载加速 -->
     <string name="settings_proxy_title">GitHub download acceleration</string>
     <string name="settings_proxy_summary">Auto mode speed-tests the direct connection and every proxy, then uses the fastest one. With a system proxy or VPN on, the direct connection is preferred. The test here is a reference only; auto mode re-tests at download time.</string>
+    <string name="settings_proxy_entry_summary">Speed-test the direct connection and every proxy, then use the fastest one for GitHub downloads.</string>
     <string name="settings_proxy_mode_official">Official direct</string>
     <string name="settings_proxy_mode_auto">Auto (fastest)</string>
     <string name="settings_proxy_mode_pinned">Pinned proxy</string>

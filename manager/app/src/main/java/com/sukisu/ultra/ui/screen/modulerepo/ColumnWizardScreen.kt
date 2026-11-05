@@ -73,6 +73,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -279,6 +280,8 @@ private fun ColumnWizardScreenMaterial(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                // 顶栏的收起动画要靠 nestedScroll 连接列表的滚动：漏了它顶栏就钉死不动。
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 // 没有底部操作条时（完成态 / 空列表）没人替列表让出导航栏，这里自己让。
                 .then(
                     if (state.done || total == 0) {

@@ -24,8 +24,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.VerifiedUser
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -40,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -97,22 +104,36 @@ fun ModuleColumnStrip(
 
 @Composable
 private fun ColumnEntryCard(column: RepoColumn, onClick: () -> Unit) {
-    TonalCard(onClick = onClick, modifier = Modifier.width(232.dp)) {
+    // 入口卡走中性 surfaceContainer 底色，档位色只留在图标徽章上：
+    // 之前整卡铺 accent 底色（root→error 淡粉）在浅色主题里显得脏，被用户点名重做。
+    TonalCard(
+        onClick = onClick,
+        modifier = Modifier.width(236.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                AccentDot(column.accent)
-                Text(
-                    text = column.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                AccentBadge(column.accent)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = column.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = stringResource(R.string.module_column_topic_count, column.topics.size),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             if (column.subtitle.isNotEmpty()) {
                 Text(
@@ -123,12 +144,38 @@ private fun ColumnEntryCard(column: RepoColumn, onClick: () -> Unit) {
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Text(
-                text = stringResource(R.string.module_column_topic_count, column.topics.size),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
         }
+    }
+}
+
+/**
+ * 入口卡的图标徽章：圆角方块里放一枚档位色图标。
+ * 专栏内容不依赖具体图标语义，按 accent 选一个近义的即可；
+ * material-icons 是裁剪版，只从确认存在的 outlined 集合里挑。
+ */
+@Composable
+private fun AccentBadge(accent: String) {
+    val tint = accentColor(accent)
+    val image = when (accent) {
+        "root" -> Icons.Outlined.Shield
+        "hide" -> Icons.Outlined.VisibilityOff
+        "integrity" -> Icons.Outlined.VerifiedUser
+        "tool" -> Icons.Outlined.Build
+        else -> Icons.Outlined.Shield
+    }
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(tint.copy(alpha = 0.12f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = image,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(22.dp),
+        )
     }
 }
 
@@ -237,7 +284,9 @@ private fun ModuleColumnScreenMaterial(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
+                .padding(innerPadding)
+                // 顶栏的收起动画要靠 nestedScroll 连接列表的滚动：漏了它顶栏就钉死不动。
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -271,9 +320,9 @@ private fun ColumnHeaderCard(column: RepoColumn) {
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                AccentDot(column.accent)
+                AccentBadge(column.accent)
                 Text(
                     text = column.title,
                     style = MaterialTheme.typography.titleLarge,
@@ -666,16 +715,6 @@ private fun stepSourceLabel(step: RepoColumnStep): String = when (step.source.ki
     "updateJson" -> step.source.url
     "store" -> step.source.moduleId
     else -> ""
-}
-
-@Composable
-private fun AccentDot(accent: String) {
-    Box(
-        modifier = Modifier
-            .size(10.dp)
-            .clip(CircleShape)
-            .background(accentColor(accent)),
-    )
 }
 
 @Composable

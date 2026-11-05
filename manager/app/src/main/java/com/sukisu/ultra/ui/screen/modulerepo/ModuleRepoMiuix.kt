@@ -805,33 +805,9 @@ private fun MiuixCoolapkCommunityCard(
 ) {
     if (source == null) return
 
-    if (source.enabled) {
-        AppCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp),
-            insideMargin = PaddingValues(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = stringResource(R.string.module_repo_coolapk_enabled),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight(550),
-                    color = colorScheme.onSurfaceVariantSummary,
-                )
-                Spacer(Modifier.weight(1f))
-                TextButton(
-                    modifier = Modifier.wrapContentWidth(Alignment.End),
-                    text = stringResource(R.string.module_repo_coolapk_disable),
-                    onClick = { onSetSourceEnabled(source.id, false) },
-                )
-            }
-        }
-        return
-    }
+    // 已开启就什么都不显示：来源开关在筛选胶囊下方「来源管理」里也有入口，
+    // 商店页不需要常驻一行「已开启 / 关闭」提醒用户自己刚才点过什么。
+    if (source.enabled) return
 
     // 两段式确认：第一次点只是把按钮文案换成「我已了解，确认开启」，第二次点才真的开启，
     // 不额外弹窗。用 enabled 当 key，启用状态一变（不管是在这里还是来源管理里改的）就复位。

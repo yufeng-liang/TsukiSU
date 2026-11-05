@@ -1654,6 +1654,7 @@
     <!-- GitHub 下载加速 -->
     <string name="settings_proxy_title">GitHub 下载加速</string>
     <string name="settings_proxy_summary">自动模式会把直连和每个代理一起测速，谁快用谁；开了系统代理或 VPN 时优先走直连。这里的测速只作参考，自动模式会在下载时重新测速。</string>
+    <string name="settings_proxy_entry_summary">测速直连与所有代理，GitHub 下载自动走最快的线路。</string>
     <string name="settings_proxy_mode_official">官方直连</string>
     <string name="settings_proxy_mode_auto">自动选优</string>
     <string name="settings_proxy_mode_pinned">指定代理</string>
