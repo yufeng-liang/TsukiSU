@@ -571,9 +571,10 @@ private fun DetailsToggle(
 private fun TopicProgressChip(progress: ColumnProgressEntry) {
     val done = progress.done
     val (label, color) = if (done) {
-        stringResource(R.string.module_column_progress_done) to MaterialTheme.colorScheme.primary
+        // 底色是 XXContainer，文字就必须用对应的 onXXContainer，否则深色主题下浅字贴浅底看不清。
+        stringResource(R.string.module_column_progress_done) to MaterialTheme.colorScheme.onPrimaryContainer
     } else {
-        "${progress.settledSteps} / ${progress.totalSteps}" to MaterialTheme.colorScheme.tertiary
+        "${progress.settledSteps} / ${progress.totalSteps}" to MaterialTheme.colorScheme.onTertiaryContainer
     }
     Text(
         text = label,
