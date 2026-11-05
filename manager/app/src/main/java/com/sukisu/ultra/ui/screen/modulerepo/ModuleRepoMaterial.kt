@@ -628,7 +628,7 @@ private fun CoolapkCommunityEntryCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            FilledTonalButton(
+            Button(
                 onClick = {
                     if (awaitingConfirm) {
                         awaitingConfirm = false

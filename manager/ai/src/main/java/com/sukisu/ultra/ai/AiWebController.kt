@@ -8,6 +8,7 @@ import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -64,6 +65,24 @@ data class GithubRelease(
 object AiWebController {
 
     private const val MAX_BODY = 2 * 1024 * 1024
+
+    /** 自动故障转移链的总预算：所有服务商尝试 + DuckDuckGo 兜底共享。 */
+    private const val SEARCH_CHAIN_BUDGET_MS = 20_000L
+
+    /** 剩余预算低于这个值就不再尝试下一家，避免最后一家必然超时。 */
+    private const val MIN_ATTEMPT_BUDGET_MS = 1_000L
+
+    /** 聚合错误里每家失败原因最多展示 120 字。 */
+    private const val MAX_PROVIDER_ERROR_CHARS = 120
+
+    /** searchWeb 聚合错误文本总长上限。 */
+    private const val MAX_SEARCH_OUTPUT_CHARS = 4000
+
+    /** DuckDuckGo 兜底最多返回多少条（对应 web_search 工具的 limit 参数上限）。 */
+    private const val MAX_FALLBACK_RESULTS = 10
+
+    /** 兜底搜索在「搜索来源」里显示的固定名字。 */
+    private const val DUCKDUCKGO_SOURCE = "内置 DuckDuckGo"
     private const val USER_AGENT =
         "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) " +
             "Chrome/124.0.0.0 Mobile Safari/537.36"
@@ -77,53 +96,111 @@ object AiWebController {
     /** Only direct GitHub release downloads are installable. */
     fun isGithubReleaseUrl(url: String): Boolean = AiGithubUrls.isReleaseDownloadUrl(url)
 
+    /**
+     * 联网搜索：按设置页的顺序逐个尝试已启用的服务商（单次最多 8 秒、整链 20 秒），
+     * 全部失败后可用内置 DuckDuckGo 兜底。返回给模型看的纯文本，末尾标注搜索来源。
+     *
+     * 切换条件：只有网络异常 / 非 2xx / 解析失败才换下一家；「0 条结果」算这家服务可用，不切换。
+     */
     suspend fun searchWeb(query: String, limit: Int = 8): String = withContext(Dispatchers.IO) {
         val cleaned = query.trim()
         require(cleaned.isNotEmpty()) { "query is required" }
         require(cleaned.length <= 200) { "query is too long" }
-        val configuredSearch = AiSearchSettings.load()
-        // NONE 时退回内置 DuckDuckGo；除 AnySearch 允许匿名外，其余服务都要填了 Key 才启用。
-        val useConfiguredProvider = when (configuredSearch.provider) {
-            AiSearchProvider.NONE -> false
-            AiSearchProvider.FIRECRAWL -> configuredSearch.apiKey.isNotBlank()
-            AiSearchProvider.ANYSEARCH -> true
-            AiSearchProvider.TAVILY -> configuredSearch.apiKey.isNotBlank()
-            AiSearchProvider.YUANBAO -> configuredSearch.apiKey.isNotBlank()
+
+        val config = AiSearchSettings.load()
+        if (!config.searchEnabled) {
+            return@withContext "联网搜索已关闭：请在 AI 助手的联网搜索设置中开启。"
         }
-        if (useConfiguredProvider) {
-            return@withContext AiWebSearch.search(cleaned)
-        }
-        val encoded = URLEncoder.encode(cleaned, StandardCharsets.UTF_8.toString())
-        val html = fetch("https://html.duckduckgo.com/html/?q=$encoded", "text/html")
-        var results = parseDuckDuckGo(html)
-        if (results.isEmpty()) {
-            val lite = runCatching {
-                parseDuckDuckGoLite(
-                    fetch("https://lite.duckduckgo.com/lite/?q=$encoded", "text/html")
+
+        val startedAt = System.nanoTime()
+        val errors = mutableListOf<String>()
+        var skipped: List<AiSearchProvider> = emptyList()
+        // 候选 = 用户启用且已配置的服务商，按拖拽顺序；AnySearch 匿名访问也算已配置。
+        val candidates = config.failoverCandidates()
+        for ((index, provider) in candidates.withIndex()) {
+            val remainingMs = SEARCH_CHAIN_BUDGET_MS - elapsedMs(startedAt)
+            // 剩余预算不够一次有意义的请求时直接收尾，避免总耗时失控。
+            if (remainingMs < MIN_ATTEMPT_BUDGET_MS) {
+                skipped = candidates.drop(index)
+                break
+            }
+            val timeoutMs = minOf(PROVIDER_TIMEOUT_MS, remainingMs)
+            val outcome = AiWebSearch.searchProvider(
+                query = cleaned,
+                provider = provider,
+                apiKey = config.keyOf(provider),
+                timeoutMs = timeoutMs,
+            )
+            when (outcome) {
+                // 0 条结果也算成功：说明这家服务可用，没必要再切下一家。
+                is ProviderOutcome.Success -> return@withContext withSearchSource(
+                    AiWebSearch.formatResults(outcome.results),
+                    provider.displayName(),
                 )
-            }.getOrDefault(emptyList())
-            results = lite
+
+                is ProviderOutcome.Failure ->
+                    errors += "${provider.displayName()}：${outcome.message}"
+            }
         }
-        buildJsonObject {
-            put("query", cleaned)
-            put("results", buildJsonArray {
-                results.take(limit.coerceIn(1, 10)).forEach { result ->
-                    add(buildJsonObject {
-                        put("title", result.title.take(200))
-                        put("url", result.url)
-                        put("snippet", result.snippet.take(320))
-                    })
-                }
-            })
-            if (results.isEmpty()) {
-                put(
-                    "note",
-                    "No web results were parsed. Try github_search with repository keywords, " +
-                        "or ask the user to open a browser.",
+
+        // 所有服务商都没给出结果时，用内置 DuckDuckGo 兜底。
+        if (config.duckDuckGoFallback) {
+            val fallback = try {
+                searchDuckDuckGo(cleaned)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                errors += "内置 DuckDuckGo：${error.readableSearchError()}"
+                null
+            }
+            if (fallback != null) {
+                return@withContext withSearchSource(
+                    AiWebSearch.formatResults(fallback, limit.coerceIn(1, MAX_FALLBACK_RESULTS)),
+                    DUCKDUCKGO_SOURCE,
                 )
             }
-        }.toString()
+        } else if (candidates.isEmpty()) {
+            return@withContext "联网搜索未配置：请启用至少一个搜索服务，或打开内置 DuckDuckGo 兜底。"
+        }
+
+        if (skipped.isNotEmpty()) {
+            errors += "总耗时接近上限，已跳过：${skipped.joinToString("、") { it.displayName() }}"
+        }
+        buildAggregateSearchError(errors)
     }
+
+    /**
+     * 内置 DuckDuckGo 兜底：先抓 HTML 版解析，解析不到再抓 Lite 版。
+     * 两段抓取/解析逻辑与原实现一致，只是把结果换成统一结构交给调用方格式化。
+     */
+    private fun searchDuckDuckGo(query: String): List<SearchResult> {
+        val encoded = URLEncoder.encode(query, StandardCharsets.UTF_8.toString())
+        val html = fetch("https://html.duckduckgo.com/html/?q=$encoded", "text/html")
+        val results = parseDuckDuckGo(html)
+        if (results.isNotEmpty()) return results.map { it.toSearchResult() }
+        return runCatching {
+            parseDuckDuckGoLite(fetch("https://lite.duckduckgo.com/lite/?q=$encoded", "text/html"))
+        }.getOrDefault(emptyList()).map { it.toSearchResult() }
+    }
+
+    private fun WebSearchResult.toSearchResult(): SearchResult =
+        SearchResult(title = title, url = url, snippet = snippet)
+
+    /** 搜索结果末尾统一标注来源，方便模型/用户判断可信度。 */
+    private fun withSearchSource(text: String, source: String): String =
+        "$text\n\n搜索来源：$source"
+
+    /** 从开始时间算已用毫秒。 */
+    private fun elapsedMs(startedAtNanos: Long): Long =
+        (System.nanoTime() - startedAtNanos) / 1_000_000
+
+    /** 所有服务都失败时的聚合文本：每家一行（各截断 120 字），整体不超过 4000 字。 */
+    private fun buildAggregateSearchError(errors: List<String>): String = buildString {
+        append("所有搜索服务均失败：")
+        errors.forEach { error ->
+            append('\n').append("· ").append(error.take(MAX_PROVIDER_ERROR_CHARS))
+        }
+    }.take(MAX_SEARCH_OUTPUT_CHARS)
 
     suspend fun searchGithub(query: String, limit: Int = 8): String = withContext(Dispatchers.IO) {
         val cleaned = query.trim()

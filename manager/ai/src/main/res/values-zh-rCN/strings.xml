@@ -326,7 +326,18 @@
     <string name="ai_clear_history_action">清空聊天记录</string>
     <string name="ai_search_get_key">获取 API Key</string>
     <string name="ai_search_key_optional">可留空，匿名访问的速率与每日额度更低。</string>
-    <string name="ai_search_section_summary">让助手可以搜索实时网页，选择一个服务商。</string>
+    <string name="ai_search_section_summary">按顺序尝试已启用的服务，失败时自动切换。</string>
     <string name="ai_state_enabled">已启用</string>
     <string name="ai_state_disabled">未启用</string>
+    <string name="ai_search_enable">启用联网搜索</string>
+    <string name="ai_search_enable_desc">让助手用下面的服务搜索实时网页。</string>
+    <string name="ai_search_duckduckgo_fallback">内置 DuckDuckGo 兜底</string>
+    <string name="ai_search_duckduckgo_fallback_desc">所有服务都失败时，直接抓取 DuckDuckGo 结果。</string>
+    <string name="ai_search_provider_enabled">启用%1$s</string>
+    <string name="ai_search_test">测试</string>
+    <string name="ai_search_testing">测试中…</string>
+    <string name="ai_search_test_success">成功 · %1$d 毫秒 · %2$d 条</string>
+    <string name="ai_search_test_failure">失败：%1$s</string>
+    <string name="ai_search_test_cost">测试会真实调用一次搜索接口。</string>
+    <string name="ai_search_drag_handle">拖动排序</string>
 </resources>
