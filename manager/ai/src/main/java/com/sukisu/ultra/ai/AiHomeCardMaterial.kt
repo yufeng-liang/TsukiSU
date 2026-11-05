@@ -2,6 +2,7 @@ package com.sukisu.ultra.ai
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
@@ -15,7 +16,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Chat
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Visibility
@@ -301,40 +304,65 @@ internal fun AiConfigEditorMaterial(
             )
         }
 
-        // ② 连接配置：服务商、格式、端点、密钥、模型、思考模式、系统提示与测试连接
+
+        // ② AI 提供商：头部一行放切换/新增/删除，下面依次是名称、格式、地址、密钥、模型、图片模型、思考、提示与测试
         SettingsSection(
-            title = stringResource(R.string.ai_connection_section),
+            title = stringResource(R.string.ai_provider_group),
             subtitle = stringResource(R.string.ai_connection_trust),
         ) {
-            Text(
-                text = stringResource(R.string.ai_provider_section),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // 头部一行放下「当前提供商 + 切换 / 新增 / 删除」，格式与模型做副标题，省掉原来三行独立操作区。
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text(
-                    text = currentProvider?.name ?: defaultProviderName,
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(1f),
-                )
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = (currentProvider?.name ?: defaultProviderName).take(1),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                }
+                Column(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
+                    Text(
+                        text = currentProvider?.name ?: defaultProviderName,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    val modelName = AiSettings.activeModel(draft)?.name ?: draft.model
+                    Text(
+                        text = listOfNotNull(
+                            stringResource((currentProvider?.format ?: draft.format).labelRes()),
+                            modelName.takeIf { it.isNotBlank() },
+                        ).joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 TextButton(onClick = { showProviderDialog = true }) {
                     Text(stringResource(R.string.ai_provider_switch))
                 }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                TextButton(onClick = { addProvider() }) {
-                    Text(stringResource(R.string.ai_provider_add))
+                IconButton(onClick = { addProvider() }) {
+                    Icon(
+                        imageVector = Icons.Rounded.Add,
+                        contentDescription = stringResource(R.string.ai_provider_add),
+                    )
                 }
                 if (draft.providers.size > 1) {
-                    TextButton(onClick = { showDeleteProviderDialog = true }) {
-                        Text(stringResource(R.string.ai_provider_delete))
+                    IconButton(onClick = { showDeleteProviderDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Rounded.Delete,
+                            contentDescription = stringResource(R.string.ai_provider_delete),
+                        )
                     }
                 }
             }
@@ -367,19 +395,22 @@ internal fun AiConfigEditorMaterial(
                 placeholder = { Text(stringResource(R.string.ai_endpoint_hint)) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                // 识别结果挪进 supportingText，省掉单独一行说明。
+                supportingText = if (detected != null) {
+                    {
+                        Text(
+                            text = stringResource(
+                                R.string.ai_format_detected,
+                                stringResource(detected.labelRes()),
+                            ) + " · " + draft.resolvedEndpoint(),
+                        )
+                    }
+                } else {
+                    null
+                },
                 shape = MaterialTheme.shapes.large,
                 modifier = Modifier.fillMaxWidth(),
             )
-            if (detected != null) {
-                Text(
-                    text = stringResource(
-                        R.string.ai_format_detected,
-                        stringResource(detected.labelRes()),
-                    ) + " · " + draft.resolvedEndpoint(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
             OutlinedTextField(
                 value = currentProvider?.apiKey ?: draft.apiKey,
                 onValueChange = { value -> updateCurrentProvider { it.copy(apiKey = value) } },
@@ -446,19 +477,21 @@ internal fun AiConfigEditorMaterial(
                     )
                 }
             }
-            OutlinedTextField(
-                value = draft.imageModel,
-                onValueChange = { onDraftChange(draft.copy(imageModel = it)) },
-                label = { Text(stringResource(R.string.ai_image_model)) },
-                placeholder = { Text(stringResource(R.string.ai_image_model_hint)) },
-                singleLine = true,
-                shape = MaterialTheme.shapes.large,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            // 图片模型与「获取图片模型」并排，少占一行。
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                OutlinedTextField(
+                    value = draft.imageModel,
+                    onValueChange = { onDraftChange(draft.copy(imageModel = it)) },
+                    label = { Text(stringResource(R.string.ai_image_model)) },
+                    placeholder = { Text(stringResource(R.string.ai_image_model_hint)) },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.large,
+                    modifier = Modifier.weight(1f),
+                )
                 TextButton(
                     onClick = { onFetchModels(true) },
                     enabled = !fetchingModels,
@@ -497,27 +530,34 @@ internal fun AiConfigEditorMaterial(
                 shape = MaterialTheme.shapes.large,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Text(
-                text = stringResource(
-                    R.string.ai_provider_test_hint,
-                    currentProvider?.name ?: defaultProviderName,
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedButton(
-                onClick = onTest,
-                enabled = !testState.testing,
+            // 测试连接收成紧凑按钮：说明放左边，按钮靠右。
+            Row(
                 modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (testState.testing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.padding(end = 8.dp).size(16.dp),
-                        strokeWidth = 2.dp,
-                    )
-                    Text(stringResource(R.string.ai_testing))
-                } else {
-                    Text(stringResource(R.string.ai_test_connection))
+                Text(
+                    text = stringResource(
+                        R.string.ai_provider_test_hint,
+                        currentProvider?.name ?: defaultProviderName,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedButton(
+                    onClick = onTest,
+                    enabled = !testState.testing,
+                ) {
+                    if (testState.testing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.padding(end = 6.dp).size(14.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        Text(stringResource(R.string.ai_testing))
+                    } else {
+                        Text(stringResource(R.string.ai_test_connection))
+                    }
                 }
             }
 
@@ -561,7 +601,21 @@ internal fun AiConfigEditorMaterial(
             }
         }
 
-        // ③ 会话标题模型与标题思考强度：字段自带标签，卡片不再加标题
+
+        // ③ 联网搜索：服务商单选与 Key
+        SettingsSection(
+            title = stringResource(R.string.ai_search_section),
+            subtitle = stringResource(R.string.ai_search_section_summary),
+        ) {
+            AiSearchSettingsSection()
+        }
+
+        // ④ MCP 服务器：服务器列表与新增
+        SettingsSection(title = stringResource(R.string.ai_mcp_section)) {
+            AiMcpSettingsSection()
+        }
+
+        // ⑤ 会话标题模型与标题思考强度：字段自带标签，卡片不再加标题
         SettingsSection {
             OutlinedTextField(
                 value = draft.titleModel,
@@ -588,7 +642,8 @@ internal fun AiConfigEditorMaterial(
             }
         }
 
-        // ④ 访问范围
+
+        // ⑥ 访问范围
         SettingsSection(
             title = stringResource(R.string.ai_scope_section),
             subtitle = stringResource(R.string.ai_scope_summary),
@@ -639,7 +694,8 @@ internal fun AiConfigEditorMaterial(
             )
         }
 
-        // ⑤ 超级用户控制
+
+        // ⑦ 超级用户控制
         SettingsSection(
             title = stringResource(R.string.ai_superuser_section),
             subtitle = stringResource(R.string.ai_superuser_section_summary),
@@ -705,7 +761,8 @@ internal fun AiConfigEditorMaterial(
             )
         }
 
-        // ⑥ 写入权限
+
+        // ⑧ 写入权限
         SettingsSection(
             title = stringResource(R.string.ai_write_section),
         ) {
@@ -790,7 +847,8 @@ internal fun AiConfigEditorMaterial(
             )
         }
 
-        // ⑦ 行为
+
+        // ⑨ 行为
         SettingsSection(
             title = stringResource(R.string.ai_behavior_section),
         ) {
@@ -834,7 +892,8 @@ internal fun AiConfigEditorMaterial(
             )
         }
 
-        // ⑧ 高级 API 模式：开关自带标题与摘要，展开内容跟随开关
+
+        // ⑩ 高级 API 模式：开关自带标题与摘要，展开内容跟随开关
         SettingsSection {
             AiToggleRow(
                 title = stringResource(R.string.ai_advanced_mode),
@@ -910,13 +969,8 @@ internal fun AiConfigEditorMaterial(
             }
         }
 
-        // ⑨ 联网搜索（含 MCP 服务器）：该组件内部没有大标题，由外层分组卡片补齐
-        SettingsSection(
-            title = stringResource(R.string.ai_search_section),
-            subtitle = stringResource(R.string.ai_search_section_summary),
-        ) {
-            AiToolsSettingsSection()
-        }
+
+
     }
 
     if (showProviderDialog) {

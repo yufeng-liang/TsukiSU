@@ -985,7 +985,9 @@ internal fun AiConfigEditorMiuix(
             },
         )
     }
-    AiToolsSettingsSection()
+    // 联网搜索与 MCP 现在是两个独立分组，各自带标题。
+    AiSearchSettingsSection()
+    AiMcpSettingsSection()
 }
 
 @Composable

@@ -281,6 +281,7 @@
     <string name="ai_edit_cancel">Cancel</string>
     <string name="ai_sessions">Sessions</string>
     <string name="ai_provider_section">Providers</string>
+    <string name="ai_provider_group">AI provider</string>
     <string name="ai_provider_default">Default</string>
     <string name="ai_provider_switch">Switch</string>
     <string name="ai_provider_switch_title">Choose a provider</string>

@@ -16,7 +16,6 @@ import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -39,17 +38,14 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 /**
- * AI 设置页里的「联网搜索」与「MCP 服务器」两个小组。
+ * AI 设置页里的「联网搜索」与「MCP 服务器」两个独立分组：
  *
  * 这里刻意只用 Material3 控件：设置页的 Material / Miuix 两套外壳都调用同一个 composable，
  * 避免再维护两份几乎相同的配置界面。两套主题的颜色由外层 theme 决定。
  */
 @Composable
-internal fun AiToolsSettingsSection(modifier: Modifier = Modifier) {
+internal fun AiSearchSettingsSection(modifier: Modifier = Modifier) {
     var searchConfig by remember { mutableStateOf(AiSearchSettings.load()) }
-    var servers by remember { mutableStateOf(AiMcpSettings.list()) }
-    var showAddServer by remember { mutableStateOf(false) }
-    var serverDetail by remember { mutableStateOf<AiMcpServer?>(null) }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         AiSearchProvider.entries.forEach { provider ->
@@ -67,15 +63,16 @@ internal fun AiToolsSettingsSection(modifier: Modifier = Modifier) {
                 },
             )
         }
+    }
+}
 
-        // 服务商与 MCP 是两个子组：用弱分隔线分开，避免整块堆在一起。
-        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+@Composable
+internal fun AiMcpSettingsSection(modifier: Modifier = Modifier) {
+    var servers by remember { mutableStateOf(AiMcpSettings.list()) }
+    var showAddServer by remember { mutableStateOf(false) }
+    var serverDetail by remember { mutableStateOf<AiMcpServer?>(null) }
 
-        Text(
-            text = stringResource(R.string.ai_mcp_section),
-            style = MaterialTheme.typography.titleSmall,
-            modifier = Modifier.padding(top = 4.dp),
-        )
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (servers.isEmpty()) {
             Text(
                 text = stringResource(R.string.ai_mcp_empty),
