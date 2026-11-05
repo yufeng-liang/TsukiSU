@@ -248,12 +248,7 @@ private fun ColumnWizardScreenMaterial(
             LargeFlexibleTopAppBar(
                 title = { Text(text = topic.title) },
                 navigationIcon = { TopBarBackButton(onClick = onBack) },
-                actions = {
-                    // 风险徽章常驻：滚到第 6 步时也不该忘记这个专题是高风险。
-                    Box(modifier = Modifier.padding(end = 16.dp)) {
-                        RiskBadge(topic.riskLevel)
-                    }
-                },
+                actions = {},
                 colors = expressiveTopAppBarColors(),
                 scrollBehavior = scrollBehavior,
             )

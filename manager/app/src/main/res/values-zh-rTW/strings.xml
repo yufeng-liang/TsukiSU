@@ -1347,9 +1347,6 @@
     <string name="module_column_verify_title">怎麼確認生效</string>
     <string name="module_column_evidence_age">%1$d 天前驗證</string>
     <string name="module_column_evidence_unknown">驗證時間未知</string>
-    <string name="module_column_risk_low">風險低</string>
-    <string name="module_column_risk_medium">風險中</string>
-    <string name="module_column_risk_high">風險高</string>
     <string name="module_column_step_optional">可選</string>
     <string name="module_column_step_kind_install_module">裝模組</string>
     <string name="module_column_step_kind_install_app">安裝應用</string>

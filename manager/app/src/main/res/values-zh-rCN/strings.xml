@@ -1609,9 +1609,6 @@
     <string name="module_column_verify_title">怎么确认生效</string>
     <string name="module_column_evidence_age">%1$d 天前验证</string>
     <string name="module_column_evidence_unknown">验证时间未知</string>
-    <string name="module_column_risk_low">风险低</string>
-    <string name="module_column_risk_medium">风险中</string>
-    <string name="module_column_risk_high">风险高</string>
     <string name="module_column_step_optional">可选</string>
     <string name="module_column_step_kind_install_module">装模块</string>
     <string name="module_column_step_kind_install_app">安装应用</string>

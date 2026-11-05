@@ -99,7 +99,6 @@ fun ModuleColumnStrip(
             text = stringResource(R.string.module_column_section_title),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 4.dp),
         )
         if (columns.size == 1) {
             // 只有一个专栏时横滑没有意义，卡片直接占满整行。
@@ -409,7 +408,6 @@ private fun TopicCard(
                     modifier = Modifier.weight(1f),
                 )
                 TierBadge(topic.tier)
-                RiskBadge(topic.riskLevel)
             }
             if (topic.summary.isNotEmpty()) {
                 Text(
@@ -429,9 +427,6 @@ private fun TopicCard(
                 ) {
                     Text(text = stringResource(R.string.column_wizard_open))
                 }
-            }
-            if (topic.layers.isNotEmpty()) {
-                TagRow(topic.layers)
             }
             EvidenceRow(topic.evidence)
             if (topic.requires.isNotEmpty()) {
@@ -499,26 +494,6 @@ private fun Section(title: String, lines: List<String>) {
                 text = "· $line",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun TagRow(tags: List<String>) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        tags.forEach { tag ->
-            Text(
-                text = tag,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                modifier = Modifier
-                    .clip(MaterialTheme.shapes.small)
-                    .background(MaterialTheme.colorScheme.secondaryContainer)
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
             )
         }
     }
@@ -626,25 +601,6 @@ private fun tierColor(tier: String): Color = when (tier) {
     "game" -> MaterialTheme.colorScheme.error
     "tool" -> MaterialTheme.colorScheme.secondary
     else -> MaterialTheme.colorScheme.outline
-}
-
-/** 风险徽章：详情页与向导页共用，保证同一个专题在两处颜色一致。 */
-@Composable
-internal fun RiskBadge(riskLevel: String) {
-    val (labelRes, container) = when (riskLevel) {
-        "low" -> R.string.module_column_risk_low to MaterialTheme.colorScheme.secondaryContainer
-        "medium" -> R.string.module_column_risk_medium to MaterialTheme.colorScheme.tertiaryContainer
-        else -> R.string.module_column_risk_high to MaterialTheme.colorScheme.errorContainer
-    }
-    Text(
-        text = stringResource(labelRes),
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier
-            .clip(MaterialTheme.shapes.small)
-            .background(container)
-            .padding(horizontal = 6.dp, vertical = 2.dp),
-    )
 }
 
 /** 证据行：颜色代表时效，文字说清「多久以前、在哪台机器上验的」。 */
