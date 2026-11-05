@@ -81,6 +81,10 @@ object AiWebController {
         val cleaned = query.trim()
         require(cleaned.isNotEmpty()) { "query is required" }
         require(cleaned.length <= 200) { "query is too long" }
+        val configuredSearch = AiSearchSettings.load()
+        if (configuredSearch.provider != AiSearchProvider.NONE && configuredSearch.apiKey.isNotBlank()) {
+            return@withContext AiWebSearch.search(cleaned)
+        }
         val encoded = URLEncoder.encode(cleaned, StandardCharsets.UTF_8.toString())
         val html = fetch("https://html.duckduckgo.com/html/?q=$encoded", "text/html")
         var results = parseDuckDuckGo(html)

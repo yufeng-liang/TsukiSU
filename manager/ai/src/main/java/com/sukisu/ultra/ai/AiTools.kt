@@ -62,6 +62,8 @@ object AiTools {
 
     /** Searches the bundled detector troubleshooting reference. */
     const val SEARCH_ANSWERS_TOOL = "search_detector_answers"
+    const val MCP_LIST_TOOL = "mcp_list"
+    const val MCP_CALL_TOOL = "mcp_call"
 
     /** Hard cap on how much shell output is fed back to the model. */
     private const val MAX_SHELL_OUTPUT_CHARS = 20_000
@@ -118,6 +120,8 @@ object AiTools {
         add(moduleInstallGithubTool)
         add(runShellTool)
         add(searchAnswersTool)
+        add(mcpListTool)
+        add(mcpCallTool)
     }
 
     suspend fun execute(
@@ -938,6 +942,35 @@ object AiTools {
                 DetectorAnswers.search(query)
             }
 
+            MCP_LIST_TOOL -> {
+                requirePermission(config.allowWebAccess, AiCapability.WEB)
+                val servers = AiMcpSettings.list().filter { it.enabled }
+                if (servers.isEmpty()) {
+                    return "No MCP servers are configured. Ask the user to add one in the assistant settings."
+                }
+                buildString {
+                    servers.forEach { server ->
+                        appendLine("Server ${server.name} (${server.id}):")
+                        val tools = AiMcpClient.listTools(server)
+                        if (tools.isEmpty()) {
+                            appendLine("  (no tools or unreachable)")
+                        } else {
+                            tools.forEach { tool -> appendLine("  - ${tool.name}: ${tool.description}") }
+                        }
+                    }
+                }.trim()
+            }
+
+            MCP_CALL_TOOL -> {
+                requirePermission(config.allowWebAccess, AiCapability.WEB)
+                val serverId = args.requiredString("server")
+                val toolName = args.requiredString("tool")
+                val argumentsJson = args.string("arguments")?.trim().orEmpty().ifEmpty { "{}" }
+                val server = AiMcpSettings.list().firstOrNull { it.id == serverId }
+                    ?: throw IllegalArgumentException("Unknown MCP server '$serverId'")
+                AiMcpClient.callTool(server, toolName, argumentsJson)
+            }
+
             else -> throw IllegalArgumentException("Unknown tool '${call.name}'")
         }
     }
@@ -1561,6 +1594,25 @@ object AiTools {
         parameters = objectSchema(
             "query" to stringSchema("The red-flag text or keywords, in the detector's own wording."),
             required = listOf("query"),
+        ),
+    )
+
+    private val mcpListTool = AiToolSpec(
+        name = MCP_LIST_TOOL,
+        description = "List the tools exposed by the MCP servers the user configured. " +
+            "Call this before mcp_call when you are not sure what is available.",
+        parameters = objectSchema(),
+    )
+
+    private val mcpCallTool = AiToolSpec(
+        name = MCP_CALL_TOOL,
+        description = "Call a tool exposed by a configured MCP server. Pass the server id, " +
+            "the tool name and an arguments object as a JSON string.",
+        parameters = objectSchema(
+            "server" to stringSchema("MCP server id, as returned by mcp_list."),
+            "tool" to stringSchema("Tool name to call."),
+            "arguments" to stringSchema("Tool arguments as a JSON object string, e.g. {}."),
+            required = listOf("server", "tool"),
         ),
     )
 

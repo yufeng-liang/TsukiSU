@@ -111,15 +111,20 @@ fun AiSettingsScreen(onBack: () -> Unit) {
             reportAdvancedOptionsError(it)
             return@fetch
         }
+        val resolvedDraft = draft.copy(
+            endpoint = AiSettings.resolveEndpoint(draft),
+            apiKey = AiSettings.resolveApiKey(draft),
+            model = AiSettings.resolveModel(draft),
+        )
         if (!fetchingModels) {
-            if (draft.endpoint.isBlank()) {
+            if (resolvedDraft.endpoint.isBlank()) {
                 Toast.makeText(context, R.string.ai_address_required, Toast.LENGTH_SHORT).show()
             } else {
                 runWithLocalNetwork {
                     fetchingModels = true
                     scope.launch {
                         try {
-                            val models = AiApiClient.fetchModels(draft)
+                            val models = AiApiClient.fetchModels(resolvedDraft)
                             if (models.isEmpty()) {
                                 Toast.makeText(context, R.string.ai_no_models, Toast.LENGTH_SHORT).show()
                             } else {
@@ -149,9 +154,14 @@ fun AiSettingsScreen(onBack: () -> Unit) {
             return@test
         }
         if (!testState.testing) {
+            val resolvedDraft = draft.copy(
+                endpoint = AiSettings.resolveEndpoint(draft),
+                apiKey = AiSettings.resolveApiKey(draft),
+                model = AiSettings.resolveModel(draft),
+            )
             runWithLocalNetwork {
                 testState = AiTestState(testing = true)
-                scope.launch { testState = runAiConnectionTest(draft) }
+                scope.launch { testState = runAiConnectionTest(resolvedDraft) }
             }
         }
     }

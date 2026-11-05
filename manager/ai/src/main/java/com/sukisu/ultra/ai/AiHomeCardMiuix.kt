@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -19,10 +20,12 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sukisu.ultra.ai.R
+import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
@@ -179,7 +183,103 @@ internal fun AiConfigEditorMiuix(
         pendingRiskPhrase = phrase
         pendingRiskAction = action
     }
-    val detected = if (draft.endpoint.isNotBlank()) draft.effectiveFormat() else null
+    val currentProvider = AiSettings.activeProvider(draft)
+    val defaultProviderName = stringResource(R.string.ai_provider_default)
+    val newProviderName = stringResource(R.string.ai_provider_new_name)
+    var showProviderDialog by remember { mutableStateOf(false) }
+    var showDeleteProviderDialog by remember { mutableStateOf(false) }
+    var fetchingProviderModels by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val detected = if (draft.resolvedEndpoint().isNotBlank()) draft.effectiveFormat() else null
+
+    fun updateCurrentProvider(transform: (AiProvider) -> AiProvider) {
+        val existing = currentProvider
+        if (existing != null && draft.providers.any { it.id == existing.id }) {
+            onDraftChange(
+                draft.copy(
+                    providers = draft.providers.map {
+                        if (it.id == existing.id) transform(it) else it
+                    },
+                ),
+            )
+            return
+        }
+        val seed = existing ?: AiProvider(
+            id = "p" + System.currentTimeMillis(),
+            name = newProviderName,
+            format = draft.format,
+            endpoint = draft.endpoint,
+            apiKey = draft.apiKey,
+        )
+        val updated = transform(seed)
+        onDraftChange(
+            draft.copy(
+                providers = listOf(updated),
+                currentProviderId = updated.id,
+                currentModelId = updated.models.firstOrNull()?.id ?: "",
+            ),
+        )
+    }
+
+    fun addProvider() {
+        val provider = AiProvider(
+            id = "p" + System.currentTimeMillis(),
+            name = newProviderName,
+            format = draft.format,
+            endpoint = draft.endpoint,
+            apiKey = draft.apiKey,
+        )
+        onDraftChange(
+            draft.copy(
+                providers = draft.providers + provider,
+                currentProviderId = provider.id,
+                currentModelId = "",
+            ),
+        )
+    }
+
+    fun deleteCurrentProvider() {
+        val existing = currentProvider ?: return
+        val remaining = draft.providers.filterNot { it.id == existing.id }
+        val first = remaining.firstOrNull() ?: return
+        onDraftChange(
+            draft.copy(
+                providers = remaining,
+                currentProviderId = first.id,
+                currentModelId = first.models.firstOrNull()?.id ?: "",
+            ),
+        )
+    }
+
+    fun fetchProviderModels() {
+        val provider = currentProvider ?: return
+        if (provider.models.isNotEmpty() || provider.endpoint.isBlank()) return
+        scope.launch {
+            fetchingProviderModels = true
+            try {
+                val models = ModelCatalog.listModels(provider)
+                if (models.isNotEmpty()) {
+                    val enriched = ModelCatalog.enrich(models)
+                    val updated = provider.copy(models = enriched)
+                    val providers = if (draft.providers.any { it.id == provider.id }) {
+                        draft.providers.map { if (it.id == provider.id) updated else it }
+                    } else {
+                        listOf(updated)
+                    }
+                    onDraftChange(
+                        draft.copy(
+                            providers = providers,
+                            currentProviderId = provider.id,
+                            currentModelId = enriched.firstOrNull()?.id ?: "",
+                        ),
+                    )
+                }
+            } catch (_: Exception) {
+            } finally {
+                fetchingProviderModels = false
+            }
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         AiToggleRowMiuix(
@@ -198,9 +298,65 @@ internal fun AiConfigEditorMiuix(
             style = MiuixTheme.textStyles.body2,
             color = colorScheme.onSurfaceVariantSummary,
         )
+        Text(
+            text = stringResource(R.string.ai_provider_section),
+            style = MiuixTheme.textStyles.body2,
+            color = colorScheme.onSurfaceVariantSummary,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = currentProvider?.name ?: defaultProviderName,
+                style = MiuixTheme.textStyles.body1,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(
+                text = stringResource(R.string.ai_provider_switch),
+                onClick = { showProviderDialog = true },
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            TextButton(
+                text = stringResource(R.string.ai_provider_add),
+                onClick = { addProvider() },
+            )
+            if (draft.providers.size > 1) {
+                TextButton(
+                    text = stringResource(R.string.ai_provider_delete),
+                    onClick = { showDeleteProviderDialog = true },
+                )
+            }
+        }
         TextField(
-            value = draft.endpoint,
-            onValueChange = { onDraftChange(draft.copy(endpoint = it)) },
+            value = currentProvider?.name ?: "",
+            onValueChange = { value -> updateCurrentProvider { it.copy(name = value) } },
+            label = stringResource(R.string.ai_provider_name),
+            useLabelAsPlaceholder = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            text = stringResource(R.string.ai_format),
+            style = MiuixTheme.textStyles.body2,
+            color = colorScheme.onSurfaceVariantSummary,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            AiProviderFormat.entries.forEach { format ->
+                MiuixFormatChip(
+                    selected = (currentProvider?.format ?: draft.format) == format,
+                    text = stringResource(format.labelRes()),
+                    onClick = { updateCurrentProvider { it.copy(format = format) } },
+                )
+            }
+        }
+        TextField(
+            value = currentProvider?.endpoint ?: draft.endpoint,
+            onValueChange = { value -> updateCurrentProvider { it.copy(endpoint = value) } },
             label = stringResource(R.string.ai_endpoint),
             useLabelAsPlaceholder = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
@@ -217,8 +373,8 @@ internal fun AiConfigEditorMiuix(
             )
         }
         TextField(
-            value = draft.apiKey,
-            onValueChange = { onDraftChange(draft.copy(apiKey = it)) },
+            value = currentProvider?.apiKey ?: draft.apiKey,
+            onValueChange = { value -> updateCurrentProvider { it.copy(apiKey = value) } },
             label = stringResource(R.string.ai_api_key),
             useLabelAsPlaceholder = true,
             visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
@@ -235,13 +391,37 @@ internal fun AiConfigEditorMiuix(
             },
             modifier = Modifier.fillMaxWidth(),
         )
-        TextField(
-            value = draft.model,
-            onValueChange = { onDraftChange(draft.copy(model = it)) },
-            label = stringResource(R.string.ai_model),
-            useLabelAsPlaceholder = true,
+        Row(
             modifier = Modifier.fillMaxWidth(),
-        )
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.ai_model),
+                    style = MiuixTheme.textStyles.body2,
+                    color = colorScheme.onSurfaceVariantSummary,
+                )
+                Text(
+                    text = AiSettings.activeModel(draft)?.name ?: draft.model,
+                    style = MiuixTheme.textStyles.body1,
+                )
+            }
+            TextButton(
+                text = stringResource(
+                    if (fetchingModels || fetchingProviderModels) {
+                        R.string.ai_fetching_models
+                    } else {
+                        R.string.ai_fetch_models
+                    }
+                ),
+                onClick = {
+                    onFetchModels(false)
+                    fetchProviderModels()
+                },
+                enabled = !fetchingModels && !fetchingProviderModels,
+            )
+        }
         TextField(
             value = draft.imageModel,
             onValueChange = { onDraftChange(draft.copy(imageModel = it)) },
@@ -254,32 +434,10 @@ internal fun AiConfigEditorMiuix(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             TextButton(
-                text = stringResource(
-                    if (fetchingModels) R.string.ai_fetching_models else R.string.ai_fetch_models
-                ),
-                onClick = { onFetchModels(false) },
-                enabled = !fetchingModels,
-            )
-            TextButton(
                 text = stringResource(R.string.ai_fetch_image_models),
                 onClick = { onFetchModels(true) },
                 enabled = !fetchingModels,
             )
-        }
-
-        Text(
-            text = stringResource(R.string.ai_format),
-            style = MiuixTheme.textStyles.body2,
-            color = colorScheme.onSurfaceVariantSummary,
-        )
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AiProviderFormat.entries.forEach { format ->
-                MiuixFormatChip(
-                    selected = draft.format == format,
-                    text = stringResource(format.labelRes()),
-                    onClick = { onDraftChange(draft.copy(format = format)) },
-                )
-            }
         }
 
         Text(
@@ -309,6 +467,14 @@ internal fun AiConfigEditorMiuix(
             useLabelAsPlaceholder = true,
             maxLines = 4,
             modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            text = stringResource(
+                R.string.ai_provider_test_hint,
+                currentProvider?.name ?: defaultProviderName,
+            ),
+            style = MiuixTheme.textStyles.body2,
+            color = colorScheme.onSurfaceVariantSummary,
         )
         TextButton(
             text = if (testState.testing) stringResource(R.string.ai_testing)
@@ -699,6 +865,109 @@ internal fun AiConfigEditorMiuix(
 
     }
 
+    if (showProviderDialog) {
+        AlertDialog(
+            onDismissRequest = { showProviderDialog = false },
+            title = {
+                Text(
+                    text = stringResource(R.string.ai_provider_switch_title),
+                    style = MiuixTheme.textStyles.title4,
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.heightIn(max = 360.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    draft.providers.forEach { provider ->
+                        val isCurrent = provider.id == currentProvider?.id
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onDraftChange(
+                                        draft.copy(
+                                            currentProviderId = provider.id,
+                                            currentModelId = provider.models.firstOrNull()?.id ?: "",
+                                        ),
+                                    )
+                                    showProviderDialog = false
+                                }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = provider.name.ifBlank { defaultProviderName },
+                                    style = MiuixTheme.textStyles.body1,
+                                )
+                                Text(
+                                    text = stringResource(provider.format.labelRes()) + " · " +
+                                        stringResource(
+                                            R.string.ai_provider_models_count,
+                                            provider.models.size,
+                                        ),
+                                    style = MiuixTheme.textStyles.body2,
+                                    color = colorScheme.onSurfaceVariantSummary,
+                                )
+                            }
+                            if (isCurrent) {
+                                Text(
+                                    text = stringResource(R.string.ai_provider_current_mark),
+                                    style = MiuixTheme.textStyles.body2,
+                                    color = colorScheme.primary,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    text = stringResource(R.string.ai_close),
+                    onClick = { showProviderDialog = false },
+                )
+            },
+        )
+    }
+
+    if (showDeleteProviderDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteProviderDialog = false },
+            title = {
+                Text(
+                    text = stringResource(R.string.ai_provider_delete),
+                    style = MiuixTheme.textStyles.title4,
+                )
+            },
+            text = {
+                Text(
+                    text = stringResource(
+                        R.string.ai_provider_delete_message,
+                        currentProvider?.name ?: defaultProviderName,
+                    ),
+                    style = MiuixTheme.textStyles.body2,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    text = stringResource(R.string.ai_delete_message_confirm),
+                    onClick = {
+                        deleteCurrentProvider()
+                        showDeleteProviderDialog = false
+                    },
+                )
+            },
+            dismissButton = {
+                TextButton(
+                    text = stringResource(R.string.ai_close),
+                    onClick = { showDeleteProviderDialog = false },
+                )
+            },
+        )
+    }
+
     pendingRiskKind?.let { kind ->
         AiRiskDialogMiuix(
             kind = kind,
@@ -716,6 +985,7 @@ internal fun AiConfigEditorMiuix(
             },
         )
     }
+    AiToolsSettingsSection()
 }
 
 @Composable

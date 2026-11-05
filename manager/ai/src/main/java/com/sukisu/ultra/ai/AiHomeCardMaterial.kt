@@ -1,5 +1,6 @@
 package com.sukisu.ultra.ai
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
@@ -34,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sukisu.ultra.ai.R
+import kotlinx.coroutines.launch
 
 /**
  * Compact home entry point. The card only shows live status and a snippet;
@@ -187,7 +191,103 @@ internal fun AiConfigEditorMaterial(
         pendingRiskPhrase = phrase
         pendingRiskAction = action
     }
-    val detected = if (draft.endpoint.isNotBlank()) draft.effectiveFormat() else null
+    val currentProvider = AiSettings.activeProvider(draft)
+    val defaultProviderName = stringResource(R.string.ai_provider_default)
+    val newProviderName = stringResource(R.string.ai_provider_new_name)
+    var showProviderDialog by remember { mutableStateOf(false) }
+    var showDeleteProviderDialog by remember { mutableStateOf(false) }
+    var fetchingProviderModels by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val detected = if (draft.resolvedEndpoint().isNotBlank()) draft.effectiveFormat() else null
+
+    fun updateCurrentProvider(transform: (AiProvider) -> AiProvider) {
+        val existing = currentProvider
+        if (existing != null && draft.providers.any { it.id == existing.id }) {
+            onDraftChange(
+                draft.copy(
+                    providers = draft.providers.map {
+                        if (it.id == existing.id) transform(it) else it
+                    },
+                ),
+            )
+            return
+        }
+        val seed = existing ?: AiProvider(
+            id = "p" + System.currentTimeMillis(),
+            name = newProviderName,
+            format = draft.format,
+            endpoint = draft.endpoint,
+            apiKey = draft.apiKey,
+        )
+        val updated = transform(seed)
+        onDraftChange(
+            draft.copy(
+                providers = listOf(updated),
+                currentProviderId = updated.id,
+                currentModelId = updated.models.firstOrNull()?.id ?: "",
+            ),
+        )
+    }
+
+    fun addProvider() {
+        val provider = AiProvider(
+            id = "p" + System.currentTimeMillis(),
+            name = newProviderName,
+            format = draft.format,
+            endpoint = draft.endpoint,
+            apiKey = draft.apiKey,
+        )
+        onDraftChange(
+            draft.copy(
+                providers = draft.providers + provider,
+                currentProviderId = provider.id,
+                currentModelId = "",
+            ),
+        )
+    }
+
+    fun deleteCurrentProvider() {
+        val existing = currentProvider ?: return
+        val remaining = draft.providers.filterNot { it.id == existing.id }
+        val first = remaining.firstOrNull() ?: return
+        onDraftChange(
+            draft.copy(
+                providers = remaining,
+                currentProviderId = first.id,
+                currentModelId = first.models.firstOrNull()?.id ?: "",
+            ),
+        )
+    }
+
+    fun fetchProviderModels() {
+        val provider = currentProvider ?: return
+        if (provider.models.isNotEmpty() || provider.endpoint.isBlank()) return
+        scope.launch {
+            fetchingProviderModels = true
+            try {
+                val models = ModelCatalog.listModels(provider)
+                if (models.isNotEmpty()) {
+                    val enriched = ModelCatalog.enrich(models)
+                    val updated = provider.copy(models = enriched)
+                    val providers = if (draft.providers.any { it.id == provider.id }) {
+                        draft.providers.map { if (it.id == provider.id) updated else it }
+                    } else {
+                        listOf(updated)
+                    }
+                    onDraftChange(
+                        draft.copy(
+                            providers = providers,
+                            currentProviderId = provider.id,
+                            currentModelId = enriched.firstOrNull()?.id ?: "",
+                        ),
+                    )
+                }
+            } catch (_: Exception) {
+            } finally {
+                fetchingProviderModels = false
+            }
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         AiToggleRow(
@@ -207,9 +307,63 @@ internal fun AiConfigEditorMaterial(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Text(
+            text = stringResource(R.string.ai_provider_section),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = currentProvider?.name ?: defaultProviderName,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { showProviderDialog = true }) {
+                Text(stringResource(R.string.ai_provider_switch))
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            TextButton(onClick = { addProvider() }) {
+                Text(stringResource(R.string.ai_provider_add))
+            }
+            if (draft.providers.size > 1) {
+                TextButton(onClick = { showDeleteProviderDialog = true }) {
+                    Text(stringResource(R.string.ai_provider_delete))
+                }
+            }
+        }
         OutlinedTextField(
-            value = draft.endpoint,
-            onValueChange = { onDraftChange(draft.copy(endpoint = it)) },
+            value = currentProvider?.name ?: "",
+            onValueChange = { value -> updateCurrentProvider { it.copy(name = value) } },
+            label = { Text(stringResource(R.string.ai_provider_name)) },
+            singleLine = true,
+            shape = MaterialTheme.shapes.large,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            text = stringResource(R.string.ai_format),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            AiProviderFormat.entries.forEach { format ->
+                FilterChip(
+                    selected = (currentProvider?.format ?: draft.format) == format,
+                    onClick = { updateCurrentProvider { it.copy(format = format) } },
+                    label = { Text(stringResource(format.labelRes())) },
+                )
+            }
+        }
+        OutlinedTextField(
+            value = currentProvider?.endpoint ?: draft.endpoint,
+            onValueChange = { value -> updateCurrentProvider { it.copy(endpoint = value) } },
             label = { Text(stringResource(R.string.ai_endpoint)) },
             placeholder = { Text(stringResource(R.string.ai_endpoint_hint)) },
             singleLine = true,
@@ -228,8 +382,8 @@ internal fun AiConfigEditorMaterial(
             )
         }
         OutlinedTextField(
-            value = draft.apiKey,
-            onValueChange = { onDraftChange(draft.copy(apiKey = it)) },
+            value = currentProvider?.apiKey ?: draft.apiKey,
+            onValueChange = { value -> updateCurrentProvider { it.copy(apiKey = value) } },
             label = { Text(stringResource(R.string.ai_api_key)) },
             placeholder = { Text(stringResource(R.string.ai_api_key_hint)) },
             singleLine = true,
@@ -247,15 +401,52 @@ internal fun AiConfigEditorMaterial(
             shape = MaterialTheme.shapes.large,
             modifier = Modifier.fillMaxWidth(),
         )
-        OutlinedTextField(
-            value = draft.model,
-            onValueChange = { onDraftChange(draft.copy(model = it)) },
-            label = { Text(stringResource(R.string.ai_model)) },
-            placeholder = { Text(stringResource(R.string.ai_model_hint)) },
-            singleLine = true,
-            shape = MaterialTheme.shapes.large,
+        Row(
             modifier = Modifier.fillMaxWidth(),
-        )
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.ai_model),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = AiSettings.activeModel(draft)?.name ?: draft.model,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+            TextButton(
+                onClick = {
+                    onFetchModels(false)
+                    fetchProviderModels()
+                },
+                enabled = !fetchingModels && !fetchingProviderModels,
+            ) {
+                if (fetchingModels || fetchingProviderModels) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.padding(end = 6.dp).size(14.dp),
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Rounded.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.padding(end = 6.dp).size(16.dp),
+                    )
+                }
+                Text(
+                    stringResource(
+                        if (fetchingModels || fetchingProviderModels) {
+                            R.string.ai_fetching_models
+                        } else {
+                            R.string.ai_fetch_models
+                        }
+                    )
+                )
+            }
+        }
         OutlinedTextField(
             value = draft.imageModel,
             onValueChange = { onDraftChange(draft.copy(imageModel = it)) },
@@ -270,47 +461,10 @@ internal fun AiConfigEditorMaterial(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             TextButton(
-                onClick = { onFetchModels(false) },
-                enabled = !fetchingModels,
-            ) {
-                if (fetchingModels) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.padding(end = 6.dp).size(14.dp),
-                        strokeWidth = 2.dp,
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Rounded.Refresh,
-                        contentDescription = null,
-                        modifier = Modifier.padding(end = 6.dp).size(16.dp),
-                    )
-                }
-                Text(
-                    stringResource(
-                        if (fetchingModels) R.string.ai_fetching_models else R.string.ai_fetch_models
-                    )
-                )
-            }
-            TextButton(
                 onClick = { onFetchModels(true) },
                 enabled = !fetchingModels,
             ) {
                 Text(stringResource(R.string.ai_fetch_image_models))
-            }
-        }
-
-        Text(
-            text = stringResource(R.string.ai_format),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AiProviderFormat.entries.forEach { format ->
-                FilterChip(
-                    selected = draft.format == format,
-                    onClick = { onDraftChange(draft.copy(format = format)) },
-                    label = { Text(stringResource(format.labelRes())) },
-                )
             }
         }
 
@@ -343,6 +497,14 @@ internal fun AiConfigEditorMaterial(
             maxLines = 4,
             shape = MaterialTheme.shapes.large,
             modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            text = stringResource(
+                R.string.ai_provider_test_hint,
+                currentProvider?.name ?: defaultProviderName,
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         OutlinedButton(
             onClick = onTest,
@@ -759,6 +921,97 @@ internal fun AiConfigEditorMaterial(
 
     }
 
+    if (showProviderDialog) {
+        AlertDialog(
+            onDismissRequest = { showProviderDialog = false },
+            title = { Text(stringResource(R.string.ai_provider_switch_title)) },
+            text = {
+                Column(
+                    modifier = Modifier.heightIn(max = 360.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    draft.providers.forEach { provider ->
+                        val isCurrent = provider.id == currentProvider?.id
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onDraftChange(
+                                        draft.copy(
+                                            currentProviderId = provider.id,
+                                            currentModelId = provider.models.firstOrNull()?.id ?: "",
+                                        ),
+                                    )
+                                    showProviderDialog = false
+                                }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = provider.name.ifBlank { defaultProviderName },
+                                    style = MaterialTheme.typography.bodyLarge,
+                                )
+                                Text(
+                                    text = stringResource(provider.format.labelRes()) + " · " +
+                                        stringResource(
+                                            R.string.ai_provider_models_count,
+                                            provider.models.size,
+                                        ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (isCurrent) {
+                                Text(
+                                    text = stringResource(R.string.ai_provider_current_mark),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showProviderDialog = false }) {
+                    Text(stringResource(R.string.ai_close))
+                }
+            },
+        )
+    }
+
+    if (showDeleteProviderDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteProviderDialog = false },
+            title = { Text(stringResource(R.string.ai_provider_delete)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.ai_provider_delete_message,
+                        currentProvider?.name ?: defaultProviderName,
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        deleteCurrentProvider()
+                        showDeleteProviderDialog = false
+                    },
+                ) {
+                    Text(stringResource(R.string.ai_delete_message_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteProviderDialog = false }) {
+                    Text(stringResource(R.string.ai_close))
+                }
+            },
+        )
+    }
+
     pendingRiskKind?.let { kind ->
         AiRiskDialogMaterial(
             kind = kind,
@@ -776,6 +1029,7 @@ internal fun AiConfigEditorMaterial(
             },
         )
     }
+    AiToolsSettingsSection()
 }
 
 @Composable
