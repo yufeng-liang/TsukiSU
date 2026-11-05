@@ -1,4 +1,7 @@
 package com.sukisu.ultra.ai
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.NavigationDrawerItem
 
 import androidx.compose.material3.TextButton as MaterialTextButton
 import androidx.compose.material3.AlertDialog
@@ -108,6 +111,7 @@ fun AiChatMiuix(
     LaunchedEffect(state.pendingQuestion) {
         if (state.pendingQuestion != null) keyboardController?.hide()
     }
+    var showSessions by remember { mutableStateOf(false) }
     val clearDialog = rememberAiConfirmDialog(AiUiMode.Miuix, onConfirm = actions.onClearHistory)
     val clearTitle = stringResource(R.string.ai_clear_history_title)
     val clearContent = stringResource(R.string.ai_clear_history_message)
@@ -161,6 +165,10 @@ fun AiChatMiuix(
                     }
                 },
                 actions = {
+            top.yukonga.miuix.kmp.basic.TextButton(
+                text = stringResource(R.string.ai_sessions),
+                onClick = { showSessions = true },
+            )
                     if (state.config.model.isNotBlank()) {
                         TextButton(
                             text = state.config.model.take(12),
@@ -306,6 +314,47 @@ fun AiChatMiuix(
                 onStop = actions.onStop,
                 onDismissError = actions.onDismissError,
             )
+        }
+    }
+
+    if (showSessions) {
+        ModalBottomSheet(
+            onDismissRequest = { showSessions = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        ) {
+            androidx.compose.foundation.layout.Column(
+                modifier = androidx.compose.ui.Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            ) {
+                androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    androidx.compose.material3.Text(
+                        text = stringResource(R.string.ai_sessions),
+                        style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                        modifier = androidx.compose.ui.Modifier.weight(1f),
+                    )
+                    androidx.compose.material3.TextButton(onClick = {
+                        actions.onNewSession()
+                        showSessions = false
+                    }) { androidx.compose.material3.Text(stringResource(R.string.ai_new_chat)) }
+                }
+                LazyColumn(modifier = androidx.compose.ui.Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+                    items(state.sessions, key = { it.id }) { session ->
+                        NavigationDrawerItem(
+                            label = {
+                                androidx.compose.material3.Text(
+                                    text = session.title.ifBlank { stringResource(R.string.ai_new_chat) },
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                )
+                            },
+                            selected = session.id == state.activeSessionId,
+                            onClick = {
+                                actions.onSwitchSession(session.id)
+                                showSessions = false
+                            },
+                        )
+                    }
+                }
+            }
         }
     }
 
