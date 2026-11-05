@@ -604,46 +604,48 @@ private fun CoolapkCommunityEntryCard(
     var awaitingConfirm by remember(source.enabled) { mutableStateOf(false) }
 
     TonalCard(modifier = Modifier.fillMaxWidth()) {
-        Column(
+        // 一行放完：渠道徽章 + 标题/说明 + 开启按钮；按钮不再独占一行，跟下面模块卡的密度对齐。
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                text = stringResource(R.string.module_repo_coolapk_title),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = stringResource(R.string.module_repo_coolapk_summary),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
+            CoolapkBadge()
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.module_repo_coolapk_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = stringResource(R.string.module_repo_coolapk_summary),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            FilledTonalButton(
+                onClick = {
+                    if (awaitingConfirm) {
+                        awaitingConfirm = false
+                        onSetSourceEnabled(source.id, true)
+                    } else {
+                        awaitingConfirm = true
+                    }
+                },
+                contentPadding = ButtonDefaults.TextButtonContentPadding,
             ) {
-                FilledTonalButton(
-                    onClick = {
-                        if (awaitingConfirm) {
-                            awaitingConfirm = false
-                            onSetSourceEnabled(source.id, true)
-                        } else {
-                            awaitingConfirm = true
-                        }
-                    },
-                    contentPadding = ButtonDefaults.TextButtonContentPadding,
-                ) {
-                    Text(
-                        text = stringResource(
-                            if (awaitingConfirm) R.string.module_repo_coolapk_confirm
-                            else R.string.module_repo_coolapk_enable
-                        ),
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                }
+                Text(
+                    text = stringResource(
+                        if (awaitingConfirm) R.string.module_repo_coolapk_confirm
+                        else R.string.module_repo_coolapk_enable
+                    ),
+                    style = MaterialTheme.typography.labelMedium,
+                )
             }
         }
     }
