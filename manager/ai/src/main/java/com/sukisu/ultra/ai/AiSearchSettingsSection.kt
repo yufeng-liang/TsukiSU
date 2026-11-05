@@ -1,6 +1,7 @@
 package com.sukisu.ultra.ai
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,12 +14,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
-import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.Block
-import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.DragHandle
-import androidx.compose.material.icons.rounded.Language
-import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -60,12 +57,14 @@ import kotlinx.coroutines.launch
  *
  * 结构（自上而下）：
  * 1. 总开关「启用联网搜索」；
- * 2. 四家搜索服务，每行左侧拖柄可拖拽排序，行内常驻 API Key 输入与「测试」；
+ * 2. 四家搜索服务，列表只显示名称与启用开关，左侧拖柄可拖拽排序；
+ *    点行进入二级弹窗，里面放服务说明、API Key、申请入口与测试；
  * 3. 固定在最末的「内置 DuckDuckGo 兜底」开关，不参与拖拽。
  *
  * 设计取舍：
  * - 只用 Material3 控件，Material / Miuix 两套外壳共用同一个 composable；
  * - 所有改动立即写进 [AiSearchSettings]，不设「保存」按钮，避免用户改完忘了保存；
+ * - 列表不堆说明与输入框，避免四家服务把设置页拉得很长；
  * - 拖拽不引入 reorderable 依赖（本模块没有），用 [detectDragGestures] + 累计位移交换相邻行。
  */
 @Composable
@@ -75,6 +74,8 @@ internal fun AiSearchSettingsSection(modifier: Modifier = Modifier) {
     var testing by remember { mutableStateOf<AiSearchProvider?>(null) }
     var testJob by remember { mutableStateOf<Job?>(null) }
     val testResults = remember { mutableStateMapOf<AiSearchProvider, AiSearchTestResult>() }
+    // 二级弹窗当前对应的服务；null 表示关闭。
+    var detailProvider by remember { mutableStateOf<AiSearchProvider?>(null) }
     val scope = rememberCoroutineScope()
 
     // 离开设置页就取消未完成的测试，避免回调写进已经销毁的组合。
@@ -103,7 +104,7 @@ internal fun AiSearchSettingsSection(modifier: Modifier = Modifier) {
         persist(config.copy(order = order))
     }
 
-    /** 发起一次真实搜索测试：消耗一次调用，结果直接写回对应行内展示。 */
+    /** 发起一次真实搜索测试：消耗一次调用，结果写回对应服务，在弹窗里展示。 */
     fun runTest(provider: AiSearchProvider) {
         if (testing != null) return
         testing = provider
@@ -114,7 +115,7 @@ internal fun AiSearchSettingsSection(modifier: Modifier = Modifier) {
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Throwable) {
-                // 测试是辅助功能，网络异常不应该让页面崩，转成行内失败提示。
+                // 测试是辅助功能，网络异常不应该让页面崩，转成弹窗内的失败提示。
                 AiSearchTestResult.Failure(provider, error.message ?: error.javaClass.simpleName)
             }
             testResults[provider] = result
@@ -152,25 +153,19 @@ internal fun AiSearchSettingsSection(modifier: Modifier = Modifier) {
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-        // ② 四家搜索服务：key 包一层，拖拽排序时行内状态（输入焦点、测试结果）跟着行走。
+        // ② 四家搜索服务：列表只留名称与开关，更多设置进二级弹窗。
         order.forEach { provider ->
             key(provider) {
-                SearchProviderSettingRow(
+                SearchProviderRow(
                     provider = provider,
-                    config = config,
+                    checked = config.isEnabled(provider),
                     sectionEnabled = config.searchEnabled,
-                    testing = testing,
-                    result = testResults[provider],
+                    onOpen = { detailProvider = provider },
                     onToggle = { enabled ->
                         val next = if (enabled) config.enabled + provider
                         else config.enabled - provider
                         persist(config.copy(enabled = next))
                     },
-                    onKeyChange = { value ->
-                        // key 以枚举名做索引，避免枚举改名后和旧 Key 串味。
-                        persist(config.copy(keys = config.keys + (provider.name to value)))
-                    },
-                    onTest = { runTest(provider) },
                     onMove = { direction -> move(provider, direction) },
                 )
             }
@@ -185,40 +180,46 @@ internal fun AiSearchSettingsSection(modifier: Modifier = Modifier) {
             onCheckedChange = { persist(config.copy(duckDuckGoFallback = it)) },
         )
     }
+
+    detailProvider?.let { provider ->
+        SearchProviderDetailDialog(
+            provider = provider,
+            config = config,
+            sectionEnabled = config.searchEnabled,
+            testing = testing,
+            result = testResults[provider],
+            onDismiss = { detailProvider = null },
+            onKeyChange = { value ->
+                // key 以枚举名做索引，避免枚举改名后和旧 Key 串味。
+                persist(config.copy(keys = config.keys + (provider.name to value)))
+            },
+            onTest = { runTest(provider) },
+        )
+    }
 }
 
 /**
- * 单个搜索服务行。
+ * 单个搜索服务行（列表态）。
  *
- * 布局： [拖柄][图标][标题 + 描述][启用开关]
- *        └ 常驻的 Key 输入框 + 申请入口 + 测试按钮 + 测试结果
+ * 布局： [拖柄][服务名称][启用开关]，整行可点进二级弹窗。
  *
- * @param sectionEnabled 总开关状态；关闭时本行所有控件禁用（内容仍可见）。
- * @param testing 正在测试的服务；非 null 时其它行的测试按钮禁用。
- * @param result 最近一次测试结果，切换开关或重新测试时会替换。
+ * @param sectionEnabled 总开关状态；关闭时本行控件禁用（名称仍可见）。
+ * @param onOpen 点行打开该服务的详细设置弹窗。
  * @param onMove 请求与相邻行交换位置（+1 下移 / -1 上移）。
  */
 @Composable
-private fun SearchProviderSettingRow(
+private fun SearchProviderRow(
     provider: AiSearchProvider,
-    config: AiSearchConfig,
+    checked: Boolean,
     sectionEnabled: Boolean,
-    testing: AiSearchProvider?,
-    result: AiSearchTestResult?,
+    onOpen: () -> Unit,
     onToggle: (Boolean) -> Unit,
-    onKeyChange: (String) -> Unit,
-    onTest: () -> Unit,
     onMove: (Int) -> Unit,
 ) {
-    val uriHandler = LocalUriHandler.current
-    val keyUrl = keyUrlOf(provider)
-    val isTesting = testing == provider
-    // 禁用时只把文字/图标压暗；控件交给 Material3 自己的 disabled 配色，
-    // 否则「页面 alpha × 控件 disabled alpha」叠起来几乎看不见字。
+    // 禁用时把文字压暗；控件交给 Material3 自己的 disabled 配色。
     val contentAlpha = if (sectionEnabled) 1f else 0.5f
 
     // 拖拽：以整行高度为参考，累计位移超过约一行就与相邻行交换，然后扣掉阈值继续累计。
-    // 行高差异较大（有的带测试结果、有的没有），所以按自身实测高度算，不用固定值。
     var rowHeightPx by remember { mutableIntStateOf(0) }
     val minSwapPx = with(LocalDensity.current) { DragSwapMin.toPx() }
     val swapThresholdPx = if (rowHeightPx > 0) {
@@ -269,156 +270,171 @@ private fun SearchProviderSettingRow(
         Modifier
     }
 
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .onGloballyPositioned { rowHeightPx = it.size.height }
             .clip(SearchRowShape)
+            .clickable(onClick = onOpen)
             .background(
                 if (dragging) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
                 else Color.Transparent,
             )
             .padding(horizontal = 4.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        Box(
+            modifier = Modifier
+                .size(DragHandleTouchSize)
+                .then(handleModifier),
+            contentAlignment = Alignment.Center,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(DragHandleTouchSize)
-                    .then(handleModifier),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.DragHandle,
-                    contentDescription = stringResource(R.string.ai_search_drag_handle),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = contentAlpha),
-                    modifier = Modifier.size(20.dp),
-                )
-            }
             Icon(
-                imageVector = providerIcon(provider),
-                contentDescription = null,
+                imageVector = Icons.Rounded.DragHandle,
+                contentDescription = stringResource(R.string.ai_search_drag_handle),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = contentAlpha),
                 modifier = Modifier.size(20.dp),
             )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = providerTitle(provider),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha),
-                )
-                Text(
-                    text = providerDescription(provider),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = contentAlpha),
-                )
-            }
-            val toggleDescription = stringResource(
-                R.string.ai_search_provider_enabled,
-                providerTitle(provider),
-            )
-            Switch(
-                checked = config.isEnabled(provider),
-                onCheckedChange = onToggle,
-                enabled = sectionEnabled,
-                modifier = Modifier.semantics { contentDescription = toggleDescription },
-            )
         }
-
-        // Key 区常驻显示（不再依赖单选态），缩进一点和标题分层次。
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 28.dp, end = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            OutlinedTextField(
-                value = config.keyOf(provider),
-                onValueChange = onKeyChange,
-                label = { Text(stringResource(R.string.ai_search_api_key)) },
-                singleLine = true,
-                enabled = sectionEnabled,
-                shape = MaterialTheme.shapes.large,
-                modifier = Modifier.fillMaxWidth(),
-                supportingText = if (provider == AiSearchProvider.ANYSEARCH) {
-                    { Text(stringResource(R.string.ai_search_key_optional)) }
-                } else {
-                    null
-                },
-            )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                if (keyUrl != null) {
-                    TextButton(
-                        enabled = sectionEnabled,
-                        onClick = { uriHandler.openUri(keyUrl) },
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Text(
-                            text = stringResource(R.string.ai_search_get_key),
-                            modifier = Modifier.padding(start = 6.dp),
-                        )
-                    }
-                }
-                TextButton(
-                    // 停用的服务也允许测试：用户经常是先测通再打开；测试进行中全部禁点。
-                    enabled = sectionEnabled && testing == null,
-                    onClick = onTest,
-                ) {
-                    Text(
-                        stringResource(
-                            if (isTesting) R.string.ai_search_testing else R.string.ai_search_test,
-                        ),
-                    )
-                }
-            }
-            when {
-                isTesting -> Text(
-                    text = stringResource(R.string.ai_search_testing),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-
-                result is AiSearchTestResult.Success -> Text(
-                    text = stringResource(
-                        R.string.ai_search_test_success,
-                        result.latencyMs,
-                        result.count,
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-
-                result is AiSearchTestResult.Failure -> Text(
-                    text = stringResource(R.string.ai_search_test_failure, result.message),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Text(
-                text = stringResource(R.string.ai_search_test_cost),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-            )
-        }
+        Text(
+            text = providerTitle(provider),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha),
+            modifier = Modifier.weight(1f),
+        )
+        val toggleDescription = stringResource(
+            R.string.ai_search_provider_enabled,
+            providerTitle(provider),
+        )
+        Switch(
+            checked = checked,
+            onCheckedChange = onToggle,
+            enabled = sectionEnabled,
+            modifier = Modifier.semantics { contentDescription = toggleDescription },
+        )
     }
 }
 
 /**
- * 兜底行：内置 DuckDuckGo 抓取，不参与拖拽（没有拖柄，用等宽占位保持图标对齐）。
+ * 单个搜索服务的二级设置弹窗：说明、API Key、申请入口、测试与最近一次测试结果。
+ *
+ * 列表页因此只留名称与开关，四家服务不会把设置页撑长。
+ */
+@Composable
+private fun SearchProviderDetailDialog(
+    provider: AiSearchProvider,
+    config: AiSearchConfig,
+    sectionEnabled: Boolean,
+    testing: AiSearchProvider?,
+    result: AiSearchTestResult?,
+    onDismiss: () -> Unit,
+    onKeyChange: (String) -> Unit,
+    onTest: () -> Unit,
+) {
+    val uriHandler = LocalUriHandler.current
+    val keyUrl = keyUrlOf(provider)
+    val isTesting = testing == provider
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(providerTitle(provider)) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = providerDescription(provider),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = config.keyOf(provider),
+                    onValueChange = onKeyChange,
+                    label = { Text(stringResource(R.string.ai_search_api_key)) },
+                    singleLine = true,
+                    enabled = sectionEnabled,
+                    shape = MaterialTheme.shapes.large,
+                    modifier = Modifier.fillMaxWidth(),
+                    supportingText = if (provider == AiSearchProvider.ANYSEARCH) {
+                        { Text(stringResource(R.string.ai_search_key_optional)) }
+                    } else {
+                        null
+                    },
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (keyUrl != null) {
+                        TextButton(
+                            enabled = sectionEnabled,
+                            onClick = { uriHandler.openUri(keyUrl) },
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Text(
+                                text = stringResource(R.string.ai_search_get_key),
+                                modifier = Modifier.padding(start = 6.dp),
+                            )
+                        }
+                    }
+                    TextButton(
+                        // 停用的服务也允许测试：用户经常是先测通再打开；测试进行中全部禁点。
+                        enabled = sectionEnabled && testing == null,
+                        onClick = onTest,
+                    ) {
+                        Text(
+                            stringResource(
+                                if (isTesting) R.string.ai_search_testing else R.string.ai_search_test,
+                            ),
+                        )
+                    }
+                }
+                when {
+                    isTesting -> Text(
+                        text = stringResource(R.string.ai_search_testing),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    result is AiSearchTestResult.Success -> Text(
+                        text = stringResource(
+                            R.string.ai_search_test_success,
+                            result.latencyMs,
+                            result.count,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+
+                    result is AiSearchTestResult.Failure -> Text(
+                        text = stringResource(R.string.ai_search_test_failure, result.message),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.ai_search_test_cost),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.ai_close))
+            }
+        },
+    )
+}
+
+/**
+ * 兜底行：内置 DuckDuckGo 抓取，不参与拖拽（用等宽占位保持名称左对齐）。
  */
 @Composable
 private fun DuckDuckGoFallbackRow(
@@ -435,14 +451,8 @@ private fun DuckDuckGoFallbackRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // 占位：与上方四行的拖柄触碰区同宽，保证图标左边缘对齐。
+        // 占位：与上方服务行的拖柄触碰区同宽，保证名称左边缘对齐。
         Spacer(modifier = Modifier.size(DragHandleTouchSize))
-        Icon(
-            imageVector = providerIcon(AiSearchProvider.NONE),
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = contentAlpha),
-            modifier = Modifier.size(20.dp),
-        )
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = stringResource(R.string.ai_search_duckduckgo_fallback),
@@ -503,14 +513,6 @@ private fun keyUrlOf(provider: AiSearchProvider): String? = when (provider) {
     AiSearchProvider.TAVILY -> TAVILY_KEY_URL
     AiSearchProvider.YUANBAO -> YUANBAO_KEY_URL
     AiSearchProvider.NONE -> null
-}
-
-private fun providerIcon(provider: AiSearchProvider) = when (provider) {
-    AiSearchProvider.NONE -> Icons.Rounded.Block
-    AiSearchProvider.FIRECRAWL -> Icons.Rounded.Language
-    AiSearchProvider.ANYSEARCH -> Icons.Rounded.Search
-    AiSearchProvider.TAVILY -> Icons.Rounded.AutoAwesome
-    AiSearchProvider.YUANBAO -> Icons.Rounded.Cloud
 }
 
 @Composable
