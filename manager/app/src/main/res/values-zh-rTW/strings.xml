@@ -219,7 +219,7 @@
     <string name="module_repo_coolapk_title">酷安社群模組</string>
     <string name="module_repo_coolapk_summary">酷安使用者自發上傳，未經安全審核，預設關閉。</string>
     <string name="module_repo_coolapk_enable">開啟</string>
-    <string name="module_repo_coolapk_confirm">我已了解，確認開啟</string>
+    <string name="module_repo_coolapk_confirm">確認開啟</string>
     <string name="module_repo_coolapk_disable">關閉</string>
     <string name="module_repo_filter_all">全部</string>
     <string name="module_repo_filter_source_count">%1$s · %2$d</string>

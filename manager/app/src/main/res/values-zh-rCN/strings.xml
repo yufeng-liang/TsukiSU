@@ -56,7 +56,7 @@
     <string name="module_repo_coolapk_title">酷安社区模块</string>
     <string name="module_repo_coolapk_summary">酷安用户自发上传，未经安全审核，默认关闭。</string>
     <string name="module_repo_coolapk_enable">开启</string>
-    <string name="module_repo_coolapk_confirm">我已了解，确认开启</string>
+    <string name="module_repo_coolapk_confirm">确认开启</string>
     <string name="module_repo_coolapk_disable">关闭</string>
     <string name="module_repo_filter_all">全部</string>
     <string name="module_repo_filter_source_count">%1$s · %2$d</string>

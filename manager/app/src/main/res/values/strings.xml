@@ -68,7 +68,7 @@
     <string name="module_repo_coolapk_title">Coolapk community modules</string>
     <string name="module_repo_coolapk_summary">Uploaded by Coolapk users. No review; off by default.</string>
     <string name="module_repo_coolapk_enable">Turn on</string>
-    <string name="module_repo_coolapk_confirm">I understand — turn on</string>
+    <string name="module_repo_coolapk_confirm">Turn on</string>
     <string name="module_repo_coolapk_disable">Turn off</string>
     <string name="module_repo_filter_all">All</string>
     <string name="module_repo_filter_source_count">%1$s · %2$d</string>
