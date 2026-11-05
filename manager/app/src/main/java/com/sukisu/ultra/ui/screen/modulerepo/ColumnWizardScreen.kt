@@ -8,6 +8,7 @@ import com.sukisu.ultra.ui.theme.AiAssistantMaterialTheme
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.layout.Spacer
 import com.sukisu.ultra.data.column.ColumnPreflight
+import com.sukisu.ultra.data.column.ColumnHealthCheck
 import com.sukisu.ultra.data.column.ColumnHealthReport
 import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.verticalScroll
@@ -46,6 +47,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Person
@@ -359,11 +362,6 @@ private fun ColumnWizardScreenMiuix(
                     started = started,
                     running = state.running,
                     onRunAll = onRunAll,
-                    onStart = {
-                        orderedStates
-                            .firstOrNull { it.status == ColumnStepStatus.PENDING }
-                            ?.let { requestRun(it.step) }
-                    },
                 )
             }
         },
@@ -439,6 +437,7 @@ private fun ColumnWizardScreenMiuix(
                     index = index + 1,
                     uiState = uiState,
                     busy = state.running,
+                    installed = uiState.step.source.packageName.trim() in state.installedApps,
                     optedIn = uiState.step.id in state.optedIn,
                     onToggleOptIn = { onToggleOptIn(uiState.step) },
                     onRun = { requestRun(uiState.step) },
@@ -472,12 +471,20 @@ private fun ColumnWizardScreenMiuix(
 /** 设备现状体检卡（Miuix）。只提示「之前配过一部分」，绝不用来决定跳过哪一步。 */
 @Composable
 private fun ColumnHealthCardMiuix(report: ColumnHealthReport) {
+    // 与 Material 版同一套交互：默认只给结论，点标题行展开九项明细。
+    var expanded by rememberSaveable { mutableStateOf(false) }
     val colorScheme = MiuixTheme.colorScheme
+    val missing = report.checks.filter { !it.passed }
     AppCard(
         modifier = Modifier.fillMaxWidth(),
         insideMargin = PaddingValues(16.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             MiuixText(
                 text = stringResource(R.string.column_health_title_short),
                 modifier = Modifier.weight(1f),
@@ -491,9 +498,18 @@ private fun ColumnHealthCardMiuix(report: ColumnHealthReport) {
                     report.passedCount,
                     report.totalCount,
                 ),
-                color = colorScheme.primary,
+                color = if (missing.isEmpty()) successGreenMiuix() else colorScheme.primary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
+            )
+            Spacer(Modifier.width(2.dp))
+            MiuixIcon(
+                imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                contentDescription = stringResource(
+                    if (expanded) R.string.column_health_collapse else R.string.column_health_expand,
+                ),
+                modifier = Modifier.size(18.dp),
+                tint = colorScheme.onSurfaceVariantSummary,
             )
         }
         Spacer(Modifier.height(10.dp))
@@ -510,26 +526,57 @@ private fun ColumnHealthCardMiuix(report: ColumnHealthReport) {
             okText = stringResource(R.string.column_health_ready),
             noText = stringResource(R.string.column_health_not_ready),
         )
-        val missing = report.checks.filter { !it.passed }
-        if (missing.isNotEmpty()) {
+        if (expanded) {
             Spacer(Modifier.height(10.dp))
             MiuixHorizontalDivider()
             Spacer(Modifier.height(8.dp))
-            missing.take(3).forEach { check ->
-                MiuixText(
-                    text = "· ${check.detail}",
-                    color = colorScheme.onSurfaceVariantSummary,
-                    fontSize = 13.sp,
-                )
+            report.checks.forEachIndexed { index, check ->
+                if (index > 0) Spacer(Modifier.height(6.dp))
+                HealthCheckDetailRowMiuix(check)
             }
-            if (missing.size > 3) {
-                MiuixText(
-                    text = "· …（还有 ${missing.size - 3} 项）",
-                    color = colorScheme.onSurfaceVariantSummary,
-                    fontSize = 13.sp,
-                )
-            }
+        } else {
+            Spacer(Modifier.height(8.dp))
+            MiuixText(
+                text = if (missing.isEmpty()) {
+                    stringResource(R.string.column_health_all_pass)
+                } else {
+                    stringResource(R.string.column_health_missing_hint, missing.size)
+                },
+                color = colorScheme.onSurfaceVariantSummary,
+                fontSize = 13.sp,
+            )
         }
+    }
+}
+
+/** 明细里的一行（Miuix）：通过/未通过图标 + 探针原话。 */
+@Composable
+private fun HealthCheckDetailRowMiuix(check: ColumnHealthCheck) {
+    val colorScheme = MiuixTheme.colorScheme
+    val tint = if (check.passed) successGreenMiuix() else colorScheme.error
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        MiuixIcon(
+            imageVector = if (check.passed) Icons.Rounded.CheckCircle else Icons.Rounded.Close,
+            contentDescription = null,
+            modifier = Modifier
+                .padding(top = 1.dp)
+                .size(14.dp),
+            tint = tint,
+        )
+        MiuixText(
+            text = check.detail.ifEmpty {
+                stringResource(
+                    if (check.passed) R.string.column_wizard_check_pass else R.string.column_wizard_check_fail,
+                )
+            },
+            modifier = Modifier.weight(1f),
+            color = colorScheme.onSurfaceVariantSummary,
+            fontSize = 13.sp,
+        )
     }
 }
 
@@ -638,6 +685,7 @@ private fun WizardStepCardMiuix(
     index: Int,
     uiState: ColumnStepUiState,
     busy: Boolean,
+    installed: Boolean,
     optedIn: Boolean,
     onToggleOptIn: () -> Unit,
     onRun: () -> Unit,
@@ -699,8 +747,16 @@ private fun WizardStepCardMiuix(
                         fontSize = 11.sp,
                     )
                     MiuixText(
-                        text = stringResource(statusLabel(uiState.status)),
-                        color = statusColor,
+                        text = if (installed && uiState.status == ColumnStepStatus.PENDING) {
+                            stringResource(R.string.column_wizard_installed)
+                        } else {
+                            stringResource(statusLabel(uiState.status))
+                        },
+                        color = if (installed && uiState.status == ColumnStepStatus.PENDING) {
+                            successGreenMiuix()
+                        } else {
+                            statusColor
+                        },
                         fontSize = 11.sp,
                     )
                     if (step.optional) {
@@ -822,6 +878,7 @@ private fun WizardStepCardMiuix(
             StepPrimaryActionMiuix(
                 status = uiState.status,
                 enabled = !busy,
+                installed = installed,
                 onRun = onRun,
                 onMarkDone = onMarkDone,
             )
@@ -844,13 +901,16 @@ private fun WizardStepCardMiuix(
 private fun StepPrimaryActionMiuix(
     status: ColumnStepStatus,
     enabled: Boolean,
+    installed: Boolean = false,
     onRun: () -> Unit,
     onMarkDone: () -> Unit,
 ) {
     // NEEDS_USER 是「等你动手」，点它是「我做完了」，不是「重跑一遍」——重跑只会再下载一次、
     // 再弹一次安装器。所以这里接的是 onMarkDone，不是 onRun。
     val label = when (status) {
-        ColumnStepStatus.PENDING, ColumnStepStatus.RUNNING -> R.string.column_wizard_run
+        ColumnStepStatus.PENDING ->
+            if (installed) R.string.column_wizard_reinstall else R.string.column_wizard_run
+        ColumnStepStatus.RUNNING -> R.string.column_wizard_run
         ColumnStepStatus.FAILED -> R.string.column_wizard_retry
         ColumnStepStatus.NEEDS_USER -> R.string.column_wizard_done_step
         ColumnStepStatus.SUCCESS, ColumnStepStatus.SKIPPED -> null
@@ -1123,7 +1183,6 @@ private fun WizardBottomBarMiuix(
     started: Boolean,
     running: Boolean,
     onRunAll: () -> Unit,
-    onStart: () -> Unit,
 ) {
     if (total == 0) return
     val colorScheme = MiuixTheme.colorScheme
@@ -1136,31 +1195,20 @@ private fun WizardBottomBarMiuix(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (!started) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                // 与 Material 版一致：只留「一键执行」一个入口。
+                MiuixButton(
+                    onClick = onRunAll,
+                    enabled = !running,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp),
+                    cornerRadius = 23.dp,
+                    colors = MiuixButtonDefaults.buttonColorsPrimary(),
                 ) {
-                    MiuixButton(
-                        onClick = onRunAll,
-                        enabled = !running,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(44.dp),
-                        cornerRadius = 22.dp,
-                        colors = MiuixButtonDefaults.buttonColorsPrimary(),
-                    ) {
-                        MiuixText(
-                            text = stringResource(R.string.column_wizard_run_all),
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium,
-                        )
-                    }
-                    MiuixTextButton(
-                        text = stringResource(R.string.column_wizard_start_first),
-                        onClick = onStart,
-                        enabled = !running,
-                        modifier = Modifier.height(44.dp),
-                        insideMargin = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                    MiuixText(
+                        text = stringResource(R.string.column_wizard_run_all),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
                     )
                 }
             } else {
@@ -1307,11 +1355,6 @@ private fun ColumnWizardScreenMaterial(
                     started = started,
                     running = state.running,
                     onRunAll = onRunAll,
-                    onStart = {
-                        orderedStates
-                            .firstOrNull { it.status == ColumnStepStatus.PENDING }
-                            ?.let { requestRun(it.step) }
-                    },
                 )
             }
         },
@@ -1384,6 +1427,7 @@ private fun ColumnWizardScreenMaterial(
                     index = index + 1,
                     uiState = uiState,
                     busy = state.running,
+                    installed = uiState.step.source.packageName.trim() in state.installedApps,
                     optedIn = uiState.step.id in state.optedIn,
                     onToggleOptIn = { onToggleOptIn(uiState.step) },
                     onRun = { requestRun(uiState.step) },
@@ -1506,6 +1550,7 @@ private fun WizardStepCard(
     index: Int,
     uiState: ColumnStepUiState,
     busy: Boolean,
+    installed: Boolean,
     optedIn: Boolean,
     onToggleOptIn: () -> Unit,
     onRun: () -> Unit,
@@ -1549,6 +1594,7 @@ private fun WizardStepCard(
                 StepPrimaryAction(
                     status = uiState.status,
                     enabled = !busy,
+                    installed = installed,
                     onRun = onRun,
                     onMarkDone = onMarkDone,
                 )
@@ -1569,9 +1615,17 @@ private fun WizardStepCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                 )
                 Text(
-                    text = stringResource(statusLabel(uiState.status)),
+                    text = if (installed && uiState.status == ColumnStepStatus.PENDING) {
+                        stringResource(R.string.column_wizard_installed)
+                    } else {
+                        stringResource(statusLabel(uiState.status))
+                    },
                     style = MaterialTheme.typography.labelSmall,
-                    color = statusColor(uiState.status),
+                    color = if (installed && uiState.status == ColumnStepStatus.PENDING) {
+                        successGreen()
+                    } else {
+                        statusColor(uiState.status)
+                    },
                 )
                 if (step.optional) {
                     Text(
@@ -1739,13 +1793,16 @@ private fun WizardStepCard(
 private fun StepPrimaryAction(
     status: ColumnStepStatus,
     enabled: Boolean,
+    installed: Boolean = false,
     onRun: () -> Unit,
     onMarkDone: () -> Unit,
 ) {
     // NEEDS_USER 是「等你动手」，点它是「我做完了」，不是「重跑一遍」——重跑只会再下载一次、
     // 再弹一次安装器。所以这里接的是 onMarkDone，不是 onRun。
     val label = when (status) {
-        ColumnStepStatus.PENDING, ColumnStepStatus.RUNNING -> R.string.column_wizard_run
+        ColumnStepStatus.PENDING ->
+            if (installed) R.string.column_wizard_reinstall else R.string.column_wizard_run
+        ColumnStepStatus.RUNNING -> R.string.column_wizard_run
         ColumnStepStatus.FAILED -> R.string.column_wizard_retry
         ColumnStepStatus.NEEDS_USER -> R.string.column_wizard_done_step
         ColumnStepStatus.SUCCESS, ColumnStepStatus.SKIPPED -> null
@@ -2019,7 +2076,6 @@ private fun WizardBottomBar(
     started: Boolean,
     running: Boolean,
     onRunAll: () -> Unit,
-    onStart: () -> Unit,
 ) {
     if (total == 0) return
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 3.dp) {
@@ -2031,35 +2087,20 @@ private fun WizardBottomBar(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (!started) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                // 只留一个入口：新手点它就是从头跑，老手点它就是接着跑，没必要拆成两个按钮
+                // 让人选「一键执行」还是「开始第一步」——那两步做的是同一件事。
+                Button(
+                    onClick = onRunAll,
+                    enabled = !running,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp),
+                    shape = RoundedCornerShape(23.dp),
                 ) {
-                    Button(
-                        onClick = onRunAll,
-                        enabled = !running,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(44.dp),
-                        shape = RoundedCornerShape(22.dp),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.column_wizard_run_all),
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                    }
-                    TextButton(
-                        onClick = onStart,
-                        enabled = !running,
-                        modifier = Modifier.height(44.dp),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.column_wizard_start_first),
-                            style = MaterialTheme.typography.labelMedium,
-                            maxLines = 1,
-                            softWrap = false,
-                        )
-                    }
+                    Text(
+                        text = stringResource(R.string.column_wizard_run_all),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
                 }
             } else {
                 Row(
@@ -2129,12 +2170,24 @@ private fun successGreen(): Color = if (MaterialTheme.colorScheme.surfaceBright.
 
 @Composable
 private fun ColumnHealthCard(report: ColumnHealthReport) {
+    // 明细默认收起：进专题第一眼要的是「这台机器配过没有」这个结论，不是九行探针输出。
+    // 想核对每一项再点开——结论文案与明细在同一张卡里，不跳页。
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val missing = report.checks.filter { !it.passed }
     WizardCard(
         modifier = Modifier.fillMaxWidth(),
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { expanded = !expanded }
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 Text(
                     text = stringResource(R.string.column_health_title_short),
                     style = MaterialTheme.typography.titleSmall,
@@ -2147,10 +2200,22 @@ private fun ColumnHealthCard(report: ColumnHealthReport) {
                         report.totalCount,
                     ),
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = if (missing.isEmpty()) {
+                        successGreen()
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
+                )
+                Icon(
+                    imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                    contentDescription = stringResource(
+                        if (expanded) R.string.column_health_collapse else R.string.column_health_expand,
+                    ),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
                 )
             }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
             HealthLevelRow(
                 ok = report.dayLevelReady,
                 title = stringResource(R.string.column_health_day_level),
@@ -2164,27 +2229,57 @@ private fun ColumnHealthCard(report: ColumnHealthReport) {
                 okText = stringResource(R.string.column_health_ready),
                 noText = stringResource(R.string.column_health_not_ready),
             )
-            val missing = report.checks.filter { !it.passed }
-            if (missing.isNotEmpty()) {
+            if (expanded) {
                 Spacer(Modifier.height(10.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Spacer(Modifier.height(8.dp))
-                missing.take(3).forEach { check ->
-                    Text(
-                        text = "· ${check.detail}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                report.checks.forEachIndexed { index, check ->
+                    if (index > 0) Spacer(Modifier.height(6.dp))
+                    HealthCheckDetailRow(check)
                 }
-                if (missing.size > 3) {
-                    Text(
-                        text = "· …（还有 ${missing.size - 3} 项）",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+            } else {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = if (missing.isEmpty()) {
+                        stringResource(R.string.column_health_all_pass)
+                    } else {
+                        stringResource(R.string.column_health_missing_hint, missing.size)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
+    }
+}
+
+/** 明细里的一行：通过/未通过图标 + 探针原话（探针没给话就退回状态文字）。 */
+@Composable
+private fun HealthCheckDetailRow(check: ColumnHealthCheck) {
+    val tint = if (check.passed) successGreen() else MaterialTheme.colorScheme.error
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Icon(
+            imageVector = if (check.passed) Icons.Rounded.CheckCircle else Icons.Rounded.Close,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier
+                .padding(top = 1.dp)
+                .size(14.dp),
+        )
+        Text(
+            text = check.detail.ifEmpty {
+                stringResource(
+                    if (check.passed) R.string.column_wizard_check_pass else R.string.column_wizard_check_fail,
+                )
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 

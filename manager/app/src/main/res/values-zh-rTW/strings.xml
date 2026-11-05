@@ -1414,6 +1414,8 @@
     <string name="settings_proxy_empty">目前沒有可用代理，稍後重新進入本頁會自動重試。</string>
     <string name="column_wizard_run_all">一鍵執行</string>
     <string name="column_wizard_opt_in">納入一鍵執行</string>
+    <string name="column_wizard_installed" translatable="true">已安裝</string>
+    <string name="column_wizard_reinstall" translatable="true">重新安裝</string>
     <string name="column_wizard_run_all_rest">一鍵執行剩餘步驟</string>
     <string name="module_column_guide_title">你該從哪一檔開始</string>
     <string name="module_column_tier_day">日用級</string>
@@ -1445,5 +1447,9 @@
     <string name="column_health_integrity_level" translatable="true">Google 三綠</string>
     <string name="column_health_ready" translatable="true">已就緒</string>
     <string name="column_health_not_ready" translatable="true">未設定</string>
+    <string name="column_health_expand" translatable="true">查看明細</string>
+    <string name="column_health_collapse" translatable="true">收起明細</string>
+    <string name="column_health_missing_hint" translatable="true">還有 %1$d 項未通過</string>
+    <string name="column_health_all_pass" translatable="true">全部通過</string>
     <string name="module_column_tier_recommended" translatable="true">最常用</string>
 </resources>

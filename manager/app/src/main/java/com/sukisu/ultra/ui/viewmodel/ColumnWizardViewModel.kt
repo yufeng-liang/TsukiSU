@@ -122,6 +122,29 @@ class ColumnWizardViewModel(
         verifyRestoredInstallSteps()
         // 存量用户检测：设备上可能早就配好了一套（甚至用别的工具配的），进专题先看一眼现状。
         runHealthCheck()
+        // 检测器是否已经装过：装过就不用再下载一次、界面也该按「已安装」来说话。
+        detectInstalledApps(topic)
+    }
+
+    /**
+     * 扫一遍专题里 `installApp` 步骤声明的包名，看设备上是不是已经装了。
+     *
+     * 索引里写包名的步骤才能被提前判断（见 [com.sukisu.ultra.data.model.RepoColumnStepSource.packageName]）；
+     * 没写包名的仍然只有执行时才可能知道。结果只进 [ColumnWizardUiState.installedApps]，不改善步骤状态。
+     */
+    private fun detectInstalledApps(topic: RepoColumnTopic) {
+        val declared = topic.steps
+            .filter { it.kind.trim().equals("installApp", ignoreCase = true) }
+            .map { it.source.packageName.trim() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+        if (declared.isEmpty()) return
+        viewModelScope.launch {
+            val installed = withContext(Dispatchers.IO) { declared.filter(::packageInstalled).toSet() }
+            if (installed.isEmpty()) return@launch
+            _uiState.update { it.copy(installedApps = it.installedApps + installed) }
+            appendLog("设备上已经装了：${installed.joinToString("、")}，这一步可以直接跳过")
+        }
     }
 
     /**

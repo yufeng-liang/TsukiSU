@@ -183,6 +183,7 @@ object RepoColumnParser {
         pinnedVersion = item.text("pinnedVersion"),
         sha256 = item.text("sha256"),
         moduleId = item.text("moduleId"),
+        packageName = item.text("packageName"),
         url = item.text("url"),
     )
 
@@ -193,6 +194,7 @@ object RepoColumnParser {
         pinnedVersion = "",
         sha256 = "",
         moduleId = "",
+        packageName = "",
         url = "",
     )
 

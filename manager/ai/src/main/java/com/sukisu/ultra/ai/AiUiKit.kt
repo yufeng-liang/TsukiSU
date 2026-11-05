@@ -49,7 +49,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -57,8 +56,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
-import androidx.core.content.ContextCompat
-import androidx.core.graphics.drawable.toBitmap
 import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.CardColors
 import top.yukonga.miuix.kmp.basic.CardDefaults as MiuixCardDefaults
@@ -474,31 +471,11 @@ fun AiAvatarImage(
     modifier: Modifier = Modifier,
     size: Dp = 24.dp,
 ) {
-    val host = AiAssistant.requireHost()
-    val drawables = host.avatarDrawables()
-    val iconRes = drawables?.iconRes
-    val bitmap = remember(iconRes) {
-        drawables?.let {
-            runCatching {
-                ContextCompat.getDrawable(host.context, it.iconRes)
-                    ?.toBitmap(width = 256, height = 256)
-                    ?.asImageBitmap()
-            }.getOrNull()
-        }
-    }
-    if (bitmap != null) {
-        Image(
-            bitmap = bitmap,
-            contentDescription = null,
-            modifier = modifier.size(size),
-            contentScale = ContentScale.Crop,
-        )
-    } else if (drawables != null) {
-        Image(
-            painter = painterResource(drawables.foregroundRes),
-            contentDescription = null,
-            modifier = modifier.size(size),
-            contentScale = ContentScale.Fit,
-        )
-    }
+    // 助手用独立品牌标识，不再复用宿主应用图标（否则入口看起来像「另一个 App」）。
+    Image(
+        painter = painterResource(R.drawable.ic_ai_assistant_logo),
+        contentDescription = null,
+        modifier = modifier.size(size),
+        contentScale = ContentScale.Fit,
+    )
 }

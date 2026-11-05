@@ -54,7 +54,7 @@ data class HomeUiState(
     // 任一侧为空说明对端还不支持该指纹（旧内核 / tarball 构建），此时退回比版本号。
     val bundledLkmRev: String = "",
     val kernelLkmRev: String = "",
-    val showAiHomeCard: Boolean = false,
+    val showAiHomeCard: Boolean = true,
     // 主页「隐藏环境进行中」卡片：进行中的专题（重启后回来时提示用户接着做）。
     // 数据来自 ColumnProgressStore 的汇总记录，不跑 root，纯本地读取。
     val hideEnvCard: ColumnProgressEntry? = null,

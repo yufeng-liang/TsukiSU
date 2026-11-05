@@ -21,7 +21,9 @@ import okhttp3.RequestBody.Companion.toRequestBody
  *
  * 根据 [AiSearchSettings] 里的配置选择服务：
  * - [AiSearchProvider.FIRECRAWL]：调用 Firecrawl 官方 /v1/search；
- * - [AiSearchProvider.ANYSEARCH]：调用内置的 AnySearch 官方端点（Key 可选，匿名额度更低）。
+ * - [AiSearchProvider.ANYSEARCH]：调用内置的 AnySearch 官方端点（Key 可选，匿名额度更低）；
+ * - [AiSearchProvider.TAVILY]：调用 Tavily 官方 /search（需要 Key）；
+ * - [AiSearchProvider.YUANBAO]：调用腾讯云元宝搜索 /SearchPro（需要服务 API KEY）。
  *
  * [search] 永远返回给模型看的纯文本，不向调用方抛业务异常；协程取消除外。
  */
@@ -31,6 +33,12 @@ object AiWebSearch {
 
     /** AnySearch 官方 REST 端点：用户不需要填写，随版本内置。 */
     private const val ANYSEARCH_ENDPOINT = "https://api.anysearch.com/v1/search"
+
+    /** Tavily 官方搜索端点。 */
+    private const val TAVILY_ENDPOINT = "https://api.tavily.com/search"
+
+    /** 腾讯云元宝搜索端点（服务 API KEY 方式）。 */
+    private const val YUANBAO_ENDPOINT = "https://api.wsa.cloud.tencent.com/SearchPro"
     private const val MAX_RESULTS = 5
     private const val MAX_SUMMARY_CHARS = 500
     private const val MAX_OUTPUT_CHARS = 4000
@@ -54,7 +62,7 @@ object AiWebSearch {
 
     /**
      * 执行一次联网搜索，返回给模型看的纯文本（标题 + URL + 摘要，最多 5 条）。
-     * 配置为 NONE / Firecrawl 未填 Key -> 返回提示文案而不是抛异常。
+     * 配置为 NONE / 需要 Key 的服务未填 Key -> 返回提示文案而不是抛异常。
      */
     suspend fun search(query: String): String = withContext(Dispatchers.IO) {
         try {
@@ -67,9 +75,9 @@ object AiWebSearch {
             if (config.provider == AiSearchProvider.NONE) {
                 return@withContext "联网搜索未启用：请在 AI 设置中选择搜索服务。"
             }
-            // Firecrawl 必须鉴权；AnySearch 支持匿名访问（额度更低），Key 可留空。
-            if (config.provider == AiSearchProvider.FIRECRAWL && config.apiKey.isBlank()) {
-                return@withContext "Firecrawl 需要 API Key：请在 AI 设置中填写。"
+            // AnySearch 支持匿名访问（额度更低），其余服务都必须带 Key。
+            if (config.provider.requiresApiKey() && config.apiKey.isBlank()) {
+                return@withContext "${config.provider.displayName()} 需要 API Key：请在 AI 设置中填写。"
             }
 
             val result = when (config.provider) {
@@ -79,6 +87,10 @@ object AiWebSearch {
                 AiSearchProvider.FIRECRAWL -> searchFirecrawl(cleaned, config)
 
                 AiSearchProvider.ANYSEARCH -> searchAnySearch(cleaned, config)
+
+                AiSearchProvider.TAVILY -> searchTavily(cleaned, config)
+
+                AiSearchProvider.YUANBAO -> searchYuanbao(cleaned, config)
             }
             result.take(MAX_OUTPUT_CHARS)
         } catch (e: CancellationException) {
@@ -173,11 +185,109 @@ object AiWebSearch {
         return formatResults(results)
     }
 
+    /** Tavily：POST /search，鉴权走 Bearer；响应 results[].title/url/content。 */
+    private fun searchTavily(query: String, config: AiSearchConfig): String {
+        val payload = buildJsonObject {
+            put("query", query)
+            put("max_results", MAX_RESULTS)
+            put("search_depth", "basic")
+        }
+        val (code, responseBody) = postJson(TAVILY_ENDPOINT, config.apiKey.trim(), payload.toString())
+        if (code !in 200..299) {
+            return httpError(code, responseBody)
+        }
+
+        val root = runCatching { json.parseToJsonElement(responseBody) as? JsonObject }
+            .getOrNull()
+            ?: return "Tavily 返回的数据无法解析，未获得搜索结果。"
+        val data = root["results"] as? JsonArray ?: JsonArray(emptyList())
+        val results = data.mapNotNull { element ->
+            val item = element as? JsonObject ?: return@mapNotNull null
+            val url = item.string("url").orEmpty()
+            if (url.isBlank()) return@mapNotNull null
+            SearchResult(
+                title = item.string("title").orEmpty().ifBlank { url },
+                url = url,
+                snippet = item.string("content").orEmpty().ifBlank { item.string("description").orEmpty() },
+            )
+        }
+        if (results.isEmpty()) {
+            return "Tavily 没有返回可用的搜索结果。"
+        }
+        return formatResults(results)
+    }
+
+    /**
+     * 元宝搜索：POST /SearchPro，请求体 `{Query, Cnt}`。
+     * 响应 `{Response:{Pages:["{...json 字符串...}", ...]}}`，Pages 元素需要二次解析；
+     * 单条字段 passage / content 都是正文摘录，优先用更短的 passage。
+     */
+    private fun searchYuanbao(query: String, config: AiSearchConfig): String {
+        val payload = buildJsonObject {
+            put("Query", query)
+            put("Cnt", MAX_RESULTS)
+        }
+        val (code, responseBody) = postJson(YUANBAO_ENDPOINT, config.apiKey.trim(), payload.toString())
+        if (code !in 200..299) {
+            return httpError(code, responseBody)
+        }
+
+        val root = runCatching { json.parseToJsonElement(responseBody) as? JsonObject }
+            .getOrNull()
+            ?: return "元宝搜索返回的数据无法解析，未获得搜索结果。"
+        val response = root["Response"] as? JsonObject
+            ?: return "元宝搜索返回的数据无法解析，未获得搜索结果。"
+        val pages = response["Pages"] as? JsonArray
+        if (pages == null) {
+            val message = (response["Error"] as? JsonObject)?.string("Message")
+                ?: response.string("Message")
+            return if (message != null) "元宝搜索失败：$message" else "元宝搜索没有返回可用的搜索结果。"
+        }
+
+        val results = pages.mapNotNull { element ->
+            val item = when (element) {
+                is JsonObject -> element
+                is JsonPrimitive -> runCatching {
+                    json.parseToJsonElement(element.contentOrNull.orEmpty()) as? JsonObject
+                }.getOrNull()
+                else -> null
+            } ?: return@mapNotNull null
+            val url = item.string("url").orEmpty()
+            if (url.isBlank()) return@mapNotNull null
+            SearchResult(
+                title = item.string("title").orEmpty().ifBlank { url },
+                url = url,
+                snippet = item.string("passage").orEmpty()
+                    .ifBlank { item.string("content").orEmpty() }
+                    .ifBlank { item.string("snippet").orEmpty() },
+            )
+        }
+        if (results.isEmpty()) {
+            return "元宝搜索没有返回可用的搜索结果。"
+        }
+        return formatResults(results)
+    }
+
+    /** 是否必须填 Key：只有 AnySearch 支持匿名访问。 */
+    private fun AiSearchProvider.requiresApiKey(): Boolean = when (this) {
+        AiSearchProvider.NONE, AiSearchProvider.ANYSEARCH -> false
+        AiSearchProvider.FIRECRAWL, AiSearchProvider.TAVILY, AiSearchProvider.YUANBAO -> true
+    }
+
+    /** 错误提示里给用户看的服务名。 */
+    private fun AiSearchProvider.displayName(): String = when (this) {
+        AiSearchProvider.NONE -> "联网搜索"
+        AiSearchProvider.FIRECRAWL -> "Firecrawl"
+        AiSearchProvider.ANYSEARCH -> "AnySearch"
+        AiSearchProvider.TAVILY -> "Tavily"
+        AiSearchProvider.YUANBAO -> "元宝搜索"
+    }
+
     /** 发一次 JSON POST；返回 HTTP 状态码与响应体原文。apiKey 为空时不带鉴权头（AnySearch 匿名）。 */
     private fun postJson(url: String, apiKey: String, body: String): Pair<Int, String> {
         val builder = Request.Builder()
             .url(url)
-            .header("Content-Type", "application/json")
+            .header("Content-Type", "application/json; charset=UTF-8")
             .header("Accept", "application/json")
         if (apiKey.isNotBlank()) {
             builder.header("Authorization", "Bearer $apiKey")

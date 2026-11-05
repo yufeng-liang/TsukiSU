@@ -1688,6 +1688,8 @@
     <string name="settings_proxy_empty">No proxies are available right now. Come back to this page later to retry.</string>
     <string name="column_wizard_run_all">Run all</string>
     <string name="column_wizard_opt_in">Include in run-all</string>
+    <string name="column_wizard_installed" translatable="true">Installed</string>
+    <string name="column_wizard_reinstall" translatable="true">Reinstall</string>
     <string name="column_wizard_run_all_rest">Run remaining steps</string>
     <string name="module_column_guide_title">Which level do you need?</string>
     <string name="module_column_tier_day">Day-to-day</string>
@@ -1719,6 +1721,10 @@
     <string name="column_health_integrity_level" translatable="true">Google three-green</string>
     <string name="column_health_ready" translatable="true">Ready</string>
     <string name="column_health_not_ready" translatable="true">Not set up</string>
+    <string name="column_health_expand" translatable="true">Show all checks</string>
+    <string name="column_health_collapse" translatable="true">Hide check details</string>
+    <string name="column_health_missing_hint" translatable="true">%1$d checks still failing</string>
+    <string name="column_health_all_pass" translatable="true">All checks passed</string>
     <string name="module_column_tier_recommended" translatable="true">Most common</string>
     <string name="about_contributors">Main contributors</string>
     <string name="about_contributors_hint">Drag to explore, pinch to zoom, tap an avatar to open the profile.</string>

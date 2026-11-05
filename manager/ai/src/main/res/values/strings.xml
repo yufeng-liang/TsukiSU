@@ -299,6 +299,8 @@
     <string name="ai_search_provider_none">Built-in DuckDuckGo</string>
     <string name="ai_search_provider_firecrawl">Firecrawl</string>
     <string name="ai_search_provider_anysearch">AnySearch</string>
+    <string name="ai_search_provider_tavily">Tavily</string>
+    <string name="ai_search_provider_yuanbao">Yuanbao Search</string>
     <string name="ai_mcp_section">MCP servers</string>
     <string name="ai_mcp_empty">No MCP server yet. Add one to expose its tools to the assistant.</string>
     <string name="ai_mcp_add">Add server</string>
@@ -319,6 +321,8 @@
     <string name="ai_search_desc_none">No setup needed: the assistant scrapes DuckDuckGo results directly. Speed and reliability are lower than a dedicated API.</string>
     <string name="ai_search_desc_firecrawl">Firecrawl is a web scraping and search API that returns clean page content. It needs an API key; the free tier gives about 1,000 credits per month (500 searches or 1,000 pages).</string>
     <string name="ai_search_desc_anysearch">AnySearch is a real-time search service built for AI agents. A free account gets 1,000 requests per day, and an API key is optional.</string>
+    <string name="ai_search_desc_tavily">Tavily is a search API built for AI agents. It needs an API key; the free plan includes 1,000 credits per month.</string>
+    <string name="ai_search_desc_yuanbao">Tencent Cloud Yuanbao Search returns real-time results from authoritative sources. It needs an API key and includes 2,000 free calls per month while the promotion lasts.</string>
     <string name="ai_jump_bottom">Scroll to bottom</string>
     <string name="ai_clear_history_action">Clear chat history</string>
     <string name="ai_search_get_key">Get API key</string>

@@ -82,11 +82,13 @@ object AiWebController {
         require(cleaned.isNotEmpty()) { "query is required" }
         require(cleaned.length <= 200) { "query is too long" }
         val configuredSearch = AiSearchSettings.load()
-        // NONE 时退回内置 DuckDuckGo；Firecrawl 必须有 Key；AnySearch 允许匿名，直接走官方端点。
+        // NONE 时退回内置 DuckDuckGo；除 AnySearch 允许匿名外，其余服务都要填了 Key 才启用。
         val useConfiguredProvider = when (configuredSearch.provider) {
             AiSearchProvider.NONE -> false
             AiSearchProvider.FIRECRAWL -> configuredSearch.apiKey.isNotBlank()
             AiSearchProvider.ANYSEARCH -> true
+            AiSearchProvider.TAVILY -> configuredSearch.apiKey.isNotBlank()
+            AiSearchProvider.YUANBAO -> configuredSearch.apiKey.isNotBlank()
         }
         if (useConfiguredProvider) {
             return@withContext AiWebSearch.search(cleaned)
