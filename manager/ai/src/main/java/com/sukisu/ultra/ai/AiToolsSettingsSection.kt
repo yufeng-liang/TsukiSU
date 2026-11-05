@@ -12,7 +12,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Block
+import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AlertDialog
@@ -386,6 +388,8 @@ private fun SearchProviderRow(
     val keyUrl = when (provider) {
         AiSearchProvider.FIRECRAWL -> FIRECRAWL_KEY_URL
         AiSearchProvider.ANYSEARCH -> ANYSEARCH_KEY_URL
+        AiSearchProvider.TAVILY -> TAVILY_KEY_URL
+        AiSearchProvider.YUANBAO -> YUANBAO_KEY_URL
         AiSearchProvider.NONE -> null
     }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -465,11 +469,15 @@ private fun SearchProviderRow(
 /** 两家服务的 Key 申请页；点按钮直接跳浏览器，不用用户自己找。 */
 private const val FIRECRAWL_KEY_URL = "https://www.firecrawl.dev/app/api-keys"
 private const val ANYSEARCH_KEY_URL = "https://www.anysearch.com/console/api-keys"
+private const val TAVILY_KEY_URL = "https://app.tavily.com/home"
+private const val YUANBAO_KEY_URL = "https://console.cloud.tencent.com/wsapi/index"
 
 private fun providerIcon(provider: AiSearchProvider) = when (provider) {
     AiSearchProvider.NONE -> Icons.Rounded.Block
     AiSearchProvider.FIRECRAWL -> Icons.Rounded.Language
     AiSearchProvider.ANYSEARCH -> Icons.Rounded.Search
+    AiSearchProvider.TAVILY -> Icons.Rounded.AutoAwesome
+    AiSearchProvider.YUANBAO -> Icons.Rounded.Cloud
 }
 
 @Composable
@@ -477,6 +485,8 @@ private fun providerTitle(provider: AiSearchProvider): String = when (provider) 
     AiSearchProvider.NONE -> stringResource(R.string.ai_search_provider_none)
     AiSearchProvider.FIRECRAWL -> stringResource(R.string.ai_search_provider_firecrawl)
     AiSearchProvider.ANYSEARCH -> stringResource(R.string.ai_search_provider_anysearch)
+    AiSearchProvider.TAVILY -> stringResource(R.string.ai_search_provider_tavily)
+    AiSearchProvider.YUANBAO -> stringResource(R.string.ai_search_provider_yuanbao)
 }
 
 @Composable
@@ -484,4 +494,6 @@ private fun providerDescription(provider: AiSearchProvider): String = when (prov
     AiSearchProvider.NONE -> stringResource(R.string.ai_search_desc_none)
     AiSearchProvider.FIRECRAWL -> stringResource(R.string.ai_search_desc_firecrawl)
     AiSearchProvider.ANYSEARCH -> stringResource(R.string.ai_search_desc_anysearch)
+    AiSearchProvider.TAVILY -> stringResource(R.string.ai_search_desc_tavily)
+    AiSearchProvider.YUANBAO -> stringResource(R.string.ai_search_desc_yuanbao)
 }

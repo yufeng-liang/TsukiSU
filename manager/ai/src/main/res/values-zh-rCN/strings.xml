@@ -298,6 +298,8 @@
     <string name="ai_search_provider_none">内置 DuckDuckGo</string>
     <string name="ai_search_provider_firecrawl">Firecrawl</string>
     <string name="ai_search_provider_anysearch">AnySearch</string>
+    <string name="ai_search_provider_tavily">Tavily</string>
+    <string name="ai_search_provider_yuanbao">元宝搜索</string>
     <string name="ai_mcp_section">MCP 服务器</string>
     <string name="ai_mcp_empty">还没有 MCP 服务器。添加一个，它的工具就会出现在助手可调用的列表里。</string>
     <string name="ai_mcp_add">添加服务器</string>
@@ -318,6 +320,8 @@
     <string name="ai_search_desc_none">无需配置：助手直接抓取 DuckDuckGo 结果，速度和稳定性不如专业 API。</string>
     <string name="ai_search_desc_firecrawl">Firecrawl 是网页抓取与搜索 API，能返回清洗后的网页正文。需要 API Key；免费额度每月约 1000 信用点（约 500 次搜索或 1000 个页面）。</string>
     <string name="ai_search_desc_anysearch">AnySearch 是面向 AI Agent 的实时搜索服务，免费账号每天 1000 次调用，API Key 可选。</string>
+    <string name="ai_search_desc_tavily">Tavily 是面向 AI Agent 的搜索 API。需要 API Key，免费计划每月 1000 信用点。</string>
+    <string name="ai_search_desc_yuanbao">腾讯云元宝搜索，返回实时、权威的中文网页结果。需要 API Key，限时活动每月 2000 次免费调用。</string>
     <string name="ai_jump_bottom">回到底部</string>
     <string name="ai_clear_history_action">清空聊天记录</string>
     <string name="ai_search_get_key">获取 API Key</string>

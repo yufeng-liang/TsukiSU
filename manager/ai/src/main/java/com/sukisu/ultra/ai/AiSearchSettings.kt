@@ -18,14 +18,20 @@ enum class AiSearchProvider {
 
     /** AnySearch 官方搜索 API（https://api.anysearch.com/v1/search）；端点内置，Key 可选（匿名额度更低）。 */
     ANYSEARCH,
+
+    /** Tavily 官方搜索 API（https://api.tavily.com/search），面向 AI Agent，需要 API Key。 */
+    TAVILY,
+
+    /** 腾讯云元宝搜索（https://api.wsa.cloud.tencent.com/SearchPro），需要服务 API KEY。 */
+    YUANBAO,
 }
 
 /**
  * 联网搜索配置。
  *
  * @property provider 搜索服务；[AiSearchProvider.NONE] 表示不启用。
- * @property apiKey 服务鉴权 Key；Firecrawl 必填，AnySearch 可留空走匿名额度。
- * @property endpoint Firecrawl 的自定义端点（留空用官方地址）；AnySearch 恒用内置端点，此字段忽略。
+ * @property apiKey 服务鉴权 Key；Firecrawl / Tavily / 元宝搜索必填，AnySearch 可留空走匿名额度。
+ * @property endpoint Firecrawl 的自定义端点（留空用官方地址）；其余服务恒用内置端点，此字段忽略。
  */
 @Serializable
 data class AiSearchConfig(
