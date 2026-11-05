@@ -132,6 +132,19 @@ class ColumnStepRunnerImpl(
             return failed("这个步骤没有配置下载来源，无法安装", log)
         }
 
+        // 索引里手写了包名的，在**下载之前**先判断一次：已装就没必要为了一句「已经装了」把
+        // 几十兆的安装包下下来（春秋的包有 50 MB）。ctx.force（用户点「升级/重做」）要放行，
+        // 否则升级永远走不到安装器。包名没写的退回老路径：下载后从 APK 里读。
+        val declaredPkg = step.source.packageName.trim()
+        if (declaredPkg.isNotEmpty() && !ctx.force && isAppInstalled(declaredPkg)) {
+            log.line("$declaredPkg 已安装，跳过下载")
+            return ColumnStepResult(
+                ColumnStepStatus.SKIPPED,
+                "$declaredPkg 已经装了，跳过（要重装请在步骤上点升级/重做）",
+                log.text(),
+            )
+        }
+
         val uri = fetcher.resolve(step).getOrElse { e ->
             return failed("准备安装包失败：${e.message ?: e.javaClass.simpleName}", log)
         }
@@ -340,6 +353,22 @@ class ColumnStepRunnerImpl(
         if (id.isEmpty() || id == "unknown-module") return false
         if (!isValidColumnModuleId(id)) return false
         return ColumnRootIo.isDirectory("/data/adb/modules/$id")
+    }
+
+    /**
+     * 普通 App 是否已经装在设备上。
+     *
+     * 只查 PackageManager，不走 root：索引里的包名是远程数据，拼进 shell 命令前还得再防一次
+     * 注入；而 PackageManager 查询本身就能回答「在不在」，没必要开 shell。
+     */
+    private fun isAppInstalled(packageName: String): Boolean {
+        val pkg = packageName.trim()
+        if (pkg.isEmpty()) return false
+        return runCatching {
+            @Suppress("DEPRECATION")
+            ksuApp.packageManager.getPackageInfo(pkg, 0)
+            true
+        }.getOrDefault(false)
     }
 
     /** `/data/adb/modules` 下现有的模块目录名（`ls -1` 不含隐藏项）。 */

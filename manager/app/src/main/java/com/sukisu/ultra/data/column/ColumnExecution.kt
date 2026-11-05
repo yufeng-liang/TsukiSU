@@ -181,6 +181,13 @@ data class ColumnWizardUiState(
     val preflight: ColumnPreflight? = null,
     /** 进专题时跑一次的设备体检结果，用来在顶部提示「你之前已经配过」。 */
     val health: ColumnHealthReport? = null,
+    /**
+     * 专题里那些 `installApp` 步骤声明的包名，已经在设备上装着的集合。
+     *
+     * 只是旁证：已装 ≠ 配好，所以它不会把步骤标成完成，只用来把界面文案换成「已安装」、
+     * 并在执行前省掉一次几十兆的下载。
+     */
+    val installedApps: Set<String> = emptySet(),
 )
 
 /** 预检时对某一步的判定，决定「一键执行」要不要把它列给用户看。 */

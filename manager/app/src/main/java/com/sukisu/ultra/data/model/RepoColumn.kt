@@ -197,6 +197,15 @@ data class RepoColumnStepSource(
     /** 商店索引里的模块 id，[kind] 为 store 时有意义。 */
     val moduleId: String,
     /**
+     * `installApp` 步骤要装的 App 包名（索引里手写）。
+     *
+     * 存在的意义是**执行前**就能判断「已经装了吗」：APK 的包名本来只能从下载下来的安装包里读，
+     * 而春秋那种包有 50 MB，为了判断一句「已经装了」先下 50 MB 太浪费。索引写死包名后，
+     * 执行器在下载前先用 PackageManager 查一次，已装直接跳过。空串表示索引没写，退回老行为
+     * （下载后读包名再判断）。
+     */
+    val packageName: String = "",
+    /**
      * 模块自带的 `update.json` 地址，[kind] 为 updateJson 时有意义。
      *
      * 这类模块不在 GitHub 发版（LSPosed 的 2.x 只走 Telegram 频道），但官方提供了 updateJson：
