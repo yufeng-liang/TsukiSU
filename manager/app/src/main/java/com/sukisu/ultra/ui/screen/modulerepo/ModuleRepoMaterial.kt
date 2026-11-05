@@ -637,14 +637,19 @@ private fun CoolapkCommunityEntryCard(
                         awaitingConfirm = true
                     }
                 },
-                contentPadding = ButtonDefaults.TextButtonContentPadding,
+                modifier = Modifier.height(34.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
             ) {
+                // 按钮宽度会被左边说明挤压，这里禁止换行：文案已经压到「开启 / 确认开启」，
+                // 单行放得下，不要让它折成两行顶高整张卡。
                 Text(
                     text = stringResource(
                         if (awaitingConfirm) R.string.module_repo_coolapk_confirm
                         else R.string.module_repo_coolapk_enable
                     ),
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    softWrap = false,
                 )
             }
         }
