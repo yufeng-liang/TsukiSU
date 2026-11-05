@@ -155,6 +155,7 @@ import com.sukisu.ultra.ui.theme.LocalEnableFloatingBottomBar
 import com.sukisu.ultra.ui.theme.LocalEnableFloatingBottomBarBlur
 import com.sukisu.ultra.ui.theme.LocalEnableNavigationBadge
 import com.sukisu.ultra.ui.theme.LocalModuleDescriptionMaxLines
+import com.sukisu.ultra.ui.util.AiCardTransition
 import com.sukisu.ultra.ui.util.BackgroundNavTransition
 import com.sukisu.ultra.ui.util.ImageStorage
 import com.sukisu.ultra.ui.util.LocaleHelper
@@ -562,7 +563,10 @@ class MainActivity : ComponentActivity() {
                                 entry<Route.Extensions>(swipeDismiss = swipeDismiss) { ExtensionsScreen() }
                                 entry<Route.CpuSpoof>(swipeDismiss = swipeDismiss) { CpuSpoofScreen() }
                                 entry<Route.VersionSpoof>(swipeDismiss = swipeDismiss) { VersionSpoofScreen() }
-                                entry<Route.AiAssistant>(swipeDismiss = swipeDismiss) {
+                                entry<Route.AiAssistant>(
+                                    transition = AiCardTransition,
+                                    swipeDismiss = swipeDismiss,
+                                ) {
                                     if (!AiFeatureBridge.isAvailable) {
                                         LaunchedEffect(Unit) { navigator.pop() }
                                     } else {
