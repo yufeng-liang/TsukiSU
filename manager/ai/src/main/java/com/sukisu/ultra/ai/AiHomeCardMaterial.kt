@@ -348,8 +348,11 @@ internal fun AiConfigEditorMaterial(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                TextButton(onClick = { showProviderDialog = true }) {
-                    Text(stringResource(R.string.ai_provider_switch))
+                // 只有一个供应商时「切换」没有意义，隐藏以省出空间、避免弹出空列表。
+                if (draft.providers.size > 1) {
+                    TextButton(onClick = { showProviderDialog = true }) {
+                        Text(stringResource(R.string.ai_provider_switch))
+                    }
                 }
                 IconButton(onClick = { addProvider() }) {
                     Icon(
