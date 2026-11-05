@@ -318,4 +318,5 @@
     <string name="ai_search_desc_none">Built-in DuckDuckGo fallback. No setup needed.</string>
     <string name="ai_search_desc_firecrawl">Cloud search API. Get a key at firecrawl.dev.</string>
     <string name="ai_search_desc_anysearch">Self-hosted search gateway. Needs endpoint and key.</string>
+    <string name="ai_jump_bottom">Scroll to bottom</string>
 </resources>

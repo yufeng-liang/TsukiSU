@@ -1,5 +1,6 @@
 package com.sukisu.ultra.ai
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.NavigationDrawerItem
 
@@ -48,16 +49,20 @@ import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.AddComment
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -148,6 +153,14 @@ fun AiChatMiuix(
         }
     }
 
+    // 不在列表底部时显示「回到底部」按钮。
+    val jumpScope = rememberCoroutineScope()
+    val showJumpDown = remember(listState) { derivedStateOf {
+        val info = listState.layoutInfo
+        val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+        lastVisible < info.totalItemsCount - 1
+    } }.value
+
     val fallbackTitle = remember(state.messages) {
         state.messages.firstOrNull { it.role == AiMessageRole.USER }
             ?.content?.trim()?.replace('\n', ' ')?.take(18).orEmpty()
@@ -215,10 +228,11 @@ fun AiChatMiuix(
                 .background(colorScheme.surface)
                 .imePadding(),
         ) {
+            Box(modifier = Modifier.weight(1f)) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier
-                    .weight(1f)
+                    .fillMaxSize()
                     .overScrollVertical()
                     .scrollEndHaptic()
                     .nestedScroll(scroll.nestedScrollConnection),
@@ -308,7 +322,31 @@ fun AiChatMiuix(
                 )
             }
 
-            AiComposerMiuix(
+                if (showJumpDown) {
+                Surface(
+                    shape = CircleShape,
+                    color = MiuixTheme.colorScheme.secondaryContainer,
+                    shadowElevation = 4.dp,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 16.dp, bottom = 12.dp),
+                ) {
+                    IconButton(onClick = {
+                        jumpScope.launch {
+                            val last = listState.layoutInfo.totalItemsCount - 1
+                            if (last >= 0) listState.animateScrollToItem(last)
+                        }
+                    }) {
+                        Icon(
+                            imageVector = Icons.Rounded.KeyboardArrowDown,
+                            contentDescription = stringResource(R.string.ai_jump_bottom),
+                        )
+                    }
+                }
+            }
+        }
+
+        AiComposerMiuix(
                 contextLabel = contextLabel,
                 value = state.input,
                 isSending = state.isSending,
