@@ -96,6 +96,7 @@ import java.time.LocalDate
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Button as MiuixButton
+import top.yukonga.miuix.kmp.basic.ButtonDefaults as MiuixButtonDefaults
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator as MiuixCircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -570,9 +571,10 @@ private fun DetailsToggle(
 private fun TopicProgressChip(progress: ColumnProgressEntry) {
     val done = progress.done
     val (label, color) = if (done) {
-        stringResource(R.string.module_column_progress_done) to MaterialTheme.colorScheme.primary
+        // 底色是 XXContainer，文字就必须用对应的 onXXContainer，否则深色主题下浅字贴浅底看不清。
+        stringResource(R.string.module_column_progress_done) to MaterialTheme.colorScheme.onPrimaryContainer
     } else {
-        "${progress.settledSteps} / ${progress.totalSteps}" to MaterialTheme.colorScheme.tertiary
+        "${progress.settledSteps} / ${progress.totalSteps}" to MaterialTheme.colorScheme.onTertiaryContainer
     }
     Text(
         text = label,
@@ -1182,6 +1184,8 @@ private fun TopicCardMiuix(
                 MiuixButton(
                     onClick = { onOpenWizard(topic) },
                     modifier = Modifier.fillMaxWidth(),
+                    // miuix Button 默认是灰底次要样式，主操作要用 primary 才够醒目（与商店页一致）。
+                    colors = MiuixButtonDefaults.buttonColorsPrimary(),
                 ) {
                     MiuixText(text = stringResource(R.string.column_wizard_open))
                 }

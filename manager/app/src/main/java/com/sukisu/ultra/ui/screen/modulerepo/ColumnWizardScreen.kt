@@ -1143,6 +1143,8 @@ private fun WizardBottomBarMiuix(
                         .fillMaxWidth()
                         .height(48.dp),
                     cornerRadius = 24.dp,
+                    // 和「一键执行」同一套主色：这里的「执行剩余步骤」也是主操作，不能用默认灰底。
+                    colors = MiuixButtonDefaults.buttonColorsPrimary(),
                 ) {
                     MiuixText(
                         text = stringResource(R.string.column_wizard_run_all_rest),
