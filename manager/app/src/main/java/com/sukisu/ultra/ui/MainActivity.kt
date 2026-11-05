@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.util.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.core.animation.doOnEnd
 import coil.compose.AsyncImage
@@ -147,6 +148,7 @@ import com.sukisu.ultra.ui.screen.template.AppProfileTemplateScreen
 import com.sukisu.ultra.ui.screen.templateeditor.TemplateEditorScreen
 import com.sukisu.ultra.ui.screen.umountmanager.UmountManagerScreen
 import com.sukisu.ultra.ui.screen.upload.ModuleUploadScreen
+import com.sukisu.ultra.ai.api.AiHomeCardBounds
 import com.sukisu.ultra.ui.theme.AiAssistantMaterialTheme
 import com.sukisu.ultra.ui.theme.KernelSUTheme
 import com.sukisu.ultra.ui.theme.LocalColorMode
@@ -156,6 +158,7 @@ import com.sukisu.ultra.ui.theme.LocalEnableFloatingBottomBarBlur
 import com.sukisu.ultra.ui.theme.LocalEnableNavigationBadge
 import com.sukisu.ultra.ui.theme.LocalModuleDescriptionMaxLines
 import com.sukisu.ultra.ui.util.AiCardTransition
+import com.sukisu.ultra.ui.util.AiHomeBackgroundTransition
 import com.sukisu.ultra.ui.util.BackgroundNavTransition
 import com.sukisu.ultra.ui.util.ImageStorage
 import com.sukisu.ultra.ui.util.LocaleHelper
@@ -174,6 +177,7 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.nav.core.NavDisplay
+import top.yukonga.miuix.kmp.nav.core.LocalNavTransitionScope
 import top.yukonga.miuix.kmp.nav.core.NavDisplayEffects
 import top.yukonga.miuix.kmp.nav.core.rememberNavSystemCornerRadius
 import top.yukonga.miuix.kmp.nav.transition.NavSwipeDirection
@@ -423,7 +427,10 @@ class MainActivity : ComponentActivity() {
                                     else -> navigator.pop()
                                 }
                             }) {
-                            entry<Route.Main>(swipeDismiss = swipeDismiss) { mainScreenEntry() }
+                            entry<Route.Main>(
+                                transition = AiHomeBackgroundTransition,
+                                swipeDismiss = swipeDismiss,
+                            ) { mainScreenEntry() }
                             entry<Route.About>(swipeDismiss = swipeDismiss) { AboutScreen() }
                             entry<Route.Sulog>(swipeDismiss = swipeDismiss) { SulogScreen() }
                             entry<Route.ColorPalette>(swipeDismiss = swipeDismiss) { key -> ColorPaletteScreen(key.section, key.importUri) }
@@ -573,22 +580,48 @@ class MainActivity : ComponentActivity() {
                                         // The assistant is always MD3; inside the Miuix shell it needs
                                         // the MD3 colour scheme of the current appearance settings.
                                         AiAssistantMaterialTheme {
-                                            AiFeatureBridge.ChatScreen(
-                                                onClose = {
-                                                    if (navigator.current() == Route.AiAssistant) navigator.pop()
-                                                },
-                                                onOpenSettings = { navigator.push(Route.AiSettings) },
-                                                onNavigate = { target ->
-                                                    when (target) {
-                                                        is ManagerAiTarget.Tab -> {
-                                                            viewModel.openMainPage(target.pageIndex, target.section)
-                                                            navigator.popUntil { it is Route.Main }
+                                            // 容器变换时让页面内容跟着卡片矩形一起长大：整页按卡片尺寸等比缩放，
+                                            // 再平移回卡片位置，和 AiCardTransition 的裁剪形状严格对齐。
+                                            val navScope = LocalNavTransitionScope.current
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .graphicsLayer {
+                                                        val expansion =
+                                                            1f - (-navScope.relativeDepth).coerceIn(0f, 1f)
+                                                        if (expansion < 0.999f) {
+                                                            scaleX = lerp(
+                                                                AiHomeCardBounds.width, 1f, expansion,
+                                                            )
+                                                            scaleY = lerp(
+                                                                AiHomeCardBounds.height, 1f, expansion,
+                                                            )
+                                                            translationX =
+                                                                (AiHomeCardBounds.centerX - 0.5f) *
+                                                                    (1f - expansion) * size.width
+                                                            translationY =
+                                                                (AiHomeCardBounds.centerY - 0.5f) *
+                                                                    (1f - expansion) * size.height
                                                         }
+                                                    },
+                                            ) {
+                                                AiFeatureBridge.ChatScreen(
+                                                    onClose = {
+                                                        if (navigator.current() == Route.AiAssistant) navigator.pop()
+                                                    },
+                                                    onOpenSettings = { navigator.push(Route.AiSettings) },
+                                                    onNavigate = { target ->
+                                                        when (target) {
+                                                            is ManagerAiTarget.Tab -> {
+                                                                viewModel.openMainPage(target.pageIndex, target.section)
+                                                                navigator.popUntil { it is Route.Main }
+                                                            }
 
-                                                        is ManagerAiTarget.Push -> navigator.navigateTo(target.route)
-                                                    }
-                                                },
-                                            )
+                                                            is ManagerAiTarget.Push -> navigator.navigateTo(target.route)
+                                                        }
+                                                    },
+                                                )
+                                            }
                                         }
                                     }
                                 }

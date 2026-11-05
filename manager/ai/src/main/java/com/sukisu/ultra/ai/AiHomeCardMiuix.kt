@@ -158,7 +158,7 @@ fun AiHomeCardMiuix(onOpenChat: () -> Unit) {
                     // 整行按钮太占地方，右侧小圆箭头表示「进入」，点击整卡即可。
                     Box(
                         modifier = Modifier
-                            .size(32.dp)
+                            .size(38.dp)
                             .clip(CircleShape)
                             .background(colorScheme.primary),
                         contentAlignment = Alignment.Center,
@@ -167,7 +167,7 @@ fun AiHomeCardMiuix(onOpenChat: () -> Unit) {
                             imageVector = Icons.Rounded.ChevronRight,
                             contentDescription = stringResource(R.string.ai_open_chat),
                             tint = colorScheme.onPrimary,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(22.dp),
                         )
                     }
                 }

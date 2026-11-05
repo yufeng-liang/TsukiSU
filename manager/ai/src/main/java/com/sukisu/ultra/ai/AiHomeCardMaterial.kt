@@ -188,8 +188,8 @@ fun AiHomeCardMaterial(onOpenChat: () -> Unit) {
                             imageVector = Icons.Rounded.ChevronRight,
                             contentDescription = stringResource(R.string.ai_open_chat),
                             modifier = Modifier
-                                .padding(7.dp)
-                                .size(18.dp),
+                                .padding(8.dp)
+                                .size(22.dp),
                         )
                     }
                 }
