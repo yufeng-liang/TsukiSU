@@ -42,6 +42,7 @@ import androidx.compose.material.icons.rounded.LayersClear
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.RestartAlt
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.rounded.Policy
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Share
@@ -250,140 +251,27 @@ fun SettingPagerMiuix(
                         )
                     }
                 }
-                // GitHub 下载加速单独占一个 item：它和上面的通用卡不是同一组设置，
-                // 拆出来既避免一张卡里塞太多行，也给它自己留出锚点/重组边界。
-                // 状态和 Material 页共用，纯客户端配置，不需要 root。
+                // GitHub 下载加速单独占一个 item：设置页只留一行入口，模式/代理列表/测速
+                // 都收进独立子页，避免设置页被这一组配置撑得太长。
                 item {
-                    val proxyMode = ProxyMode.from(uiState.proxyMode)
-                    val proxyPinned = proxyMode == ProxyMode.PINNED
-                    val proxyHealthById = uiState.proxyHealth.associateBy { it.id }
-                    // 存下来的 id 可能已经不在列表里（下发源下线或改了 id）。这时下载会悄悄退回直连，
-                    // 界面却还停在「指定代理」上，所以要和「还没选」分开提示。
-                    // 列表本身为空时判断不了是 id 失效还是列表没拉到，交给下面的空态文案。
-                    val proxyPinnedMissing = proxyPinned &&
-                        uiState.proxyPinnedId.isNotBlank() &&
-                        uiState.proxyEntries.isNotEmpty() &&
-                        uiState.proxyEntries.none { it.id == uiState.proxyPinnedId }
                     AppCard(
                         modifier = Modifier
                             .padding(top = 12.dp)
                             .fillMaxWidth(),
                         colors = backgroundAwareCardColors(),
                     ) {
-                        Text(
-                            text = stringResource(R.string.settings_proxy_title),
-                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp),
-                            color = colorScheme.onBackground,
-                            fontSize = MiuixTheme.textStyles.body1.fontSize,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            text = stringResource(R.string.settings_proxy_summary),
-                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp),
-                            color = colorScheme.onSurfaceVariantSummary,
-                            fontSize = MiuixTheme.textStyles.footnote1.fontSize,
-                        )
-                        RadioButtonPreference(
-                            title = stringResource(R.string.settings_proxy_mode_official),
-                            selected = proxyMode == ProxyMode.OFFICIAL,
-                            onClick = { actions.onSetProxyMode(ProxyMode.OFFICIAL.value) },
-                        )
-                        RadioButtonPreference(
-                            title = stringResource(R.string.settings_proxy_mode_auto),
-                            selected = proxyMode == ProxyMode.AUTO,
-                            onClick = { actions.onSetProxyMode(ProxyMode.AUTO.value) },
-                        )
-                        RadioButtonPreference(
-                            title = stringResource(R.string.settings_proxy_mode_pinned),
-                            selected = proxyPinned,
-                            onClick = { actions.onSetProxyMode(ProxyMode.PINNED.value) },
-                        )
-                        // 选了「指定代理」但还没选具体哪一条、或选的那条已经失效时，
-                        // 说明现在实际走的是直连，别让人以为还在用某个代理。
-                        if (proxyPinned && (uiState.proxyPinnedId.isBlank() || proxyPinnedMissing)) {
-                            Text(
-                                text = stringResource(
-                                    if (proxyPinnedMissing) {
-                                        R.string.settings_proxy_pinned_missing
-                                    } else {
-                                        R.string.settings_proxy_pinned_hint
-                                    }
-                                ),
-                                modifier = Modifier.padding(
-                                    start = 16.dp,
-                                    end = 16.dp,
-                                    top = 2.dp,
-                                    bottom = 6.dp,
-                                ),
-                                color = colorScheme.onSurfaceVariantSummary,
-                                fontSize = MiuixTheme.textStyles.footnote1.fontSize,
-                            )
-                        }
-                        if (uiState.proxyEntries.isEmpty()) {
-                            Text(
-                                text = stringResource(R.string.settings_proxy_empty),
-                                modifier = Modifier.padding(
-                                    start = 16.dp,
-                                    end = 16.dp,
-                                    top = 2.dp,
-                                    bottom = 6.dp,
-                                ),
-                                color = colorScheme.onSurfaceVariantSummary,
-                                fontSize = MiuixTheme.textStyles.footnote1.fontSize,
-                            )
-                        }
-                        uiState.proxyEntries.forEach { entry ->
-                            val health = proxyHealthById[entry.id]
-                            RadioButtonPreference(
-                                title = entry.name,
-                                summary = entry.note.takeIf { it.isNotBlank() },
-                                selected = entry.id == uiState.proxyPinnedId,
-                                // 和 Material 版对齐：只有「指定代理」模式下点击才写入，避免别的模式下误改配置
-                                onClick = { if (proxyPinned) actions.onSetProxyPinnedId(entry.id) },
-                                // 只有「指定代理」模式下才允许选某一条
-                                enabled = proxyPinned,
-                                startAction = { MiuixProxyStatusDot(health, enabled = proxyPinned) },
-                                endActions = {
-                                    Text(
-                                        text = miuixProxyLatencyLabel(health),
-                                        // 行的可交互性跟着模式走，禁用时延迟文字一起降透明度；
-                                        // 这里不依赖库里的 LocalContentColor，改动只在本地可见。
-                                        color = colorScheme.onSurfaceVariantSummary.copy(
-                                            alpha = if (proxyPinned) 1f else 0.38f
-                                        ),
-                                        fontSize = MiuixTheme.textStyles.footnote1.fontSize,
-                                    )
-                                },
-                            )
-                        }
                         ArrowPreference(
-                            title = stringResource(
-                                if (uiState.proxyTesting) {
-                                    R.string.settings_proxy_testing
-                                } else {
-                                    R.string.settings_proxy_test_all
-                                }
-                            ),
+                            title = stringResource(R.string.settings_proxy_title),
+                            summary = stringResource(R.string.settings_proxy_entry_summary),
                             startAction = {
                                 Icon(
-                                    Icons.Rounded.Refresh,
+                                    Icons.Filled.Download,
                                     modifier = Modifier.padding(end = 6.dp),
-                                    contentDescription = stringResource(R.string.settings_proxy_test_all),
-                                    tint = colorScheme.onBackground,
+                                    contentDescription = stringResource(R.string.settings_proxy_title),
+                                    tint = colorScheme.onBackground
                                 )
                             },
-                            endActions = {
-                                if (uiState.proxyTesting) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.padding(start = 4.dp),
-                                        size = 16.dp,
-                                        strokeWidth = 2.dp,
-                                    )
-                                }
-                            },
-                            onClick = actions.onTestProxies,
-                            // 测速中禁用，避免重复点出好几轮并发探测
-                            enabled = !uiState.proxyTesting,
+                            onClick = actions.onOpenProxySettings
                         )
                     }
                 }

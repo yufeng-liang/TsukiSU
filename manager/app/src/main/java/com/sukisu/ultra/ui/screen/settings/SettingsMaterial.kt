@@ -235,155 +235,35 @@ fun SettingPagerMaterial(
             )
             }
 
-            // GitHub 下载加速：模式选择 + 代理测速。纯客户端配置，不需要 root，所以放在通用设置里。
-            val proxyMode = ProxyMode.from(uiState.proxyMode)
-            val proxyPinned = proxyMode == ProxyMode.PINNED
-            val proxyHealthById = uiState.proxyHealth.associateBy { it.id }
-            // 存下来的 id 可能已经不在列表里（下发源下线或改了 id）。这时下载会悄悄退回直连，
-            // 界面却还停在「指定代理」上，所以要和「还没选」分开提示。
-            // 列表本身为空时判断不了是 id 失效还是列表没拉到，这种情况交给下面的空态文案。
-            val proxyPinnedMissing = proxyPinned &&
-                uiState.proxyPinnedId.isNotBlank() &&
-                uiState.proxyEntries.isNotEmpty() &&
-                uiState.proxyEntries.none { it.id == uiState.proxyPinnedId }
+            // GitHub 下载加速：设置页只留一行入口，模式/代理列表/测速都收进独立子页，
+            // 避免设置页被这一组配置撑得太长。
             SegmentedColumn(
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
-                content = buildList {
-                    add {
-                        SegmentedListItem(
-                            headlineContent = {
-                                Text(
-                                    text = stringResource(R.string.settings_proxy_title),
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                            },
-                            supportingContent = {
-                                Text(stringResource(R.string.settings_proxy_summary))
-                            },
-                            leadingContent = {
-                                IconTile(
-                                    Icons.Filled.Download,
-                                    stringResource(R.string.settings_proxy_title)
-                                )
-                            }
-                        )
-                    }
-                    add {
-                        SegmentedRadioItem(
-                            title = stringResource(R.string.settings_proxy_mode_official),
-                            selected = proxyMode == ProxyMode.OFFICIAL,
-                            onClick = { actions.onSetProxyMode(ProxyMode.OFFICIAL.value) }
-                        )
-                    }
-                    add {
-                        SegmentedRadioItem(
-                            title = stringResource(R.string.settings_proxy_mode_auto),
-                            selected = proxyMode == ProxyMode.AUTO,
-                            onClick = { actions.onSetProxyMode(ProxyMode.AUTO.value) }
-                        )
-                    }
-                    add {
-                        SegmentedRadioItem(
-                            title = stringResource(R.string.settings_proxy_mode_pinned),
-                            selected = proxyPinned,
-                            onClick = { actions.onSetProxyMode(ProxyMode.PINNED.value) }
-                        )
-                    }
-                    // 选了「指定代理」但还没选具体哪一条、或选的那条已经失效时，
-                    // 明确告诉用户现在实际走的是直连，别让人以为还在用某个代理。
-                    if (proxyPinned && (uiState.proxyPinnedId.isBlank() || proxyPinnedMissing)) {
-                        add {
-                            SegmentedListItem(
-                                headlineContent = {
-                                    Text(
-                                        stringResource(
-                                            if (proxyPinnedMissing) {
-                                                R.string.settings_proxy_pinned_missing
-                                            } else {
-                                                R.string.settings_proxy_pinned_hint
-                                            }
-                                        )
-                                    )
-                                }
+                content = listOf {
+                    SegmentedListItem(
+                        onClick = actions.onOpenProxySettings,
+                        headlineContent = {
+                            Text(
+                                text = stringResource(R.string.settings_proxy_title),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        },
+                        supportingContent = {
+                            Text(stringResource(R.string.settings_proxy_entry_summary))
+                        },
+                        leadingContent = {
+                            IconTile(
+                                Icons.Filled.Download,
+                                stringResource(R.string.settings_proxy_title)
+                            )
+                        },
+                        trailingContent = {
+                            Icon(
+                                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                null
                             )
                         }
-                    }
-                    if (uiState.proxyEntries.isEmpty()) {
-                        add {
-                            SegmentedListItem(
-                                headlineContent = {
-                                    Text(stringResource(R.string.settings_proxy_empty))
-                                }
-                            )
-                        }
-                    }
-                    uiState.proxyEntries.forEach { entry ->
-                        add {
-                            val health = proxyHealthById[entry.id]
-                            SegmentedListItem(
-                                // 只有「指定代理」模式下这些行才是可点的
-                                onClick = if (proxyPinned) {
-                                    { actions.onSetProxyPinnedId(entry.id) }
-                                } else {
-                                    null
-                                },
-                                enabled = proxyPinned,
-                                headlineContent = { Text(entry.name) },
-                                supportingContent = {
-                                    if (entry.note.isNotBlank()) Text(entry.note)
-                                },
-                                leadingContent = {
-                                    RadioButton(
-                                        selected = entry.id == uiState.proxyPinnedId,
-                                        onClick = null,
-                                        enabled = proxyPinned
-                                    )
-                                },
-                                trailingContent = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(proxyLatencyLabel(health))
-                                        Spacer(Modifier.width(8.dp))
-                                        // 行的可交互性跟着「指定代理」模式走，状态点同样变灰
-                                        ProxyStatusDot(health, enabled = proxyPinned)
-                                    }
-                                }
-                            )
-                        }
-                    }
-                    add {
-                        SegmentedListItem(
-                            // 测速中禁用整行，避免重复点出好几轮并发探测
-                            onClick = if (uiState.proxyTesting) null else actions.onTestProxies,
-                            enabled = !uiState.proxyTesting,
-                            headlineContent = {
-                                Text(
-                                    stringResource(
-                                        if (uiState.proxyTesting) {
-                                            R.string.settings_proxy_testing
-                                        } else {
-                                            R.string.settings_proxy_test_all
-                                        }
-                                    )
-                                )
-                            },
-                            leadingContent = {
-                                IconTile(
-                                    Icons.Filled.Refresh,
-                                    stringResource(R.string.settings_proxy_test_all),
-                                    // 测速中整行禁用，图标也跟着灰掉，否则看着像还能再点一次
-                                    enabled = !uiState.proxyTesting
-                                )
-                            },
-                            trailingContent = {
-                                if (uiState.proxyTesting) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(18.dp),
-                                        strokeWidth = 2.dp
-                                    )
-                                }
-                            }
-                        )
-                    }
+                    )
                 }
             )
 
@@ -767,7 +647,7 @@ private fun TopBar(
 
 /** 延迟文案：未测 / 不可用 / 具体毫秒三种情况分开，避免把内部值 -1 ms 直接显示出来。 */
 @Composable
-private fun proxyLatencyLabel(health: ProxyHealth?): String = when {
+internal fun proxyLatencyLabel(health: ProxyHealth?): String = when {
     health == null -> stringResource(R.string.settings_proxy_untested)
     !health.reachable -> stringResource(R.string.settings_proxy_unavailable)
     else -> stringResource(R.string.settings_proxy_latency, health.latencyMs)
@@ -778,7 +658,7 @@ private fun proxyLatencyLabel(health: ProxyHealth?): String = when {
  * 行不可交互（非「指定代理」模式）时整体降透明度，跟 Material3 的 disabled 令牌对齐。
  */
 @Composable
-private fun ProxyStatusDot(health: ProxyHealth?, enabled: Boolean = true) {
+internal fun ProxyStatusDot(health: ProxyHealth?, enabled: Boolean = true) {
     val color = when {
         health == null -> MaterialTheme.colorScheme.outline
         health.reachable -> ProxyReachableGreen

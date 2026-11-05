@@ -53,6 +53,7 @@ import androidx.compose.foundation.pager.PagerDefaults.flingBehavior
 import androidx.compose.foundation.pager.PagerDefaults.pageNestedScrollConnection
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
+import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -76,6 +77,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -134,6 +136,8 @@ import com.sukisu.ultra.ui.screen.modulerepo.ModuleRepoScreen
 import com.sukisu.ultra.ui.screen.modulerepo.rememberColumnById
 import com.sukisu.ultra.ui.screen.scriptrun.ScriptRunScreen
 import com.sukisu.ultra.ui.screen.settings.SettingPager
+import com.sukisu.ultra.ui.screen.settings.ProxySettingsScreen
+import com.sukisu.ultra.ui.screen.settings.SettingsScreenActions
 import com.sukisu.ultra.ui.screen.settings.backup.BackupScreen
 import com.sukisu.ultra.ui.screen.settings.tools.ToolsScreen
 import com.sukisu.ultra.ui.screen.sulog.SulogScreen
@@ -364,6 +368,32 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
+                    // 「GitHub 下载加速」子页：设置页与它共用一个 SettingsViewModel，
+                    // 所以这里直接拿 activity 作用域的实例，状态与设置页保持同源。
+                    // SettingsScreenActions 其余回调子页用不到（默认空实现即可，data class 全带默认值）。
+                    val proxySettingsEntry: @Composable () -> Unit = label@{
+                        val activityOwner = LocalActivity.current as? ViewModelStoreOwner
+                        if (activityOwner == null) {
+                            // 拿不到 ViewModelStoreOwner 就什么都不渲染——这在正常流程里不会发生。
+                            return@label
+                        }
+                        val settingsViewModel: SettingsViewModel = viewModel(viewModelStoreOwner = activityOwner)
+                        val settingsUiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
+                        val settingsActions = SettingsScreenActions(
+                            onSetProxyMode = settingsViewModel::setProxyMode,
+                            onSetProxyPinnedId = settingsViewModel::setProxyPinnedId,
+                            onTestProxies = settingsViewModel::testProxies,
+                        )
+                        // 列表原本只在 ViewModel init 时读一次，进子页顺带重读一遍，
+                        // 「重进本页刷新」的承诺在子页同样成立。
+                        LaunchedEffect(Unit) { settingsViewModel.refreshProxyEntries() }
+                        ProxySettingsScreen(
+                            uiState = settingsUiState,
+                            actions = settingsActions,
+                            onBack = { navigator.pop() },
+                        )
+                    }
+
                     val navDisplay = @Composable {
                         val backgroundActive = uiState.customBackgroundUri.isNotEmpty()
                         NavDisplay(
@@ -510,6 +540,9 @@ class MainActivity : ComponentActivity() {
                             entry<Route.SuperUser>(swipeDismiss = swipeDismiss) { mainScreenEntry() }
                             entry<Route.Module>(swipeDismiss = swipeDismiss) { mainScreenEntry() }
                             entry<Route.Settings>(swipeDismiss = swipeDismiss) { mainScreenEntry() }
+                            entry<Route.ProxySettings>(swipeDismiss = swipeDismiss) {
+                                proxySettingsEntry()
+                            }
                             entry<Route.KernelFlash>(swipeDismiss = swipeDismiss)  { key ->
                                     KernelFlashScreen(
                                         key.kernelUri,
