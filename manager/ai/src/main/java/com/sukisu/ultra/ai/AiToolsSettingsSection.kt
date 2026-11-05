@@ -44,6 +44,9 @@ import kotlinx.coroutines.launch
  * 这里刻意只用 Material3 控件：设置页的 Material / Miuix 两套外壳都调用同一个 composable，
  * 避免再维护两份几乎相同的配置界面。两套主题的颜色由外层 theme 决定。
  */
+/** 设置项圆角：行高亮与输入框外层保持一致，避免同页出现 4/12/16dp 三种圆角。 */
+private val SettingsRowShape = RoundedCornerShape(12.dp)
+
 @Composable
 internal fun AiSearchSettingsSection(modifier: Modifier = Modifier) {
     var searchConfig by remember { mutableStateOf(AiSearchSettings.load()) }
@@ -116,12 +119,14 @@ internal fun AiMcpSettingsSection(modifier: Modifier = Modifier) {
                         onValueChange = { name = it },
                         label = { Text(stringResource(R.string.ai_mcp_name)) },
                         singleLine = true,
+                        shape = MaterialTheme.shapes.large,
                     )
                     OutlinedTextField(
                         value = url,
                         onValueChange = { url = it },
                         label = { Text(stringResource(R.string.ai_mcp_url)) },
                         singleLine = true,
+                        shape = MaterialTheme.shapes.large,
                     )
                 }
             },
@@ -171,9 +176,9 @@ private fun McpServerRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(SettingsRowShape)
             .clickable(onClick = onOpen)
-            .padding(horizontal = 4.dp, vertical = 10.dp),
+            .padding(horizontal = 4.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -231,12 +236,14 @@ private fun McpServerDetailDialog(
                     onValueChange = { name = it },
                     label = { Text(stringResource(R.string.ai_mcp_name)) },
                     singleLine = true,
+                    shape = MaterialTheme.shapes.large,
                 )
                 OutlinedTextField(
                     value = url,
                     onValueChange = { url = it },
                     label = { Text(stringResource(R.string.ai_mcp_url)) },
                     singleLine = true,
+                    shape = MaterialTheme.shapes.large,
                 )
                 OutlinedTextField(
                     value = headersText,
@@ -244,6 +251,7 @@ private fun McpServerDetailDialog(
                     label = { Text(stringResource(R.string.ai_mcp_headers)) },
                     placeholder = { Text(stringResource(R.string.ai_mcp_headers_hint)) },
                     minLines = 2,
+                    shape = MaterialTheme.shapes.large,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(
@@ -384,7 +392,7 @@ private fun SearchProviderRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(SettingsRowShape)
                 .clickable(onClick = onSelect)
                 .padding(horizontal = 4.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -425,6 +433,7 @@ private fun SearchProviderRow(
                     onValueChange = onApiKey,
                     label = { Text(stringResource(R.string.ai_search_api_key)) },
                     singleLine = true,
+                    shape = MaterialTheme.shapes.large,
                     modifier = Modifier.fillMaxWidth(),
                     supportingText = if (provider == AiSearchProvider.ANYSEARCH) {
                         { Text(stringResource(R.string.ai_search_key_optional)) }

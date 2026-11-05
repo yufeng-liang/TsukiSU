@@ -1088,6 +1088,9 @@ internal fun AiConfigEditorMaterial(
     }
 }
 
+/** 分组卡片圆角。 */
+private val SettingsCardShape = RoundedCornerShape(20.dp)
+
 /**
  * 设置页分组卡片：统一的圆角、内边距与标题样式，替代原先靠分隔线堆叠的长列表。
  *
@@ -1104,7 +1107,7 @@ private fun SettingsSection(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = SettingsCardShape,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
