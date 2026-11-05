@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
@@ -399,7 +400,8 @@ private fun SearchProviderRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = providerTitle(provider),
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
                     color = if (selected) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.onSurface,
                 )
