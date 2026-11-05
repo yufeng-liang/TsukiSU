@@ -407,8 +407,8 @@ private fun ColumnHeaderCard(column: RepoColumn) {
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // 顶栏大标题已经是专栏标题，这里不再重复一遍标题行；图标只交代「这一页在讲隐藏环境」。
-            ColumnIconBadge(Icons.Outlined.VisibilityOff)
+            // 顶栏大标题已经是专栏标题，这里不再重复一遍标题行；图标跟商店列表卡走同一套 accent 映射。
+            ColumnIconBadge(columnGlyph(column.accent))
             if (column.subtitle.isNotEmpty()) {
                 Text(
                     text = column.subtitle,
@@ -1012,14 +1012,14 @@ private fun ModuleColumnScreenMiuix(
 /**
  * 专栏头卡（Miuix 版）：图标块 + 副标题 + 描述 + 只读提示。
  *
- * 顶栏标题已经是专栏名，这里不再重复一遍标题行；图标只交代「这一页在讲隐藏环境」。
+ * 顶栏标题已经是专栏名，这里不再重复一遍标题行；图标跟商店列表卡走同一套 accent 映射。
  */
 @Composable
 private fun ModuleColumnHeaderMiuix(column: RepoColumn) {
     // insideMargin 就是 AppCard 自带的内边距（默认 0），这里给 16dp，content 里不再叠一层 padding。
     AppCard(modifier = Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            ColumnIconBadgeMiuix(Icons.Outlined.VisibilityOff)
+            ColumnIconBadgeMiuix(columnGlyph(column.accent))
             if (column.subtitle.isNotEmpty()) {
                 MiuixText(
                     text = column.subtitle,

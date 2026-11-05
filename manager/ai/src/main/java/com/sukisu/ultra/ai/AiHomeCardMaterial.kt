@@ -1,6 +1,8 @@
 package com.sukisu.ultra.ai
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,12 +27,18 @@ import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Card
+import androidx.compose.material3.ExposedDropdownMenu
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -44,13 +52,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sukisu.ultra.ai.R
 import kotlinx.coroutines.launch
@@ -293,7 +304,7 @@ internal fun AiConfigEditorMaterial(
         }
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         // ① 启用助手：卡片内容自带标题行，不再叠一层分组标题
         SettingsSection {
             AiToggleRow(
@@ -309,6 +320,7 @@ internal fun AiConfigEditorMaterial(
         SettingsSection(
             title = stringResource(R.string.ai_provider_group),
             subtitle = stringResource(R.string.ai_connection_trust),
+            contentSpacing = 8.dp,
         ) {
             // 头部一行放下「当前提供商 + 切换 / 新增 / 删除」，格式与模型做副标题，省掉原来三行独立操作区。
             Row(
@@ -369,27 +381,27 @@ internal fun AiConfigEditorMaterial(
                     }
                 }
             }
-            OutlinedTextField(
-                value = currentProvider?.name ?: "",
-                onValueChange = { value -> updateCurrentProvider { it.copy(name = value) } },
-                label = { Text(stringResource(R.string.ai_provider_name)) },
-                singleLine = true,
-                shape = MaterialTheme.shapes.large,
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-            )
-            Text(
-                text = stringResource(R.string.ai_format),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AiProviderFormat.entries.forEach { format ->
-                    FilterChip(
-                        selected = (currentProvider?.format ?: draft.format) == format,
-                        onClick = { updateCurrentProvider { it.copy(format = format) } },
-                        label = { Text(stringResource(format.labelRes())) },
-                    )
-                }
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = currentProvider?.name ?: "",
+                    onValueChange = { value -> updateCurrentProvider { it.copy(name = value) } },
+                    label = { Text(stringResource(R.string.ai_provider_name)) },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.large,
+                    modifier = Modifier.weight(1f),
+                )
+                AiDropdownField(
+                    label = stringResource(R.string.ai_format),
+                    selectedLabel = stringResource((currentProvider?.format ?: draft.format).labelRes()),
+                    options = AiProviderFormat.entries.map { stringResource(it.labelRes()) },
+                    onSelect = { index ->
+                        updateCurrentProvider { it.copy(format = AiProviderFormat.entries[index]) }
+                    },
+                    modifier = Modifier.weight(1f),
+                )
             }
             OutlinedTextField(
                 value = currentProvider?.endpoint ?: draft.endpoint,
@@ -447,7 +459,7 @@ internal fun AiConfigEditorMaterial(
                     )
                     Text(
                         text = AiSettings.activeModel(draft)?.name ?: draft.model,
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
                 TextButton(
@@ -503,20 +515,15 @@ internal fun AiConfigEditorMaterial(
                 }
             }
 
-            Text(
-                text = stringResource(R.string.ai_thinking_mode),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            AiDropdownField(
+                label = stringResource(R.string.ai_thinking_mode),
+                selectedLabel = stringResource(draft.thinkingMode.labelRes()),
+                options = AiThinkingMode.entries.map { stringResource(it.labelRes()) },
+                onSelect = { index ->
+                    onDraftChange(draft.copy(thinkingMode = AiThinkingMode.entries[index]))
+                },
+                modifier = Modifier.fillMaxWidth(),
             )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AiThinkingMode.entries.forEach { mode ->
-                    FilterChip(
-                        selected = draft.thinkingMode == mode,
-                        onClick = { onDraftChange(draft.copy(thinkingMode = mode)) },
-                        label = { Text(stringResource(mode.labelRes())) },
-                    )
-                }
-            }
             Text(
                 text = stringResource(R.string.ai_thinking_summary),
                 style = MaterialTheme.typography.bodySmall,
@@ -629,20 +636,15 @@ internal fun AiConfigEditorMaterial(
                 shape = MaterialTheme.shapes.large,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Text(
-                text = stringResource(R.string.ai_title_effort),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            AiDropdownField(
+                label = stringResource(R.string.ai_title_effort),
+                selectedLabel = stringResource(draft.titleEffort.titleEffortLabelRes()),
+                options = AiThinkingMode.entries.map { stringResource(it.titleEffortLabelRes()) },
+                onSelect = { index ->
+                    onDraftChange(draft.copy(titleEffort = AiThinkingMode.entries[index]))
+                },
+                modifier = Modifier.fillMaxWidth(),
             )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AiThinkingMode.entries.forEach { mode ->
-                    FilterChip(
-                        selected = draft.titleEffort == mode,
-                        onClick = { onDraftChange(draft.copy(titleEffort = mode)) },
-                        label = { Text(stringResource(mode.titleEffortLabelRes())) },
-                    )
-                }
-            }
         }
 
 
@@ -1086,6 +1088,9 @@ internal fun AiConfigEditorMaterial(
     }
 }
 
+/** 分组卡片圆角。 */
+private val SettingsCardShape = RoundedCornerShape(20.dp)
+
 /**
  * 设置页分组卡片：统一的圆角、内边距与标题样式，替代原先靠分隔线堆叠的长列表。
  *
@@ -1097,24 +1102,43 @@ internal fun AiConfigEditorMaterial(
 private fun SettingsSection(
     title: String? = null,
     subtitle: String? = null,
+    contentSpacing: Dp = 10.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    ElevatedCard(
+    Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = SettingsCardShape,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(contentSpacing),
         ) {
             if (title != null || subtitle != null) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     if (title != null) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
+                        // 分组标题：左侧短色条 + titleMedium，和卡片内部的 14sp 正文拉开层级。
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(width = 3.dp, height = 14.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(MaterialTheme.colorScheme.primary),
+                            )
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
                     if (subtitle != null) {
                         Text(
@@ -1126,6 +1150,49 @@ private fun SettingsSection(
                 }
             }
             content()
+        }
+    }
+}
+
+/**
+ * 只读下拉框：用于设置项里的枚举选择（接口格式、思考强度），比一排 chip 更省空间。
+ */
+@Composable
+private fun AiDropdownField(
+    label: String,
+    selectedLabel: String,
+    options: List<String>,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = modifier,
+    ) {
+        OutlinedTextField(
+            value = selectedLabel,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            shape = MaterialTheme.shapes.large,
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEachIndexed { index, option ->
+                DropdownMenuItem(
+                    text = { Text(option) },
+                    onClick = {
+                        expanded = false
+                        onSelect(index)
+                    },
+                )
+            }
         }
     }
 }
@@ -1189,7 +1256,7 @@ private fun AiToggleRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, style = MaterialTheme.typography.bodyLarge)
+            Text(text = title, style = MaterialTheme.typography.bodyMedium)
             Text(
                 text = summary,
                 style = MaterialTheme.typography.bodySmall,
