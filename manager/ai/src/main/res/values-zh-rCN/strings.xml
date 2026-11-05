@@ -317,4 +317,5 @@
     <string name="ai_search_desc_none">内置的 DuckDuckGo 兜底，不用配置。</string>
     <string name="ai_search_desc_firecrawl">云端搜索 API，到 firecrawl.dev 领 key。</string>
     <string name="ai_search_desc_anysearch">自建搜索网关，需要端点和 key。</string>
+    <string name="ai_jump_bottom">回到底部</string>
 </resources>
