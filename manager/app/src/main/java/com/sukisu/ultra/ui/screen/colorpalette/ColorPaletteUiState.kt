@@ -62,7 +62,7 @@ data class ColorPaletteUiState(
     val colorsSectionExpanded: Boolean = true,
     val showFullStatus: Boolean = false,
     val hideHomeWarnings: Boolean = false,
-    val showAiHomeCard: Boolean = false,
+    val showAiHomeCard: Boolean = true,
     val moduleDescriptionMaxLines: Int = 4,
     /** Resolved static overlay used by the preview; null when no overlay is active. */
     val appearance: ResolvedAppearance? = null,
