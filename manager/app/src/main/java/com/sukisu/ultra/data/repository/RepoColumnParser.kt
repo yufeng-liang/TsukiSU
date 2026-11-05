@@ -128,6 +128,7 @@ object RepoColumnParser {
 
     private fun parseEvidence(item: JSONObject): RepoColumnEvidence = RepoColumnEvidence(
         verifiedAt = item.text("verifiedAt"),
+        label = item.text("label"),
         device = item.text("device"),
         kernel = item.text("kernel"),
         source = item.text("source"),
@@ -136,6 +137,7 @@ object RepoColumnParser {
 
     private fun emptyEvidence(): RepoColumnEvidence = RepoColumnEvidence(
         verifiedAt = "",
+        label = "",
         device = "",
         kernel = "",
         source = "",

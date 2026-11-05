@@ -39,6 +39,19 @@ class RepoColumnRepositoryImpl(
      * 懒初始化：不在构造时碰 [ksuApp]（ViewModel 可能在某些预览/测试环境里先被构造）。
      * `newBuilder` 复制的是共享的连接池与线程池，不会额外建连接资源。
      */
+    companion object {
+        /**
+         * 进程级内存缓存：专栏文档很小（几十 KB），但每次进详情页都会新建一个 ViewModel，
+         * 没有缓存就要重新等一次网络。只在这里留一份，不做失效判断——调用方拿到缓存先渲染，
+         * 再自己决定要不要刷新。
+         */
+        @Volatile
+        private var cachedColumns: List<RepoColumn>? = null
+
+        /** 供上层同步取用：拿到就先渲染，网络回来再覆盖。 */
+        fun peekCached(): List<RepoColumn>? = cachedColumns
+    }
+
     private val client: OkHttpClient by lazy {
         ksuApp.okhttpClient.newBuilder()
             .callTimeout(Duration.ofSeconds(COLUMNS_CALL_TIMEOUT_SECONDS))
@@ -65,6 +78,7 @@ class RepoColumnRepositoryImpl(
             // 解析不出 columns 数组说明这份文档不是专栏（地址被换掉、CDN 返回了别的内容）。
             val columns = RepoColumnParser.parse(body)
                 ?: throw IOException("columns document has no column list")
+            cachedColumns = columns
             Result.success(columns)
         } catch (e: CancellationException) {
             // 取消不是失败：吞掉它会把这层变成一个「正常的失败结果」，上层就再也取消不掉了。

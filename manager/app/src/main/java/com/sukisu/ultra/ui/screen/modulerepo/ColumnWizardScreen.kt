@@ -1,20 +1,15 @@
 package com.sukisu.ultra.ui.screen.modulerepo
 
 import androidx.compose.foundation.shape.RoundedCornerShape
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.basic.TextButton as MiuixTextButton
-import top.yukonga.miuix.kmp.basic.ButtonDefaults as MiuixButtonDefaults
 import com.sukisu.ultra.ui.component.miuix.AppCard
 import com.sukisu.ultra.ui.UiMode
 import com.sukisu.ultra.ui.LocalUiMode
+import com.sukisu.ultra.ui.theme.AiAssistantMaterialTheme
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.layout.Spacer
 import com.sukisu.ultra.data.column.ColumnPreflight
 import com.sukisu.ultra.data.column.ColumnHealthReport
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Card
 import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -81,6 +76,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sukisu.ultra.R
 import com.sukisu.ultra.data.column.ColumnCheckResult
@@ -100,6 +96,9 @@ import kotlinx.coroutines.withContext
 
 /** 日志默认折叠时露出的行数。够看到「正在做什么 / 为什么失败」，又不至于把步骤列表挤到屏幕外。 */
 private const val LOG_COLLAPSED_LINES = 5
+
+/** 步骤说明默认折叠时露出的行数：note 常是一整段，全展开会把卡片撑得比标题高好几倍。 */
+private const val NOTE_COLLAPSED_LINES = 3
 
 /** 与 `RepoColumnStep.kind` 的取值一致；只有这个类型要在卡片里原文展示命令。 */
 private const val STEP_KIND_RUN_COMMAND = "runCommand"
@@ -146,25 +145,31 @@ fun ColumnWizardScreen(
 ) {
     // P0/P1 共用 Material 实现：向导只有「执行 / 跳过 / 回滚」三个动作，
     // 两套界面没有行为差异，没必要维护两份逐参转发的副本。
-    ColumnWizardScreenMaterial(
-        topic = topic,
-        state = state,
-        onRunStep = onRunStep,
-        onSkipStep = onSkipStep,
-        onRollback = onRollback,
-        onBack = onBack,
-        onProvideKeybox = onProvideKeybox,
-        onUpgradeStep = onUpgradeStep,
-        onRunAll = onRunAll,
-        onToggleOptIn = onToggleOptIn,
-        onMarkDone = onMarkDone,
-    )
-    state.preflight?.let { plan ->
-        ColumnPreflightDialog(
-            plan = plan,
-            onConfirm = onConfirmPreflight,
-            onDismiss = onDismissPreflight,
+    //
+    // Miuix 外壳只提供 MiuixTheme、没有 MaterialTheme，本页的 Material 组件会落回
+    // 框架默认配色（也就是那个用户认出来的紫）。这里补一层同源 MD3 调色板：
+    // Material 模式下 AiAssistantMaterialTheme 直通，不多套一层主题。
+    AiAssistantMaterialTheme {
+        ColumnWizardScreenMaterial(
+            topic = topic,
+            state = state,
+            onRunStep = onRunStep,
+            onSkipStep = onSkipStep,
+            onRollback = onRollback,
+            onBack = onBack,
+            onProvideKeybox = onProvideKeybox,
+            onUpgradeStep = onUpgradeStep,
+            onRunAll = onRunAll,
+            onToggleOptIn = onToggleOptIn,
+            onMarkDone = onMarkDone,
         )
+        state.preflight?.let { plan ->
+            ColumnPreflightDialog(
+                plan = plan,
+                onConfirm = onConfirmPreflight,
+                onDismiss = onDismissPreflight,
+            )
+        }
     }
 }
 
@@ -475,6 +480,9 @@ private fun WizardStepCard(
 ) {
     val step = uiState.step
     val skipped = uiState.status == ColumnStepStatus.SKIPPED
+    // note 常是整段说明，全展开会把卡片撑得很高：默认只看 3 行，超出时才给「展开 / 收起」。
+    var noteExpanded by rememberSaveable(step.id) { mutableStateOf(false) }
+    var noteOverflows by remember(step.id) { mutableStateOf(false) }
     WizardCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -520,7 +528,7 @@ private fun WizardStepCard(
                         Text(
                             text = stepKindLabel(step.kind),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                         )
                         Text(
                             text = stringResource(statusLabel(uiState.status)),
@@ -533,7 +541,32 @@ private fun WizardStepCard(
                             text = step.note,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = if (noteExpanded) Int.MAX_VALUE else NOTE_COLLAPSED_LINES,
+                            overflow = TextOverflow.Ellipsis,
+                            onTextLayout = { layout ->
+                                // 折叠时被省略号截断，说明 note 超过 3 行，才需要露出「展开」。
+                                if (!noteExpanded && !noteOverflows && layout.hasVisualOverflow) {
+                                    noteOverflows = true
+                                }
+                            },
                         )
+                        if (noteOverflows) {
+                            TextButton(
+                                onClick = { noteExpanded = !noteExpanded },
+                                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                            ) {
+                                Text(
+                                    text = stringResource(
+                                        if (noteExpanded) {
+                                            R.string.column_wizard_note_less
+                                        } else {
+                                            R.string.column_wizard_note_more
+                                        },
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
                     }
                     // 官方只肯走群/网盘发的检测器（春秋），商店给不了直链，但能把官方入口摆出来；
                     // 链接来自索引仓，只放行 http/https，点了也只是打开浏览器，不执行任何东西。
@@ -546,6 +579,10 @@ private fun WizardStepCard(
                                 }
                             },
                             contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                            // 纯文字链接：只有 primary 文字，不带按钮底色，也不额外占高度。
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.primary,
+                            ),
                         ) {
                             Text(
                                 text = stringResource(R.string.column_wizard_open_link),
@@ -621,19 +658,20 @@ private fun WizardStepActions(
             status == ColumnStepStatus.NEEDS_USER
         )
     if (runLabel == null && !canSkip) return
-    Column(
-        horizontalAlignment = Alignment.End,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         if (runLabel != null) {
-            Button(
+            // 动作改成紧凑的文字按钮：原来一个「标记为已完成」的实心胶囊比标题还抢眼。
+            TextButton(
                 onClick = if (status == ColumnStepStatus.NEEDS_USER) onMarkDone else onRun,
                 enabled = enabled && status != ColumnStepStatus.RUNNING,
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
             ) {
                 Text(
                     text = stringResource(runLabel),
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.labelMedium,
                 )
             }
         }
@@ -641,7 +679,7 @@ private fun WizardStepActions(
             TextButton(
                 onClick = onSkip,
                 enabled = enabled,
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
             ) {
                 Text(
                     text = stringResource(R.string.column_wizard_skip),
@@ -890,17 +928,8 @@ private fun WizardBottomBar(
     onStart: () -> Unit,
 ) {
     if (total == 0) return
-    if (LocalUiMode.current == UiMode.Miuix) {
-        WizardBottomBarMiuix(
-            total = total,
-            finished = finished,
-            started = started,
-            running = running,
-            onRunAll = onRunAll,
-            onStart = onStart,
-        )
-        return
-    }
+    // 本页两套 UI 模式走的都是 Material 实现（见文件头说明），底部条也必须是 Material3：
+    // 之前 Miuix 模式下这里整块换成 miuix 的实心色按钮，夹在 Material 卡片中间非常割裂。
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 3.dp) {
         Column(
             modifier = Modifier
@@ -914,16 +943,29 @@ private fun WizardBottomBar(
                 Button(
                     onClick = onRunAll,
                     enabled = !running,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
                 ) {
-                    Text(text = stringResource(R.string.column_wizard_run_all))
+                    Text(
+                        text = stringResource(R.string.column_wizard_run_all),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
                 }
                 TextButton(
                     onClick = onStart,
                     enabled = !running,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(text = stringResource(R.string.column_wizard_start_first))
+                    Text(
+                        text = stringResource(R.string.column_wizard_start_first),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
                 }
             } else {
                 Row(
@@ -943,9 +985,15 @@ private fun WizardBottomBar(
                 OutlinedButton(
                     onClick = onRunAll,
                     enabled = !running,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(24.dp),
                 ) {
-                    Text(text = stringResource(R.string.column_wizard_run_all_rest))
+                    Text(
+                        text = stringResource(R.string.column_wizard_run_all_rest),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
                 }
             }
         }
@@ -984,76 +1032,6 @@ private fun successGreen(): Color = if (MaterialTheme.colorScheme.surfaceBright.
  * 只回答一个问题：「这台机器之前是不是已经配过一部分隐藏环境」。九项探针都是只读的
  * 存在性检查，它看不出「配置对不对」，所以这里只作提示，绝不用来决定跳过哪一步。
  */
-
-/** Miuix 版底部操作条：按钮换成 miuix 的 TextButton，进度条用细线画。 */
-@Composable
-private fun WizardBottomBarMiuix(
-    total: Int,
-    finished: Int,
-    started: Boolean,
-    running: Boolean,
-    onRunAll: () -> Unit,
-    onStart: () -> Unit,
-) {
-    val fraction = if (total == 0) 0f else (finished.toFloat() / total).coerceIn(0f, 1f)
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MiuixTheme.colorScheme.surface)
-            .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (!started) {
-                MiuixTextButton(
-                    text = stringResource(R.string.column_wizard_run_all),
-                    onClick = onRunAll,
-                    enabled = !running,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = MiuixButtonDefaults.textButtonColorsPrimary(),
-                )
-                MiuixTextButton(
-                    text = stringResource(R.string.column_wizard_start_first),
-                    onClick = onStart,
-                    enabled = !running,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            } else {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(MiuixTheme.colorScheme.onSurface.copy(alpha = 0.10f)),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(fraction)
-                                .height(4.dp)
-                                .background(MiuixTheme.colorScheme.primary),
-                        )
-                    }
-                    Text(
-                        text = stringResource(R.string.column_wizard_progress, finished, total),
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                }
-                MiuixTextButton(
-                    text = stringResource(R.string.column_wizard_run_all_rest),
-                    onClick = onRunAll,
-                    enabled = !running,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = MiuixButtonDefaults.textButtonColorsPrimary(),
-                )
-            }
-        }
-    }
-}
 
 @Composable
 private fun ColumnHealthCard(report: ColumnHealthReport) {

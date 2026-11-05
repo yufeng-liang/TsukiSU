@@ -110,6 +110,13 @@ data class RepoColumnKeybox(
 data class RepoColumnEvidence(
     /** 验证日期，`yyyy-MM-dd`；解析不出来时 [ageDays] 返回 [Int.MAX_VALUE]。 */
     val verifiedAt: String,
+    /**
+     * 证据的口径说明，例如「依据 2026-08 的社区实测帖」。
+     *
+     * 单独一个字段是因为 [verifiedAt] 是那份实测帖的日期，不是「商店最近一次核对」的日期：
+     * 直接把它算成「N 天前验证」会让用户以为这套配置 N 天没更新过。
+     */
+    val label: String = "",
     val device: String,
     val kernel: String,
     /** 证据出处，例如「酷安 @泛彼柏舟y 73287937」。 */

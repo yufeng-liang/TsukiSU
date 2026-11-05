@@ -1619,8 +1619,11 @@
     <string name="home_hide_env_done_title">Hide environment completed</string>
     <string name="home_hide_env_done_summary">See what you gained, or pick another topic</string>
     <string name="module_column_verify_title">How to confirm</string>
-    <string name="module_column_evidence_age">Verified %1$d days ago</string>
+    <string name="module_column_evidence_verified">Verified</string>
+    <string name="module_column_evidence_stale">Earlier verification</string>
+    <string name="module_column_evidence_tested">tested</string>
     <string name="module_column_evidence_unknown">Verification date unknown</string>
+    <string name="module_column_details_show">View details</string>
     <string name="module_column_step_optional">Optional</string>
     <string name="module_column_step_kind_install_module">Install module</string>
     <string name="module_column_step_kind_install_app">Install app</string>
@@ -1644,6 +1647,8 @@
     <string name="column_wizard_log_title">Log</string>
     <string name="column_wizard_expand_log">Show all</string>
     <string name="column_wizard_collapse_log">Collapse</string>
+    <string name="column_wizard_note_more">Show more</string>
+    <string name="column_wizard_note_less">Show less</string>
     <string name="column_wizard_rollback">Roll back this run</string>
     <string name="column_wizard_rollback_confirm_title">Roll back this run?</string>
     <string name="column_wizard_rollback_confirm_body">This will uninstall the modules installed during this run and restore the files it wrote. A reboot is required for the uninstall to fully take effect. Continue?</string>

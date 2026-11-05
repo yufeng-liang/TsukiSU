@@ -1345,8 +1345,11 @@
     <string name="home_hide_env_done_title">隱藏環境已完成</string>
     <string name="home_hide_env_done_summary">看看成果，或挑別的主題繼續</string>
     <string name="module_column_verify_title">怎麼確認生效</string>
-    <string name="module_column_evidence_age">%1$d 天前驗證</string>
+    <string name="module_column_evidence_verified">已驗證</string>
+    <string name="module_column_evidence_stale">歷史驗證</string>
+    <string name="module_column_evidence_tested">實測帖</string>
     <string name="module_column_evidence_unknown">驗證時間未知</string>
+    <string name="module_column_details_show">查看詳情</string>
     <string name="module_column_step_optional">可選</string>
     <string name="module_column_step_kind_install_module">裝模組</string>
     <string name="module_column_step_kind_install_app">安裝應用</string>
@@ -1370,6 +1373,8 @@
     <string name="column_wizard_log_title">執行日誌</string>
     <string name="column_wizard_expand_log">展開全部</string>
     <string name="column_wizard_collapse_log">收起</string>
+    <string name="column_wizard_note_more">展開</string>
+    <string name="column_wizard_note_less">收起</string>
     <string name="column_wizard_rollback">回滾本次改動</string>
     <string name="column_wizard_rollback_confirm_title">確認回滾本次改動？</string>
     <string name="column_wizard_rollback_confirm_body">將解除安裝本次安裝的模組、還原本次寫過的文件；解除安裝需要重新啟動後才會完全生效。繼續？</string>
