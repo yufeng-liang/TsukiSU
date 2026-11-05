@@ -114,6 +114,8 @@ import com.sukisu.ultra.ui.util.formatRepoTime
 import com.sukisu.ultra.ui.util.isDownloadAvailable
 import com.sukisu.ultra.ui.util.rememberBlurBackdrop
 import com.sukisu.ultra.ui.util.rememberContentReady
+import top.yukonga.miuix.kmp.basic.Button as MiuixButton
+import top.yukonga.miuix.kmp.basic.ButtonDefaults as MiuixButtonDefaults
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
@@ -841,11 +843,7 @@ private fun MiuixCoolapkCommunityCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            TextButton(
-                text = stringResource(
-                    if (awaitingConfirm) R.string.module_repo_coolapk_confirm
-                    else R.string.module_repo_coolapk_enable
-                ),
+            MiuixButton(
                 onClick = {
                     if (awaitingConfirm) {
                         awaitingConfirm = false
@@ -854,7 +852,19 @@ private fun MiuixCoolapkCommunityCard(
                         awaitingConfirm = true
                     }
                 },
-            )
+                modifier = Modifier.height(34.dp),
+                cornerRadius = 17.dp,
+                colors = MiuixButtonDefaults.buttonColorsPrimary(),
+            ) {
+                Text(
+                    text = stringResource(
+                        if (awaitingConfirm) R.string.module_repo_coolapk_confirm
+                        else R.string.module_repo_coolapk_enable
+                    ),
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }

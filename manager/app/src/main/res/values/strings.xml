@@ -65,7 +65,7 @@
     <string name="module_repo_source_duplicate">Source already exists</string>
     <string name="module_repo_source_unreachable">No valid module store found at this URL</string>
     <string name="module_repo_source_bad_url">Invalid URL</string>
-    <string name="module_repo_coolapk_title">Coolapk community modules</string>
+    <string name="module_repo_coolapk_title">Coolapk community module source</string>
     <string name="module_repo_coolapk_summary">Uploaded by Coolapk users. No review; off by default.</string>
     <string name="module_repo_coolapk_enable">Turn on</string>
     <string name="module_repo_coolapk_confirm">Turn on</string>
@@ -74,7 +74,7 @@
     <string name="module_repo_filter_source_count">%1$s · %2$d</string>
     <string name="module_repo_filter_source_empty">No modules in this source right now.</string>
     <string name="module_repo_coolapk_enabled">On</string>
-    <string name="module_repo_coolapk_restore">Restore Coolapk community modules</string>
+    <string name="module_repo_coolapk_restore">Restore Coolapk community module source</string>
     <string name="module_repo_coolapk_restore_summary">You removed this source earlier. Restoring adds it back turned off — you still turn it on from the store.</string>
     <string name="module_repo_coolapk_post">Post</string>
     <string name="module_repo_coolapk_uploader">Uploader</string>

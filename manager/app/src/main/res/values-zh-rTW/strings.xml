@@ -216,7 +216,7 @@
     <string name="color_sakura">櫻花粉</string>
     <string name="network_offline">未連線至網路</string>
     <string name="module_repo_unavailable">模組倉庫目前無法使用，請稍後再試。</string>
-    <string name="module_repo_coolapk_title">酷安社群模組</string>
+    <string name="module_repo_coolapk_title">酷安社群模組源</string>
     <string name="module_repo_coolapk_summary">酷安使用者自發上傳，未經安全審核，預設關閉。</string>
     <string name="module_repo_coolapk_enable">開啟</string>
     <string name="module_repo_coolapk_confirm">確認開啟</string>
@@ -225,7 +225,7 @@
     <string name="module_repo_filter_source_count">%1$s · %2$d</string>
     <string name="module_repo_filter_source_empty">該來源下暫無模組</string>
     <string name="module_repo_coolapk_enabled">已開啟</string>
-    <string name="module_repo_coolapk_restore">恢復酷安社群模組</string>
+    <string name="module_repo_coolapk_restore">恢復酷安社群模組源</string>
     <string name="module_repo_coolapk_restore_summary">你之前刪掉了這個來源。恢復後仍是關閉狀態，需要在商店頁重新開啟。</string>
     <string name="module_repo_coolapk_post">來源</string>
     <string name="module_repo_coolapk_uploader">上傳者</string>

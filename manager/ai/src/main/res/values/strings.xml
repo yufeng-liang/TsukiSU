@@ -327,7 +327,18 @@
     <string name="ai_clear_history_action">Clear chat history</string>
     <string name="ai_search_get_key">Get API key</string>
     <string name="ai_search_key_optional">Optional. Leave empty for anonymous access: rate limits and daily quota are lower.</string>
-    <string name="ai_search_section_summary">Let the assistant search the live web. Pick one provider.</string>
+    <string name="ai_search_section_summary">Tries enabled providers in order, switching automatically on failure.</string>
     <string name="ai_state_enabled">Enabled</string>
     <string name="ai_state_disabled">Disabled</string>
+    <string name="ai_search_enable">Enable web search</string>
+    <string name="ai_search_enable_desc">Let the assistant search the live web with the providers below.</string>
+    <string name="ai_search_duckduckgo_fallback">Built-in DuckDuckGo fallback</string>
+    <string name="ai_search_duckduckgo_fallback_desc">If every provider fails, scrape DuckDuckGo results directly.</string>
+    <string name="ai_search_provider_enabled">Enable %1$s</string>
+    <string name="ai_search_test">Test</string>
+    <string name="ai_search_testing">Testing…</string>
+    <string name="ai_search_test_success">OK · %1$d ms · %2$d results</string>
+    <string name="ai_search_test_failure">Failed: %1$s</string>
+    <string name="ai_search_test_cost">A test makes one real search request.</string>
+    <string name="ai_search_drag_handle">Drag to reorder</string>
 </resources>
