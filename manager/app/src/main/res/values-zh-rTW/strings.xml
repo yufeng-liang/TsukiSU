@@ -1338,6 +1338,12 @@
     <string name="module_column_empty">這個專欄還沒有專題。</string>
     <string name="module_column_requires_title">前置條件</string>
     <string name="module_column_steps_title">步驟</string>
+    <string name="module_column_steps_show">查看 %1$d 個步驟</string>
+    <string name="module_column_steps_hide">收起步驟</string>
+    <string name="module_column_progress_done">已完成</string>
+    <string name="column_wizard_health_scanning">正在檢查裝置現況\u2026</string>
+    <string name="home_hide_env_done_title">隱藏環境已完成</string>
+    <string name="home_hide_env_done_summary">看看成果，或挑別的主題繼續</string>
     <string name="module_column_verify_title">怎麼確認生效</string>
     <string name="module_column_evidence_age">%1$d 天前驗證</string>
     <string name="module_column_evidence_unknown">驗證時間未知</string>

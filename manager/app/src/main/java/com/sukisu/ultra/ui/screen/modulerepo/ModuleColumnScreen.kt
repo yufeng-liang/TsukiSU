@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.IntrinsicSize
 import android.util.Log
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Build
@@ -35,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
@@ -42,6 +45,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,6 +65,8 @@ import com.sukisu.ultra.data.model.RepoColumnEvidence
 import com.sukisu.ultra.data.model.RepoColumnGuide
 import com.sukisu.ultra.data.model.RepoColumnStep
 import com.sukisu.ultra.data.model.RepoColumnTopic
+import com.sukisu.ultra.data.column.ColumnProgressEntry
+import com.sukisu.ultra.data.column.ColumnProgressStore
 import com.sukisu.ultra.data.model.ageDays
 import com.sukisu.ultra.data.model.freshness
 import com.sukisu.ultra.ui.LocalUiMode
@@ -71,6 +77,7 @@ import com.sukisu.ultra.ui.component.material.TopBarBackButton
 import com.sukisu.ultra.ui.component.material.expressiveTopAppBarColors
 import com.sukisu.ultra.ui.viewmodel.ModuleRepoViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * 商店列表头的专栏横滑区。
@@ -94,21 +101,30 @@ fun ModuleColumnStrip(
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(horizontal = 4.dp),
         )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(columns, key = { it.id }) { column ->
-                ColumnEntryCard(column = column, onClick = { onOpenColumn(column) })
+        if (columns.size == 1) {
+            // 只有一个专栏时横滑没有意义，卡片直接占满整行。
+            ColumnEntryCard(
+                column = columns.first(),
+                onClick = { onOpenColumn(columns.first()) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(columns, key = { it.id }) { column ->
+                    ColumnEntryCard(column = column, onClick = { onOpenColumn(column) })
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ColumnEntryCard(column: RepoColumn, onClick: () -> Unit) {
+private fun ColumnEntryCard(column: RepoColumn, onClick: () -> Unit, modifier: Modifier = Modifier) {
     // 入口卡走中性 surfaceContainer 底色，档位色只留在图标徽章上：
     // 之前整卡铺 accent 底色（root→error 淡粉）在浅色主题里显得脏，被用户点名重做。
     TonalCard(
         onClick = onClick,
-        modifier = Modifier.width(236.dp),
+        modifier = if (modifier != Modifier) modifier else Modifier.width(236.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
     ) {
         Column(
@@ -269,6 +285,20 @@ private fun ModuleColumnScreenMaterial(
     onOpenWizard: (RepoColumnTopic) -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+    // 每个专题的进度（做过哪步、第几步）只在进页面时读一次 SharedPreferences。
+    val progressByTopic = remember(column.id) {
+        ColumnProgressStore.snapshot()
+            .filter { it.columnId == column.id }
+            .associateBy { it.topicId }
+    }
+    // 引导卡按档位跳到对应专题：列表里 header(0)、guide(1)，专题从 2 开始。
+    val onGuideSelect: (String) -> Unit = { tier ->
+        val topic = column.topics.firstOrNull { it.tier == tier && it.steps.isNotEmpty() }
+        val index = topic?.let { column.topics.indexOf(it) }?.plus(2)
+        if (index != null) scope?.launch { listState.animateScrollToItem(index) }
+    }
 
     ExpressiveScaffold(
         topBar = {
@@ -282,6 +312,7 @@ private fun ModuleColumnScreenMaterial(
         contentWindowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal),
     ) { innerPadding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
@@ -293,10 +324,10 @@ private fun ModuleColumnScreenMaterial(
             item(key = "column-header") { ColumnHeaderCard(column) }
             // 「怎么选」排在专题列表之前：新用户先看这一块，再决定自己做哪一档。
             if (column.guide.isNotEmpty()) {
-                item(key = "column-guide") { ColumnGuideCard(column.guide) }
+                item(key = "column-guide") { ColumnGuideCard(column.guide, onSelectTopic = onGuideSelect) }
             }
             items(column.topics, key = { it.id }) { topic ->
-                TopicCard(topic = topic, onOpenWizard = onOpenWizard)
+                TopicCard(topic = topic, progress = progressByTopic[topic.id], onOpenWizard = onOpenWizard)
             }
             if (column.topics.isEmpty()) {
                 item(key = "column-empty") {
@@ -349,7 +380,11 @@ private fun ColumnHeaderCard(column: RepoColumn) {
 }
 
 @Composable
-private fun TopicCard(topic: RepoColumnTopic, onOpenWizard: (RepoColumnTopic) -> Unit) {
+private fun TopicCard(
+    topic: RepoColumnTopic,
+    progress: ColumnProgressEntry?,
+    onOpenWizard: (RepoColumnTopic) -> Unit,
+) {
     TonalCard(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
             // 左侧 4dp 档位色条：列表滚起来时也能一眼分清「这是哪一档」。
@@ -383,6 +418,18 @@ private fun TopicCard(topic: RepoColumnTopic, onOpenWizard: (RepoColumnTopic) ->
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            if (progress != null) {
+                TopicProgressChip(progress)
+            }
+            // 「开始执行」紧跟在摘要后面：详情页卡片很长，按钮沉底会让用户翻完 11 个步骤才找到它。
+            if (topic.steps.isNotEmpty()) {
+                FilledTonalButton(
+                    onClick = { onOpenWizard(topic) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(text = stringResource(R.string.column_wizard_open))
+                }
+            }
             if (topic.layers.isNotEmpty()) {
                 TagRow(topic.layers)
             }
@@ -394,12 +441,19 @@ private fun TopicCard(topic: RepoColumnTopic, onOpenWizard: (RepoColumnTopic) ->
                 )
             }
             if (topic.steps.isNotEmpty()) {
-                Text(
-                    text = stringResource(R.string.module_column_steps_title),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                topic.steps.forEachIndexed { index, step -> StepRow(index = index, step = step) }
+                var stepsExpanded by remember(topic.id) { mutableStateOf(false) }
+                TextButton(onClick = { stepsExpanded = !stepsExpanded }) {
+                    Text(
+                        text = if (stepsExpanded) {
+                            stringResource(R.string.module_column_steps_hide)
+                        } else {
+                            stringResource(R.string.module_column_steps_show, topic.steps.size)
+                        },
+                    )
+                }
+                if (stepsExpanded) {
+                    topic.steps.forEachIndexed { index, step -> StepRow(index = index, step = step) }
+                }
             }
             if (topic.verifyHints.isNotEmpty()) {
                 Section(
@@ -407,18 +461,29 @@ private fun TopicCard(topic: RepoColumnTopic, onOpenWizard: (RepoColumnTopic) ->
                     lines = topic.verifyHints,
                 )
             }
-            // 没有步骤的专题不进向导：点进去只会是一片空列表。
-            if (topic.steps.isNotEmpty()) {
-                FilledTonalButton(
-                    onClick = { onOpenWizard(topic) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(text = stringResource(R.string.column_wizard_open))
-                }
-            }
             }
         }
     }
+}
+
+@Composable
+private fun TopicProgressChip(progress: ColumnProgressEntry) {
+    val done = progress.done
+    val (label, color) = if (done) {
+        stringResource(R.string.module_column_progress_done) to MaterialTheme.colorScheme.primary
+    } else {
+        "${progress.settledSteps} / ${progress.totalSteps}" to MaterialTheme.colorScheme.tertiary
+    }
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = color,
+        modifier = Modifier
+            .clip(MaterialTheme.shapes.small)
+            .background(if (done) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.tertiaryContainer)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    )
 }
 
 @Composable
@@ -465,7 +530,7 @@ private fun TagRow(tags: List<String>) {
  * 文案全部来自索引（远程可改，不用发版），这里只负责排版，不替用户做判断。
  */
 @Composable
-private fun ColumnGuideCard(guide: List<RepoColumnGuide>) {
+private fun ColumnGuideCard(guide: List<RepoColumnGuide>, onSelectTopic: (String) -> Unit = {}) {
     TonalCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -483,6 +548,7 @@ private fun ColumnGuideCard(guide: List<RepoColumnGuide>) {
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .background(tint.copy(alpha = 0.10f))
+                        .clickable { onSelectTopic(item.tier) }
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {

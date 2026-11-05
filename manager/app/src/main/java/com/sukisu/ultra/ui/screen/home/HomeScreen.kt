@@ -130,14 +130,19 @@ fun HomePager(
         onReleaseUpdateClick = { startUpdate() },
         onOpenVersionSpoof = { navigator.push(Route.VersionSpoof) },
         onOpenAi = { navigator.push(Route.AiAssistant) },
-        // 一个专题在进行中就直接回向导接着做；多个进行中则回专栏详情页自己挑。
+        // 一个专题在进行中就直接回向导接着做；多个进行中或刚完成则回专栏详情页自己挑。
         onOpenHideEnv = {
-            val card = ColumnProgressStore.latest()
-            if (card != null) {
+            val running = ColumnProgressStore.latest()
+            if (running != null) {
                 if (ColumnProgressStore.runningCount() > 1) {
-                    navigator.push(Route.ModuleColumn(card.columnId))
+                    navigator.push(Route.ModuleColumn(running.columnId))
                 } else {
-                    navigator.push(Route.ColumnWizard(card.columnId, card.topicId))
+                    navigator.push(Route.ColumnWizard(running.columnId, running.topicId))
+                }
+            } else {
+                // 没有进行中的：卡片是 24 小时内刚完成的正反馈，点进去看专栏详情。
+                ColumnProgressStore.recentDone()?.let {
+                    navigator.push(Route.ModuleColumn(it.columnId))
                 }
             }
         },

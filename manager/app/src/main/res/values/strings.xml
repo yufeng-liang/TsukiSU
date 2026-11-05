@@ -1612,6 +1612,12 @@
     <string name="module_column_empty">This column has no topics yet.</string>
     <string name="module_column_requires_title">Before you start</string>
     <string name="module_column_steps_title">Steps</string>
+    <string name="module_column_steps_show">View %1$d steps</string>
+    <string name="module_column_steps_hide">Collapse steps</string>
+    <string name="module_column_progress_done">Completed</string>
+    <string name="column_wizard_health_scanning">Checking device status\u2026</string>
+    <string name="home_hide_env_done_title">Hide environment completed</string>
+    <string name="home_hide_env_done_summary">See what you gained, or pick another topic</string>
     <string name="module_column_verify_title">How to confirm</string>
     <string name="module_column_evidence_age">Verified %1$d days ago</string>
     <string name="module_column_evidence_unknown">Verification date unknown</string>

@@ -209,6 +209,7 @@ fun HomePagerMiuix(
                             HideEnvCardMiuix(
                                 entry = state.hideEnvCard,
                                 runningCount = state.hideEnvRunningCount,
+                                done = state.hideEnvCardDone,
                                 onClick = actions.onOpenHideEnv,
                             )
                         }
@@ -896,6 +897,7 @@ private fun previewHomeScreenState(
 private fun HideEnvCardMiuix(
     entry: ColumnProgressEntry,
     runningCount: Int,
+    done: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -908,14 +910,20 @@ private fun HideEnvCardMiuix(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = stringResource(R.string.home_hide_env_card_title),
+                        text = stringResource(
+                            if (done) R.string.home_hide_env_done_title else R.string.home_hide_env_card_title,
+                        ),
                         color = MiuixTheme.colorScheme.onSurface,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        text = entry.topicTitle,
+                        text = if (done) {
+                            stringResource(R.string.home_hide_env_done_summary)
+                        } else {
+                            entry.topicTitle
+                        },
                         color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                         fontSize = 14.sp,
                     )
@@ -932,7 +940,7 @@ private fun HideEnvCardMiuix(
                 )
             }
             Spacer(Modifier.height(10.dp))
-            Box(
+            if (!done) Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(4.dp)

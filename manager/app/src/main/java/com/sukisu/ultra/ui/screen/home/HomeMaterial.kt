@@ -182,6 +182,7 @@ fun HomePagerMaterial(
                 HideEnvCard(
                     entry = state.hideEnvCard,
                     runningCount = state.hideEnvRunningCount,
+                    done = state.hideEnvCardDone,
                     onClick = actions.onOpenHideEnv,
                 )
             }
@@ -868,13 +869,14 @@ private fun previewHomeScreenState(
 fun HideEnvCard(
     entry: ColumnProgressEntry,
     runningCount: Int,
+    done: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val fraction = (entry.settledSteps.toFloat() / entry.totalSteps.coerceAtLeast(1)).coerceIn(0f, 1f)
     TonalCard(
         modifier = modifier.fillMaxWidth(),
-        containerColor = MaterialTheme.colorScheme.primaryContainer,
+        containerColor = if (done) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primaryContainer,
         onClick = onClick,
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
@@ -896,20 +898,31 @@ fun HideEnvCard(
                 Spacer(Modifier.width(14.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = stringResource(R.string.home_hide_env_card_title),
+                        text = stringResource(
+                            if (done) R.string.home_hide_env_done_title else R.string.home_hide_env_card_title,
+                        ),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        text = entry.topicTitle,
+                        text = if (done) {
+                            stringResource(R.string.home_hide_env_done_summary)
+                        } else {
+                            entry.topicTitle
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primary) {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = if (done) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
+                ) {
                     Text(
-                        text = stringResource(R.string.home_hide_env_card_continue),
+                        text = stringResource(
+                            if (done) R.string.home_hide_env_done_title else R.string.home_hide_env_card_continue,
+                        ),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -917,7 +930,7 @@ fun HideEnvCard(
                 }
             }
             Spacer(Modifier.height(12.dp))
-            LinearProgressIndicator(
+            if (!done) LinearProgressIndicator(
                 progress = { fraction },
                 modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)),
                 color = MaterialTheme.colorScheme.primary,

@@ -217,6 +217,9 @@ class HomeViewModel(
             VersionSpoofProbe(supported = false, warningHidden = false, isSpoofed = false)
         }
 
+        // 主页隐藏环境卡片：有进行中的显示进行中；没有就看 24 小时内刚完成的（正反馈）。
+        val hideEnvEntry = ColumnProgressStore.latest() ?: ColumnProgressStore.recentDone()
+
         return HomeUiState(
             hideVersionMismatchWarning = versionSpoofProbe.warningHidden,
             isVersionSpoofSupported = versionSpoofProbe.supported,
@@ -249,7 +252,8 @@ class HomeViewModel(
             hideHomeCardDecoration = settingsRepo.hideHomeCardDecoration,
             homeCardStickers = existingHomeCardStickers(),
             showAiHomeCard = settingsRepo.showAiHomeCard,
-            hideEnvCard = ColumnProgressStore.latest(),
+            hideEnvCard = hideEnvEntry,
+            hideEnvCardDone = hideEnvEntry?.done == true,
             hideEnvRunningCount = ColumnProgressStore.runningCount(),
             showFullStatus = ksuApp.getSharedPreferences("settings", Context.MODE_PRIVATE)
                 .getBoolean("show_fingerprint", true),
