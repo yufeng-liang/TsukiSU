@@ -1621,7 +1621,7 @@
     <string name="module_column_step_kind_ask_user">手动操作</string>
 
     <!-- 专栏执行向导：逐步执行与自检 -->
-    <string name="column_wizard_open">跟着做</string>
+    <string name="column_wizard_open">开始执行</string>
     <string name="column_wizard_start">开始</string>
     <string name="column_wizard_start_first">开始第一步</string>
     <string name="column_wizard_run">执行</string>
@@ -1647,7 +1647,7 @@
     <string name="column_wizard_status_needs_user">需要你处理</string>
     <string name="column_wizard_confirm_title">执行前确认</string>
     <string name="column_wizard_cancel">取消</string>
-    <string name="column_wizard_readonly_note">点「一键执行」，能自动的步骤向导会替你跑完；会改到设备的地方都会先问过你。</string>
+    <string name="column_wizard_readonly_note">点下面的「开始执行」进向导：能自动的步骤会替你跑完，会改到设备的地方都会先问过你。</string>
     <string name="column_wizard_empty">这个专题还没有可执行的步骤。</string>
     <string name="column_wizard_open_link">打开官方页面</string>
     <string name="column_wizard_upgrade">升级到 %1$s</string>
@@ -1696,7 +1696,7 @@
     <string name="column_preflight_continue" translatable="true">继续</string>
     <string name="column_preflight_cancel" translatable="true">取消</string>
     <string name="column_health_title_short" translatable="true">设备现状</string>
-    <string name="column_health_score" translatable="true">%1$d / %2$d</string>
+    <string name="column_health_score" translatable="true">%2$d 项检查 · %1$d 项通过</string>
     <string name="column_health_day_level" translatable="true">日用级隐藏</string>
     <string name="column_health_integrity_level" translatable="true">谷歌三绿</string>
     <string name="column_health_ready" translatable="true">已就绪</string>

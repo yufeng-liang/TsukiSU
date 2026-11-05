@@ -1633,7 +1633,7 @@
     <string name="module_column_step_kind_ask_user">Do it manually</string>
 
     <!-- 专栏执行向导：逐步执行与自检 -->
-    <string name="column_wizard_open">Follow along</string>
+    <string name="column_wizard_open">Start</string>
     <string name="column_wizard_start">Start</string>
     <string name="column_wizard_start_first">Start the first step</string>
     <string name="column_wizard_run">Run</string>
@@ -1659,7 +1659,7 @@
     <string name="column_wizard_status_needs_user">Needs you</string>
     <string name="column_wizard_confirm_title">Confirm this step</string>
     <string name="column_wizard_cancel">Cancel</string>
-    <string name="column_wizard_readonly_note">Tap Run all and the wizard handles every step it can — anything that changes your device asks first.</string>
+    <string name="column_wizard_readonly_note">Tap Start to enter the guide: steps that can run automatically will be done for you, and anything that changes the device is asked first.</string>
     <string name="column_wizard_empty">This topic has no steps to run yet.</string>
     <string name="column_wizard_open_link">Open official page</string>
     <string name="column_wizard_upgrade">Upgrade to %1$s</string>
@@ -1708,7 +1708,7 @@
     <string name="column_preflight_continue" translatable="true">Continue</string>
     <string name="column_preflight_cancel" translatable="true">Cancel</string>
     <string name="column_health_title_short" translatable="true">Device check</string>
-    <string name="column_health_score" translatable="true">%1$d / %2$d</string>
+    <string name="column_health_score" translatable="true">%1$d of %2$d checks passed</string>
     <string name="column_health_day_level" translatable="true">Daily-use hiding</string>
     <string name="column_health_integrity_level" translatable="true">Google three-green</string>
     <string name="column_health_ready" translatable="true">Ready</string>
