@@ -169,6 +169,14 @@ class ModuleRepoViewModel(
      */
     private var columnsRefreshing = false
 
+    init {
+        // 进程内已有专栏缓存就先渲染出来，网络回来再覆盖。没有这一步，每进一次详情页都要
+        // 新建一个 ViewModel、重新等一整趟网络，看起来就是「永远在转圈」。
+        RepoColumnRepositoryImpl.peekCached()?.let { cached ->
+            _uiState.update { it.copy(columns = cached) }
+        }
+    }
+
     /**
      * 拉一趟专栏。
      *

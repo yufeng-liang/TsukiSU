@@ -1607,8 +1607,11 @@
     <string name="home_hide_env_done_title">隐藏环境已完成</string>
     <string name="home_hide_env_done_summary">看看成果，或挑别的专题继续</string>
     <string name="module_column_verify_title">怎么确认生效</string>
-    <string name="module_column_evidence_age">%1$d 天前验证</string>
+    <string name="module_column_evidence_verified">已验证</string>
+    <string name="module_column_evidence_stale">历史验证</string>
+    <string name="module_column_evidence_tested">实测帖</string>
     <string name="module_column_evidence_unknown">验证时间未知</string>
+    <string name="module_column_details_show">查看详情</string>
     <string name="module_column_step_optional">可选</string>
     <string name="module_column_step_kind_install_module">装模块</string>
     <string name="module_column_step_kind_install_app">安装应用</string>
@@ -1632,6 +1635,8 @@
     <string name="column_wizard_log_title">执行日志</string>
     <string name="column_wizard_expand_log">展开全部</string>
     <string name="column_wizard_collapse_log">收起</string>
+    <string name="column_wizard_note_more">展开</string>
+    <string name="column_wizard_note_less">收起</string>
     <string name="column_wizard_rollback">回滚本次改动</string>
     <string name="column_wizard_rollback_confirm_title">确认回滚本次改动？</string>
     <string name="column_wizard_rollback_confirm_body">将卸载本次安装的模块、还原本次写过的文件；卸载需要重启后才会彻底生效。继续？</string>
