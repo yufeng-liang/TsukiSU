@@ -314,4 +314,7 @@
     <string name="ai_mcp_tools_title">工具列表</string>
     <string name="ai_mcp_tools_empty">该服务器没有返回任何工具。</string>
     <string name="ai_mcp_remove_confirm">确定删除这个服务器？它的工具会从助手可用列表里消失。</string>
+    <string name="ai_search_desc_none">内置的 DuckDuckGo 兜底，不用配置。</string>
+    <string name="ai_search_desc_firecrawl">云端搜索 API，到 firecrawl.dev 领 key。</string>
+    <string name="ai_search_desc_anysearch">自建搜索网关，需要端点和 key。</string>
 </resources>

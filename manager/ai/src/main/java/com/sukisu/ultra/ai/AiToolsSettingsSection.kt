@@ -8,8 +8,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -23,6 +24,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -41,43 +44,24 @@ internal fun AiToolsSettingsSection(modifier: Modifier = Modifier) {
     var serverDetail by remember { mutableStateOf<AiMcpServer?>(null) }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = stringResource(R.string.ai_search_section),
-            style = MaterialTheme.typography.titleSmall,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             AiSearchProvider.entries.forEach { provider ->
-                AssistChip(
-                    onClick = {
+                SearchProviderRow(
+                    provider = provider,
+                    selected = searchConfig.provider == provider,
+                    config = searchConfig,
+                    onSelect = {
                         searchConfig = searchConfig.copy(provider = provider)
                         AiSearchSettings.save(searchConfig)
                     },
-                    label = { Text(providerLabel(provider)) },
-                    enabled = true,
-                )
-            }
-        }
-        if (searchConfig.provider != AiSearchProvider.NONE) {
-            OutlinedTextField(
-                value = searchConfig.apiKey,
-                onValueChange = {
-                    searchConfig = searchConfig.copy(apiKey = it)
-                    AiSearchSettings.save(searchConfig)
-                },
-                label = { Text(stringResource(R.string.ai_search_api_key)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            if (searchConfig.provider == AiSearchProvider.ANYSEARCH) {
-                OutlinedTextField(
-                    value = searchConfig.endpoint,
-                    onValueChange = {
-                        searchConfig = searchConfig.copy(endpoint = it)
+                    onApiKey = { value ->
+                        searchConfig = searchConfig.copy(apiKey = value)
                         AiSearchSettings.save(searchConfig)
                     },
-                    label = { Text(stringResource(R.string.ai_search_endpoint)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    onEndpoint = { value ->
+                        searchConfig = searchConfig.copy(endpoint = value)
+                        AiSearchSettings.save(searchConfig)
+                    },
                 )
             }
         }
@@ -383,3 +367,86 @@ internal fun parseHeaders(raw: String): Map<String, String> = raw
     }
     .filter { it.first.isNotBlank() }
     .toMap()
+
+/**
+ * 搜索服务商行：单选卡片样式（参考 RikkaHub 的 provider 列表）。
+ * 选中的整卡高亮 + 勾选角标；Firecrawl / AnySearch 选中时展开各自的输入框。
+ * NONE（内置 DuckDuckGo）没有输入框，只有一行说明。
+ */
+@Composable
+private fun SearchProviderRow(
+    provider: AiSearchProvider,
+    selected: Boolean,
+    config: AiSearchConfig,
+    onSelect: () -> Unit,
+    onApiKey: (String) -> Unit,
+    onEndpoint: (String) -> Unit,
+) {
+    ElevatedCard(
+        onClick = onSelect,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer
+            else MaterialTheme.colorScheme.surfaceVariant,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = providerTitle(provider),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                if (selected) {
+                    Icon(
+                        imageVector = Icons.Rounded.CheckCircle,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+            Text(
+                text = providerDescription(provider),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (selected && provider != AiSearchProvider.NONE) {
+                OutlinedTextField(
+                    value = config.apiKey,
+                    onValueChange = onApiKey,
+                    label = { Text(stringResource(R.string.ai_search_api_key)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            if (selected && provider == AiSearchProvider.ANYSEARCH) {
+                OutlinedTextField(
+                    value = config.endpoint,
+                    onValueChange = onEndpoint,
+                    label = { Text(stringResource(R.string.ai_search_endpoint)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun providerTitle(provider: AiSearchProvider): String = when (provider) {
+    AiSearchProvider.NONE -> stringResource(R.string.ai_search_provider_none)
+    AiSearchProvider.FIRECRAWL -> stringResource(R.string.ai_search_provider_firecrawl)
+    AiSearchProvider.ANYSEARCH -> stringResource(R.string.ai_search_provider_anysearch)
+}
+
+@Composable
+private fun providerDescription(provider: AiSearchProvider): String = when (provider) {
+    AiSearchProvider.NONE -> stringResource(R.string.ai_search_desc_none)
+    AiSearchProvider.FIRECRAWL -> stringResource(R.string.ai_search_desc_firecrawl)
+    AiSearchProvider.ANYSEARCH -> stringResource(R.string.ai_search_desc_anysearch)
+}
