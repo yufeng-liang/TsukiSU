@@ -54,7 +54,7 @@
     <string name="module_repo_source_unreachable">该地址未找到有效的模块商店</string>
     <string name="module_repo_source_bad_url">地址无效</string>
     <string name="module_repo_coolapk_title">酷安社区模块</string>
-    <string name="module_repo_coolapk_summary">由酷安用户自发上传的模块索引，没有经过任何安全审核，因此默认关闭，需要你自己开启。</string>
+    <string name="module_repo_coolapk_summary">酷安用户自发上传，未经安全审核，默认关闭。</string>
     <string name="module_repo_coolapk_enable">开启</string>
     <string name="module_repo_coolapk_confirm">我已了解，确认开启</string>
     <string name="module_repo_coolapk_disable">关闭</string>

@@ -66,7 +66,7 @@
     <string name="module_repo_source_unreachable">No valid module store found at this URL</string>
     <string name="module_repo_source_bad_url">Invalid URL</string>
     <string name="module_repo_coolapk_title">Coolapk community modules</string>
-    <string name="module_repo_coolapk_summary">A module index uploaded by Coolapk users on their own. No security review is performed, so it stays off until you turn it on.</string>
+    <string name="module_repo_coolapk_summary">Uploaded by Coolapk users. No review; off by default.</string>
     <string name="module_repo_coolapk_enable">Turn on</string>
     <string name="module_repo_coolapk_confirm">I understand — turn on</string>
     <string name="module_repo_coolapk_disable">Turn off</string>
