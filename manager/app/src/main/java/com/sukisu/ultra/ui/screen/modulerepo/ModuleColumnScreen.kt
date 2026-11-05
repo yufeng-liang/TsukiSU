@@ -96,6 +96,7 @@ import java.time.LocalDate
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Button as MiuixButton
+import top.yukonga.miuix.kmp.basic.ButtonDefaults as MiuixButtonDefaults
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator as MiuixCircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -1182,6 +1183,8 @@ private fun TopicCardMiuix(
                 MiuixButton(
                     onClick = { onOpenWizard(topic) },
                     modifier = Modifier.fillMaxWidth(),
+                    // miuix Button 默认是灰底次要样式，主操作要用 primary 才够醒目（与商店页一致）。
+                    colors = MiuixButtonDefaults.buttonColorsPrimary(),
                 ) {
                     MiuixText(text = stringResource(R.string.column_wizard_open))
                 }
