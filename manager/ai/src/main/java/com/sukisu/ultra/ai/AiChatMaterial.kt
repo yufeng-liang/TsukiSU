@@ -89,6 +89,12 @@ fun AiChatMaterial(
     actions: AiChatActions,
 ) {
     val listState = rememberLazyListState()
+    val contextLabel = remember(state.messages, state.config) {
+        val used = state.messages.sumOf { it.content.length } / 3
+        val window = AiSettings.activeModel(state.config)?.contextWindow ?: 0
+        if (window > 0 && used > 0) "上下文约 ${used / 1000}k / ${window / 1000}k" else ""
+    }
+
     var showSessions by remember { mutableStateOf(false) }
     BackHandler(enabled = state.pendingQuestion != null) {
         actions.onAnswerQuestion(null)
@@ -266,6 +272,7 @@ fun AiChatMaterial(
             }
 
             AiComposerMaterial(
+                contextLabel = contextLabel,
                 value = state.input,
                 isSending = state.isSending,
                 error = state.error,
@@ -889,6 +896,7 @@ private fun AiComposerMaterial(
     onSend: () -> Unit,
     onStop: () -> Unit,
     onDismissError: () -> Unit,
+    contextLabel: String = "",
 ) {
     Column(
         modifier = Modifier
@@ -898,6 +906,14 @@ private fun AiComposerMaterial(
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        if (contextLabel.isNotEmpty()) {
+            Text(
+                text = contextLabel,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp),
+            )
+        }
         AnimatedVisibility(visible = error != null) {
             Surface(
                 shape = RoundedCornerShape(16.dp),

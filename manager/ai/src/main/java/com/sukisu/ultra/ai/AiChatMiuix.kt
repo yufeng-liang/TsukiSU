@@ -112,6 +112,12 @@ fun AiChatMiuix(
         if (state.pendingQuestion != null) keyboardController?.hide()
     }
     var showSessions by remember { mutableStateOf(false) }
+    val contextLabel = remember(state.messages, state.config) {
+        val used = state.messages.sumOf { it.content.length } / 3
+        val window = AiSettings.activeModel(state.config)?.contextWindow ?: 0
+        if (window > 0 && used > 0) "上下文约 ${used / 1000}k / ${window / 1000}k" else ""
+    }
+
     val clearDialog = rememberAiConfirmDialog(AiUiMode.Miuix, onConfirm = actions.onClearHistory)
     val clearTitle = stringResource(R.string.ai_clear_history_title)
     val clearContent = stringResource(R.string.ai_clear_history_message)
@@ -303,6 +309,7 @@ fun AiChatMiuix(
             }
 
             AiComposerMiuix(
+                contextLabel = contextLabel,
                 value = state.input,
                 isSending = state.isSending,
                 error = state.error,
@@ -1021,6 +1028,7 @@ private fun AiComposerMiuix(
     onSend: () -> Unit,
     onStop: () -> Unit,
     onDismissError: () -> Unit,
+    contextLabel: String = "",
 ) {
     Column(
         modifier = Modifier
@@ -1029,6 +1037,14 @@ private fun AiComposerMiuix(
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        if (contextLabel.isNotEmpty()) {
+            androidx.compose.material3.Text(
+                text = contextLabel,
+                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = androidx.compose.ui.Modifier.padding(start = 4.dp),
+            )
+        }
         AnimatedVisibility(visible = error != null) {
             AiAppCard(
                 modifier = Modifier.fillMaxWidth(),
