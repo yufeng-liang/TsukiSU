@@ -1621,9 +1621,6 @@
     <string name="module_column_verify_title">How to confirm</string>
     <string name="module_column_evidence_age">Verified %1$d days ago</string>
     <string name="module_column_evidence_unknown">Verification date unknown</string>
-    <string name="module_column_risk_low">Low risk</string>
-    <string name="module_column_risk_medium">Medium risk</string>
-    <string name="module_column_risk_high">High risk</string>
     <string name="module_column_step_optional">Optional</string>
     <string name="module_column_step_kind_install_module">Install module</string>
     <string name="module_column_step_kind_install_app">Install app</string>
