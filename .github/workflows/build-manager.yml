@@ -198,6 +198,9 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          # 校验 job 只读缓存，避免把无关内容写进缓存
+          cache-read-only: true
 
       - name: Verify manager package single source
         run: python3 scripts/check_manager_package.py --gradle
@@ -231,9 +234,7 @@ jobs:
       matrix:
         include:
           - target: aarch64-linux-android
-          - target: x86_64-linux-android
           - target: armv7-linux-androideabi
-          - target: riscv64-linux-android
     uses: ./.github/workflows/ksud.yml
 
     with:
@@ -405,6 +406,9 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          # 缓存 Gradle 依赖与构建缓存，加速 :app:assembleRelease（实测占整条流水线近一半时间）
+          cache-read-only: false
 
       # --------------------------------------------------------
       # Download ksud artifacts
@@ -424,13 +428,6 @@ jobs:
           path: artifacts/ksud-armv7-linux-androideabi
 
 
-      - name: Download x86_64 ksud
-        uses: actions/download-artifact@v8
-        with:
-          name: ksud-x86_64-linux-android
-          path: artifacts/ksud-x86_64-linux-android
-
-
       # --------------------------------------------------------
       # Copy ksud into Manager
       # --------------------------------------------------------
@@ -441,7 +438,6 @@ jobs:
 
           mkdir -p app/src/main/jniLibs/arm64-v8a
           mkdir -p app/src/main/jniLibs/armeabi-v7a
-          mkdir -p app/src/main/jniLibs/x86_64
 
           ARM64_KSUD=$(find ../artifacts/ksud-aarch64-linux-android \
             -type f -name ksud | head -n 1)
@@ -449,12 +445,9 @@ jobs:
           ARM_KSUD=$(find ../artifacts/ksud-armv7-linux-androideabi \
             -type f -name ksud | head -n 1)
 
-          X86_64_KSUD=$(find ../artifacts/ksud-x86_64-linux-android \
-            -type f -name ksud | head -n 1)
 
           test -n "$ARM64_KSUD"
           test -n "$ARM_KSUD"
-          test -n "$X86_64_KSUD"
 
           # Randomize the packaged identity on every build so detectors cannot
           # pin stable anchors: the daemon/JNI library names and the component
@@ -540,9 +533,6 @@ jobs:
 
           cp -f "$ARM_KSUD" \
             "app/src/main/jniLibs/armeabi-v7a/$KSUD_LIB"
-
-          cp -f "$X86_64_KSUD" \
-            "app/src/main/jniLibs/x86_64/$KSUD_LIB"
 
 
       # --------------------------------------------------------
@@ -676,17 +666,6 @@ jobs:
           path: artifacts/ksud-armv7-linux-androideabi
 
 
-      - name: Download x86_64 ksud
-        uses: actions/download-artifact@v8
-        with:
-          name: ksud-x86_64-linux-android
-          path: artifacts/ksud-x86_64-linux-android
-      
-      - name: Download RISC-V ksud
-        uses: actions/download-artifact@v8
-        with:
-          name: ksud-riscv64-linux-android
-          path: artifacts/ksud-riscv64-linux-android
 
       # --------------------------------------------------------
       # Place Manager APK and ksud artifacts
@@ -711,8 +690,7 @@ jobs:
 
           mkdir -p target/aarch64-linux-android/release
           mkdir -p target/armv7-linux-androideabi/release
-          mkdir -p target/x86_64-linux-android/release
-          mkdir -p target/riscv64-linux-android/release
+
 
           ARM64_KSUD=$(find artifacts/ksud-aarch64-linux-android \
             -type f -name ksud | head -n 1)
@@ -720,16 +698,9 @@ jobs:
           ARM_KSUD=$(find artifacts/ksud-armv7-linux-androideabi \
             -type f -name ksud | head -n 1)
 
-          X86_64_KSUD=$(find artifacts/ksud-x86_64-linux-android \
-            -type f -name ksud | head -n 1)
-
-          RISCV64_KSUD=$(find artifacts/ksud-riscv64-linux-android \
-            -type f -name ksud | head -n 1)
 
           test -n "$ARM64_KSUD"
           test -n "$ARM_KSUD"
-          test -n "$X86_64_KSUD"
-          test -n "$RISCV64_KSUD"
 
           cp -f "$ARM64_KSUD" \
             target/aarch64-linux-android/release/ksud
@@ -737,11 +708,7 @@ jobs:
           cp -f "$ARM_KSUD" \
             target/armv7-linux-androideabi/release/ksud
 
-          cp -f "$X86_64_KSUD" \
-            target/x86_64-linux-android/release/ksud
 
-          cp -f "$RISCV64_KSUD" \
-            target/riscv64-linux-android/release/ksud
 
 
       # --------------------------------------------------------
@@ -817,8 +784,6 @@ jobs:
             -t release \
             -a arm64-v8a \
             -a armeabi-v7a \
-            -a x86_64 \
-            -a riscv64 \
             -K "$SIGN_KEYSTORE_FILE" \
             -A "$SIGN_KEY_ALIAS" \
             -P "$SIGN_KEYSTORE_PASSWORD" \
