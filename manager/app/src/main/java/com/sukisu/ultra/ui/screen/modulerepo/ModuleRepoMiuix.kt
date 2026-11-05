@@ -819,25 +819,29 @@ private fun MiuixCoolapkCommunityCard(
             .padding(horizontal = 12.dp),
         insideMargin = PaddingValues(16.dp),
     ) {
-        Text(
-            text = stringResource(R.string.module_repo_coolapk_title),
-            fontSize = 16.sp,
-            fontWeight = FontWeight(550),
-            color = colorScheme.onSurface,
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = stringResource(R.string.module_repo_coolapk_summary),
-            fontSize = 14.sp,
-            color = colorScheme.onSurfaceVariantSummary,
-        )
-        Spacer(Modifier.height(12.dp))
+        // 一行放完：渠道徽章 + 标题/说明 + 开启按钮；按钮不再独占一行，跟下面模块卡的密度对齐。
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            CoolapkBadge()
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.module_repo_coolapk_title),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight(550),
+                    color = colorScheme.onSurface,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = stringResource(R.string.module_repo_coolapk_summary),
+                    fontSize = 13.sp,
+                    color = colorScheme.onSurfaceVariantSummary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             TextButton(
-                modifier = Modifier.wrapContentWidth(Alignment.End),
                 text = stringResource(
                     if (awaitingConfirm) R.string.module_repo_coolapk_confirm
                     else R.string.module_repo_coolapk_enable

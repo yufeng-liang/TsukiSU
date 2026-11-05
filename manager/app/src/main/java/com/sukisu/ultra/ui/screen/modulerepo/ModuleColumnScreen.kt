@@ -183,21 +183,16 @@ private fun ColumnEntryCard(column: RepoColumn, onClick: () -> Unit, modifier: M
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    // 标题下面这行原来是「N 个专题」，换成副标题：一行说清这栏是干什么的，
+                    // 专题数量在详情页里看得到，入口卡上不重复占一行。
                     Text(
-                        text = stringResource(R.string.module_column_topic_count, column.topics.size),
+                        text = column.subtitle,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
-            }
-            if (column.subtitle.isNotEmpty()) {
-                Text(
-                    text = column.subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
             }
         }
     }
