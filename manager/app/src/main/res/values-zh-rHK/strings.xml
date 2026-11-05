@@ -659,6 +659,7 @@
     <string name="settings_proxy_pinned_missing">所選代理已無法使用，下載會退回官方直連。</string>
     <string name="settings_proxy_empty">暫時沒有可用代理，稍後重入本頁會自動重試。</string>
     <string name="column_wizard_run_all">一鍵執行</string>
+    <string name="column_wizard_opt_in">納入一鍵執行</string>
     <string name="column_wizard_run_all_rest">一鍵執行剩餘步驟</string>
     <string name="module_column_guide_title">你該從哪一檔開始</string>
     <string name="module_column_tier_day">日用級</string>

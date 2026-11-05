@@ -1687,6 +1687,7 @@
     <string name="settings_proxy_pinned_missing">The pinned proxy is no longer available; downloads fall back to the official direct connection.</string>
     <string name="settings_proxy_empty">No proxies are available right now. Come back to this page later to retry.</string>
     <string name="column_wizard_run_all">Run all</string>
+    <string name="column_wizard_opt_in">Include in run-all</string>
     <string name="column_wizard_run_all_rest">Run remaining steps</string>
     <string name="module_column_guide_title">Which level do you need?</string>
     <string name="module_column_tier_day">Day-to-day</string>
