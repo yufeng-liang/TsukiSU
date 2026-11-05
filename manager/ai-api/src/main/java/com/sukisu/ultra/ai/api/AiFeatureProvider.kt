@@ -22,6 +22,9 @@ interface AiFeatureProvider {
     ): @Composable () -> Unit
 
     fun homeCard(onOpenChat: () -> Unit): @Composable () -> Unit
+
+    /** Miuix 主题下的首页入口卡片；宿主页面本身就在 MiuixTheme 里。 */
+    fun homeCardMiuix(onOpenChat: () -> Unit): @Composable () -> Unit
 }
 
 /**
@@ -67,5 +70,10 @@ object AiFeatureBridge {
     @Composable
     fun HomeCard(onOpenChat: () -> Unit) {
         provider?.homeCard(onOpenChat)?.invoke()
+    }
+
+    @Composable
+    fun HomeCardMiuix(onOpenChat: () -> Unit) {
+        provider?.homeCardMiuix(onOpenChat)?.invoke()
     }
 }

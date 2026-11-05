@@ -295,7 +295,7 @@
     <string name="ai_search_section">Web search</string>
     <string name="ai_search_api_key">API key</string>
     <string name="ai_search_endpoint">Endpoint (AnySearch)</string>
-    <string name="ai_search_provider_none">Off</string>
+    <string name="ai_search_provider_none">Built-in DuckDuckGo</string>
     <string name="ai_search_provider_firecrawl">Firecrawl</string>
     <string name="ai_search_provider_anysearch">AnySearch</string>
     <string name="ai_mcp_section">MCP servers</string>
@@ -315,8 +315,14 @@
     <string name="ai_mcp_tools_title">Tools</string>
     <string name="ai_mcp_tools_empty">No tools returned by this server.</string>
     <string name="ai_mcp_remove_confirm">Remove this server? Its tools will disappear from the assistant.</string>
-    <string name="ai_search_desc_none">Built-in DuckDuckGo fallback. No setup needed.</string>
-    <string name="ai_search_desc_firecrawl">Cloud search API. Get a key at firecrawl.dev.</string>
-    <string name="ai_search_desc_anysearch">Self-hosted search gateway. Needs endpoint and key.</string>
+    <string name="ai_search_desc_none">No setup needed: the assistant scrapes DuckDuckGo results directly. Speed and reliability are lower than a dedicated API.</string>
+    <string name="ai_search_desc_firecrawl">Firecrawl is a web scraping and search API that returns clean page content. It needs an API key, and a free tier is available.</string>
+    <string name="ai_search_desc_anysearch">AnySearch is a real-time search service built for AI agents. It offers 1000 free calls per day, and an API key is optional.</string>
     <string name="ai_jump_bottom">Scroll to bottom</string>
+    <string name="ai_clear_history_action">Clear chat history</string>
+    <string name="ai_search_get_key">Get API key</string>
+    <string name="ai_search_key_optional">Optional. Leave empty to use anonymous access with a lower rate limit.</string>
+    <string name="ai_search_section_summary">Let the assistant search the live web. Pick one provider.</string>
+    <string name="ai_state_enabled">Enabled</string>
+    <string name="ai_state_disabled">Disabled</string>
 </resources>

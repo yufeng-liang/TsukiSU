@@ -39,15 +39,17 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.automirrored.rounded.Send
-import androidx.compose.material.icons.rounded.AddComment
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -157,33 +159,35 @@ fun AiChatMaterial(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = if (sessionTitle.isEmpty()) stringResource(R.string.ai_chat_title) else sessionTitle,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                navigationIcon = { AiTopBarBackButton(onClick = actions.onBack) },
-                actions = {
-                    TextButton(onClick = { showSessions = true }) {
+                    Column {
                         Text(
-                            text = stringResource(R.string.ai_sessions),
-                            style = MaterialTheme.typography.labelMedium,
+                            text = if (sessionTitle.isEmpty()) stringResource(R.string.ai_chat_title) else sessionTitle,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                    }
-                    if (state.config.model.isNotBlank()) {
-                        TextButton(onClick = actions.onOpenSettings) {
+                        // 模型名作为副标题；未选模型时不占位。
+                        if (state.config.model.isNotBlank()) {
                             Text(
-                                text = state.config.model.take(14),
-                                style = MaterialTheme.typography.labelMedium,
+                                text = state.config.model,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }
+                },
+                navigationIcon = { AiTopBarBackButton(onClick = actions.onBack) },
+                actions = {
+                    // 会话列表
+                    IconButton(onClick = { showSessions = true }) {
+                        Icon(Icons.Rounded.History, contentDescription = stringResource(R.string.ai_sessions))
+                    }
+                    // 设置
                     IconButton(onClick = actions.onOpenSettings) {
                         Icon(Icons.Rounded.Tune, contentDescription = stringResource(R.string.ai_settings))
                     }
+                    // 清空聊天记录
                     IconButton(onClick = {
                         clearDialog.showConfirm(
                             title = clearTitle,
@@ -191,7 +195,10 @@ fun AiChatMaterial(
                             confirm = clearConfirm,
                         )
                     }) {
-                        Icon(Icons.Rounded.AddComment, contentDescription = stringResource(R.string.ai_new_chat))
+                        Icon(
+                            Icons.Rounded.DeleteSweep,
+                            contentDescription = stringResource(R.string.ai_clear_history_action),
+                        )
                     }
                 },
                 colors = aiExpressiveTopAppBarColors(),
@@ -431,22 +438,38 @@ private fun AiSetupCardMaterial(
     onOpenSettings: () -> Unit,
 ) {
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.tertiaryContainer,
         contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        // 单行紧凑卡片：提示文字占满剩余宽度，尾部跟「打开设置」，整体约 56dp 高。
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
                 text = stringResource(
                     if (enabled) R.string.ai_setup_required else R.string.ai_setup_disabled
                 ),
                 style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.weight(1f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
-            Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.ai_open_settings))
+            TextButton(
+                onClick = onOpenSettings,
+                modifier = Modifier.height(36.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp),
+                // tertiaryContainer 上的 TextButton 默认用 primary，会变成浅色低对比；跟随容器内容色。
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                ),
+            ) {
+                Text(
+                    text = stringResource(R.string.ai_open_settings),
+                    style = MaterialTheme.typography.labelLarge,
+                )
             }
         }
     }
@@ -800,8 +823,8 @@ private fun AiCapabilityCards(
     )
     FlowRow(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
         maxItemsInEachRow = 2,
     ) {
         cards.forEach { (titleRes, promptRes, emoji) ->
@@ -812,15 +835,15 @@ private fun AiCapabilityCards(
                 modifier = Modifier.weight(1f),
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(text = emoji, style = MaterialTheme.typography.titleLarge)
+                    Text(text = emoji, style = MaterialTheme.typography.titleMedium)
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = title,
-                            style = MaterialTheme.typography.labelLarge,
+                            style = MaterialTheme.typography.labelMedium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -846,33 +869,40 @@ private fun AiWelcomeMaterial(
     onRefresh: () -> Unit,
 ) {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        // 头像与标题同一行，整体约 40dp 高。
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            AiAvatarImage(
-                modifier = Modifier.padding(12.dp),
-                size = 40.dp,
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            ) {
+                AiAvatarImage(
+                    modifier = Modifier.padding(4.dp),
+                    size = 32.dp,
+                )
+            }
+            Text(
+                text = stringResource(R.string.ai_welcome_title),
+                style = MaterialTheme.typography.titleMedium,
             )
         }
         Text(
-            text = stringResource(R.string.ai_welcome_title),
-            style = MaterialTheme.typography.titleLarge,
-            textAlign = TextAlign.Center,
-        )
-        Text(
             text = stringResource(R.string.ai_welcome_body),
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 24.dp),
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 8.dp),
         )
-        AiCapabilityCards(onSuggestion = onSuggestion, modifier = Modifier.padding(horizontal = 20.dp))
+        AiCapabilityCards(onSuggestion = onSuggestion, modifier = Modifier.padding(horizontal = 8.dp))
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -883,7 +913,7 @@ private fun AiWelcomeMaterial(
                     label = {
                         Text(
                             text = suggestion,
-                            maxLines = 3,
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                     },
@@ -906,7 +936,12 @@ private fun AiWelcomeMaterial(
                 )
             }
         }
-        TextButton(onClick = onRefresh) {
+        // 「换一批」保留文字：图标单独一行时表意不清，而紧凑 TextButton 仍只占一行。
+        TextButton(
+            onClick = onRefresh,
+            modifier = Modifier.height(36.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp),
+        ) {
             Icon(
                 imageVector = Icons.Rounded.Refresh,
                 contentDescription = null,
@@ -914,7 +949,8 @@ private fun AiWelcomeMaterial(
             )
             Text(
                 text = stringResource(R.string.ai_suggestions_refresh),
-                modifier = Modifier.padding(start = 6.dp),
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(start = 4.dp),
             )
         }
     }

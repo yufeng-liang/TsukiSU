@@ -78,7 +78,6 @@ import com.sukisu.ultra.ui.component.miuix.WarningCard
 import com.sukisu.ultra.ui.component.rebootlistpopup.RebootListPopupMiuix
 import com.sukisu.ultra.ui.component.statustag.StatusTag
 import com.sukisu.ultra.ai.api.AiFeatureBridge
-import com.sukisu.ultra.ui.theme.AiAssistantMaterialTheme
 import com.sukisu.ultra.ui.theme.LocalBackgroundImagePath
 import com.sukisu.ultra.ui.theme.LocalEnableBlur
 import com.sukisu.ultra.ui.theme.backgroundAwareCardColors
@@ -198,10 +197,8 @@ fun HomePagerMiuix(
                             WarningCard(customText(CustomTextKey.HOME_WARN_PREVIEW_MODE), level = WarningLevel.Notice)
                         }
                         if (state.showAiHomeCard && AiFeatureBridge.isAvailable) {
-                            // MD3 card inside the Miuix page: use the MD3 scheme of the appearance settings.
-                            AiAssistantMaterialTheme {
-                                AiFeatureBridge.HomeCard(onOpenChat = actions.onOpenAi)
-                            }
+                            // Miuix 页面用 Miuix 变体：卡片圆角、底色、按钮都跟随 MiuixTheme。
+                            AiFeatureBridge.HomeCardMiuix(onOpenChat = actions.onOpenAi)
                         }
                         if (state.hideEnvCard != null) {
                             // Miuix 专属实现：外壳用 AppCard（跟其它 miuix 卡片同一套圆角与底色），
