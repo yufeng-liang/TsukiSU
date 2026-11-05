@@ -316,12 +316,12 @@
     <string name="ai_mcp_tools_empty">该服务器没有返回任何工具。</string>
     <string name="ai_mcp_remove_confirm">确定删除这个服务器？它的工具会从助手可用列表里消失。</string>
     <string name="ai_search_desc_none">无需配置：助手直接抓取 DuckDuckGo 结果，速度和稳定性不如专业 API。</string>
-    <string name="ai_search_desc_firecrawl">Firecrawl 是网页抓取与搜索 API，能返回清洗后的网页正文。需要 API Key，有免费额度。</string>
-    <string name="ai_search_desc_anysearch">AnySearch 是面向 AI Agent 的实时搜索服务，每天 1000 次免费调用，API Key 可选。</string>
+    <string name="ai_search_desc_firecrawl">Firecrawl 是网页抓取与搜索 API，能返回清洗后的网页正文。需要 API Key；免费额度每月约 1000 信用点（约 500 次搜索或 1000 个页面）。</string>
+    <string name="ai_search_desc_anysearch">AnySearch 是面向 AI Agent 的实时搜索服务，免费账号每天 1000 次调用，API Key 可选。</string>
     <string name="ai_jump_bottom">回到底部</string>
     <string name="ai_clear_history_action">清空聊天记录</string>
     <string name="ai_search_get_key">获取 API Key</string>
-    <string name="ai_search_key_optional">可留空，匿名试用，限额更低。</string>
+    <string name="ai_search_key_optional">可留空，匿名访问的速率与每日额度更低。</string>
     <string name="ai_search_section_summary">让助手可以搜索实时网页，选择一个服务商。</string>
     <string name="ai_state_enabled">已启用</string>
     <string name="ai_state_disabled">未启用</string>
