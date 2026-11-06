@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.util.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.core.animation.doOnEnd
 import coil.compose.AsyncImage
@@ -148,7 +147,6 @@ import com.sukisu.ultra.ui.screen.template.AppProfileTemplateScreen
 import com.sukisu.ultra.ui.screen.templateeditor.TemplateEditorScreen
 import com.sukisu.ultra.ui.screen.umountmanager.UmountManagerScreen
 import com.sukisu.ultra.ui.screen.upload.ModuleUploadScreen
-import com.sukisu.ultra.ai.api.AiHomeCardBounds
 import com.sukisu.ultra.ui.theme.AiAssistantMaterialTheme
 import com.sukisu.ultra.ui.theme.KernelSUTheme
 import com.sukisu.ultra.ui.theme.LocalColorMode
@@ -157,7 +155,7 @@ import com.sukisu.ultra.ui.theme.LocalEnableFloatingBottomBar
 import com.sukisu.ultra.ui.theme.LocalEnableFloatingBottomBarBlur
 import com.sukisu.ultra.ui.theme.LocalEnableNavigationBadge
 import com.sukisu.ultra.ui.theme.LocalModuleDescriptionMaxLines
-import com.sukisu.ultra.ui.util.AiCardTransition
+import com.sukisu.ultra.ui.util.AiChatContainer
 import com.sukisu.ultra.ui.util.AiHomeBackgroundTransition
 import com.sukisu.ultra.ui.util.BackgroundNavTransition
 import com.sukisu.ultra.ui.util.ImageStorage
@@ -177,7 +175,6 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.nav.core.NavDisplay
-import top.yukonga.miuix.kmp.nav.core.LocalNavTransitionScope
 import top.yukonga.miuix.kmp.nav.core.NavDisplayEffects
 import top.yukonga.miuix.kmp.nav.core.rememberNavSystemCornerRadius
 import top.yukonga.miuix.kmp.nav.transition.NavSwipeDirection
@@ -401,6 +398,9 @@ class MainActivity : ComponentActivity() {
 
                     val navDisplay = @Composable {
                         val backgroundActive = uiState.customBackgroundUri.isNotEmpty()
+                        // 卡片展开过渡期间不要给下层首页蒙灰：容器本身就是从卡片长出来的，
+                        // 蒙灰会让卡片和动画看起来是“两个东西”。
+                        val topRouteForDim = navigator.backStack.lastOrNull()
                         NavDisplay(
                             backStack = navigator.backStack,
                             transition = if (backgroundActive) {
@@ -412,7 +412,11 @@ class MainActivity : ComponentActivity() {
                                 cornerClipRadius = rememberNavSystemCornerRadius(),
                                 // The dim scrim sits under the top destination even when idle; an
                                 // opaque page hid it, but a transparent one would stay darkened.
-                                dimAmount = if (backgroundActive) 0f else 0.5f,
+                                dimAmount = if (backgroundActive || topRouteForDim == Route.AiAssistant) {
+                                    0f
+                                } else {
+                                    0.5f
+                                },
                             ),
                             onBack = {
                                 when (val top = navigator.current()) {
@@ -571,8 +575,10 @@ class MainActivity : ComponentActivity() {
                                 entry<Route.CpuSpoof>(swipeDismiss = swipeDismiss) { CpuSpoofScreen() }
                                 entry<Route.VersionSpoof>(swipeDismiss = swipeDismiss) { VersionSpoofScreen() }
                                 entry<Route.AiAssistant>(
-                                    transition = AiCardTransition,
-                                    swipeDismiss = swipeDismiss,
+                                    // 容器变换由页面内的共享元素动画负责，nav 侧保持瞬时切换；
+                                    // 滑动返回也关掉，返回键交给 AiChatContainer 先播完收起动画再出栈。
+                                    transition = NavTransitions.None,
+                                    swipeDismiss = NavSwipeDirection.None,
                                 ) {
                                     if (!AiFeatureBridge.isAvailable) {
                                         LaunchedEffect(Unit) { navigator.pop() }
@@ -580,34 +586,15 @@ class MainActivity : ComponentActivity() {
                                         // The assistant is always MD3; inside the Miuix shell it needs
                                         // the MD3 colour scheme of the current appearance settings.
                                         AiAssistantMaterialTheme {
-                                            // 容器变换时让页面内容跟着卡片矩形一起长大：整页按卡片尺寸等比缩放，
-                                            // 再平移回卡片位置，和 AiCardTransition 的裁剪形状严格对齐。
-                                            val navScope = LocalNavTransitionScope.current
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxSize()
-                                                    .graphicsLayer {
-                                                        // 不夹紧：弹簧过冲时 expansion 会略越界，
-                                                        // 收起时页面会比卡片再小一点再回弹，展开时轻微放大后回落。
-                                                        val expansion = 1f + navScope.relativeDepth
-                                                        scaleX = lerp(
-                                                            AiHomeCardBounds.width, 1f, expansion,
-                                                        )
-                                                        scaleY = lerp(
-                                                            AiHomeCardBounds.height, 1f, expansion,
-                                                        )
-                                                        translationX =
-                                                            (AiHomeCardBounds.centerX - 0.5f) *
-                                                                (1f - expansion) * size.width
-                                                        translationY =
-                                                            (AiHomeCardBounds.centerY - 0.5f) *
-                                                                (1f - expansion) * size.height
-                                                    },
-                                            ) {
+                                            val isTop = navigator.backStack.lastOrNull() == Route.AiAssistant
+                                            AiChatContainer(
+                                                backEnabled = isTop,
+                                                onClose = {
+                                                    if (navigator.current() == Route.AiAssistant) navigator.pop()
+                                                },
+                                            ) { requestClose ->
                                                 AiFeatureBridge.ChatScreen(
-                                                    onClose = {
-                                                        if (navigator.current() == Route.AiAssistant) navigator.pop()
-                                                    },
+                                                    onClose = requestClose,
                                                     onOpenSettings = { navigator.push(Route.AiSettings) },
                                                     onNavigate = { target ->
                                                         when (target) {
