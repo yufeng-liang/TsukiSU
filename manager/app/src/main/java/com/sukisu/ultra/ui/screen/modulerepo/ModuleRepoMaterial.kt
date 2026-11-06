@@ -358,6 +358,8 @@ fun ModuleRepoScreenMaterial(
                                 filterOptions = filterOptions,
                                 selectedSourceId = state.selectedSourceId,
                                 columns = state.columns,
+                                columnsFailed = state.columnsFailed,
+                                onRetryColumns = actions.onRefresh,
                                 onOpenColumn = actions.onOpenColumn,
                                 onSetSourceEnabled = actions.onSetSourceEnabled,
                                 onSelectSource = actions.onSelectSource,
@@ -708,6 +710,8 @@ private fun RepoStoreHeader(
     filterOptions: List<RepoSourceFilterOption>,
     selectedSourceId: String?,
     columns: List<RepoColumn>,
+    columnsFailed: Boolean,
+    onRetryColumns: () -> Unit,
     onOpenColumn: (RepoColumn) -> Unit,
     onSetSourceEnabled: (String, Boolean) -> Unit,
     onSelectSource: (String?) -> Unit,
@@ -718,7 +722,12 @@ private fun RepoStoreHeader(
     ) {
         CoolapkCommunityEntryCard(source = coolapkSource, onSetSourceEnabled = onSetSourceEnabled)
         // 专栏排在筛选胶囊之前：它是内容入口，筛选是列表工具，工具不该挡在内容前面。
-        ModuleColumnStrip(columns = columns, onOpenColumn = onOpenColumn)
+        ModuleColumnStrip(
+            columns = columns,
+            onOpenColumn = onOpenColumn,
+            failed = columnsFailed,
+            onRetry = onRetryColumns,
+        )
         RepoSourceFilterRow(
             options = filterOptions,
             selectedSourceId = selectedSourceId,

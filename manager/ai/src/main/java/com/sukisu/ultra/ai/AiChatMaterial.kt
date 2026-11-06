@@ -10,6 +10,19 @@ import com.sukisu.ultra.ai.api.AiNavigationTarget
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.animation.core.tween
+import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -227,16 +240,26 @@ fun AiChatMaterial(
                     }
                 }
                 if (state.messages.isEmpty()) {
+                    // 问候 + 能力卡整块在剩余可视区里居中，并再上移 10%（视觉重心更舒服）。
                     item(key = "welcome") {
-                        AiWelcomeMaterial(
-                            suggestions = state.suggestions,
-                            loading = state.suggestionsLoading,
-                            onSuggestion = { text ->
-                                actions.onInputChange(text)
-                                actions.onSend()
-                            },
-                            onRefresh = actions.onRefreshSuggestions,
-                        )
+                        BoxWithConstraints(modifier = Modifier.fillParentMaxHeight().fillMaxWidth()) {
+                            val shiftUp = maxHeight * 0.10f
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                AiWelcomeMaterial(
+                                    suggestions = state.suggestions,
+                                    loading = state.suggestionsLoading,
+                                    onSuggestion = { text ->
+                                        actions.onInputChange(text)
+                                        actions.onSend()
+                                    },
+                                    onRefresh = actions.onRefreshSuggestions,
+                                    modifier = Modifier.offset(y = -shiftUp),
+                                )
+                            }
+                        }
                     }
                 }
                 items(state.messages, key = { it.id }) { message ->
@@ -817,49 +840,102 @@ private fun AiMessageBubbleMaterial(
 private fun AiCapabilityCards(
     onSuggestion: (String) -> Unit,
     modifier: Modifier = Modifier,
+    generation: Int = 0,
 ) {
-    val cards = listOf(
-        Triple(R.string.ai_home_card_device, R.string.ai_home_card_device_prompt, "\uD83D\uDCF1"),
-        Triple(R.string.ai_home_card_troubleshoot, R.string.ai_home_card_troubleshoot_prompt, "\uD83D\uDD0D"),
-        Triple(R.string.ai_home_card_module_pick, R.string.ai_home_card_module_pick_prompt, "\uD83E\uDDE9"),
-        Triple(R.string.ai_home_card_cleanup, R.string.ai_home_card_cleanup_prompt, "\uD83E\uDDF9"),
+    // 三套预置候选：即使没配模型，「换一批」也能真的换内容，不依赖网络。
+    val pages = listOf(
+        listOf(
+            Triple(R.string.ai_home_card_device, R.string.ai_home_card_device_prompt, "\uD83D\uDCF1"),
+            Triple(R.string.ai_home_card_troubleshoot, R.string.ai_home_card_troubleshoot_prompt, "\uD83D\uDD0D"),
+            Triple(R.string.ai_home_card_module_pick, R.string.ai_home_card_module_pick_prompt, "\uD83E\uDDE9"),
+            Triple(R.string.ai_home_card_cleanup, R.string.ai_home_card_cleanup_prompt, "\uD83E\uDDF9"),
+        ),
+        listOf(
+            Triple(R.string.ai_cap_status, R.string.ai_suggestion_status2, "\uD83D\uDCCA"),
+            Triple(R.string.ai_cap_troubleshoot, R.string.ai_suggestion_troubleshoot2, "\uD83E\uDDE9"),
+            Triple(R.string.ai_cap_lkm, R.string.ai_suggestion_lkm, "\u2699\uFE0F"),
+            Triple(R.string.ai_cap_modules2, R.string.ai_suggestion_modules2, "\uD83D\uDCE6"),
+        ),
+        listOf(
+            Triple(R.string.ai_cap_clean, R.string.ai_suggestion_cleanup2, "\uD83E\uDDF9"),
+            Triple(R.string.ai_cap_detect, R.string.ai_suggestion_detect, "\uD83D\uDEE1\uFE0F"),
+            Triple(R.string.ai_cap_backup, R.string.ai_suggestion_backup, "\uD83D\uDCBE"),
+            Triple(R.string.ai_cap_beginner, R.string.ai_suggestion_beginner, "\uD83C\uDF31"),
+        ),
     )
-    FlowRow(
+    val cards = pages[generation.mod(pages.size)].map { (title, prompt, emoji) ->
+        Triple(stringResource(title), stringResource(prompt), emoji)
+    }
+
+    // 两列错落排列：左列「高+矮」，右列「矮+高」。
+    // 滚动容器里高度无界，卡片用 weight 会塌成 0，所以用 heightIn(min) 给不同起跳高度，长文案再自己撑开。
+    AnimatedContent(
+        targetState = generation,
+        transitionSpec = {
+            (fadeIn(tween(220)) + slideInVertically(tween(260)) { it / 6 }) togetherWith
+                (fadeOut(tween(160)) + slideOutVertically(tween(220)) { -it / 8 })
+        },
+        label = "capability-cards",
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        maxItemsInEachRow = 2,
     ) {
-        cards.forEach { (titleRes, promptRes, emoji) ->
-            val title = stringResource(titleRes)
-            val prompt = stringResource(promptRes)
-            Card(
-                onClick = { onSuggestion(prompt) },
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Column(
                 modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(text = emoji, style = MaterialTheme.typography.titleMedium)
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.labelMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = prompt,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
+                AiCapabilityCard(cards[0], onSuggestion, Modifier.heightIn(min = 116.dp))
+                AiCapabilityCard(cards[2], onSuggestion, Modifier.heightIn(min = 92.dp))
             }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                AiCapabilityCard(cards[1], onSuggestion, Modifier.heightIn(min = 96.dp))
+                AiCapabilityCard(cards[3], onSuggestion, Modifier.heightIn(min = 112.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiCapabilityCard(
+    card: Triple<String, String, String>,
+    onSuggestion: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val (title, prompt, emoji) = card
+    Card(
+        onClick = { onSuggestion(prompt) },
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 11.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(text = emoji, fontSize = 22.sp)
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                text = prompt,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                // 不再截断：卡片高度由文案撑开，短文案也不会显得空。
+            )
         }
     }
 }
@@ -870,13 +946,15 @@ private fun AiWelcomeMaterial(
     loading: Boolean,
     onSuggestion: (String) -> Unit,
     onRefresh: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
+    // 每次「换一批」都递增，即使模型不可用、候选集来自本地预置，也有轮换动画。
+    var generation by remember { mutableIntStateOf(0) }
     Column(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = modifier.fillMaxWidth().padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // 头像与标题同一行，整体约 40dp 高。
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -901,28 +979,15 @@ private fun AiWelcomeMaterial(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
-            maxLines = 3,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 8.dp),
         )
-        AiCapabilityCards(onSuggestion = onSuggestion, modifier = Modifier.padding(horizontal = 8.dp))
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            suggestions.forEach { suggestion ->
-                SuggestionChip(
-                    onClick = { onSuggestion(suggestion) },
-                    label = {
-                        Text(
-                            text = suggestion,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    },
-                )
-            }
-        }
+        AiCapabilityCards(
+            onSuggestion = onSuggestion,
+            modifier = Modifier.padding(horizontal = 8.dp),
+            generation = generation,
+        )
         if (loading) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -939,11 +1004,14 @@ private fun AiWelcomeMaterial(
                 )
             }
         }
-        // 「换一批」保留文字：图标单独一行时表意不清，而紧凑 TextButton 仍只占一行。
-        TextButton(
-            onClick = onRefresh,
-            modifier = Modifier.height(36.dp),
-            contentPadding = PaddingValues(horizontal = 8.dp),
+        // 胶囊按钮比裸 TextButton 更像一个可点的动作，也不再单独占很宽的空白。
+        FilledTonalButton(
+            onClick = {
+                generation++
+                onRefresh()
+            },
+            modifier = Modifier.height(38.dp),
+            contentPadding = PaddingValues(horizontal = 14.dp),
         ) {
             Icon(
                 imageVector = Icons.Rounded.Refresh,
@@ -952,8 +1020,8 @@ private fun AiWelcomeMaterial(
             )
             Text(
                 text = stringResource(R.string.ai_suggestions_refresh),
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.padding(start = 4.dp),
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(start = 6.dp),
             )
         }
     }

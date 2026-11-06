@@ -345,4 +345,20 @@
     <string name="ai_search_test_query_hint">Query, e.g. today’s news</string>
     <string name="ai_search_test_run">Run test search</string>
     <string name="ai_search_test_no_result">No results returned.</string>
+    <string name="ai_suggestion_status2">Check this device’s current state</string>
+    <string name="ai_suggestion_modules2">Recommend modules that get updated often</string>
+    <string name="ai_suggestion_troubleshoot2">A module is installed but does nothing — how do I debug it?</string>
+    <string name="ai_suggestion_lkm">Explain the difference between LKM and GKI</string>
+    <string name="ai_suggestion_cleanup2">Help me clean module caches and logs</string>
+    <string name="ai_suggestion_detect">Which hidden-environment checks actually matter?</string>
+    <string name="ai_suggestion_backup">How do I back up my module configuration?</string>
+    <string name="ai_suggestion_beginner">Which modules are beginner friendly?</string>
+    <string name="ai_cap_status">Device status</string>
+    <string name="ai_cap_troubleshoot">Module debugging</string>
+    <string name="ai_cap_lkm">LKM vs GKI</string>
+    <string name="ai_cap_modules2">Module picks</string>
+    <string name="ai_cap_clean">Cache cleanup</string>
+    <string name="ai_cap_detect">Detections</string>
+    <string name="ai_cap_backup">Backup config</string>
+    <string name="ai_cap_beginner">Starter modules</string>
 </resources>

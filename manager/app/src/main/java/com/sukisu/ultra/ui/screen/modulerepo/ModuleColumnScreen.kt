@@ -43,6 +43,7 @@ import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
@@ -121,8 +122,10 @@ fun ModuleColumnStrip(
     columns: List<RepoColumn>,
     onOpenColumn: (RepoColumn) -> Unit,
     modifier: Modifier = Modifier,
+    failed: Boolean = false,
+    onRetry: () -> Unit = {},
 ) {
-    if (columns.isEmpty()) return
+    if (columns.isEmpty() && !failed) return
     // 左右边距由这里补，标题与卡片用同一个值，两行左边缘才对得齐、也不会贴到屏幕边：
     // Material 商店列表自己给了 16dp contentPadding，Miuix 列表不给外层内边距、相邻卡片各自留 12dp。
     val horizontalPadding = when (LocalUiMode.current) {
@@ -140,6 +143,29 @@ fun ModuleColumnStrip(
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
         )
+        if (columns.isEmpty()) {
+            // 拉失败时留一行出口：整块隐藏会让用户以为专栏没了（v4.1.4 的用户反馈就是这个）。
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.module_column_load_failed),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onRetry) {
+                    Text(
+                        text = stringResource(R.string.module_column_retry),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            }
+            return@Column
+        }
         if (columns.size == 1) {
             // 只有一个专栏时横滑没有意义，卡片直接占满整行。
             ColumnEntryCard(
@@ -159,12 +185,11 @@ fun ModuleColumnStrip(
 
 @Composable
 private fun ColumnEntryCard(column: RepoColumn, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    // 入口卡走中性 surfaceContainerHigh 底色，主色只在图标块上点一下：
-    // 之前整卡铺 accent 底色（root→error 淡粉）在浅色主题里显得脏，被用户点名重做。
+    // 底色跟商店里其他卡片一致（TonalCard 默认 surfaceBright）：之前单独用 surfaceContainerHigh
+    // 比酷安卡和模块卡都暗一档，同一个列表里显得像另一套设计。
     TonalCard(
         onClick = onClick,
         modifier = if (modifier != Modifier) modifier else Modifier.width(236.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
