@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.CacheControl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.File
 import java.io.IOException
 import java.time.Duration
 import kotlin.coroutines.cancellation.CancellationException
@@ -25,14 +26,25 @@ internal const val MAX_COLUMNS_RESPONSE_BYTES = 1L * 1024 * 1024
 internal const val COLUMNS_CALL_TIMEOUT_SECONDS = 15L
 
 /**
+ * 备用地址：jsDelivr 在国内直连经常不通（用户没开代理时专栏区就是空的），
+ * raw.githubusercontent 在不同网络下也不稳定。多试几个 jsDelivr 的接入点再判定失败。
+ */
+internal val OFFICIAL_COLUMNS_FALLBACK_URLS = listOf(
+    "https://fastly.jsdelivr.net/gh/SukiSU-Community/modules-repo@main/json/columns.json",
+    "https://gcore.jsdelivr.net/gh/SukiSU-Community/modules-repo@main/json/columns.json",
+    "https://raw.githubusercontent.com/SukiSU-Community/modules-repo/main/json/columns.json",
+)
+
+/**
  * 从官方索引仓拉专栏。
  *
- * 只读：不发任何写请求、不落盘、不执行文档里的步骤。P0 阶段专栏纯粹是展示内容，装不装由用户
- * 自己在模块页里一步步操作。
+ * 只读：不发任何写请求、不执行文档里的步骤。装不装由用户自己在模块页里一步步操作。
  */
 class RepoColumnRepositoryImpl(
     /** 索引地址；留成参数是为了让测试能把这一层指向本地假数据。 */
     private val url: String = OFFICIAL_COLUMNS_URL,
+    /** 主地址失败后依次尝试的备用地址；测试可以传空表只测主地址。 */
+    private val fallbackUrls: List<String> = OFFICIAL_COLUMNS_FALLBACK_URLS,
 ) : RepoColumnRepository {
 
     /**
@@ -48,8 +60,23 @@ class RepoColumnRepositoryImpl(
         @Volatile
         private var cachedColumns: List<RepoColumn>? = null
 
-        /** 供上层同步取用：拿到就先渲染，网络回来再覆盖。 */
-        fun peekCached(): List<RepoColumn>? = cachedColumns
+        /** 上次成功拉到的原始 JSON；断网时拿它兜底，至少让专栏区有东西可点。 */
+        private const val CACHE_FILE_NAME = "columns-cache.json"
+
+        private fun cacheFile(): File = File(ksuApp.cacheDir, CACHE_FILE_NAME)
+
+        /**
+         * 供上层同步取用：拿到就先渲染，网络回来再覆盖。
+         *
+         * 内存没有就退到磁盘缓存——用户上次联网看过的专栏，这次断网进来仍然看得到。
+         */
+        fun peekCached(): List<RepoColumn>? = cachedColumns ?: runCatching {
+            val file = cacheFile()
+            if (!file.isFile) return@runCatching null
+            val columns = RepoColumnParser.parse(file.readText()) ?: return@runCatching null
+            cachedColumns = columns
+            columns
+        }.getOrNull()
     }
 
     private val client: OkHttpClient by lazy {
@@ -59,32 +86,41 @@ class RepoColumnRepositoryImpl(
     }
 
     override suspend fun fetchColumns(): Result<List<RepoColumn>> = withContext(Dispatchers.IO) {
-        try {
-            // 用软检查（hasAnyNetwork）而不是要求 NET_CAPABILITY_VALIDATED 的硬检查：有些 ROM
-            // 从不把网络标记成已验证，硬检查会把明明能上网的机器判成离线。
-            if (!hasAnyNetwork(ksuApp)) throw IOException("no network available")
+        // 用软检查（hasAnyNetwork）而不是要求 NET_CAPABILITY_VALIDATED 的硬检查：有些 ROM
+        // 从不把网络标记成已验证，硬检查会把明明能上网的机器判成离线。
+        if (!hasAnyNetwork(ksuApp)) return@withContext Result.failure(IOException("no network available"))
 
-            // 不读本地缓存：jsDelivr 给这类 JSON 的 max-age 是 7 天，走共享客户端的磁盘缓存会
-            // 让运营改过的专栏文案要等一周才生效。noCache 只禁「读缓存」，仍会正常发请求。
-            val request = Request.Builder()
-                .url(url)
-                .cacheControl(CacheControl.Builder().noCache().build())
-                .build()
-            val body = client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
-                response.readIndexBody(MAX_COLUMNS_RESPONSE_BYTES)
+        var lastError: Exception? = null
+        for (candidate in (listOf(url) + fallbackUrls).distinct()) {
+            try {
+                val body = fetchBody(candidate)
+                // 解析不出 columns 数组说明这份文档不是专栏（地址被换掉、CDN 返回了别的内容）。
+                val columns = RepoColumnParser.parse(body)
+                    ?: throw IOException("columns document has no column list")
+                cachedColumns = columns
+                // 落盘：下次断网/不开代理时 peekCached() 能从磁盘捞回来。
+                runCatching { cacheFile().writeText(body) }
+                return@withContext Result.success(columns)
+            } catch (e: CancellationException) {
+                // 取消不是失败：吞掉它会把这层变成一个「正常的失败结果」，上层就再也取消不掉了。
+                throw e
+            } catch (e: Exception) {
+                lastError = e
             }
+        }
+        Result.failure(lastError ?: IOException("columns endpoint unreachable"))
+    }
 
-            // 解析不出 columns 数组说明这份文档不是专栏（地址被换掉、CDN 返回了别的内容）。
-            val columns = RepoColumnParser.parse(body)
-                ?: throw IOException("columns document has no column list")
-            cachedColumns = columns
-            Result.success(columns)
-        } catch (e: CancellationException) {
-            // 取消不是失败：吞掉它会把这层变成一个「正常的失败结果」，上层就再也取消不掉了。
-            throw e
-        } catch (e: Exception) {
-            Result.failure(e)
+    private fun fetchBody(target: String): String {
+        // 不读 okhttp 磁盘缓存：jsDelivr 给这类 JSON 的 max-age 是 7 天，走共享客户端的缓存会
+        // 让运营改过的专栏文案要等一周才生效。noCache 只禁「读缓存」，仍会正常发请求。
+        val request = Request.Builder()
+            .url(target)
+            .cacheControl(CacheControl.Builder().noCache().build())
+            .build()
+        return client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
+            response.readIndexBody(MAX_COLUMNS_RESPONSE_BYTES)
         }
     }
 }
