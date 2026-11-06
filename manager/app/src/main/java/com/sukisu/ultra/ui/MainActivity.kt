@@ -587,22 +587,21 @@ class MainActivity : ComponentActivity() {
                                                 modifier = Modifier
                                                     .fillMaxSize()
                                                     .graphicsLayer {
-                                                        val expansion =
-                                                            1f - (-navScope.relativeDepth).coerceIn(0f, 1f)
-                                                        if (expansion < 0.999f) {
-                                                            scaleX = lerp(
-                                                                AiHomeCardBounds.width, 1f, expansion,
-                                                            )
-                                                            scaleY = lerp(
-                                                                AiHomeCardBounds.height, 1f, expansion,
-                                                            )
-                                                            translationX =
-                                                                (AiHomeCardBounds.centerX - 0.5f) *
-                                                                    (1f - expansion) * size.width
-                                                            translationY =
-                                                                (AiHomeCardBounds.centerY - 0.5f) *
-                                                                    (1f - expansion) * size.height
-                                                        }
+                                                        // 不夹紧：弹簧过冲时 expansion 会略越界，
+                                                        // 收起时页面会比卡片再小一点再回弹，展开时轻微放大后回落。
+                                                        val expansion = 1f + navScope.relativeDepth
+                                                        scaleX = lerp(
+                                                            AiHomeCardBounds.width, 1f, expansion,
+                                                        )
+                                                        scaleY = lerp(
+                                                            AiHomeCardBounds.height, 1f, expansion,
+                                                        )
+                                                        translationX =
+                                                            (AiHomeCardBounds.centerX - 0.5f) *
+                                                                (1f - expansion) * size.width
+                                                        translationY =
+                                                            (AiHomeCardBounds.centerY - 0.5f) *
+                                                                (1f - expansion) * size.height
                                                     },
                                             ) {
                                                 AiFeatureBridge.ChatScreen(

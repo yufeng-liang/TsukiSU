@@ -13,7 +13,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import com.sukisu.ultra.ai.api.AiHomeCardBounds
 import top.yukonga.miuix.kmp.nav.runtime.NavChange
+import top.yukonga.miuix.kmp.nav.transition.NavMotion
 import top.yukonga.miuix.kmp.nav.transition.NavRole
+import top.yukonga.miuix.kmp.nav.transition.NavSettleSpec
 import top.yukonga.miuix.kmp.nav.transition.navGraphicsTransition
 
 /**
@@ -32,7 +34,32 @@ import top.yukonga.miuix.kmp.nav.transition.navGraphicsTransition
  * Top（settled）与 Covered（被设置页等盖住）不执行变换，避免从设置页返回时聊天页
  * 被错误裁切。
  */
+/**
+ * 容器变换用的动效曲线：欠阻尼弹簧，收尾时略微过冲一点，带回弹感。
+ * 阻尼比不压太低，避免真的像弹簧来回晃。
+ */
+private val AiNavMotion = NavMotion(
+    // 阻尼比 0.72 大约 4% 过冲：收尾时能看出一点回弹，又不会像弹簧来回晃。
+    commit = NavSettleSpec.Spring(
+        dampingRatio = 0.72f,
+        stiffness = 420f,
+        clampOvershoot = false,
+    ),
+    cancel = NavSettleSpec.Spring(
+        dampingRatio = 1f,
+        stiffness = 380f,
+        clampOvershoot = true,
+    ),
+    // 页面进出是程序化导航，用这一档；比手势 commit 再软一点，回缩更容易看见回弹。
+    programmatic = NavSettleSpec.Spring(
+        dampingRatio = 0.7f,
+        stiffness = 400f,
+        clampOvershoot = false,
+    ),
+)
+
 val AiCardTransition = navGraphicsTransition(
+    motion = AiNavMotion,
     // 默认过渡给下层盖一层 dim scrim，卡片刚点下时首页会先被压暗（像闪一下）；
     // 这里的页面很快完全盖住首页，不需要这层遮罩。
     scrim = { 0f },
@@ -47,7 +74,9 @@ val AiCardTransition = navGraphicsTransition(
         return@navGraphicsTransition
     }
 
-    val expansion = 1f - (-scope.relativeDepth).coerceIn(0f, 1f)
+    // 不夹紧到 0..1：弹簧过冲时 expansion 会略小于 0（回缩时比卡片再小一点）或略大于 1，
+    // 交给下面的形状/缩放去表现这点回弹。
+    val expansion = 1f + scope.relativeDepth
     shape = ExpandingCardShape(expansion)
     clip = true
     // 页面整体保持不透明，只靠裁剪形状展示「卡片长成页面」。
@@ -62,7 +91,7 @@ private class ExpandingCardShape(private val expansion: Float) : Shape {
         layoutDirection: LayoutDirection,
         density: Density,
     ): Outline {
-        val t = expansion.coerceIn(0f, 1f)
+        val t = expansion
         val cardLeft = (AiHomeCardBounds.centerX - AiHomeCardBounds.width / 2f) * size.width
         val cardTop = (AiHomeCardBounds.centerY - AiHomeCardBounds.height / 2f) * size.height
         val cardRight = (AiHomeCardBounds.centerX + AiHomeCardBounds.width / 2f) * size.width
@@ -75,7 +104,7 @@ private class ExpandingCardShape(private val expansion: Float) : Shape {
             bottom = lerp(cardBottom, size.height, t),
         )
         // 卡片圆角 28dp，展开到全屏时收成直角。
-        val radius = with(density) { lerp(28.dp.toPx(), 0f, t) }
+        val radius = with(density) { lerp(28.dp.toPx(), 0f, t).coerceAtLeast(0f) }
         val path = Path().apply {
             addRoundRect(RoundRect(rect, CornerRadius(radius)))
         }
@@ -87,7 +116,7 @@ private class ExpandingCardShape(private val expansion: Float) : Shape {
  * 首页作为容器变换的背景层：自身不动，也不要让默认过渡给被盖住的页面做透明度衰减，
  * 否则聊天页缩回卡片时会变成半透明，和首页叠影。
  */
-val AiHomeBackgroundTransition = navGraphicsTransition { scope ->
+val AiHomeBackgroundTransition = navGraphicsTransition(motion = AiNavMotion) { scope ->
     if (scope.role == NavRole.Covered) {
         alpha = 1f
     }
