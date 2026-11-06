@@ -888,8 +888,8 @@ class ColumnStepRunnerImpl(
     private suspend fun verify(step: RepoColumnStep): ColumnStepResult {
         val checkId = step.checkId.trim()
         if (checkId.isEmpty()) {
-            val message = step.note.trim().ifBlank { "请按说明自行确认" }
-            return ColumnStepResult(ColumnStepStatus.NEEDS_USER, message)
+            // note 已经在上面的说明区完整展示过，这里再抄一遍会让用户看到同一段话两次。
+            return ColumnStepResult(ColumnStepStatus.NEEDS_USER, "请按上面的说明自行确认")
         }
         if (checkId !in ColumnCheckIds.ALL) {
             return ColumnStepResult(
@@ -912,13 +912,12 @@ class ColumnStepRunnerImpl(
     }
 
     private fun reboot(step: RepoColumnStep): ColumnStepResult {
-        val message = step.note.trim().ifBlank { "请手动重启设备（向导不会替您重启）。" }
-        return ColumnStepResult(ColumnStepStatus.NEEDS_USER, message)
+        // 同上：note 已经在说明区展示，message 只讲这一步现在要做什么。
+        return ColumnStepResult(ColumnStepStatus.NEEDS_USER, "重启后回来继续")
     }
 
     private fun askUser(step: RepoColumnStep): ColumnStepResult {
-        val message = step.note.trim().ifBlank { "请确认后继续。" }
-        return ColumnStepResult(ColumnStepStatus.NEEDS_USER, message)
+        return ColumnStepResult(ColumnStepStatus.NEEDS_USER, "按上面的说明处理完后点「我已处理」")
     }
 
 
