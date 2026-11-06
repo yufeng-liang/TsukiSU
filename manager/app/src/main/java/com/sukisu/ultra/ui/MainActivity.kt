@@ -524,6 +524,8 @@ class MainActivity : ComponentActivity() {
                                             onDismissPreflight = { wizardViewModel.dismissPreflight() },
                                             onToggleOptIn = { step -> wizardViewModel.toggleOptIn(step.id) },
                                             onMarkDone = { step -> wizardViewModel.markDone(step) },
+                                            // 「进入 AI 助手」：向导里跑完检测拿到红项截图后直接跳过去排查。
+                                            onOpenAi = { navigator.push(Route.AiAssistant) },
                                             onBack = { navigator.pop() },
                                         )
                                     }

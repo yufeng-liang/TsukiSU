@@ -1667,6 +1667,7 @@
     <string name="column_wizard_readonly_note">Tap Start to enter the guide: steps that can run automatically will be done for you, and anything that changes the device is asked first.</string>
     <string name="column_wizard_empty">This topic has no steps to run yet.</string>
     <string name="column_wizard_open_link">Open official page</string>
+    <string name="column_wizard_open_ai">Open AI assistant</string>
     <string name="column_wizard_upgrade">Upgrade to %1$s</string>
     <string name="column_wizard_keybox_title">Key material (keybox.xml) required</string>
     <string name="column_wizard_keybox_body">Play Integrity needs a Google-attested keybox. The store never stores, forwards, or uploads it: the file you pick is written straight to your device\'s TrickyStore / TEESimulator folder.</string>

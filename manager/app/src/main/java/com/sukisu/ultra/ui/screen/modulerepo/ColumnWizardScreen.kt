@@ -47,6 +47,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -137,6 +138,9 @@ import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 /** 日志默认折叠时露出的行数。够看到「正在做什么 / 为什么失败」，又不至于把步骤列表挤到屏幕外。 */
 private const val LOG_COLLAPSED_LINES = 5
 
+/** 步骤 link 写成这个协议时表示「进 AI 助手」，不跳浏览器。 */
+private const val COLUMN_LINK_AI = "sukisu://ai"
+
 /** 步骤说明默认折叠时露出的行数：note 常是一整段，全展开会把卡片撑得比标题高好几倍。 */
 private const val NOTE_COLLAPSED_LINES = 3
 
@@ -178,6 +182,8 @@ fun ColumnWizardScreen(
     onToggleOptIn: (RepoColumnStep) -> Unit = {},
     /** 用户按提示自己做完了（重启回来 / 装好 APK / 自己确认过），把这一步标成完成。 */
     onMarkDone: (RepoColumnStep) -> Unit = {},
+    /** 步骤里挂了「进入 AI 助手」入口时点它：把用户送到助手页发截图排查红项。 */
+    onOpenAi: () -> Unit = {},
     /** 预检确认框上点「继续」。 */
     onConfirmPreflight: () -> Unit = {},
     /** 预检确认框上点「取消」。 */
@@ -198,6 +204,7 @@ fun ColumnWizardScreen(
             onRunAll = onRunAll,
             onToggleOptIn = onToggleOptIn,
             onMarkDone = onMarkDone,
+            onOpenAi = onOpenAi,
         )
 
         UiMode.Material -> ColumnWizardScreenMaterial(
@@ -212,6 +219,7 @@ fun ColumnWizardScreen(
             onRunAll = onRunAll,
             onToggleOptIn = onToggleOptIn,
             onMarkDone = onMarkDone,
+            onOpenAi = onOpenAi,
         )
     }
     // 预检框两套皮肤共用 Material 版：Miuix 没有可靠的对话框 API，硬造一个只会和行为约定打架。
@@ -256,6 +264,7 @@ private fun ColumnWizardScreenMiuix(
     onRunAll: () -> Unit,
     onToggleOptIn: (RepoColumnStep) -> Unit,
     onMarkDone: (RepoColumnStep) -> Unit,
+    onOpenAi: () -> Unit,
 ) {
     val colorScheme = MiuixTheme.colorScheme
     val scrollBehavior = MiuixScrollBehavior()
@@ -444,6 +453,7 @@ private fun ColumnWizardScreenMiuix(
                     onSkip = { onSkipStep(uiState.step) },
                     onUpgrade = { onUpgradeStep(uiState.step) },
                     onMarkDone = { onMarkDone(uiState.step) },
+                    onOpenAi = onOpenAi,
                 )
             }
             if (state.log.isNotEmpty()) {
@@ -692,6 +702,7 @@ private fun WizardStepCardMiuix(
     onSkip: () -> Unit,
     onUpgrade: () -> Unit,
     onMarkDone: () -> Unit,
+    onOpenAi: () -> Unit,
 ) {
     val colorScheme = MiuixTheme.colorScheme
     // 「打开官方页面」要用它 startActivity；Composable 里取一次，别在 onClick 里取。
@@ -701,7 +712,9 @@ private fun WizardStepCardMiuix(
     val statusColor = wizardStatusColorMiuix(uiState.status)
     // note 常是整段说明，全展开会把卡片撑得很高：默认只看 3 行，超出时才给「展开 / 收起」。
     var noteExpanded by rememberSaveable(step.id) { mutableStateOf(false) }
-    var noteOverflows by remember(step.id) { mutableStateOf(false) }
+    // 折叠时的截断点：-1 = 还没量过。量到之后固定下来，避免每帧重排；
+    // 有了它才能把「…展开」正好接在被截断的那一行末尾，而不是另起一行。
+    var noteCut by remember(step.id) { mutableStateOf(-1) }
     val canSkip = step.optional && (
         uiState.status == ColumnStepStatus.PENDING ||
             uiState.status == ColumnStepStatus.FAILED ||
@@ -773,44 +786,50 @@ private fun WizardStepCardMiuix(
                     }
                 }
                 if (step.note.isNotEmpty()) {
+                    // 与 Material 版同一套交互：「展开 / 收起」接在正文末尾、整段可点。
+                    val noteSuffix = stringResource(
+                        if (noteExpanded) R.string.column_wizard_note_less
+                        else R.string.column_wizard_note_more,
+                    )
+                    val noteReserve = noteSuffix.length + 1
+                    val noteDisplay = when {
+                        noteExpanded -> step.note + "  " + noteSuffix
+                        noteCut in 1 until step.note.length ->
+                            step.note.substring(0, noteCut) + "…" + noteSuffix
+                        else -> step.note
+                    }
                     MiuixText(
-                        text = step.note,
+                        text = noteDisplay,
+                        modifier = Modifier.clickable { noteExpanded = !noteExpanded },
                         color = colorScheme.onSurfaceVariantSummary,
                         fontSize = 13.sp,
                         lineHeight = 18.sp,
                         maxLines = if (noteExpanded) Int.MAX_VALUE else NOTE_COLLAPSED_LINES,
                         overflow = TextOverflow.Ellipsis,
                         onTextLayout = { layout ->
-                            // 折叠时被省略号截断，说明 note 超过 3 行，才需要露出「展开」。
-                            if (!noteExpanded && !noteOverflows && layout.hasVisualOverflow) {
-                                noteOverflows = true
+                            if (!noteExpanded && noteCut < 0 && layout.hasVisualOverflow) {
+                                noteCut = (layout.getLineEnd(NOTE_COLLAPSED_LINES - 1, true) - noteReserve)
+                                    .coerceAtLeast(1)
                             }
                         },
                     )
-                    if (noteOverflows) {
-                        MiuixTextButton(
-                            text = stringResource(
-                                if (noteExpanded) {
-                                    R.string.column_wizard_note_less
-                                } else {
-                                    R.string.column_wizard_note_more
-                                },
-                            ),
-                            onClick = { noteExpanded = !noteExpanded },
-                            minWidth = 0.dp,
-                            minHeight = 0.dp,
-                            insideMargin = PaddingValues(horizontal = 0.dp, vertical = 2.dp),
-                        )
-                    }
                 }
                 // 官方只肯走群/网盘发的检测器（春秋），商店给不了直链，但能把官方入口摆出来；
                 // 链接来自索引仓，只放行 http/https，点了也只是打开浏览器，不执行任何东西。
                 if (step.link.isNotEmpty()) {
+                    // 与 Material 版同一套：sukisu://ai 是站内「进入 AI 助手」，其余按外链处理。
+                    val isAiEntry = step.link == COLUMN_LINK_AI
                     MiuixTextButton(
-                        text = stringResource(R.string.column_wizard_open_link),
+                        text = stringResource(
+                            if (isAiEntry) R.string.column_wizard_open_ai else R.string.column_wizard_open_link,
+                        ),
                         onClick = {
-                            runCatching {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(step.link)))
+                            if (isAiEntry) {
+                                onOpenAi()
+                            } else {
+                                runCatching {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(step.link)))
+                                }
                             }
                         },
                         minWidth = 0.dp,
@@ -1275,6 +1294,7 @@ private fun ColumnWizardScreenMaterial(
     onRunAll: () -> Unit,
     onToggleOptIn: (RepoColumnStep) -> Unit,
     onMarkDone: (RepoColumnStep) -> Unit,
+    onOpenAi: () -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
@@ -1434,6 +1454,7 @@ private fun ColumnWizardScreenMaterial(
                     onSkip = { onSkipStep(uiState.step) },
                     onUpgrade = { onUpgradeStep(uiState.step) },
                     onMarkDone = { onMarkDone(uiState.step) },
+                    onOpenAi = onOpenAi,
                 )
             }
             if (state.log.isNotEmpty()) {
@@ -1557,12 +1578,15 @@ private fun WizardStepCard(
     onSkip: () -> Unit,
     onUpgrade: () -> Unit,
     onMarkDone: () -> Unit,
+    onOpenAi: () -> Unit,
 ) {
     val step = uiState.step
     val skipped = uiState.status == ColumnStepStatus.SKIPPED
     // note 常是整段说明，全展开会把卡片撑得很高：默认只看 3 行，超出时才给「展开 / 收起」。
     var noteExpanded by rememberSaveable(step.id) { mutableStateOf(false) }
-    var noteOverflows by remember(step.id) { mutableStateOf(false) }
+    // 折叠时的截断点：-1 = 还没量过。量到之后固定下来，避免每帧重排；
+    // 有了它才能把「…展开」正好接在被截断的那一行末尾，而不是另起一行。
+    var noteCut by remember(step.id) { mutableStateOf(-1) }
     val context = LocalContext.current
     val canSkip = step.optional && (
         uiState.status == ColumnStepStatus.PENDING ||
@@ -1641,47 +1665,53 @@ private fun WizardStepCard(
                 }
             }
             if (step.note.isNotEmpty()) {
+                // 「展开 / 收起」不进布局，直接接在正文末尾：折叠时它落在我截断的那一行，
+                // 展开时跟在最后一句后面。整段文字都能点，不用去瞄一个小按钮。
+                val noteSuffix = stringResource(
+                    if (noteExpanded) R.string.column_wizard_note_less
+                    else R.string.column_wizard_note_more,
+                )
+                val noteReserve = noteSuffix.length + 1
+                val noteDisplay = when {
+                    noteExpanded -> step.note + "  " + noteSuffix
+                    noteCut in 1 until step.note.length ->
+                        step.note.substring(0, noteCut) + "…" + noteSuffix
+                    else -> step.note
+                }
                 Text(
-                    text = step.note,
+                    text = noteDisplay,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = if (noteExpanded) Int.MAX_VALUE else NOTE_COLLAPSED_LINES,
                     overflow = TextOverflow.Ellipsis,
                     onTextLayout = { layout ->
-                        // 折叠时被省略号截断，说明 note 超过 3 行，才需要露出「展开」。
-                        if (!noteExpanded && !noteOverflows && layout.hasVisualOverflow) {
-                            noteOverflows = true
+                        // 第一遍按全文量：被省略号截断就记住第三行的可见末尾，留出后缀宽度再截，
+                        // 第二遍拼上「…展开」正好填满那一行，不会再被省略号吃掉。
+                        if (!noteExpanded && noteCut < 0 && layout.hasVisualOverflow) {
+                            noteCut = (layout.getLineEnd(NOTE_COLLAPSED_LINES - 1, true) - noteReserve)
+                                .coerceAtLeast(1)
                         }
                     },
+                    modifier = Modifier.clickable { noteExpanded = !noteExpanded },
                 )
-                if (noteOverflows) {
-                    TextButton(
-                        onClick = { noteExpanded = !noteExpanded },
-                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
-                    ) {
-                        Text(
-                            text = stringResource(
-                                if (noteExpanded) {
-                                    R.string.column_wizard_note_less
-                                } else {
-                                    R.string.column_wizard_note_more
-                                },
-                            ),
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                    }
-                }
             }
             // 官方只肯走群/网盘发的检测器（春秋），商店给不了直链，但能把官方入口摆出来；
             // 链接来自索引仓，只放行 http/https，点了也只是打开浏览器，不执行任何东西。
             // 做成纯文字链接 + 小箭头：一个次要入口不该比「执行」还显眼。
             if (step.link.isNotEmpty()) {
+                // 索引里的 link 有两种：外部网页（春秋官网之类）和站内入口。后者写成 sukisu://ai，
+                // 点了直接进 AI 助手发截图，省得先跳浏览器再让用户自己找回来。
+                val isAiEntry = step.link == COLUMN_LINK_AI
                 Row(
                     modifier = Modifier
                         .clip(MaterialTheme.shapes.small)
                         .clickable {
-                            runCatching {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(step.link)))
+                            if (isAiEntry) {
+                                onOpenAi()
+                            } else {
+                                runCatching {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(step.link)))
+                                }
                             }
                         }
                         .padding(vertical = 2.dp),
@@ -1689,12 +1719,18 @@ private fun WizardStepCard(
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
                 ) {
                     Text(
-                        text = stringResource(R.string.column_wizard_open_link),
+                        text = stringResource(
+                            if (isAiEntry) R.string.column_wizard_open_ai else R.string.column_wizard_open_link,
+                        ),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                     )
                     Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
+                        imageVector = if (isAiEntry) {
+                            Icons.Rounded.AutoAwesome
+                        } else {
+                            Icons.AutoMirrored.Rounded.OpenInNew
+                        },
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(13.dp),
