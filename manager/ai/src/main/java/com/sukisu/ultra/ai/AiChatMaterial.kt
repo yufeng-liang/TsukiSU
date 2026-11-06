@@ -228,24 +228,40 @@ fun AiChatMaterial(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (!state.config.isConfigured || !state.config.enabled) {
+                // 欢迎页把「未配置提示 + 问候 + 能力卡」当成一整块，在可视区里垂直居中。
+                if (state.messages.isEmpty()) {
+                    item(key = "welcome") {
+                        Box(
+                            modifier = Modifier.fillParentMaxHeight().fillMaxWidth(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                if (!state.config.isConfigured || !state.config.enabled) {
+                                    AiSetupCardMaterial(
+                                        enabled = state.config.enabled,
+                                        onOpenSettings = actions.onOpenSettings,
+                                    )
+                                }
+                                AiWelcomeMaterial(
+                                    suggestions = state.suggestions,
+                                    loading = state.suggestionsLoading,
+                                    onSuggestion = { text ->
+                                        actions.onInputChange(text)
+                                        actions.onSend()
+                                    },
+                                    onRefresh = actions.onRefreshSuggestions,
+                                )
+                            }
+                        }
+                    }
+                } else if (!state.config.isConfigured || !state.config.enabled) {
                     item(key = "setup") {
                         AiSetupCardMaterial(
                             enabled = state.config.enabled,
                             onOpenSettings = actions.onOpenSettings,
-                        )
-                    }
-                }
-                if (state.messages.isEmpty()) {
-                    item(key = "welcome") {
-                        AiWelcomeMaterial(
-                            suggestions = state.suggestions,
-                            loading = state.suggestionsLoading,
-                            onSuggestion = { text ->
-                                actions.onInputChange(text)
-                                actions.onSend()
-                            },
-                            onRefresh = actions.onRefreshSuggestions,
                         )
                     }
                 }
@@ -906,6 +922,7 @@ private fun AiCapabilityCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 11.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Surface(
@@ -923,11 +940,13 @@ private fun AiCapabilityCard(
                 text = title,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
             )
             Text(
                 text = prompt,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
                 // 不再截断：卡片高度由文案撑开，短文案也不会显得空。
             )
         }

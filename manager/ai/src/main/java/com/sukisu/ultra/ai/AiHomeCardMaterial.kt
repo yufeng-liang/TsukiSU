@@ -132,7 +132,8 @@ fun AiHomeCardMaterial(onOpenChat: () -> Unit) {
                     rootHeight = rootView.height.toFloat(),
                 )
             },
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        // 与首页「超级用户」等统计卡同底色（surfaceBright），避免 AI 卡比其它卡深一档。
+        containerColor = MaterialTheme.colorScheme.surfaceBright,
         shape = RoundedCornerShape(28.dp),
     ) {
         Column(
