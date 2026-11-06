@@ -341,4 +341,8 @@
     <string name="ai_search_test_failure">Failed: %1$s</string>
     <string name="ai_search_test_cost">A test makes one real search request.</string>
     <string name="ai_search_drag_handle">Drag to reorder</string>
+    <string name="ai_search_test_query">Test search</string>
+    <string name="ai_search_test_query_hint">Query, e.g. today’s news</string>
+    <string name="ai_search_test_run">Run test search</string>
+    <string name="ai_search_test_no_result">No results returned.</string>
 </resources>

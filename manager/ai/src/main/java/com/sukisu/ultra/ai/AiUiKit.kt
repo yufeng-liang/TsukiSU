@@ -472,10 +472,11 @@ fun AiAvatarImage(
     size: Dp = 24.dp,
 ) {
     // 助手用独立品牌标识，不再复用宿主应用图标（否则入口看起来像「另一个 App」）。
-    Image(
+    // 用 Icon 而不是 Image：星标是单色矢量，tint 成主题色后与头像容器同色系。
+    Icon(
         painter = painterResource(R.drawable.ic_ai_assistant_logo),
         contentDescription = null,
         modifier = modifier.size(size),
-        contentScale = ContentScale.Fit,
+        tint = MaterialTheme.colorScheme.primary,
     )
 }

@@ -170,7 +170,63 @@ object AiWebController {
     }
 
     /**
-     * 内置 DuckDuckGo 兜底：先抓 HTML 版解析，解析不到再抓 Lite 版。
+     * 抓取一页网页正文，供模型在搜索之后深挖具体页面。
+     *
+     * 按设置页顺序优先用有抓取 API 的服务商（Firecrawl / Tavily / AnySearch），
+     * 元宝与内置 DuckDuckGo 没有抓取接口，最后统一用通用 GET + 正文抽取兜底。
+     */
+    suspend fun fetchPage(url: String): String = withContext(Dispatchers.IO) {
+        val cleaned = url.trim()
+        require(cleaned.isNotEmpty()) { "url is required" }
+        require(cleaned.startsWith("http://") || cleaned.startsWith("https://")) {
+            "url must start with http:// or https://"
+        }
+
+        val config = AiSearchSettings.load()
+        if (!config.searchEnabled) {
+            return@withContext "联网搜索已关闭：请在 AI 助手的联网搜索设置中开启。"
+        }
+
+        val startedAt = System.nanoTime()
+        val errors = mutableListOf<String>()
+        for (provider in config.failoverCandidates()) {
+            // 这两家没有抓取 API，留给最后的通用抓取。
+            if (provider == AiSearchProvider.NONE || provider == AiSearchProvider.YUANBAO) continue
+            val remainingMs = SEARCH_CHAIN_BUDGET_MS - elapsedMs(startedAt)
+            if (remainingMs < MIN_ATTEMPT_BUDGET_MS) break
+            val timeoutMs = minOf(PROVIDER_TIMEOUT_MS, remainingMs)
+            when (
+                val outcome = AiWebSearch.fetchPage(
+                    url = cleaned,
+                    provider = provider,
+                    apiKey = config.keyOf(provider),
+                    timeoutMs = timeoutMs,
+                )
+            ) {
+                is PageOutcome.Success ->
+                    if (outcome.text.isNotBlank()) {
+                        return@withContext withSearchSource(
+                            outcome.text,
+                            "${provider.displayName()} 正文",
+                        )
+                    }
+
+                is PageOutcome.Failure ->
+                    errors += "${provider.displayName()}：${outcome.message}"
+            }
+        }
+
+        // 通用抓取兜底：直接 GET 网页再抽正文。
+        when (val fallback = AiWebSearch.fetchPage(cleaned, AiSearchProvider.NONE, "")) {
+            is PageOutcome.Success -> withSearchSource(fallback.text, "直接抓取")
+            is PageOutcome.Failure -> {
+                errors += "直接抓取：${fallback.message}"
+                buildAggregateFetchError(errors)
+            }
+        }
+    }
+
+    /** 内置 DuckDuckGo 兜底：先抓 HTML 版解析，解析不到再抓 Lite 版。
      * 两段抓取/解析逻辑与原实现一致，只是把结果换成统一结构交给调用方格式化。
      */
     private fun searchDuckDuckGo(query: String): List<SearchResult> {
@@ -193,6 +249,10 @@ object AiWebController {
     /** 从开始时间算已用毫秒。 */
     private fun elapsedMs(startedAtNanos: Long): Long =
         (System.nanoTime() - startedAtNanos) / 1_000_000
+
+    /** 抓取失败时的聚合文本。 */
+    private fun buildAggregateFetchError(errors: List<String>): String =
+        "抓取网页失败：" + errors.joinToString("；") { it.take(MAX_PROVIDER_ERROR_CHARS) }
 
     /** 所有服务都失败时的聚合文本：每家一行（各截断 120 字），整体不超过 4000 字。 */
     private fun buildAggregateSearchError(errors: List<String>): String = buildString {

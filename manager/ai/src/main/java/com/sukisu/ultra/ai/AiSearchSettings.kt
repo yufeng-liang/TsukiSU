@@ -61,9 +61,11 @@ data class AiSearchConfig(
     /** 是否加入自动故障转移链。 */
     fun isEnabled(provider: AiSearchProvider): Boolean = provider in enabled
 
-    /** AnySearch 允许匿名（额度更低），其余服务必须填 Key 才算可用。 */
+    /** AnySearch 与 Firecrawl 允许匿名（额度更低），其余服务必须填 Key 才算可用。 */
     fun isConfigured(provider: AiSearchProvider): Boolean =
-        provider == AiSearchProvider.ANYSEARCH || keyOf(provider).isNotBlank()
+        provider == AiSearchProvider.ANYSEARCH ||
+            provider == AiSearchProvider.FIRECRAWL ||
+            keyOf(provider).isNotBlank()
 
     /**
      * 自动故障转移的候选服务商：按 [order] 排列，跳过 [AiSearchProvider.NONE]、
