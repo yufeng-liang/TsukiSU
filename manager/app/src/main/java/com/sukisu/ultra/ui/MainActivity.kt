@@ -74,6 +74,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
@@ -155,6 +156,11 @@ import com.sukisu.ultra.ui.theme.LocalEnableFloatingBottomBar
 import com.sukisu.ultra.ui.theme.LocalEnableFloatingBottomBarBlur
 import com.sukisu.ultra.ui.theme.LocalEnableNavigationBadge
 import com.sukisu.ultra.ui.theme.LocalModuleDescriptionMaxLines
+import com.sukisu.ultra.ui.util.AiChatSharedPage
+import com.sukisu.ultra.ui.util.AiSharedTransition
+import com.sukisu.ultra.ui.util.LocalAiSharedScope
+import com.sukisu.ultra.ui.util.LocalAiSharedState
+import com.sukisu.ultra.ui.util.AiHomeBackgroundTransition
 import com.sukisu.ultra.ui.util.BackgroundNavTransition
 import com.sukisu.ultra.ui.util.ImageStorage
 import com.sukisu.ultra.ui.util.LocaleHelper
@@ -396,6 +402,9 @@ class MainActivity : ComponentActivity() {
 
                     val navDisplay = @Composable {
                         val backgroundActive = uiState.customBackgroundUri.isNotEmpty()
+                        // 卡片展开过渡期间不要给下层首页蒙灰：容器本身就是从卡片长出来的，
+                        // 蒙灰会让卡片和动画看起来是“两个东西”。
+                        val topRouteForDim = navigator.backStack.lastOrNull()
                         NavDisplay(
                             backStack = navigator.backStack,
                             transition = if (backgroundActive) {
@@ -407,7 +416,11 @@ class MainActivity : ComponentActivity() {
                                 cornerClipRadius = rememberNavSystemCornerRadius(),
                                 // The dim scrim sits under the top destination even when idle; an
                                 // opaque page hid it, but a transparent one would stay darkened.
-                                dimAmount = if (backgroundActive) 0f else 0.5f,
+                                dimAmount = if (backgroundActive || topRouteForDim == Route.AiAssistant) {
+                                    0f
+                                } else {
+                                    0.5f
+                                },
                             ),
                             onBack = {
                                 when (val top = navigator.current()) {
@@ -422,7 +435,10 @@ class MainActivity : ComponentActivity() {
                                     else -> navigator.pop()
                                 }
                             }) {
-                            entry<Route.Main>(swipeDismiss = swipeDismiss) { mainScreenEntry() }
+                            entry<Route.Main>(
+                                transition = AiHomeBackgroundTransition,
+                                swipeDismiss = swipeDismiss,
+                            ) { mainScreenEntry() }
                             entry<Route.About>(swipeDismiss = swipeDismiss) { AboutScreen() }
                             entry<Route.Sulog>(swipeDismiss = swipeDismiss) { SulogScreen() }
                             entry<Route.ColorPalette>(swipeDismiss = swipeDismiss) { key -> ColorPaletteScreen(key.section, key.importUri) }
@@ -508,6 +524,8 @@ class MainActivity : ComponentActivity() {
                                             onDismissPreflight = { wizardViewModel.dismissPreflight() },
                                             onToggleOptIn = { step -> wizardViewModel.toggleOptIn(step.id) },
                                             onMarkDone = { step -> wizardViewModel.markDone(step) },
+                                            // 「进入 AI 助手」：向导里跑完检测拿到红项截图后直接跳过去排查。
+                                            onOpenAi = { navigator.push(Route.AiAssistant) },
                                             onBack = { navigator.pop() },
                                         )
                                     }
@@ -562,29 +580,40 @@ class MainActivity : ComponentActivity() {
                                 entry<Route.Extensions>(swipeDismiss = swipeDismiss) { ExtensionsScreen() }
                                 entry<Route.CpuSpoof>(swipeDismiss = swipeDismiss) { CpuSpoofScreen() }
                                 entry<Route.VersionSpoof>(swipeDismiss = swipeDismiss) { VersionSpoofScreen() }
-                                entry<Route.AiAssistant>(swipeDismiss = swipeDismiss) {
+                                entry<Route.AiAssistant>(
+                                    // 容器变换由页面内的共享元素动画负责，nav 侧保持瞬时切换；
+                                    // 滑动返回也关掉，返回键交给 AiChatContainer 先播完收起动画再出栈。
+                                    transition = NavTransitions.None,
+                                    swipeDismiss = NavSwipeDirection.None,
+                                ) {
                                     if (!AiFeatureBridge.isAvailable) {
                                         LaunchedEffect(Unit) { navigator.pop() }
                                     } else {
                                         // The assistant is always MD3; inside the Miuix shell it needs
                                         // the MD3 colour scheme of the current appearance settings.
                                         AiAssistantMaterialTheme {
-                                            AiFeatureBridge.ChatScreen(
+                                            val isTop = navigator.backStack.lastOrNull() == Route.AiAssistant
+                                            AiChatSharedPage(
+                                                backEnabled = isTop,
                                                 onClose = {
                                                     if (navigator.current() == Route.AiAssistant) navigator.pop()
                                                 },
-                                                onOpenSettings = { navigator.push(Route.AiSettings) },
-                                                onNavigate = { target ->
-                                                    when (target) {
-                                                        is ManagerAiTarget.Tab -> {
-                                                            viewModel.openMainPage(target.pageIndex, target.section)
-                                                            navigator.popUntil { it is Route.Main }
-                                                        }
+                                            ) { requestClose ->
+                                                AiFeatureBridge.ChatScreen(
+                                                    onClose = requestClose,
+                                                    onOpenSettings = { navigator.push(Route.AiSettings) },
+                                                    onNavigate = { target ->
+                                                        when (target) {
+                                                            is ManagerAiTarget.Tab -> {
+                                                                viewModel.openMainPage(target.pageIndex, target.section)
+                                                                navigator.popUntil { it is Route.Main }
+                                                            }
 
-                                                        is ManagerAiTarget.Push -> navigator.navigateTo(target.route)
-                                                    }
-                                                },
-                                            )
+                                                            is ManagerAiTarget.Push -> navigator.navigateTo(target.route)
+                                                        }
+                                                    },
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -693,14 +722,24 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
-                        when (uiMode) {
-                            UiMode.Material -> androidx.compose.material3.Scaffold(
-                                containerColor = if (hasCustomBackground) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer
-                            ) { navDisplay() }
+                        // 共享元素作用域要包住首页（卡片所在的 Main 路由）和聊天页路由，
+                        // 两者才能被 Compose 认成同一个元素做形变。
+                        SharedTransitionLayout {
+                            val aiSharedState = rememberSharedContentState(AiSharedTransition.KEY)
+                            androidx.compose.runtime.CompositionLocalProvider(
+                                LocalAiSharedScope provides this,
+                                LocalAiSharedState provides aiSharedState,
+                            ) {
+                                when (uiMode) {
+                                    UiMode.Material -> androidx.compose.material3.Scaffold(
+                                        containerColor = if (hasCustomBackground) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer
+                                    ) { navDisplay() }
 
-                            UiMode.Miuix -> Scaffold(
-                                containerColor = if (hasCustomBackground) Color.Transparent else MiuixTheme.colorScheme.surface
-                            ) { navDisplay() }
+                                    UiMode.Miuix -> Scaffold(
+                                        containerColor = if (hasCustomBackground) Color.Transparent else MiuixTheme.colorScheme.surface
+                                    ) { navDisplay() }
+                                }
+                            }
                         }
                     }
                 }

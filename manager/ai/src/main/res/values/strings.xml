@@ -22,7 +22,7 @@
     <string name="ai_image_model_hint">OpenAI-compatible model for /v1/images/generations; leave empty to disable</string>
     <string name="ai_title_model">Session title model</string>
     <string name="ai_title_model_hint">Blank = follow the main model</string>
-    <string name="ai_title_effort">Title reasoning effort</string>
+    <string name="ai_title_effort">Reasoning effort</string>
     <string name="ai_title_effort_auto">Auto</string>
     <string name="ai_title_effort_off">Off</string>
     <string name="ai_title_effort_low">Low</string>
@@ -107,7 +107,7 @@
     <string name="ai_select_model">Select model</string>
     <string name="ai_no_models">The endpoint returned no models</string>
     <string name="ai_fetch_models_failed">Could not fetch models</string>
-    <string name="ai_thinking_mode">Thinking</string>
+    <string name="ai_thinking_mode">Reasoning effort</string>
     <string name="ai_thinking_summary">Provider-dependent. Auto lets the model decide, Off disables reasoning, and Low/Medium/High set effort where supported.</string>
     <string name="ai_thinking_auto">Auto</string>
     <string name="ai_thinking_off">Off</string>

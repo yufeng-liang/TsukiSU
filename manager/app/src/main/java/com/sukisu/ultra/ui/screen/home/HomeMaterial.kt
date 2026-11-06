@@ -104,6 +104,9 @@ import com.sukisu.ultra.ui.util.module.LatestVersionInfo
 import com.sukisu.ultra.ui.util.customText
 import com.sukisu.ultra.ui.util.CustomTextKey
 import com.sukisu.ultra.ui.util.drawPainterCover
+import androidx.compose.ui.draw.alpha
+import com.sukisu.ultra.ui.util.AiSharedTransition
+import com.sukisu.ultra.ui.util.aiSharedElement
 
 private val HeroShape = RoundedCornerShape(28.dp)
 private val TileShape = RoundedCornerShape(22.dp)
@@ -176,7 +179,7 @@ fun HomePagerMaterial(
                 WarningCard(customText(CustomTextKey.HOME_WARN_PREVIEW_MODE), level = WarningLevel.Notice)
             }
             if (state.showAiHomeCard && AiFeatureBridge.isAvailable) {
-                AiFeatureBridge.HomeCard(onOpenChat = actions.onOpenAi)
+                Box(Modifier.aiSharedElement(visible = AiSharedTransition.cardVisible)) {                }
             }
             if (state.hideEnvCard != null) {
                 HideEnvCard(

@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Refresh
@@ -35,6 +36,7 @@ import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +55,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -64,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sukisu.ultra.ai.R
+import com.sukisu.ultra.ai.api.AiHomeCardBounds
 import kotlinx.coroutines.launch
 
 /**
@@ -114,15 +120,27 @@ fun AiHomeCardMaterial(onOpenChat: () -> Unit) {
         }?.let { compactSnippet(it.content) }
     }
 
+    val rootView = LocalView.current
     AiTonalCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .onGloballyPositioned { coordinates ->
+                // 记录卡片矩形，供 Container Transform 过渡从这张卡片展开页面。
+                AiHomeCardBounds.update(
+                    rect = coordinates.boundsInRoot(),
+                    rootWidth = rootView.width.toFloat(),
+                    rootHeight = rootView.height.toFloat(),
+                )
+            },
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = RoundedCornerShape(28.dp),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .clickable(onClick = onOpenChat)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -135,14 +153,16 @@ fun AiHomeCardMaterial(onOpenChat: () -> Unit) {
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 ) {
                     AiAvatarImage(
-                        modifier = Modifier.padding(8.dp),
-                        size = 32.dp,
+                        modifier = Modifier.padding(7.dp),
+                        size = 30.dp,
                     )
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = stringResource(R.string.ai_assistant_title),
                         style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = status,
@@ -157,6 +177,21 @@ fun AiHomeCardMaterial(onOpenChat: () -> Unit) {
                         modifier = Modifier.size(18.dp),
                         strokeWidth = 2.dp,
                     )
+                } else {
+                    // 整行按钮太占地方，右侧小圆箭头表示「进入」，点击整卡即可。
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.ChevronRight,
+                            contentDescription = stringResource(R.string.ai_open_chat),
+                            modifier = Modifier
+                                .padding(8.dp)
+                                .size(22.dp),
+                        )
+                    }
                 }
             }
 
@@ -167,21 +202,6 @@ fun AiHomeCardMaterial(onOpenChat: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                )
-            }
-
-            Button(
-                onClick = onOpenChat,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.Chat,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Text(
-                    text = stringResource(R.string.ai_open_chat),
-                    modifier = Modifier.padding(start = 8.dp),
                 )
             }
         }
@@ -316,7 +336,7 @@ internal fun AiConfigEditorMaterial(
         }
 
 
-        // ② AI 提供商：头部一行放切换/新增/删除，下面依次是名称、格式、地址、密钥、模型、图片模型、思考、提示与测试
+        // ② AI 提供商：头部一行放切换/新增/删除，下面依次是名称、格式、地址、密钥、模型、图片模型、推理强度、提示、会话标题模型与测试
         SettingsSection(
             title = stringResource(R.string.ai_provider_group),
             subtitle = stringResource(R.string.ai_connection_trust),
@@ -540,6 +560,31 @@ internal fun AiConfigEditorMaterial(
                 shape = MaterialTheme.shapes.large,
                 modifier = Modifier.fillMaxWidth(),
             )
+
+            // 会话标题模型也放在提供商分组里：属于模型配置，单独占一张卡太浪费空间。
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                modifier = Modifier.padding(vertical = 2.dp),
+            )
+            OutlinedTextField(
+                value = draft.titleModel,
+                onValueChange = { onDraftChange(draft.copy(titleModel = it)) },
+                label = { Text(stringResource(R.string.ai_title_model)) },
+                placeholder = { Text(stringResource(R.string.ai_title_model_hint)) },
+                singleLine = true,
+                shape = MaterialTheme.shapes.large,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            AiDropdownField(
+                label = stringResource(R.string.ai_title_effort),
+                selectedLabel = stringResource(draft.titleEffort.titleEffortLabelRes()),
+                options = AiThinkingMode.entries.map { stringResource(it.titleEffortLabelRes()) },
+                onSelect = { index ->
+                    onDraftChange(draft.copy(titleEffort = AiThinkingMode.entries[index]))
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
             // 测试连接收成紧凑按钮：说明放左边，按钮靠右。
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -625,30 +670,7 @@ internal fun AiConfigEditorMaterial(
             AiMcpSettingsSection()
         }
 
-        // ⑤ 会话标题模型与标题思考强度：字段自带标签，卡片不再加标题
-        SettingsSection {
-            OutlinedTextField(
-                value = draft.titleModel,
-                onValueChange = { onDraftChange(draft.copy(titleModel = it)) },
-                label = { Text(stringResource(R.string.ai_title_model)) },
-                placeholder = { Text(stringResource(R.string.ai_title_model_hint)) },
-                singleLine = true,
-                shape = MaterialTheme.shapes.large,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            AiDropdownField(
-                label = stringResource(R.string.ai_title_effort),
-                selectedLabel = stringResource(draft.titleEffort.titleEffortLabelRes()),
-                options = AiThinkingMode.entries.map { stringResource(it.titleEffortLabelRes()) },
-                onSelect = { index ->
-                    onDraftChange(draft.copy(titleEffort = AiThinkingMode.entries[index]))
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-
-
-        // ⑥ 访问范围
+        // ⑤ 访问范围
         SettingsSection(
             title = stringResource(R.string.ai_scope_section),
             subtitle = stringResource(R.string.ai_scope_summary),
@@ -700,7 +722,7 @@ internal fun AiConfigEditorMaterial(
         }
 
 
-        // ⑦ 超级用户控制
+        // ⑥ 超级用户控制
         SettingsSection(
             title = stringResource(R.string.ai_superuser_section),
             subtitle = stringResource(R.string.ai_superuser_section_summary),
@@ -767,7 +789,7 @@ internal fun AiConfigEditorMaterial(
         }
 
 
-        // ⑧ 写入权限
+        // ⑦ 写入权限
         SettingsSection(
             title = stringResource(R.string.ai_write_section),
         ) {
@@ -853,7 +875,7 @@ internal fun AiConfigEditorMaterial(
         }
 
 
-        // ⑨ 行为
+        // ⑧ 行为
         SettingsSection(
             title = stringResource(R.string.ai_behavior_section),
         ) {
@@ -898,7 +920,7 @@ internal fun AiConfigEditorMaterial(
         }
 
 
-        // ⑩ 高级 API 模式：开关自带标题与摘要，展开内容跟随开关
+        // ⑨ 高级 API 模式：开关自带标题与摘要，展开内容跟随开关
         SettingsSection {
             AiToggleRow(
                 title = stringResource(R.string.ai_advanced_mode),
