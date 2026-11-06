@@ -1021,7 +1021,8 @@ private fun AiComposerMaterial(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(6.dp),
-                verticalAlignment = Alignment.Bottom,
+                // 加号、输入框、发送按钮统一垂直居中：输入框只有一行时三者要在同一水平线上。
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onAttachImage, enabled = !isSending) {
                     Text(
