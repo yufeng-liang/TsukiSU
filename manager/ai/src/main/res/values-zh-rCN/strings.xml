@@ -362,4 +362,19 @@
     <string name="ai_main_effort_title">主模型推理强度</string>
     <string name="ai_title_model_follow_main">跟随主模型</string>
     <string name="ai_title_model_summary">标题生成默认关闭推理，模型不支持关闭时使用最低档。</string>
+    <string name="ai_provider_default_name">提供商 %1$d</string>
+    <string name="ai_provider_edit">编辑</string>
+    <string name="ai_provider_add_title">添加提供商</string>
+    <string name="ai_provider_edit_title">编辑提供商</string>
+    <string name="ai_provider_save">保存</string>
+    <string name="ai_provider_add_tab">添加</string>
+    <string name="ai_reasoning_unsupported">该模型不支持推理。</string>
+    <string name="ai_reasoning_on">开</string>
+    <string name="ai_mcp_add_header">添加请求头</string>
+    <string name="ai_mcp_header_name">名称</string>
+    <string name="ai_mcp_header_value">值</string>
+    <string name="ai_mcp_delete_header">删除请求头</string>
+    <string name="ai_provider_select">提供商</string>
+    <string name="ai_mcp_enabled">启用</string>
+    <string name="ai_mcp_transport">传输方式</string>
 </resources>

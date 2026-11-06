@@ -165,9 +165,15 @@ internal fun AiSearchSettingsSection(modifier: Modifier = Modifier) {
                     sectionEnabled = config.searchEnabled,
                     onOpen = { detailProvider = provider },
                     onToggle = { enabled ->
-                        val next = if (enabled) config.enabled + provider
+                        val nextEnabled = if (enabled) config.enabled + provider
                         else config.enabled - provider
-                        persist(config.copy(enabled = next))
+                        // 全部关闭时总开关跟随关闭；从全关恢复出至少一个时自动打开。
+                        val nextSearchEnabled = when {
+                            nextEnabled.isEmpty() -> false
+                            config.enabled.isEmpty() -> true
+                            else -> config.searchEnabled
+                        }
+                        persist(config.copy(enabled = nextEnabled, searchEnabled = nextSearchEnabled))
                     },
                     onMove = { direction -> move(provider, direction) },
                 )

@@ -166,8 +166,14 @@ class AiChatViewModel : ViewModel() {
         )
     }
 
-    /** 新建会话：先把当前会话落盘，再切到一个空会话。 */
+    /** 新建会话：当前已经是空白会话时不重复创建，避免一直点一直多出空白会话。 */
     fun newSession() {
+        if (_uiState.value.messages.isEmpty()) return
+        createNewSession()
+    }
+
+    /** 真正创建一个新会话（删除当前会话时也要强制创建）。 */
+    private fun createNewSession() {
         persistHistory()
         val created = AiSessionStore.create()
         AiSessionStore.save(created)
@@ -208,7 +214,7 @@ class AiChatViewModel : ViewModel() {
     fun deleteSession(id: String) {
         AiSessionStore.delete(id)
         if (id == _uiState.value.activeSessionId) {
-            newSession()
+            createNewSession()
         } else {
             _uiState.update { it.copy(sessions = AiSessionStore.list()) }
         }

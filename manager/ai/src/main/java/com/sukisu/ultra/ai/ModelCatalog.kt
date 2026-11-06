@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -239,6 +240,7 @@ internal object ModelCatalog {
             maxOutput = if (model.maxOutput != 0) model.maxOutput else capabilities.maxOutput,
             reasoning = model.reasoning || capabilities.reasoning,
             supportsImages = model.supportsImages || capabilities.supportsImages,
+            reasoningOptions = model.reasoningOptions.ifEmpty { capabilities.reasoningOptions },
         )
     }
 
@@ -283,6 +285,14 @@ internal object ModelCatalog {
                     reasoning = model.reasoning == true,
                     supportsImages = model.modalities?.input
                         ?.any { it.equals("image", ignoreCase = true) } == true,
+                    reasoningOptions = model.reasoningOptions.map { option ->
+                        AiReasoningOption(
+                            type = option.type.orEmpty(),
+                            values = option.values,
+                            min = (option.min ?: 0L).coerceAtLeast(0L).toInt(),
+                            max = (option.max ?: 0L).coerceAtLeast(0L).toInt(),
+                        )
+                    },
                 )
                 val existing = index[modelId]
                 index[modelId] = if (existing == null) {
@@ -384,8 +394,18 @@ private data class ModelsDevProvider(
 @Serializable
 private data class ModelsDevModel(
     val reasoning: Boolean? = null,
+    @SerialName("reasoning_options")
+    val reasoningOptions: List<ModelsDevReasoningOption> = emptyList(),
     val modalities: ModelsDevModalities? = null,
     val limit: ModelsDevLimit? = null,
+)
+
+@Serializable
+private data class ModelsDevReasoningOption(
+    val type: String? = null,
+    val values: List<String> = emptyList(),
+    val min: Long? = null,
+    val max: Long? = null,
 )
 
 @Serializable
@@ -405,11 +425,13 @@ private data class ModelCapabilities(
     val maxOutput: Int = 0,
     val reasoning: Boolean = false,
     val supportsImages: Boolean = false,
+    val reasoningOptions: List<AiReasoningOption> = emptyList(),
 ) {
     fun merge(other: ModelCapabilities): ModelCapabilities = ModelCapabilities(
         contextWindow = maxOf(contextWindow, other.contextWindow),
         maxOutput = maxOf(maxOutput, other.maxOutput),
         reasoning = reasoning || other.reasoning,
         supportsImages = supportsImages || other.supportsImages,
+        reasoningOptions = if (reasoningOptions.isNotEmpty()) reasoningOptions else other.reasoningOptions,
     )
 }

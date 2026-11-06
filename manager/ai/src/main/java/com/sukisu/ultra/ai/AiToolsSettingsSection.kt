@@ -1,6 +1,17 @@
 package com.sukisu.ultra.ai
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -68,55 +79,30 @@ internal fun AiMcpSettingsSection(modifier: Modifier = Modifier) {
                 }
             }
         }
-        TextButton(onClick = { showAddServer = true }) {
-            Text(stringResource(R.string.ai_mcp_add))
+        OutlinedButton(
+            onClick = { showAddServer = true },
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.large,
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Add,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Text(
+                text = stringResource(R.string.ai_mcp_add),
+                modifier = Modifier.padding(start = 6.dp),
+            )
         }
     }
 
     if (showAddServer) {
-        var name by remember { mutableStateOf("") }
-        var url by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { showAddServer = false },
-            title = { Text(stringResource(R.string.ai_mcp_add)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        label = { Text(stringResource(R.string.ai_mcp_name)) },
-                        singleLine = true,
-                        shape = MaterialTheme.shapes.large,
-                    )
-                    OutlinedTextField(
-                        value = url,
-                        onValueChange = { url = it },
-                        label = { Text(stringResource(R.string.ai_mcp_url)) },
-                        singleLine = true,
-                        shape = MaterialTheme.shapes.large,
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = name.isNotBlank() && url.isNotBlank(),
-                    onClick = {
-                        AiMcpSettings.add(
-                            AiMcpServer(
-                                id = "mcp_" + System.currentTimeMillis(),
-                                name = name.trim(),
-                                url = url.trim(),
-                            ),
-                        )
-                        servers = AiMcpSettings.list()
-                        showAddServer = false
-                    },
-                ) { Text(stringResource(R.string.ai_mcp_save)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddServer = false }) {
-                    Text(stringResource(R.string.ai_mcp_cancel))
-                }
+        McpServerAddDialog(
+            onDismiss = { showAddServer = false },
+            onSave = { server ->
+                AiMcpSettings.add(server)
+                servers = AiMcpSettings.list()
+                showAddServer = false
             },
         )
     }
@@ -128,6 +114,150 @@ internal fun AiMcpSettingsSection(modifier: Modifier = Modifier) {
             onUpdated = { servers = AiMcpSettings.list() },
         )
     }
+}
+
+/**
+ * 新增 MCP 服务器弹窗（对齐 RikkaHub 的字段顺序，改成轻量弹窗）：
+ * 名称 → 地址 → 请求头键值对（可增删） → 保存/取消。
+ */
+@Composable
+private fun McpServerAddDialog(
+    onDismiss: () -> Unit,
+    onSave: (AiMcpServer) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    var url by remember { mutableStateOf("") }
+    var enabled by remember { mutableStateOf(true) }
+    var transport by remember { mutableStateOf("STREAMABLE_HTTP") }
+    var headers by remember { mutableStateOf(listOf<Pair<String, String>>()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.ai_mcp_add)) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.ai_mcp_enabled),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Switch(checked = enabled, onCheckedChange = { enabled = it })
+                }
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(R.string.ai_mcp_name)) },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.large,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    text = stringResource(R.string.ai_mcp_transport),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = transport == "STREAMABLE_HTTP",
+                        onClick = { transport = "STREAMABLE_HTTP" },
+                        label = { Text("Streamable HTTP") },
+                    )
+                    FilterChip(
+                        selected = transport == "SSE",
+                        onClick = { transport = "SSE" },
+                        label = { Text("SSE") },
+                    )
+                }
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    label = { Text(stringResource(R.string.ai_mcp_url)) },
+                    placeholder = { Text("https://example.com/mcp") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    shape = MaterialTheme.shapes.large,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    text = stringResource(R.string.ai_mcp_headers),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                headers.forEachIndexed { index, (key, value) ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedTextField(
+                            value = key,
+                            onValueChange = { input ->
+                                headers = headers.toMutableList().also { it[index] = input to it[index].second }
+                            },
+                            label = { Text(stringResource(R.string.ai_mcp_header_name)) },
+                            singleLine = true,
+                            shape = MaterialTheme.shapes.large,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            value = value,
+                            onValueChange = { input ->
+                                headers = headers.toMutableList().also { it[index] = it[index].first to input }
+                            },
+                            label = { Text(stringResource(R.string.ai_mcp_header_value)) },
+                            singleLine = true,
+                            shape = MaterialTheme.shapes.large,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = { headers = headers.filterIndexed { i, _ -> i != index } }) {
+                            Icon(
+                                imageVector = Icons.Rounded.Delete,
+                                contentDescription = stringResource(R.string.ai_mcp_delete_header),
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                }
+                TextButton(onClick = { headers = headers + ("" to "") }) {
+                    Icon(
+                        imageVector = Icons.Rounded.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Text(
+                        text = stringResource(R.string.ai_mcp_add_header),
+                        modifier = Modifier.padding(start = 4.dp),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = name.isNotBlank() && url.trim().startsWith("http"),
+                onClick = {
+                    onSave(
+                        AiMcpServer(
+                            id = "mcp_" + System.currentTimeMillis(),
+                            name = name.trim(),
+                            url = url.trim(),
+                            enabled = enabled,
+                            transport = transport,
+                            headers = headers.filter { it.first.isNotBlank() }
+                                .associate { it.first.trim() to it.second.trim() },
+                        )
+                    )
+                },
+            ) { Text(stringResource(R.string.ai_mcp_save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.ai_mcp_cancel)) }
+        },
+    )
 }
 
 /**

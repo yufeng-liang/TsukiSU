@@ -363,4 +363,19 @@
     <string name="ai_main_effort_title">Reasoning effort (main model)</string>
     <string name="ai_title_model_follow_main">Follow main model</string>
     <string name="ai_title_model_summary">Titles are generated without reasoning; the lowest level is used if the model cannot disable it.</string>
+    <string name="ai_provider_default_name">Provider %1$d</string>
+    <string name="ai_provider_edit">Edit</string>
+    <string name="ai_provider_add_title">Add provider</string>
+    <string name="ai_provider_edit_title">Edit provider</string>
+    <string name="ai_provider_save">Save</string>
+    <string name="ai_provider_add_tab">Add</string>
+    <string name="ai_reasoning_unsupported">This model does not support reasoning.</string>
+    <string name="ai_reasoning_on">On</string>
+    <string name="ai_mcp_add_header">Add header</string>
+    <string name="ai_mcp_header_name">Header</string>
+    <string name="ai_mcp_header_value">Value</string>
+    <string name="ai_mcp_delete_header">Delete header</string>
+    <string name="ai_provider_select">Provider</string>
+    <string name="ai_mcp_enabled">Enabled</string>
+    <string name="ai_mcp_transport">Transport</string>
 </resources>

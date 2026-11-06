@@ -230,6 +230,8 @@ fun AiChatMaterial(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
+                // 只有欢迎页（没有消息）时整屏刚好放得下，不需要滚动。
+                userScrollEnabled = state.messages.isNotEmpty(),
             ) {
                 if (!state.config.isConfigured || !state.config.enabled) {
                     item(key = "setup") {
@@ -1090,18 +1092,13 @@ private fun AiComposerMaterial(
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             tonalElevation = 2.dp,
         ) {
-            // 单行时三者垂直居中；输入框长到多行后，加号与发送按钮贴底。
-            val density = LocalDensity.current
-            var fieldHeightPx by remember { mutableIntStateOf(0) }
-            val multiline = fieldHeightPx > with(density) { 64.dp.roundToPx() }
+            // 加号统一相对输入框垂直居中，多行时也不贴底。
             Row(
                 modifier = Modifier.fillMaxWidth().padding(6.dp),
-                verticalAlignment = if (multiline) Alignment.Bottom else Alignment.CenterVertically,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(
                     onClick = onAttachImage,
-                    // 发送按钮外面有 6dp padding，贴底时给加号补同样的下边距，两个圆才对得齐。
-                    modifier = Modifier.padding(bottom = if (multiline) 6.dp else 0.dp),
                     enabled = !isSending,
                 ) {
                     Text(
@@ -1122,9 +1119,7 @@ private fun AiComposerMaterial(
                         focusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
                         unfocusedBorderColor = Color.Transparent,
                     ),
-                    modifier = Modifier
-                        .weight(1f)
-                        .onSizeChanged { fieldHeightPx = it.height },
+                    modifier = Modifier.weight(1f),
                 )
                 FilledIconButton(
                     onClick = if (isSending) onStop else onSend,
