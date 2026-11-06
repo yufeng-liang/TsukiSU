@@ -74,6 +74,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
@@ -155,7 +156,10 @@ import com.sukisu.ultra.ui.theme.LocalEnableFloatingBottomBar
 import com.sukisu.ultra.ui.theme.LocalEnableFloatingBottomBarBlur
 import com.sukisu.ultra.ui.theme.LocalEnableNavigationBadge
 import com.sukisu.ultra.ui.theme.LocalModuleDescriptionMaxLines
-import com.sukisu.ultra.ui.util.AiChatContainer
+import com.sukisu.ultra.ui.util.AiChatSharedPage
+import com.sukisu.ultra.ui.util.AiSharedTransition
+import com.sukisu.ultra.ui.util.LocalAiSharedScope
+import com.sukisu.ultra.ui.util.LocalAiSharedState
 import com.sukisu.ultra.ui.util.AiHomeBackgroundTransition
 import com.sukisu.ultra.ui.util.BackgroundNavTransition
 import com.sukisu.ultra.ui.util.ImageStorage
@@ -587,7 +591,7 @@ class MainActivity : ComponentActivity() {
                                         // the MD3 colour scheme of the current appearance settings.
                                         AiAssistantMaterialTheme {
                                             val isTop = navigator.backStack.lastOrNull() == Route.AiAssistant
-                                            AiChatContainer(
+                                            AiChatSharedPage(
                                                 backEnabled = isTop,
                                                 onClose = {
                                                     if (navigator.current() == Route.AiAssistant) navigator.pop()
@@ -716,14 +720,24 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
-                        when (uiMode) {
-                            UiMode.Material -> androidx.compose.material3.Scaffold(
-                                containerColor = if (hasCustomBackground) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer
-                            ) { navDisplay() }
+                        // 共享元素作用域要包住首页（卡片所在的 Main 路由）和聊天页路由，
+                        // 两者才能被 Compose 认成同一个元素做形变。
+                        SharedTransitionLayout {
+                            val aiSharedState = rememberSharedContentState(AiSharedTransition.KEY)
+                            androidx.compose.runtime.CompositionLocalProvider(
+                                LocalAiSharedScope provides this,
+                                LocalAiSharedState provides aiSharedState,
+                            ) {
+                                when (uiMode) {
+                                    UiMode.Material -> androidx.compose.material3.Scaffold(
+                                        containerColor = if (hasCustomBackground) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer
+                                    ) { navDisplay() }
 
-                            UiMode.Miuix -> Scaffold(
-                                containerColor = if (hasCustomBackground) Color.Transparent else MiuixTheme.colorScheme.surface
-                            ) { navDisplay() }
+                                    UiMode.Miuix -> Scaffold(
+                                        containerColor = if (hasCustomBackground) Color.Transparent else MiuixTheme.colorScheme.surface
+                                    ) { navDisplay() }
+                                }
+                            }
                         }
                     }
                 }

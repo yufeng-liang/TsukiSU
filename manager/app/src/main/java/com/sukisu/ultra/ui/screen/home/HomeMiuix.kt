@@ -89,6 +89,9 @@ import com.sukisu.ultra.ui.util.BlurredBar
 import com.sukisu.ultra.ui.util.drawPainterCover
 import com.sukisu.ultra.ui.util.module.LatestVersionInfo
 import com.sukisu.ultra.ui.util.rememberBlurBackdrop
+import androidx.compose.ui.draw.alpha
+import com.sukisu.ultra.ui.util.AiSharedTransition
+import com.sukisu.ultra.ui.util.aiSharedElement
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
@@ -198,7 +201,7 @@ fun HomePagerMiuix(
                         }
                         if (state.showAiHomeCard && AiFeatureBridge.isAvailable) {
                             // Miuix 页面用 Miuix 变体：卡片圆角、底色、按钮都跟随 MiuixTheme。
-                            AiFeatureBridge.HomeCardMiuix(onOpenChat = actions.onOpenAi)
+                            Box(Modifier.aiSharedElement(visible = AiSharedTransition.cardVisible)) {                            }
                         }
                         if (state.hideEnvCard != null) {
                             // Miuix 专属实现：外壳用 AppCard（跟其它 miuix 卡片同一套圆角与底色），
