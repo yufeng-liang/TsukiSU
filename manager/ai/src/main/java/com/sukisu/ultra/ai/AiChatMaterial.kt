@@ -20,6 +20,9 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -228,23 +231,23 @@ fun AiChatMaterial(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                // 欢迎页把「未配置提示 + 问候 + 能力卡」当成一整块，在可视区里垂直居中。
+                if (!state.config.isConfigured || !state.config.enabled) {
+                    item(key = "setup") {
+                        AiSetupCardMaterial(
+                            enabled = state.config.enabled,
+                            onOpenSettings = actions.onOpenSettings,
+                        )
+                    }
+                }
                 if (state.messages.isEmpty()) {
+                    // 问候 + 能力卡整块在剩余可视区里居中，并再上移 10%（视觉重心更舒服）。
                     item(key = "welcome") {
-                        Box(
-                            modifier = Modifier.fillParentMaxHeight().fillMaxWidth(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                        BoxWithConstraints(modifier = Modifier.fillParentMaxHeight().fillMaxWidth()) {
+                            val shiftUp = maxHeight * 0.10f
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center,
                             ) {
-                                if (!state.config.isConfigured || !state.config.enabled) {
-                                    AiSetupCardMaterial(
-                                        enabled = state.config.enabled,
-                                        onOpenSettings = actions.onOpenSettings,
-                                    )
-                                }
                                 AiWelcomeMaterial(
                                     suggestions = state.suggestions,
                                     loading = state.suggestionsLoading,
@@ -253,16 +256,10 @@ fun AiChatMaterial(
                                         actions.onSend()
                                     },
                                     onRefresh = actions.onRefreshSuggestions,
+                                    modifier = Modifier.offset(y = -shiftUp),
                                 )
                             }
                         }
-                    }
-                } else if (!state.config.isConfigured || !state.config.enabled) {
-                    item(key = "setup") {
-                        AiSetupCardMaterial(
-                            enabled = state.config.enabled,
-                            onOpenSettings = actions.onOpenSettings,
-                        )
                     }
                 }
                 items(state.messages, key = { it.id }) { message ->
@@ -925,17 +922,7 @@ private fun AiCapabilityCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            ) {
-                Text(
-                    text = emoji,
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                )
-            }
+            Text(text = emoji, fontSize = 22.sp)
             Text(
                 text = title,
                 style = MaterialTheme.typography.labelLarge,
@@ -959,11 +946,12 @@ private fun AiWelcomeMaterial(
     loading: Boolean,
     onSuggestion: (String) -> Unit,
     onRefresh: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     // 每次「换一批」都递增，即使模型不可用、候选集来自本地预置，也有轮换动画。
     var generation by remember { mutableIntStateOf(0) }
     Column(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = modifier.fillMaxWidth().padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
