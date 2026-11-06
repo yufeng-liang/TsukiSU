@@ -161,7 +161,6 @@ object AiWebSearch {
         val effectiveTimeout = timeoutMs.coerceIn(MIN_PROVIDER_TIMEOUT_MS, PROVIDER_TIMEOUT_MS)
         try {
             when (provider) {
-                AiSearchProvider.NONE -> ProviderOutcome.Failure("未选择搜索服务")
                 AiSearchProvider.FIRECRAWL -> searchFirecrawl(cleaned, key, effectiveTimeout)
                 AiSearchProvider.ANYSEARCH -> searchAnySearch(cleaned, key, effectiveTimeout)
                 AiSearchProvider.TAVILY -> searchTavily(cleaned, key, effectiveTimeout)
@@ -364,8 +363,25 @@ object AiWebSearch {
                 AiSearchProvider.FIRECRAWL -> fetchFirecrawl(url, apiKey, timeoutMs)
                 AiSearchProvider.TAVILY -> fetchTavily(url, apiKey, timeoutMs)
                 AiSearchProvider.ANYSEARCH -> fetchAnySearch(url, apiKey, timeoutMs)
-                AiSearchProvider.YUANBAO, AiSearchProvider.NONE -> fetchHtml(url, timeoutMs)
+                AiSearchProvider.YUANBAO -> fetchHtml(url, timeoutMs)
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            PageOutcome.Failure(error.readableSearchError())
+        }
+    }
+
+    /**
+     * 通用 HTML 抓取：不依赖任何服务商的抓取接口（元宝也没有抓取 API），
+     * 供 [AiWebController.fetchPage] 在服务商候选链全部失败后直接兜底调用。
+     */
+    internal suspend fun fetchHtmlPage(
+        url: String,
+        timeoutMs: Long = PROVIDER_TIMEOUT_MS,
+    ): PageOutcome = withContext(Dispatchers.IO) {
+        try {
+            fetchHtml(url, timeoutMs)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -428,7 +444,7 @@ object AiWebSearch {
             ?: PageOutcome.Failure("页面没有可读正文")
     }
 
-    /** 通用兜底：直接 GET 网页并抽正文（元宝/内置 DuckDuckGo 没有抓取 API）。 */
+    /** 通用兜底：直接 GET 网页并抽正文（元宝搜索没有抓取 API）。 */
     private fun fetchHtml(url: String, timeoutMs: Long): PageOutcome {
         val request = Request.Builder()
             .url(url)
@@ -529,13 +545,12 @@ object AiWebSearch {
 /** 是否必须填 Key：只有 AnySearch 支持匿名访问。 */
 internal fun AiSearchProvider.requiresApiKey(): Boolean = when (this) {
     // Firecrawl / AnySearch 都允许匿名访问（额度与频率更低，Firecrawl 在代理 IP 上会被拒绝）。
-    AiSearchProvider.NONE, AiSearchProvider.ANYSEARCH, AiSearchProvider.FIRECRAWL -> false
+    AiSearchProvider.ANYSEARCH, AiSearchProvider.FIRECRAWL -> false
     AiSearchProvider.TAVILY, AiSearchProvider.YUANBAO -> true
 }
 
 /** 错误提示与来源标注里给用户看的服务名。 */
 internal fun AiSearchProvider.displayName(): String = when (this) {
-    AiSearchProvider.NONE -> "联网搜索"
     AiSearchProvider.FIRECRAWL -> "Firecrawl"
     AiSearchProvider.ANYSEARCH -> "AnySearch"
     AiSearchProvider.TAVILY -> "Tavily"
