@@ -1596,6 +1596,8 @@
 <string name="module_upload_identity_ready">条件都齐了，验证后即可上传。</string>
     <!-- 商店专栏 -->
     <string name="module_column_section_title">专栏</string>
+    <string name="module_column_load_failed">专栏没加载出来</string>
+    <string name="module_column_retry">重试</string>
     <string name="module_column_topic_count">%1$d 个专题</string>
     <string name="module_column_empty">这个专栏还没有专题。</string>
     <string name="module_column_requires_title">前置条件</string>

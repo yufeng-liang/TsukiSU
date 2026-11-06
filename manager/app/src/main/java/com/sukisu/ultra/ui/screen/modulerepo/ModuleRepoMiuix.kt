@@ -565,6 +565,8 @@ fun ModuleRepoScreenMiuix(
                                         filterOptions = filterOptions,
                                         selectedSourceId = state.selectedSourceId,
                                         columns = state.columns,
+                                        columnsFailed = state.columnsFailed,
+                                        onRetryColumns = actions.onRefresh,
                                         onOpenColumn = actions.onOpenColumn,
                                         onSetSourceEnabled = actions.onSetSourceEnabled,
                                         onSelectSource = actions.onSelectSource,
@@ -920,6 +922,8 @@ private fun MiuixStoreHeader(
     filterOptions: List<RepoSourceFilterOption>,
     selectedSourceId: String?,
     columns: List<RepoColumn>,
+    columnsFailed: Boolean,
+    onRetryColumns: () -> Unit,
     onOpenColumn: (RepoColumn) -> Unit,
     onSetSourceEnabled: (String, Boolean) -> Unit,
     onSelectSource: (String?) -> Unit,
@@ -935,7 +939,12 @@ private fun MiuixStoreHeader(
             onSetSourceEnabled = onSetSourceEnabled,
         )
         // 专栏横滑区目前是 Material 实现，Miuix 主题下同样可用；P1 拆执行向导时再各写一套。
-        ModuleColumnStrip(columns = columns, onOpenColumn = onOpenColumn)
+        ModuleColumnStrip(
+            columns = columns,
+            onOpenColumn = onOpenColumn,
+            failed = columnsFailed,
+            onRetry = onRetryColumns,
+        )
         MiuixSourceFilterRow(
             options = filterOptions,
             selectedSourceId = selectedSourceId,

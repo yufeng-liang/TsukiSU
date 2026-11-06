@@ -36,6 +36,13 @@ data class ModuleRepoUiState(
      * 专栏内容随索引发布，不会比模块列表变得更快。
      */
     val columnsLoaded: Boolean = false,
+    /**
+     * 最近一次专栏请求失败了。
+     *
+     * 失败本身仍然静默（不写 [error]、不弹提示），但要让专栏区留一行「没加载出来 + 重试」：
+     * 之前整块隐藏，用户看到的就是「专栏卡片凭空消失了」，还以为是版本回退。
+     */
+    val columnsFailed: Boolean = false,
     val searchStatus: SearchStatus = SearchStatus(""),
     val searchResults: List<RepoModule> = emptyList(),
     val error: Throwable? = null,

@@ -193,9 +193,12 @@ class ModuleRepoViewModel(
             try {
                 val result = columnRepo.fetchColumns()
                 withContext(Dispatchers.Main) {
-                    // 失败不留痕：专栏区维持原样（首次就是空），下一次刷新自然会再试一遍。
+                    // 失败不写 error、不弹提示（专栏拉不到不等于商店坏了），但要留一个标记让
+                    // 专栏区显示「没加载出来 + 重试」，否则用户看到的就是专栏凭空消失。
                     result.onSuccess { columns ->
-                        _uiState.update { it.copy(columns = columns, columnsLoaded = true) }
+                        _uiState.update { it.copy(columns = columns, columnsLoaded = true, columnsFailed = false) }
+                    }.onFailure {
+                        _uiState.update { it.copy(columnsFailed = true) }
                     }
                 }
             } finally {

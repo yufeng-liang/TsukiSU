@@ -1334,6 +1334,8 @@
 <string name="module_upload_identity_ready">條件都齊了，驗證後即可上傳。</string>
     <!-- 商店專欄 -->
     <string name="module_column_section_title">專欄</string>
+    <string name="module_column_load_failed">專欄沒載入出來</string>
+    <string name="module_column_retry">重試</string>
     <string name="module_column_topic_count">%1$d 個專題</string>
     <string name="module_column_empty">這個專欄還沒有專題。</string>
     <string name="module_column_requires_title">前置條件</string>

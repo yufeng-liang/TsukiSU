@@ -1608,6 +1608,8 @@
 <string name="module_upload_identity_ready">All set — verify to continue.</string>
     <!-- 商店专栏 -->
     <string name="module_column_section_title">Columns</string>
+    <string name="module_column_load_failed">Column list didn't load</string>
+    <string name="module_column_retry">Retry</string>
     <string name="module_column_topic_count">%1$d topics</string>
     <string name="module_column_empty">This column has no topics yet.</string>
     <string name="module_column_requires_title">Before you start</string>
