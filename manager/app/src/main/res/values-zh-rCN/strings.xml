@@ -1605,7 +1605,7 @@
     <string name="module_column_steps_show">查看 %1$d 个步骤</string>
     <string name="module_column_steps_hide">收起步骤</string>
     <string name="module_column_progress_done">已完成</string>
-    <string name="column_wizard_health_scanning">正在检查设备现状\u2026</string>
+    <string name="column_wizard_health_scanning">正在检查设备现状…</string>
     <string name="home_hide_env_done_title">隐藏环境已完成</string>
     <string name="home_hide_env_done_summary">看看成果，或挑别的专题继续</string>
     <string name="module_column_verify_title">怎么确认生效</string>

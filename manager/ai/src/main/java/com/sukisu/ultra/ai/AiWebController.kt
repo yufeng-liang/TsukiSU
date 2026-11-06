@@ -4,7 +4,6 @@ import com.sukisu.ultra.ai.api.AiGithubUrls
 import com.sukisu.ultra.ai.api.GithubModuleAsset
 
 import java.net.URI
-import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
@@ -24,12 +23,6 @@ import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import okhttp3.OkHttpClient
 import okhttp3.Request
-
-data class WebSearchResult(
-    val title: String,
-    val url: String,
-    val snippet: String,
-)
 
 data class GithubRepository(
     val fullName: String,
@@ -66,7 +59,7 @@ object AiWebController {
 
     private const val MAX_BODY = 2 * 1024 * 1024
 
-    /** 自动故障转移链的总预算：所有服务商尝试 + DuckDuckGo 兜底共享。 */
+    /** 自动故障转移链的总预算：所有服务商尝试共享。 */
     private const val SEARCH_CHAIN_BUDGET_MS = 20_000L
 
     /** 剩余预算低于这个值就不再尝试下一家，避免最后一家必然超时。 */
@@ -78,11 +71,8 @@ object AiWebController {
     /** searchWeb 聚合错误文本总长上限。 */
     private const val MAX_SEARCH_OUTPUT_CHARS = 4000
 
-    /** DuckDuckGo 兜底最多返回多少条（对应 web_search 工具的 limit 参数上限）。 */
-    private const val MAX_FALLBACK_RESULTS = 10
-
-    /** 兜底搜索在「搜索来源」里显示的固定名字。 */
-    private const val DUCKDUCKGO_SOURCE = "内置 DuckDuckGo"
+    /** 单次搜索最多回给模型多少条（对应 web_search 工具的 limit 参数上限）。 */
+    private const val MAX_RESULTS_PER_QUERY = 10
     private const val USER_AGENT =
         "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) " +
             "Chrome/124.0.0.0 Mobile Safari/537.36"
@@ -98,7 +88,7 @@ object AiWebController {
 
     /**
      * 联网搜索：按设置页的顺序逐个尝试已启用的服务商（单次最多 8 秒、整链 20 秒），
-     * 全部失败后可用内置 DuckDuckGo 兜底。返回给模型看的纯文本，末尾标注搜索来源。
+     * 全部失败时返回聚合错误；成功时在末尾标注搜索来源。
      *
      * 切换条件：只有网络异常 / 非 2xx / 解析失败才换下一家；「0 条结果」算这家服务可用，不切换。
      */
@@ -115,7 +105,7 @@ object AiWebController {
         val startedAt = System.nanoTime()
         val errors = mutableListOf<String>()
         var skipped: List<AiSearchProvider> = emptyList()
-        // 候选 = 用户启用且已配置的服务商，按拖拽顺序；AnySearch 匿名访问也算已配置。
+        // 候选 = 用户启用且已配置的服务商，按拖拽顺序；Firecrawl / AnySearch 匿名访问也算已配置。
         val candidates = config.failoverCandidates()
         for ((index, provider) in candidates.withIndex()) {
             val remainingMs = SEARCH_CHAIN_BUDGET_MS - elapsedMs(startedAt)
@@ -134,7 +124,7 @@ object AiWebController {
             when (outcome) {
                 // 0 条结果也算成功：说明这家服务可用，没必要再切下一家。
                 is ProviderOutcome.Success -> return@withContext withSearchSource(
-                    AiWebSearch.formatResults(outcome.results),
+                    AiWebSearch.formatResults(outcome.results, limit.coerceIn(1, MAX_RESULTS_PER_QUERY)),
                     provider.displayName(),
                 )
 
@@ -143,24 +133,9 @@ object AiWebController {
             }
         }
 
-        // 所有服务商都没给出结果时，用内置 DuckDuckGo 兜底。
-        if (config.duckDuckGoFallback) {
-            val fallback = try {
-                searchDuckDuckGo(cleaned)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                errors += "内置 DuckDuckGo：${error.readableSearchError()}"
-                null
-            }
-            if (fallback != null) {
-                return@withContext withSearchSource(
-                    AiWebSearch.formatResults(fallback, limit.coerceIn(1, MAX_FALLBACK_RESULTS)),
-                    DUCKDUCKGO_SOURCE,
-                )
-            }
-        } else if (candidates.isEmpty()) {
-            return@withContext "联网搜索未配置：请启用至少一个搜索服务，或打开内置 DuckDuckGo 兜底。"
+        // 内置 DuckDuckGo 兜底已移除：一个可用服务都没有时直接给出可操作的提示。
+        if (candidates.isEmpty()) {
+            return@withContext "联网搜索未配置：请在联网搜索设置中启用并配置至少一个搜索服务。"
         }
 
         if (skipped.isNotEmpty()) {
@@ -173,7 +148,7 @@ object AiWebController {
      * 抓取一页网页正文，供模型在搜索之后深挖具体页面。
      *
      * 按设置页顺序优先用有抓取 API 的服务商（Firecrawl / Tavily / AnySearch），
-     * 元宝与内置 DuckDuckGo 没有抓取接口，最后统一用通用 GET + 正文抽取兜底。
+     * 元宝没有抓取接口，最后统一用通用 GET + 正文抽取兜底。
      */
     suspend fun fetchPage(url: String): String = withContext(Dispatchers.IO) {
         val cleaned = url.trim()
@@ -191,7 +166,7 @@ object AiWebController {
         val errors = mutableListOf<String>()
         for (provider in config.failoverCandidates()) {
             // 这两家没有抓取 API，留给最后的通用抓取。
-            if (provider == AiSearchProvider.NONE || provider == AiSearchProvider.YUANBAO) continue
+            if (provider == AiSearchProvider.YUANBAO) continue
             val remainingMs = SEARCH_CHAIN_BUDGET_MS - elapsedMs(startedAt)
             if (remainingMs < MIN_ATTEMPT_BUDGET_MS) break
             val timeoutMs = minOf(PROVIDER_TIMEOUT_MS, remainingMs)
@@ -217,7 +192,7 @@ object AiWebController {
         }
 
         // 通用抓取兜底：直接 GET 网页再抽正文。
-        when (val fallback = AiWebSearch.fetchPage(cleaned, AiSearchProvider.NONE, "")) {
+        when (val fallback = AiWebSearch.fetchHtmlPage(cleaned)) {
             is PageOutcome.Success -> withSearchSource(fallback.text, "直接抓取")
             is PageOutcome.Failure -> {
                 errors += "直接抓取：${fallback.message}"
@@ -225,22 +200,6 @@ object AiWebController {
             }
         }
     }
-
-    /** 内置 DuckDuckGo 兜底：先抓 HTML 版解析，解析不到再抓 Lite 版。
-     * 两段抓取/解析逻辑与原实现一致，只是把结果换成统一结构交给调用方格式化。
-     */
-    private fun searchDuckDuckGo(query: String): List<SearchResult> {
-        val encoded = URLEncoder.encode(query, StandardCharsets.UTF_8.toString())
-        val html = fetch("https://html.duckduckgo.com/html/?q=$encoded", "text/html")
-        val results = parseDuckDuckGo(html)
-        if (results.isNotEmpty()) return results.map { it.toSearchResult() }
-        return runCatching {
-            parseDuckDuckGoLite(fetch("https://lite.duckduckgo.com/lite/?q=$encoded", "text/html"))
-        }.getOrDefault(emptyList()).map { it.toSearchResult() }
-    }
-
-    private fun WebSearchResult.toSearchResult(): SearchResult =
-        SearchResult(title = title, url = url, snippet = snippet)
 
     /** 搜索结果末尾统一标注来源，方便模型/用户判断可信度。 */
     private fun withSearchSource(text: String, source: String): String =
@@ -464,63 +423,6 @@ object AiWebController {
             }
             val body = response.body.string()
             return body.take(MAX_BODY)
-        }
-    }
-
-    internal fun parseDuckDuckGo(html: String): List<WebSearchResult> {
-        val anchors = Regex(
-            """<a\b[^>]*class="[^"]*result__a[^"]*"[^>]*>([\s\S]*?)</a>""",
-            RegexOption.IGNORE_CASE,
-        ).findAll(html).toList()
-        val snippets = Regex(
-            """<a\b[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)</a>""",
-            RegexOption.IGNORE_CASE,
-        ).findAll(html).map { stripHtml(it.groupValues[1]) }.toList()
-        return anchors.mapIndexedNotNull { index, match ->
-            val href = Regex("""href="([^"]*)"""", RegexOption.IGNORE_CASE)
-                .find(match.value)?.groupValues?.get(1)
-                ?: return@mapIndexedNotNull null
-            val url = decodeDuckDuckGoUrl(href)
-            if (!url.startsWith("http", true)) return@mapIndexedNotNull null
-            WebSearchResult(
-                title = stripHtml(match.groupValues[1]),
-                url = url,
-                snippet = snippets.getOrElse(index) { "" },
-            )
-        }.filter { it.title.isNotBlank() }.distinctBy { it.url }
-    }
-
-    internal fun parseDuckDuckGoLite(html: String): List<WebSearchResult> {
-        val anchors = Regex(
-            """<a\b[^>]*class="[^"]*result-link[^"]*"[^>]*>([\s\S]*?)</a>""",
-            RegexOption.IGNORE_CASE,
-        ).findAll(html).toList()
-        val snippets = Regex(
-            """<td\b[^>]*class="[^"]*result-snippet[^"]*"[^>]*>([\s\S]*?)</td>""",
-            RegexOption.IGNORE_CASE,
-        ).findAll(html).map { stripHtml(it.groupValues[1]) }.toList()
-        return anchors.mapIndexedNotNull { index, match ->
-            val href = Regex("""href="([^"]*)"""", RegexOption.IGNORE_CASE)
-                .find(match.value)?.groupValues?.get(1)
-                ?: return@mapIndexedNotNull null
-            val url = decodeDuckDuckGoUrl(href)
-            if (!url.startsWith("http", true)) return@mapIndexedNotNull null
-            WebSearchResult(
-                title = stripHtml(match.groupValues[1]),
-                url = url,
-                snippet = snippets.getOrElse(index) { "" },
-            )
-        }.filter { it.title.isNotBlank() }.distinctBy { it.url }
-    }
-
-    private fun decodeDuckDuckGoUrl(href: String): String {
-        val cleaned = unescapeHtml(href)
-        val uddg = Regex("""[?&]uddg=([^&]+)""").find(cleaned)?.groupValues?.get(1)
-        val url = uddg?.let { runCatching { URLDecoder.decode(it, "UTF-8") }.getOrNull() } ?: cleaned
-        return when {
-            url.startsWith("//") -> "https:$url"
-            url.startsWith("/") -> "https://duckduckgo.com$url"
-            else -> url
         }
     }
 

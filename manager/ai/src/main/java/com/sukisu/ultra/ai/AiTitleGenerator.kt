@@ -53,25 +53,39 @@ object AiTitleGenerator {
             // 标题用独立模型/温度/推理强度；endpoint 与鉴权沿用主配置。
             // 注意：高级模式下 AiApi 以 advancedOptions.temperature 为准，
             // 这里仍保留高级模式的 headers/extraBody，避免破坏自定义网关。
+            // 标题生成不需要推理：默认关；如果该模型不接受「关」，回落到最低档重试一次。
+            val effort = config.titleEffort.takeIf { it != AiThinkingMode.AUTO } ?: AiThinkingMode.OFF
             val titleConfig = config.copy(
                 model = config.titleModel.trim().ifEmpty { config.model },
                 temperature = 0.2f,
                 // 一次拿到完整结果即可，标题请求不需要流式与工具。
                 streaming = false,
                 toolCalling = false,
-                // AUTO = 不传推理参数；OFF/LOW/MEDIUM/HIGH 原样映射。
-                thinkingMode = config.titleEffort,
+                thinkingMode = effort,
             )
-            val completion = AiApiClient.complete(
-                config = titleConfig,
-                messages = listOf(
-                    AiApiMessage("system", SYSTEM_PROMPT),
-                    AiApiMessage("user", userContent),
-                ),
-                tools = emptyList(),
-                useTools = false,
-                maxTokens = MAX_TITLE_TOKENS,
+            val messages = listOf(
+                AiApiMessage("system", SYSTEM_PROMPT),
+                AiApiMessage("user", userContent),
             )
+            val completion = try {
+                AiApiClient.complete(
+                    config = titleConfig,
+                    messages = messages,
+                    tools = emptyList(),
+                    useTools = false,
+                    maxTokens = MAX_TITLE_TOKENS,
+                )
+            } catch (error: Exception) {
+                if (effort != AiThinkingMode.OFF) throw error
+                // 不支持「关闭推理」的网关：退到最低档再试一次。
+                AiApiClient.complete(
+                    config = titleConfig.copy(thinkingMode = AiThinkingMode.LOW),
+                    messages = messages,
+                    tools = emptyList(),
+                    useTools = false,
+                    maxTokens = MAX_TITLE_TOKENS,
+                )
+            }
             sanitize(completion.text)
         }.getOrNull()
 

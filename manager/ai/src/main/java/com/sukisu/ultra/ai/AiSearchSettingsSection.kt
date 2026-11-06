@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -61,8 +60,7 @@ import kotlinx.coroutines.launch
  * 结构（自上而下）：
  * 1. 总开关「启用联网搜索」；
  * 2. 四家搜索服务，列表只显示名称与启用开关，左侧拖柄可拖拽排序；
- *    点行进入二级弹窗，里面放服务说明、API Key、申请入口与测试；
- * 3. 固定在最末的「内置 DuckDuckGo 兜底」开关，不参与拖拽。
+ *    点行进入二级弹窗，里面放服务说明、API Key、申请入口与测试。
  *
  * 设计取舍：
  * - 只用 Material3 控件，Material / Miuix 两套外壳共用同一个 composable；
@@ -175,15 +173,6 @@ internal fun AiSearchSettingsSection(modifier: Modifier = Modifier) {
                 )
             }
         }
-
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-        // ③ 兜底：所有服务都失败时直接抓 DuckDuckGo，不参与排序。
-        DuckDuckGoFallbackRow(
-            checked = config.duckDuckGoFallback,
-            sectionEnabled = config.searchEnabled,
-            onCheckedChange = { persist(config.copy(duckDuckGoFallback = it)) },
-        )
     }
 
     detailProvider?.let { provider ->
@@ -509,47 +498,6 @@ private fun SearchProviderDetailDialog(
     )
 }
 
-/**
- * 兜底行：内置 DuckDuckGo 抓取，不参与拖拽（用等宽占位保持名称左对齐）。
- */
-@Composable
-private fun DuckDuckGoFallbackRow(
-    checked: Boolean,
-    sectionEnabled: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    val contentAlpha = if (sectionEnabled) 1f else 0.5f
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(SearchRowShape)
-            .padding(horizontal = 4.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        // 占位：与上方服务行的拖柄触碰区同宽，保证名称左边缘对齐。
-        Spacer(modifier = Modifier.size(DragHandleTouchSize))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = stringResource(R.string.ai_search_duckduckgo_fallback),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha),
-            )
-            Text(
-                text = stringResource(R.string.ai_search_duckduckgo_fallback_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = contentAlpha),
-            )
-        }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            enabled = sectionEnabled,
-        )
-    }
-}
-
 /** 设置行圆角：与 MCP 行保持一致，避免同页出现多种圆角。 */
 private val SearchRowShape = RoundedCornerShape(12.dp)
 
@@ -571,11 +519,11 @@ private val ProviderFallbackOrder = listOf(
 )
 
 /**
- * 界面上展示的顺序：去掉 NONE，去重，再把缺失的服务补到末尾。
+ * 界面上展示的顺序：去重，再把缺失的服务补到末尾。
  * 这样旧版本配置（或以后新增服务）不会让某一行凭空消失。
  */
 private fun AiSearchConfig.uiOrder(): List<AiSearchProvider> =
-    (order.filter { it != AiSearchProvider.NONE } + ProviderFallbackOrder).distinct()
+    (order + ProviderFallbackOrder).distinct()
 
 /** 各家服务的 Key 申请页；点按钮直接跳浏览器，不用用户自己找。 */
 private const val FIRECRAWL_KEY_URL = "https://www.firecrawl.dev/app/api-keys"
@@ -588,12 +536,10 @@ private fun keyUrlOf(provider: AiSearchProvider): String? = when (provider) {
     AiSearchProvider.ANYSEARCH -> ANYSEARCH_KEY_URL
     AiSearchProvider.TAVILY -> TAVILY_KEY_URL
     AiSearchProvider.YUANBAO -> YUANBAO_KEY_URL
-    AiSearchProvider.NONE -> null
 }
 
 @Composable
 private fun providerTitle(provider: AiSearchProvider): String = when (provider) {
-    AiSearchProvider.NONE -> stringResource(R.string.ai_search_provider_none)
     AiSearchProvider.FIRECRAWL -> stringResource(R.string.ai_search_provider_firecrawl)
     AiSearchProvider.ANYSEARCH -> stringResource(R.string.ai_search_provider_anysearch)
     AiSearchProvider.TAVILY -> stringResource(R.string.ai_search_provider_tavily)
@@ -602,7 +548,6 @@ private fun providerTitle(provider: AiSearchProvider): String = when (provider) 
 
 @Composable
 private fun providerDescription(provider: AiSearchProvider): String = when (provider) {
-    AiSearchProvider.NONE -> stringResource(R.string.ai_search_desc_none)
     AiSearchProvider.FIRECRAWL -> stringResource(R.string.ai_search_desc_firecrawl)
     AiSearchProvider.ANYSEARCH -> stringResource(R.string.ai_search_desc_anysearch)
     AiSearchProvider.TAVILY -> stringResource(R.string.ai_search_desc_tavily)

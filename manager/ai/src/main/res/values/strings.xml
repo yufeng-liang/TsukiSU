@@ -296,7 +296,6 @@
     <string name="ai_search_section">Web search</string>
     <string name="ai_search_api_key">API key</string>
     <string name="ai_search_endpoint">Endpoint (AnySearch)</string>
-    <string name="ai_search_provider_none">Built-in DuckDuckGo</string>
     <string name="ai_search_provider_firecrawl">Firecrawl</string>
     <string name="ai_search_provider_anysearch">AnySearch</string>
     <string name="ai_search_provider_tavily">Tavily</string>
@@ -318,7 +317,6 @@
     <string name="ai_mcp_tools_title">Tools</string>
     <string name="ai_mcp_tools_empty">No tools returned by this server.</string>
     <string name="ai_mcp_remove_confirm">Remove this server? Its tools will disappear from the assistant.</string>
-    <string name="ai_search_desc_none">No setup needed: the assistant scrapes DuckDuckGo results directly. Speed and reliability are lower than a dedicated API.</string>
     <string name="ai_search_desc_firecrawl">Firecrawl is a web scraping and search API that returns clean page content. It needs an API key; the free tier gives about 1,000 credits per month (500 searches or 1,000 pages).</string>
     <string name="ai_search_desc_anysearch">AnySearch is a real-time search service built for AI agents. A free account gets 1,000 requests per day, and an API key is optional.</string>
     <string name="ai_search_desc_tavily">Tavily is a search API built for AI agents. It needs an API key; the free plan includes 1,000 credits per month.</string>
@@ -332,8 +330,6 @@
     <string name="ai_state_disabled">Disabled</string>
     <string name="ai_search_enable">Enable web search</string>
     <string name="ai_search_enable_desc">Let the assistant search the live web with the providers below.</string>
-    <string name="ai_search_duckduckgo_fallback">Built-in DuckDuckGo fallback</string>
-    <string name="ai_search_duckduckgo_fallback_desc">If every provider fails, scrape DuckDuckGo results directly.</string>
     <string name="ai_search_provider_enabled">Enable %1$s</string>
     <string name="ai_search_test">Test</string>
     <string name="ai_search_testing">Testing…</string>
@@ -361,4 +357,10 @@
     <string name="ai_cap_detect">Detections</string>
     <string name="ai_cap_backup">Backup config</string>
     <string name="ai_cap_beginner">Starter modules</string>
+    <string name="ai_main_model">Main model</string>
+    <string name="ai_model_not_selected">Not selected</string>
+    <string name="ai_image_model_none">Disabled</string>
+    <string name="ai_main_effort_title">Reasoning effort (main model)</string>
+    <string name="ai_title_model_follow_main">Follow main model</string>
+    <string name="ai_title_model_summary">Titles are generated without reasoning; the lowest level is used if the model cannot disable it.</string>
 </resources>
