@@ -198,7 +198,16 @@ class ModuleRepoViewModel(
                     result.onSuccess { columns ->
                         _uiState.update { it.copy(columns = columns, columnsLoaded = true, columnsFailed = false) }
                     }.onFailure {
-                        _uiState.update { it.copy(columnsFailed = true) }
+                        // 断网/被墙时退到上次成功拉到的缓存：有内容可点比空一块好，
+                        // 这时候不打「没加载出来」——缓存本身就是上一次的结果。
+                        val cached = RepoColumnRepositoryImpl.peekCached()
+                        if (cached != null) {
+                            _uiState.update {
+                                it.copy(columns = cached, columnsLoaded = true, columnsFailed = false)
+                            }
+                        } else {
+                            _uiState.update { it.copy(columnsFailed = true) }
+                        }
                     }
                 }
             } finally {
