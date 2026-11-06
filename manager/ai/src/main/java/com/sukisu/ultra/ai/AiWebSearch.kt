@@ -43,14 +43,27 @@ internal sealed interface ProviderOutcome {
     data class Failure(val message: String) : ProviderOutcome
 }
 
+/** 抓取一页网页的结果：成功给正文纯文本，失败给可读原因。 */
+internal sealed interface PageOutcome {
+
+    data class Success(val text: String) : PageOutcome
+
+    data class Failure(val message: String) : PageOutcome
+}
+
+/** 抓回来的正文最多回给模型多少字，避免一次把上下文塞满。 */
+internal const val MAX_PAGE_CHARS = 12_000
+
 /** 设置页「测试」按钮的结果：成功带耗时与条数，失败带可读原因（已截断）。 */
 internal sealed interface AiSearchTestResult {
 
     data class Success(
         val provider: AiSearchProvider,
         val latencyMs: Long,
-        val count: Int,
-    ) : AiSearchTestResult
+        val results: List<SearchResult>,
+    ) : AiSearchTestResult {
+        val count: Int get() = results.size
+    }
 
     data class Failure(
         val provider: AiSearchProvider,
@@ -77,9 +90,18 @@ object AiWebSearch {
 
     /** 腾讯云元宝搜索端点（服务 API KEY 方式）。 */
     private const val YUANBAO_ENDPOINT = "https://api.wsa.cloud.tencent.com/SearchPro"
+
+    /** Firecrawl 单页抓取端点。 */
+    private const val FIRECRAWL_SCRAPE_ENDPOINT = "https://api.firecrawl.dev/v1/scrape"
+
+    /** Tavily 正文提取端点。 */
+    private const val TAVILY_EXTRACT_ENDPOINT = "https://api.tavily.com/extract"
+
+    /** AnySearch 正文提取端点。 */
+    private const val ANYSEARCH_EXTRACT_ENDPOINT = "https://api.anysearch.com/v1/extract"
     private const val MAX_RESULTS = 5
-    private const val MAX_SUMMARY_CHARS = 500
-    private const val MAX_OUTPUT_CHARS = 4000
+    private const val MAX_SUMMARY_CHARS = 900
+    private const val MAX_OUTPUT_CHARS = 5000
     private const val MAX_ERROR_BODY_CHARS = 300
     private const val MIN_PROVIDER_TIMEOUT_MS = 1_000L
 
@@ -95,6 +117,17 @@ object AiWebSearch {
     }
 
     private val jsonMediaType = "application/json".toMediaType()
+
+    private const val PAGE_USER_AGENT =
+        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) " +
+            "Chrome/124.0.0.0 Mobile Safari/537.36"
+
+    private val HTML_COMMENT = Regex("(?s)<!--.*?-->")
+    private val HTML_SCRIPT = Regex("(?is)<(script|style|noscript|svg)[^>]*>.*?</\\1>")
+    private val HTML_BLOCK_TAG = Regex(
+        "(?i)</?(p|div|br|li|tr|h[1-6]|section|article|header|footer|nav|ul|ol|table|blockquote|pre)[^>]*>",
+    )
+    private val HTML_TAG = Regex("(?s)<[^>]+>")
 
     // 宿主 app 已开启 core library desugaring（见 manager/app/build.gradle.kts），
     // java.time.Duration 在 API 24/25 上会被脱糖；这里抑制库模块单独 lint 的 NewApi 误报。
@@ -147,13 +180,17 @@ object AiWebSearch {
      *
      * 不受总开关/启用状态影响，Key 用调用方传入的那一份（不读配置），方便边填边测。
      */
-    internal suspend fun test(provider: AiSearchProvider, apiKey: String): AiSearchTestResult {
+    internal suspend fun test(
+        provider: AiSearchProvider,
+        apiKey: String,
+        query: String = TEST_QUERY,
+    ): AiSearchTestResult {
         val startedAt = System.nanoTime()
-        val outcome = searchProvider(TEST_QUERY, provider, apiKey)
+        val outcome = searchProvider(query.ifBlank { TEST_QUERY }, provider, apiKey)
         val latencyMs = (System.nanoTime() - startedAt) / 1_000_000
         return when (outcome) {
             is ProviderOutcome.Success ->
-                AiSearchTestResult.Success(provider, latencyMs, outcome.results.size)
+                AiSearchTestResult.Success(provider, latencyMs, outcome.results)
 
             is ProviderOutcome.Failure ->
                 AiSearchTestResult.Failure(provider, outcome.message.take(MAX_TEST_ERROR_CHARS))
@@ -168,7 +205,7 @@ object AiWebSearch {
         }
         val (code, responseBody) = postJson(FIRECRAWL_ENDPOINT, apiKey, payload.toString(), timeoutMs)
         if (code !in 200..299) {
-            return ProviderOutcome.Failure(httpError(code, responseBody))
+            return ProviderOutcome.Failure(firecrawlError(code, responseBody))
         }
         val root = responseBody.toJsonObjectOrNull()
             ?: return ProviderOutcome.Failure("响应无法解析为 JSON")
@@ -303,12 +340,128 @@ object AiWebSearch {
             SearchResult(
                 title = item.string("title").orEmpty().ifBlank { url },
                 url = url,
-                snippet = item.string("passage").orEmpty()
-                    .ifBlank { item.string("content").orEmpty() }
+                // content 比 passage 更完整；搜索阶段多带一点正文，模型常常不用再抓页面。
+                snippet = item.string("content").orEmpty()
+                    .ifBlank { item.string("passage").orEmpty() }
                     .ifBlank { item.string("snippet").orEmpty() },
             )
         }
         return ProviderOutcome.Success(results)
+    }
+
+    /**
+     * 抓取一页网页正文：优先用当前服务商的抓取 API，退化成通用 HTML 抓取。
+     * 与搜索一样只负责「发一次请求并解析」，编排在 [AiWebController.fetchPage]。
+     */
+    internal suspend fun fetchPage(
+        url: String,
+        provider: AiSearchProvider,
+        apiKey: String,
+        timeoutMs: Long = PROVIDER_TIMEOUT_MS,
+    ): PageOutcome = withContext(Dispatchers.IO) {
+        try {
+            when (provider) {
+                AiSearchProvider.FIRECRAWL -> fetchFirecrawl(url, apiKey, timeoutMs)
+                AiSearchProvider.TAVILY -> fetchTavily(url, apiKey, timeoutMs)
+                AiSearchProvider.ANYSEARCH -> fetchAnySearch(url, apiKey, timeoutMs)
+                AiSearchProvider.YUANBAO, AiSearchProvider.NONE -> fetchHtml(url, timeoutMs)
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            PageOutcome.Failure(error.readableSearchError())
+        }
+    }
+
+    /** Firecrawl：POST /v1/scrape，只取主内容 markdown。 */
+    private fun fetchFirecrawl(url: String, apiKey: String, timeoutMs: Long): PageOutcome {
+        val payload = buildJsonObject {
+            put("url", url)
+            put("formats", kotlinx.serialization.json.buildJsonArray { add(kotlinx.serialization.json.JsonPrimitive("markdown")) })
+            put("onlyMainContent", true)
+        }
+        val (code, body) = postJson(FIRECRAWL_SCRAPE_ENDPOINT, apiKey, payload.toString(), timeoutMs)
+        if (code !in 200..299) return PageOutcome.Failure(firecrawlError(code, body))
+        val root = body.toJsonObjectOrNull() ?: return PageOutcome.Failure("响应无法解析为 JSON")
+        val data = root["data"] as? JsonObject ?: return PageOutcome.Failure("响应格式异常：缺少 data")
+        val text = data.string("markdown").orEmpty().ifBlank { data.string("content").orEmpty() }
+        return text.takeIf { it.isNotBlank() }
+            ?.let { PageOutcome.Success(it.take(MAX_PAGE_CHARS)) }
+            ?: PageOutcome.Failure("页面没有可读正文")
+    }
+
+    /** Tavily：POST /extract，取 results[0].raw_content。 */
+    private fun fetchTavily(url: String, apiKey: String, timeoutMs: Long): PageOutcome {
+        val payload = buildJsonObject {
+            put("urls", kotlinx.serialization.json.buildJsonArray { add(kotlinx.serialization.json.JsonPrimitive(url)) })
+        }
+        val (code, body) = postJson(TAVILY_EXTRACT_ENDPOINT, apiKey, payload.toString(), timeoutMs)
+        if (code !in 200..299) return PageOutcome.Failure(httpError(code, body))
+        val root = body.toJsonObjectOrNull() ?: return PageOutcome.Failure("响应无法解析为 JSON")
+        val item = (root["results"] as? JsonArray)?.firstOrNull() as? JsonObject
+            ?: return PageOutcome.Failure("响应格式异常：未找到结果")
+        val text = item.string("raw_content").orEmpty().ifBlank { item.string("content").orEmpty() }
+        return text.takeIf { it.isNotBlank() }
+            ?.let { PageOutcome.Success(it.take(MAX_PAGE_CHARS)) }
+            ?: PageOutcome.Failure("页面没有可读正文")
+    }
+
+    /** AnySearch：POST /v1/extract，响应结构兼容多种字段。 */
+    private fun fetchAnySearch(url: String, apiKey: String, timeoutMs: Long): PageOutcome {
+        val payload = buildJsonObject { put("url", url) }
+        val (code, body) = postJson(ANYSEARCH_EXTRACT_ENDPOINT, apiKey, payload.toString(), timeoutMs)
+        if (code !in 200..299) return PageOutcome.Failure(httpError(code, body))
+        val root = body.toJsonObjectOrNull() ?: return PageOutcome.Failure("响应无法解析为 JSON")
+        val bizCode = (root["code"] as? JsonPrimitive)?.contentOrNull
+        if (bizCode != null && bizCode != "0") {
+            return PageOutcome.Failure("服务返回错误：${root.string("message") ?: "错误码 $bizCode"}")
+        }
+        val data = root["data"] as? JsonObject
+        val text = listOfNotNull(
+            data?.string("content"),
+            data?.string("markdown"),
+            data?.string("text"),
+            root.string("content"),
+        ).firstOrNull { it.isNotBlank() }.orEmpty()
+        return text.takeIf { it.isNotBlank() }
+            ?.let { PageOutcome.Success(it.take(MAX_PAGE_CHARS)) }
+            ?: PageOutcome.Failure("页面没有可读正文")
+    }
+
+    /** 通用兜底：直接 GET 网页并抽正文（元宝/内置 DuckDuckGo 没有抓取 API）。 */
+    private fun fetchHtml(url: String, timeoutMs: Long): PageOutcome {
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", PAGE_USER_AGENT)
+            .header("Accept", "text/html,application/xhtml+xml")
+            .get()
+            .build()
+        clientWithTimeout(timeoutMs).newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return PageOutcome.Failure("服务返回 HTTP ${response.code}")
+            val body = response.body.string()
+            val text = htmlToText(body).take(MAX_PAGE_CHARS)
+            return text.takeIf { it.isNotBlank() }
+                ?.let { PageOutcome.Success(it) }
+                ?: PageOutcome.Failure("页面没有可读正文")
+        }
+    }
+
+    /** 极简正文抽取：去脚本/样式/注释，块级标签转换行，去标签后压缩空白。 */
+    private fun htmlToText(html: String): String {
+        var text = html.replace(HTML_COMMENT, " ")
+        text = text.replace(HTML_SCRIPT, " ")
+        text = text.replace(HTML_BLOCK_TAG, "\n")
+        text = text.replace(HTML_TAG, " ")
+        text = text.replace("&nbsp;", " ")
+            .replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+        return text.lines()
+            .map { it.replace(whitespace, " ").trim() }
+            .filter { it.isNotEmpty() }
+            .joinToString("\n")
     }
 
     /** 发一次 JSON POST；返回 HTTP 状态码与响应体原文。apiKey 为空时不带鉴权头（AnySearch 匿名）。 */
@@ -332,6 +485,14 @@ object AiWebSearch {
         client.newBuilder()
             .callTimeout(Duration.ofMillis(timeoutMs))
             .build()
+
+    /** Firecrawl 在机房/代理 IP 上会拒绝匿名请求，单独给一句可操作的提示。 */
+    private fun firecrawlError(code: Int, body: String): String =
+        if (code == 403 && body.contains("VPN", ignoreCase = true)) {
+            "当前网络被判定为 VPN/代理，匿名无法使用：请填 API Key 或关闭代理"
+        } else {
+            httpError(code, body)
+        }
 
     private fun httpError(code: Int, body: String): String =
         "服务返回 HTTP $code：${body.trim().take(MAX_ERROR_BODY_CHARS)}"
@@ -367,8 +528,9 @@ object AiWebSearch {
 
 /** 是否必须填 Key：只有 AnySearch 支持匿名访问。 */
 internal fun AiSearchProvider.requiresApiKey(): Boolean = when (this) {
-    AiSearchProvider.NONE, AiSearchProvider.ANYSEARCH -> false
-    AiSearchProvider.FIRECRAWL, AiSearchProvider.TAVILY, AiSearchProvider.YUANBAO -> true
+    // Firecrawl / AnySearch 都允许匿名访问（额度与频率更低，Firecrawl 在代理 IP 上会被拒绝）。
+    AiSearchProvider.NONE, AiSearchProvider.ANYSEARCH, AiSearchProvider.FIRECRAWL -> false
+    AiSearchProvider.TAVILY, AiSearchProvider.YUANBAO -> true
 }
 
 /** 错误提示与来源标注里给用户看的服务名。 */

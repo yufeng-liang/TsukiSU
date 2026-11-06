@@ -201,7 +201,9 @@ fun HomePagerMiuix(
                         }
                         if (state.showAiHomeCard && AiFeatureBridge.isAvailable) {
                             // Miuix 页面用 Miuix 变体：卡片圆角、底色、按钮都跟随 MiuixTheme。
-                            Box(Modifier.aiSharedElement(visible = AiSharedTransition.cardVisible)) {                            }
+                            Box(Modifier.aiSharedElement(visible = AiSharedTransition.cardVisible)) {
+                                AiFeatureBridge.HomeCardMiuix(onOpenChat = actions.onOpenAi)
+                            }
                         }
                         if (state.hideEnvCard != null) {
                             // Miuix 专属实现：外壳用 AppCard（跟其它 miuix 卡片同一套圆角与底色），

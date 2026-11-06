@@ -188,6 +188,13 @@ data class ColumnWizardUiState(
      * 并在执行前省掉一次几十兆的下载。
      */
     val installedApps: Set<String> = emptySet(),
+    /**
+     * 专题里的隐藏步骤全部处理完了，界面据此弹一次庆祝 overlay。
+     *
+     * 触发条件是「步骤状态全都落定」，不是「自检全绿」——自检是给用户自己看效果的，
+     * 报不报红不影响「这一套配置已经装完」这个事实。用户关掉后置回 false，重进页面不会再弹。
+     */
+    val celebrate: Boolean = false,
 )
 
 /** 预检时对某一步的判定，决定「一键执行」要不要把它列给用户看。 */

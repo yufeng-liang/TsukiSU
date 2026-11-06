@@ -340,4 +340,8 @@
     <string name="ai_search_test_failure">失败：%1$s</string>
     <string name="ai_search_test_cost">测试会真实调用一次搜索接口。</string>
     <string name="ai_search_drag_handle">拖动排序</string>
+    <string name="ai_search_test_query">测试搜索</string>
+    <string name="ai_search_test_query_hint">搜索词，例如：今天新闻</string>
+    <string name="ai_search_test_run">开始测试</string>
+    <string name="ai_search_test_no_result">没有返回结果。</string>
 </resources>

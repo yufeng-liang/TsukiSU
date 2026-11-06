@@ -89,6 +89,7 @@ object AiTools {
         add(setThemeImageTool)
         add(exportThemeImageTool)
         add(webSearchTool)
+        add(fetchUrlTool)
         add(githubSearchTool)
         add(githubReleasesTool)
         add(superuserAppsTool)
@@ -370,6 +371,11 @@ object AiTools {
                     query = args.requiredString("query"),
                     limit = args.string("limit")?.toIntOrNull() ?: 8,
                 )
+            }
+
+            "fetch_url" -> {
+                requirePermission(config.allowWebAccess, AiCapability.WEB)
+                AiWebController.fetchPage(url = args.requiredString("url"))
             }
 
             "github_search" -> {
@@ -1223,6 +1229,17 @@ object AiTools {
             "query" to stringSchema("Search query."),
             "limit" to intSchema("Maximum results, 1-10. Default 8."),
             required = listOf("query"),
+        ),
+    )
+
+    private val fetchUrlTool = AiToolSpec(
+        name = "fetch_url",
+        description = "Fetch the readable text of one web page. Use it after web_search when the snippet is " +
+            "not enough: release notes, documentation, issue threads, download pages. Returns plain text " +
+            "truncated to 12000 characters.",
+        parameters = objectSchema(
+            "url" to stringSchema("Absolute http(s) URL to fetch."),
+            required = listOf("url"),
         ),
     )
 

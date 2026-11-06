@@ -116,14 +116,38 @@ class ColumnWizardViewModel(
         }
         prefetchKeybox(topic)
         // 恢复出来的进度可能已经全部落定（上次做完就退出了），这时要立刻进入完成态，
-        // 否则自检与回滚这两个入口永远不会出现。
-        maybeFinish()
+        // 否则自检与回滚这两个入口永远不会出现。这条路径不弹庆祝：用户只是重新进来看一眼。
+        maybeFinish(allowCelebrate = false)
         // SUCCESS 只是上次的记录；设备可能已经刷机或卸载，根目录复核要异步做，不能阻塞主线程。
         verifyRestoredInstallSteps()
         // 存量用户检测：设备上可能早就配好了一套（甚至用别的工具配的），进专题先看一眼现状。
         runHealthCheck()
         // 检测器是否已经装过：装过就不用再下载一次、界面也该按「已安装」来说话。
         detectInstalledApps(topic)
+        // 上次一键执行跑到一半被重启打断：设备回来了就接着跑，用户不用再点一次。
+        resumePendingRunIfAny()
+    }
+
+    /**
+     * 重启后自动续跑。
+     *
+     * 标记是全局的一份，只有「专栏 + 专题」都与当前进入的一致时才续跑：用户在别的专题里
+     * 不该被上一处的重启拖走。已全部落定、或标记过期（见 [ColumnProgressStore.peekPendingResume]）
+     * 时直接清掉标记，不再执行。
+     */
+    private fun resumePendingRunIfAny() {
+        val pending = ColumnProgressStore.peekPendingResume(ksuApp) ?: return
+        if (pending.first != columnId || pending.second != topic?.id) return
+        if (_uiState.value.done) {
+            ColumnProgressStore.clearPendingResume(ksuApp)
+            return
+        }
+        appendLog("检测到上次一键执行被重启打断，接着往下跑")
+        viewModelScope.launch {
+            // 让 start() 里那几条异步流程（体检、进度复核）先落一步，避免同时改 _uiState
+            kotlinx.coroutines.yield()
+            runAll()
+        }
     }
 
     /**
@@ -401,6 +425,16 @@ class ColumnWizardViewModel(
             try {
                 for ((index, step) in planned.withIndex()) {
                     if (!isActive) break
+                    // 重启会杀掉进程：先把「这个专题还没跑完」落盘，设备回来后 start() 会自动续上。
+                    // 放在执行之前写，是因为 reboot 一旦生效就没有机会再写任何东西了。
+                    if (step.kind.trim().equals("reboot", ignoreCase = true)) {
+                        val runningColumn = columnId
+                        val runningTopic = topic
+                        if (runningColumn != null && runningTopic != null) {
+                            ColumnProgressStore.markPendingResume(ksuApp, runningColumn, runningTopic.id)
+                            appendLog("马上重启设备；回来后会自动接着执行剩下的步骤，不用再点一次")
+                        }
+                    }
                     val result = executeStep(step, force = false)
                     if (result.isFailure) {
                         _uiState.update { it.copy(error = result.message) }
@@ -421,9 +455,15 @@ class ColumnWizardViewModel(
         }
     }
 
-    /** 这些步骤不需要人看着：装模块、装 APK、写文件、跑命令。重启 / 验收 / 确认动作一律不自动。 */
+    /**
+     * 这些步骤不需要人看着：装模块、装 APK、写文件、跑命令、重启。
+     *
+     * 重启也算自动：一键执行的语义就是「点一下，剩下我自己走完」。执行重启前会写一条
+     * [ColumnProgressStore.markPendingResume] 标记，设备回来后自动接着跑后面的步骤
+     * （见 [start]）。验收 / 确认动作仍然一律不自动——那需要人看结果。
+     */
     private fun RepoColumnStep.isAutoRunnable(): Boolean = when (kind.trim().lowercase()) {
-        "installmodule", "installapp", "writefile", "writeconfig", "writehmaconfig", "runcommand" -> true
+        "installmodule", "installapp", "writefile", "writeconfig", "writehmaconfig", "runcommand", "reboot" -> true
         else -> false
     }
 
@@ -602,6 +642,8 @@ class ColumnWizardViewModel(
                 val topicId = _uiState.value.topicId
                 runCatching { progressPrefs().edit().remove(progressKey(topicId)).apply() }
                 runCatching { ColumnProgressStore.clear(ksuApp, columnId.orEmpty(), topicId) }
+                // 回滚之后不该再自动续跑，否则重启回来会把刚撤掉的步骤又跑一遍
+                runCatching { ColumnProgressStore.clearPendingResume(ksuApp) }
                 prefetchedTopicId = null
                 _uiState.update { state ->
                     state.copy(
@@ -632,8 +674,13 @@ class ColumnWizardViewModel(
         }
     }
 
-    /** 全部步骤都落定后收尾：跑一次自检并标记完成。 */
-    private fun maybeFinish() {
+    /**
+     * 全部步骤都落定后收尾：跑一次自检并标记完成。
+     *
+     * [allowCelebrate] 为 true 时同时置位 [ColumnWizardUiState.celebrate]，界面弹一次庆祝 overlay。
+     * 只有「刚刚真的跑完最后一步」的路径才传 true；重新进页面恢复出的完成态不弹。
+     */
+    private fun maybeFinish(allowCelebrate: Boolean = true) {
         val state = _uiState.value
         if (state.done) return
         val allSettled = state.stepStates.all { item ->
@@ -641,8 +688,15 @@ class ColumnWizardViewModel(
         }
         if (!allSettled) return
         if (state.checks.isEmpty()) runSelfCheck()
-        _uiState.update { it.copy(done = true) }
+        // 走到这里说明这个专题已经没有待办：重启续跑标记可以清掉了。
+        ColumnProgressStore.clearPendingResume(ksuApp)
+        _uiState.update { it.copy(done = true, celebrate = allowCelebrate) }
         appendLog("全部步骤已处理完毕，下面是当前环境的自检结果")
+    }
+
+    /** 用户关掉庆祝 overlay。 */
+    fun dismissCelebration() {
+        _uiState.update { it.copy(celebrate = false) }
     }
 
     private fun updateStep(stepId: String, transform: (ColumnStepUiState) -> ColumnStepUiState) {

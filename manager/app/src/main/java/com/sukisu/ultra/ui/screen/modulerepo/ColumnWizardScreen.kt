@@ -1,5 +1,25 @@
 package com.sukisu.ultra.ui.screen.modulerepo
 
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.toArgb
+import nl.dionsegijn.konfetti.compose.KonfettiView
+import nl.dionsegijn.konfetti.compose.rememberKonfettiState
+import nl.dionsegijn.konfetti.core.Angle
+import nl.dionsegijn.konfetti.core.Party
+import nl.dionsegijn.konfetti.core.Position
+import nl.dionsegijn.konfetti.core.emitter.Emitter
+import nl.dionsegijn.konfetti.core.models.Shape
+import nl.dionsegijn.konfetti.core.models.Size
+import java.util.concurrent.TimeUnit
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.sukisu.ultra.ui.component.miuix.AppCard
 import com.sukisu.ultra.ui.UiMode
@@ -95,6 +115,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.sukisu.ultra.R
 import com.sukisu.ultra.data.column.ColumnCheckResult
 import com.sukisu.ultra.data.column.ColumnStepStatus
@@ -188,6 +210,10 @@ fun ColumnWizardScreen(
     onConfirmPreflight: () -> Unit = {},
     /** 预检确认框上点「取消」。 */
     onDismissPreflight: () -> Unit = {},
+    /** 庆祝 overlay 上点「去自检」：跳到自检专题，那里有「进入 AI 助手」可以发截图排查红项。 */
+    onOpenSelfCheck: () -> Unit = {},
+    /** 关掉庆祝 overlay。 */
+    onDismissCelebration: () -> Unit = {},
 ) {
     // 两套皮肤各自实现：这里不是换皮那么简单，卡片的构造、按钮的语义在两种设计语言里不一样，
     // 与其在一个函数里层层 if，不如两份实现共用同一批回调（执行 / 跳过 / 升级 / 回滚）。
@@ -232,6 +258,210 @@ fun ColumnWizardScreen(
                 onConfirm = onConfirmPreflight,
                 onDismiss = onDismissPreflight,
             )
+        }
+    }
+    // 跑完整个专题的庆祝：这是全流程唯一值得打断一次的地方，所以做成全屏而不是内联卡片。
+    // 和预检框一样套 AiAssistantMaterialTheme：Miuix 模式下才需要它生成同源调色板。
+    if (state.celebrate) {
+        AiAssistantMaterialTheme {
+            ColumnCelebrationOverlay(
+                onOpenSelfCheck = onOpenSelfCheck,
+                onDismiss = onDismissCelebration,
+            )
+        }
+    }
+}
+
+/**
+ * 专题跑完后的全屏庆祝。
+ *
+ * 只讲两件用户关心的事：①这套配置已经装好了；②去自检看实际效果，报红就发截图给 AI 助手。
+ * 不写「全部成功」「100% 通过」这类我们没法保证的话——红不红要跑完自检才知道。
+ */
+@Composable
+private fun ColumnCelebrationOverlay(
+    onOpenSelfCheck: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val konfetti = rememberKonfettiState()
+    val colors = MaterialTheme.colorScheme
+    val context = LocalContext.current
+    var shown by remember { mutableStateOf(false) }
+
+    // 彩带配色跟主题走，再补三枚固定亮色。不用纯绿 / 纯红：这两个色在本 App 里已经有
+    // 「通过 / 失败」的语义，撒进庆祝画面会被读错。
+    val partyColors = remember(colors.primary, colors.tertiary) {
+        listOf(
+            colors.primary.toArgb(),
+            colors.tertiary.toArgb(),
+            0xFFFCE18A.toInt(),
+            0xFFFF726D.toInt(),
+            0xFFB48DEF.toInt(),
+        )
+    }
+    // 第一波：从卡片背后向上炸开，星形 + 方形 + 圆形混着撒，铺满整屏。
+    val burst = remember(partyColors) {
+        Party(
+            speed = 12f,
+            maxSpeed = 34f,
+            damping = 0.88f,
+            spread = 360,
+            colors = partyColors,
+            position = Position.Relative(0.5, 0.34),
+            size = listOf(Size.SMALL, Size.MEDIUM, Size.LARGE),
+            shapes = listOf(Shape.Square, Shape.Circle, Shape.Polygon.STAR),
+            timeToLive = 2800L,
+            emitter = Emitter(duration = 140, TimeUnit.MILLISECONDS).max(140),
+        )
+    }
+    // 第二波：延迟一点从屏幕顶端往下飘，卡片出现之后画面里还有东西在动，不会一下子静掉。
+    val rain = remember(partyColors) {
+        Party(
+            speed = 0f,
+            maxSpeed = 16f,
+            damping = 0.94f,
+            angle = Angle.BOTTOM,
+            spread = 70,
+            colors = partyColors,
+            position = Position.Relative(0.5, -0.08),
+            size = listOf(Size.SMALL, Size.MEDIUM),
+            shapes = listOf(Shape.Square, Shape.Circle),
+            timeToLive = 3400L,
+            delay = 320,
+            emitter = Emitter(duration = 1100, TimeUnit.MILLISECONDS).perSecond(85),
+        )
+    }
+    // 系统里关了「动画时长缩放」（无障碍设置）就不撒彩带，只留一次静态呈现。
+    val reduceMotion = remember(context) {
+        runCatching {
+            android.provider.Settings.Global.getFloat(
+                context.contentResolver,
+                android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,
+                1f,
+            ) == 0f
+        }.getOrDefault(false)
+    }
+
+    LaunchedEffect(Unit) {
+        shown = true
+        if (reduceMotion) return@LaunchedEffect
+        konfetti.start(burst)
+        kotlinx.coroutines.delay(120)
+        konfetti.start(rain)
+    }
+
+    val cardScale by animateFloatAsState(
+        targetValue = if (shown) 1f else 0.72f,
+        animationSpec = spring(dampingRatio = 0.62f, stiffness = 360f),
+        label = "celebration-card",
+    )
+    val emojiScale by animateFloatAsState(
+        targetValue = if (shown) 1f else 0.2f,
+        animationSpec = spring(dampingRatio = 0.38f, stiffness = 240f),
+        label = "celebration-emoji",
+    )
+    val emojiTilt by animateFloatAsState(
+        targetValue = if (shown) 0f else -22f,
+        animationSpec = spring(dampingRatio = 0.45f, stiffness = 150f),
+        label = "celebration-tilt",
+    )
+    // 卡片背后一圈呼吸光晕：给「这一刻」一点重量，透明度压得很低，不抢文字对比度。
+    val glow = rememberInfiniteTransition(label = "celebration-glow")
+    val glowAlpha by glow.animateFloat(
+        initialValue = 0.14f,
+        targetValue = 0.32f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "celebration-glow-alpha",
+    )
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.62f))) {
+            // 彩带画在卡片下面：粒子从卡片背后飞出来，不会糊住文字。
+            KonfettiView(state = konfetti, modifier = Modifier.fillMaxSize())
+            Box(
+                modifier = Modifier.fillMaxSize().clickable(onClick = onDismiss),
+                contentAlignment = Alignment.Center,
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .padding(horizontal = 32.dp)
+                        .graphicsLayer {
+                            scaleX = cardScale
+                            scaleY = cardScale
+                        }
+                        .clickable(enabled = false) {},
+                    shape = RoundedCornerShape(28.dp),
+                    color = colors.surface,
+                    tonalElevation = 8.dp,
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 30.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Box(
+                                modifier = Modifier
+                                    .size(104.dp)
+                                    .background(
+                                        brush = Brush.radialGradient(
+                                            colors = listOf(
+                                                colors.primary.copy(alpha = glowAlpha),
+                                                Color.Transparent,
+                                            ),
+                                        ),
+                                        shape = CircleShape,
+                                    ),
+                            )
+                            Text(
+                                text = "\uD83C\uDF89",
+                                modifier = Modifier.graphicsLayer {
+                                    scaleX = emojiScale
+                                    scaleY = emojiScale
+                                    rotationZ = emojiTilt
+                                },
+                                fontSize = 60.sp,
+                            )
+                        }
+                        Spacer(Modifier.height(14.dp))
+                        Text(
+                            text = stringResource(R.string.column_celebrate_title),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.onSurface,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.column_celebrate_body),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
+                        Spacer(Modifier.height(22.dp))
+                        Button(
+                            onClick = onOpenSelfCheck,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp),
+                            shape = RoundedCornerShape(23.dp),
+                        ) {
+                            Text(stringResource(R.string.column_celebrate_self_check))
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        TextButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.column_celebrate_done))
+                        }
+                    }
+                }
+            }
         }
     }
 }

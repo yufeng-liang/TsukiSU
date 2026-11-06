@@ -14,10 +14,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -74,6 +77,8 @@ internal fun AiSearchSettingsSection(modifier: Modifier = Modifier) {
     var testing by remember { mutableStateOf<AiSearchProvider?>(null) }
     var testJob by remember { mutableStateOf<Job?>(null) }
     val testResults = remember { mutableStateMapOf<AiSearchProvider, AiSearchTestResult>() }
+    // 测试搜索用的查询词，弹窗内可改；四家服务共用同一个输入，免得住户各自维护。
+    var testQuery by remember { mutableStateOf("") }
     // 二级弹窗当前对应的服务；null 表示关闭。
     var detailProvider by remember { mutableStateOf<AiSearchProvider?>(null) }
     val scope = rememberCoroutineScope()
@@ -105,13 +110,13 @@ internal fun AiSearchSettingsSection(modifier: Modifier = Modifier) {
     }
 
     /** 发起一次真实搜索测试：消耗一次调用，结果写回对应服务，在弹窗里展示。 */
-    fun runTest(provider: AiSearchProvider) {
+    fun runTest(provider: AiSearchProvider, query: String) {
         if (testing != null) return
         testing = provider
         testResults.remove(provider)
         testJob = scope.launch {
             val result = try {
-                AiWebSearch.test(provider, config.keyOf(provider))
+                AiWebSearch.test(provider, config.keyOf(provider), query)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Throwable) {
@@ -188,12 +193,14 @@ internal fun AiSearchSettingsSection(modifier: Modifier = Modifier) {
             sectionEnabled = config.searchEnabled,
             testing = testing,
             result = testResults[provider],
+            testQuery = testQuery,
+            onQueryChange = { testQuery = it },
             onDismiss = { detailProvider = null },
             onKeyChange = { value ->
                 // key 以枚举名做索引，避免枚举改名后和旧 Key 串味。
                 persist(config.copy(keys = config.keys + (provider.name to value)))
             },
-            onTest = { runTest(provider) },
+            onTest = { runTest(provider, testQuery) },
         )
     }
 }
@@ -329,6 +336,8 @@ private fun SearchProviderDetailDialog(
     sectionEnabled: Boolean,
     testing: AiSearchProvider?,
     result: AiSearchTestResult?,
+    testQuery: String,
+    onQueryChange: (String) -> Unit,
     onDismiss: () -> Unit,
     onKeyChange: (String) -> Unit,
     onTest: () -> Unit,
@@ -358,7 +367,10 @@ private fun SearchProviderDetailDialog(
                     enabled = sectionEnabled,
                     shape = MaterialTheme.shapes.large,
                     modifier = Modifier.fillMaxWidth(),
-                    supportingText = if (provider == AiSearchProvider.ANYSEARCH) {
+                    supportingText = if (
+                        provider == AiSearchProvider.ANYSEARCH ||
+                        provider == AiSearchProvider.FIRECRAWL
+                    ) {
                         { Text(stringResource(R.string.ai_search_key_optional)) }
                     } else {
                         null
@@ -381,40 +393,104 @@ private fun SearchProviderDetailDialog(
                             )
                         }
                     }
-                    TextButton(
+                }
+                Text(
+                    text = stringResource(R.string.ai_search_test_query),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = testQuery,
+                        onValueChange = onQueryChange,
+                        placeholder = { Text(stringResource(R.string.ai_search_test_query_hint)) },
+                        singleLine = true,
+                        enabled = sectionEnabled,
+                        shape = MaterialTheme.shapes.large,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(
                         // 停用的服务也允许测试：用户经常是先测通再打开；测试进行中全部禁点。
                         enabled = sectionEnabled && testing == null,
                         onClick = onTest,
                     ) {
-                        Text(
-                            stringResource(
-                                if (isTesting) R.string.ai_search_testing else R.string.ai_search_test,
-                            ),
-                        )
+                        if (isTesting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Rounded.Search,
+                                contentDescription = stringResource(R.string.ai_search_test_run),
+                            )
+                        }
                     }
                 }
                 when {
-                    isTesting -> Text(
-                        text = stringResource(R.string.ai_search_testing),
+                    result is AiSearchTestResult.Success && result.count == 0 -> Text(
+                        text = stringResource(R.string.ai_search_test_no_result),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
-                    result is AiSearchTestResult.Success -> Text(
-                        text = stringResource(
-                            R.string.ai_search_test_success,
-                            result.latencyMs,
-                            result.count,
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
+                    result is AiSearchTestResult.Success -> Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = stringResource(
+                                R.string.ai_search_test_success,
+                                result.latencyMs,
+                                result.count,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        // 只展示前三条，弹窗里能确认真实返回即可。
+                        result.results.take(3).forEach { item ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        MaterialTheme.shapes.large,
+                                    )
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                Text(
+                                    text = item.title.ifBlank { item.url },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = item.url,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (item.snippet.isNotBlank()) {
+                                    Text(
+                                        text = item.snippet,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                    }
 
                     result is AiSearchTestResult.Failure -> Text(
                         text = stringResource(R.string.ai_search_test_failure, result.message),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
-                        maxLines = 3,
+                        maxLines = 4,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }

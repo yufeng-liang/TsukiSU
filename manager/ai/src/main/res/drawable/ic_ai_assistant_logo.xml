@@ -1,31 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  AI 助手品牌标识：绿色到青色的圆形渐变底 + 白色四角星，替代原先直接复用应用图标。
-  圆形外轮廓保证在首页/聊天的圆形头像槽里不会露出方形边角。
+  AI 助手品牌标识：四角星。白色仅作占位，运行时由 AiAvatarImage 用主题色 tint，
+  因此图标颜色会跟随 App 主题；外圈由头像容器的 primaryContainer 提供，两者同一色系。
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="48dp"
     android:height="48dp"
     android:viewportWidth="48"
     android:viewportHeight="48">
 
     <path
-        android:pathData="M24,2 C36.15,2 46,11.85 46,24 C46,36.15 36.15,46 24,46 C11.85,46 2,36.15 2,24 C2,11.85 11.85,2 24,2 Z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:type="linear"
-                android:startX="8"
-                android:startY="6"
-                android:endX="40"
-                android:endY="42">
-                <item android:color="#FF34D399" android:offset="0" />
-                <item android:color="#FF06B6D4" android:offset="1" />
-            </gradient>
-        </aapt:attr>
-    </path>
-
-    <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M24,10 C25.1,18.4 29.6,22.9 38,24 C29.6,25.1 25.1,29.6 24,38 C22.9,29.6 18.4,25.1 10,24 C18.4,22.9 22.9,18.4 24,10 Z" />
+        android:pathData="M24,4 C25.4,15.2 32.8,22.6 44,24 C32.8,25.4 25.4,32.8 24,44 C22.6,32.8 15.2,25.4 4,24 C15.2,22.6 22.6,15.2 24,4 Z" />
 </vector>
