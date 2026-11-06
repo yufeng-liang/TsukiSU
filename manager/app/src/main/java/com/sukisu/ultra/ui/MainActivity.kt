@@ -526,6 +526,13 @@ class MainActivity : ComponentActivity() {
                                             onMarkDone = { step -> wizardViewModel.markDone(step) },
                                             // 「进入 AI 助手」：向导里跑完检测拿到红项截图后直接跳过去排查。
                                             onOpenAi = { navigator.push(Route.AiAssistant) },
+                                            // 庆祝 overlay 的「去自检」：进同一专栏的自检专题，
+                                            // 那一屏本身带「进入 AI 助手」，红项可以就地发截图排查。
+                                            onOpenSelfCheck = {
+                                                wizardViewModel.dismissCelebration()
+                                                navigator.push(Route.ColumnWizard(key.columnId, SELF_CHECK_TOPIC_ID))
+                                            },
+                                            onDismissCelebration = { wizardViewModel.dismissCelebration() },
                                             onBack = { navigator.pop() },
                                         )
                                     }
@@ -1009,3 +1016,6 @@ private fun MainScreenBackHandler(
         }
     )
 }
+
+/// 自检专题的 id，与索引 json/columns.json 里 self-check 的 topicId 保持一致。
+private const val SELF_CHECK_TOPIC_ID = "self-check"

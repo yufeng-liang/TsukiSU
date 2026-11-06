@@ -326,6 +326,7 @@ dependencies {
     implementation(libs.xz)
     implementation(libs.protobuf.kotlin.lite)
     implementation(libs.coil.compose)
+    implementation(libs.konfetti.compose)
 
     testImplementation(libs.junit)
     testImplementation(libs.org.json)

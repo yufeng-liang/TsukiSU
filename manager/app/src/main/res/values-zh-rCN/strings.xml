@@ -1714,6 +1714,10 @@
     <string name="column_health_collapse" translatable="true">收起明细</string>
     <string name="column_health_missing_hint" translatable="true">还有 %1$d 项未通过</string>
     <string name="column_health_all_pass" translatable="true">全部通过</string>
+    <string name="column_celebrate_title">全部装好了</string>
+    <string name="column_celebrate_body">实际效果请用自检软件跑一遍。报红就把截图发给 AI 助手。</string>
+    <string name="column_celebrate_self_check">去自检</string>
+    <string name="column_celebrate_done">知道了</string>
     <string name="module_column_tier_recommended" translatable="true">最常用</string>
     <string name="about_contributors">主要贡献者</string>
     <string name="about_contributors_hint">拖动浏览，双指缩放，点击头像打开主页。</string>

@@ -1726,6 +1726,10 @@
     <string name="column_health_collapse" translatable="true">Hide check details</string>
     <string name="column_health_missing_hint" translatable="true">%1$d checks still failing</string>
     <string name="column_health_all_pass" translatable="true">All checks passed</string>
+    <string name="column_celebrate_title">All set</string>
+    <string name="column_celebrate_body">Run a detector to see the actual result. If it reports red items, send the screenshot to the AI assistant.</string>
+    <string name="column_celebrate_self_check">Run self-check</string>
+    <string name="column_celebrate_done">Got it</string>
     <string name="module_column_tier_recommended" translatable="true">Most common</string>
     <string name="about_contributors">Main contributors</string>
     <string name="about_contributors_hint">Drag to explore, pinch to zoom, tap an avatar to open the profile.</string>
