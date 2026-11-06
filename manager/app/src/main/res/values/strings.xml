@@ -1608,7 +1608,7 @@
 <string name="module_upload_identity_ready">All set — verify to continue.</string>
     <!-- 商店专栏 -->
     <string name="module_column_section_title">Columns</string>
-    <string name="module_column_load_failed">Column list didn't load</string>
+    <string name="module_column_load_failed">Column list failed to load</string>
     <string name="module_column_retry">Retry</string>
     <string name="module_column_topic_count">%1$d topics</string>
     <string name="module_column_empty">This column has no topics yet.</string>
@@ -1617,7 +1617,7 @@
     <string name="module_column_steps_show">View %1$d steps</string>
     <string name="module_column_steps_hide">Collapse steps</string>
     <string name="module_column_progress_done">Completed</string>
-    <string name="column_wizard_health_scanning">Checking device status\u2026</string>
+    <string name="column_wizard_health_scanning">Checking device status…</string>
     <string name="home_hide_env_done_title">Hide environment completed</string>
     <string name="home_hide_env_done_summary">See what you gained, or pick another topic</string>
     <string name="module_column_verify_title">How to confirm</string>
