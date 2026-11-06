@@ -28,7 +28,9 @@ import com.sukisu.ultra.data.model.RepoColumnStep
 import com.sukisu.ultra.data.model.RepoColumnTopic
 import com.sukisu.ultra.ksuApp
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,6 +38,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -78,6 +81,13 @@ class ColumnWizardViewModel(
 
     /** 同一条向导只允许一个步骤在跑。 */
     private var runningStep = false
+
+    /**
+     * 重启倒计时期间用户的选择：true = 立刻重启，false = 稍后自己重启。
+     *
+     * 只有 [confirmRebootBeforeRunning] 在等的时候非空。
+     */
+    private var rebootDecision: CompletableDeferred<Boolean>? = null
 
     /** 已经预取过密钥的专题 id，避免重复网络请求。 */
     private var prefetchedTopicId: String? = null
@@ -432,7 +442,11 @@ class ColumnWizardViewModel(
                         val runningTopic = topic
                         if (runningColumn != null && runningTopic != null) {
                             ColumnProgressStore.markPendingResume(ksuApp, runningColumn, runningTopic.id)
-                            appendLog("马上重启设备；回来后会自动接着执行剩下的步骤，不用再点一次")
+                        }
+                        // 手机突然黑屏重启会吓到人：先倒计时并在界面上说清楚「回来后会自动接着跑」。
+                        if (!confirmRebootBeforeRunning()) {
+                            appendLog("已暂停：等你手动重启设备。回来后打开 App 会自动接着跑剩下的步骤")
+                            return@launch
                         }
                     }
                     val result = executeStep(step, force = false)
@@ -699,6 +713,45 @@ class ColumnWizardViewModel(
         _uiState.update { it.copy(celebrate = false) }
     }
 
+    /**
+     * 重启前先给用户一个倒计时，别让手机毫无征兆地黑屏。
+     *
+     * 返回 true = 时间到、按原计划重启；false = 用户选「稍后我自己重启」，调用方要停下本次
+     * 一键执行。续跑标记在调用前已经写过（[ColumnProgressStore.markPendingResume]），
+     * 用户手动重启后打开 App 会由 [resumePendingRunIfAny] 自动接着跑。
+     */
+    private suspend fun confirmRebootBeforeRunning(): Boolean {
+        val decision = CompletableDeferred<Boolean>()
+        rebootDecision = decision
+        var left = REBOOT_COUNTDOWN_SECONDS
+        _uiState.update { it.copy(rebootCountdown = left) }
+        appendLog("${left} 秒后重启设备；回来后会自动接着跑剩下的步骤，不用再点一次")
+        while (left > 0) {
+            // 每秒看一次用户有没有点按钮；没点就继续倒数。
+            val answered = withTimeoutOrNull(1_000L) { decision.await() }
+            if (answered != null) {
+                _uiState.update { it.copy(rebootCountdown = -1) }
+                rebootDecision = null
+                return answered
+            }
+            left -= 1
+            _uiState.update { it.copy(rebootCountdown = left) }
+        }
+        _uiState.update { it.copy(rebootCountdown = -1) }
+        rebootDecision = null
+        return true
+    }
+
+    /** 倒计时卡片上的「立即重启」。 */
+    fun rebootNow() {
+        rebootDecision?.complete(true)
+    }
+
+    /** 倒计时卡片上的「稍后我自己重启」。 */
+    fun rebootLater() {
+        rebootDecision?.complete(false)
+    }
+
     private fun updateStep(stepId: String, transform: (ColumnStepUiState) -> ColumnStepUiState) {
         _uiState.update { state ->
             state.copy(
@@ -826,6 +879,9 @@ class ColumnWizardViewModel(
     }
 
     private companion object {
+        /** 重启前的倒计时秒数：够用户看清提示，又不至于等太久。 */
+        const val REBOOT_COUNTDOWN_SECONDS = 10
+
         /** 日志上限：长步骤（模块安装）输出很多，不截断会把内存和 UI 一起拖慢。 */
         const val MAX_LOG_LINES = 400
 

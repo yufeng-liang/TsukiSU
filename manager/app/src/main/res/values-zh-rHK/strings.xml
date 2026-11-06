@@ -702,5 +702,9 @@
     <string name="column_celebrate_body">實際效果請用自檢軟體跑一遍。報紅就把截圖發給 AI 助理。</string>
     <string name="column_celebrate_self_check">去自檢</string>
     <string name="column_celebrate_done">知道了</string>
+    <string name="reboot_countdown_title">馬上重啟裝置</string>
+    <string name="reboot_countdown_body">螢幕會黑一下，這是正常的：重啟後隱藏設定才會生效。開機後開啟 App 會自己接著跑，不用重新點。</string>
+    <string name="reboot_countdown_now">立即重啟</string>
+    <string name="reboot_countdown_later">稍後我自己重啟</string>
     <string name="module_column_tier_recommended" translatable="true">最常用</string>
 </resources>

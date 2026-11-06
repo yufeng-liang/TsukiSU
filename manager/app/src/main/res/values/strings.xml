@@ -1730,6 +1730,10 @@
     <string name="column_celebrate_body">Run a detector to see the actual result. If it reports red items, send the screenshot to the AI assistant.</string>
     <string name="column_celebrate_self_check">Run self-check</string>
     <string name="column_celebrate_done">Got it</string>
+    <string name="reboot_countdown_title">Restarting soon</string>
+    <string name="reboot_countdown_body">The screen goes black for a moment. It is restarting so the hidden config takes effect. Open the app after boot and it continues on its own.</string>
+    <string name="reboot_countdown_now">Restart now</string>
+    <string name="reboot_countdown_later">Restart later</string>
     <string name="module_column_tier_recommended" translatable="true">Most common</string>
     <string name="about_contributors">Main contributors</string>
     <string name="about_contributors_hint">Drag to explore, pinch to zoom, tap an avatar to open the profile.</string>

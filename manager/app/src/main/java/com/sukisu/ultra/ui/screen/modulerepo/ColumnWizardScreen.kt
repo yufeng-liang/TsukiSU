@@ -75,6 +75,10 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -214,6 +218,10 @@ fun ColumnWizardScreen(
     onOpenSelfCheck: () -> Unit = {},
     /** 关掉庆祝 overlay。 */
     onDismissCelebration: () -> Unit = {},
+    /** 重启倒计时卡片上点「立即重启」。 */
+    onRebootNow: () -> Unit = {},
+    /** 重启倒计时卡片上点「稍后我自己重启」。 */
+    onRebootLater: () -> Unit = {},
 ) {
     // 两套皮肤各自实现：这里不是换皮那么简单，卡片的构造、按钮的语义在两种设计语言里不一样，
     // 与其在一个函数里层层 if，不如两份实现共用同一批回调（执行 / 跳过 / 升级 / 回滚）。
@@ -268,6 +276,97 @@ fun ColumnWizardScreen(
                 onOpenSelfCheck = onOpenSelfCheck,
                 onDismiss = onDismissCelebration,
             )
+        }
+    }
+    // 重启前倒计时：手机突然黑屏会让人以为死机了，所以先明说「X 秒后重启」并给两个出口。
+    if (state.rebootCountdown >= 0) {
+        AiAssistantMaterialTheme {
+            RebootCountdownOverlay(
+                seconds = state.rebootCountdown,
+                onRebootNow = onRebootNow,
+                onRebootLater = onRebootLater,
+            )
+        }
+    }
+}
+
+/**
+ * 重启前的倒计时提示。
+ *
+ * 只说三件事：几秒后重启、为什么要重启（让隐藏配置生效）、重启完回来自动接着跑。
+ * 两个按钮给用户掌控感：「立即重启」和「稍后我自己重启」（后者之后打开 App 会自动续跑）。
+ */
+@Composable
+private fun RebootCountdownOverlay(
+    seconds: Int,
+    onRebootNow: () -> Unit,
+    onRebootLater: () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.86f)
+                .wrapContentHeight(),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 22.dp, vertical = 22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = seconds.toString(),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = stringResource(R.string.reboot_countdown_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.reboot_countdown_body),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(20.dp))
+                Button(
+                    onClick = onRebootNow,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp),
+                    shape = RoundedCornerShape(23.dp),
+                ) {
+                    Text(stringResource(R.string.reboot_countdown_now), style = MaterialTheme.typography.titleSmall)
+                }
+                Spacer(Modifier.height(8.dp))
+                TextButton(onClick = onRebootLater, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = stringResource(R.string.reboot_countdown_later),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }

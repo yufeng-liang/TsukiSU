@@ -533,6 +533,9 @@ class MainActivity : ComponentActivity() {
                                                 navigator.push(Route.ColumnWizard(key.columnId, SELF_CHECK_TOPIC_ID))
                                             },
                                             onDismissCelebration = { wizardViewModel.dismissCelebration() },
+                                            // 一键执行走到重启那一步会先倒计时，这里接两个出口。
+                                            onRebootNow = { wizardViewModel.rebootNow() },
+                                            onRebootLater = { wizardViewModel.rebootLater() },
                                             onBack = { navigator.pop() },
                                         )
                                     }
