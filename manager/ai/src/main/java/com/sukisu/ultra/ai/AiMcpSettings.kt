@@ -17,6 +17,8 @@ data class AiMcpServer(
     val name: String,
     val url: String,
     val enabled: Boolean = true,
+    /** STREAMABLE_HTTP 或 SSE；客户端都按「POST + 接收 JSON/SSE」处理，这里只影响展示与端口习惯。 */
+    val transport: String = "STREAMABLE_HTTP",
     val headers: Map<String, String> = emptyMap(),
 )
 

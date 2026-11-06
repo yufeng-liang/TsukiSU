@@ -25,6 +25,45 @@ enum class AiThinkingMode {
     }
 }
 
+/**
+ * 该模型可选的推理强度档位：「自动」永远可选；模型明确不支持推理时返回空列表。
+ * models.dev 的 reasoning_options 有三种形态：
+ * - effort：直接给出档位名（none/low/medium/high/max），按它裁刻度；
+ * - toggle：只有开/关，用「自动 / 关闭 / 开」；
+ * - budget_tokens：给最小/最大预算，用「自动 / 关闭 / 低 / 中 / 高」三档估算。
+ */
+fun AiModelInfo?.supportedReasoningModes(): List<AiThinkingMode> {
+    if (this == null) return AiThinkingMode.entries.toList()
+    val options = reasoningOptions
+    val effort = options.firstOrNull { it.type.equals("effort", ignoreCase = true) }
+    if (effort != null && effort.values.isNotEmpty()) {
+        return buildList {
+            add(AiThinkingMode.AUTO)
+            effort.values.forEach { add(it.toThinkingMode()) }
+        }
+    }
+    if (options.any { it.type.equals("toggle", ignoreCase = true) }) {
+        return listOf(AiThinkingMode.AUTO, AiThinkingMode.OFF, AiThinkingMode.LOW)
+    }
+    if (options.any { it.type.equals("budget_tokens", ignoreCase = true) }) {
+        return listOf(
+            AiThinkingMode.AUTO, AiThinkingMode.OFF, AiThinkingMode.LOW,
+            AiThinkingMode.MEDIUM, AiThinkingMode.HIGH,
+        )
+    }
+    if (!reasoning) return emptyList()
+    return AiThinkingMode.entries.toList()
+}
+
+/** 把 models.dev 的 effort 名称映射到本项目的能力枚举。 */
+fun String.toThinkingMode(): AiThinkingMode = when (trim().lowercase()) {
+    "none", "off", "disabled" -> AiThinkingMode.OFF
+    "minimal", "low" -> AiThinkingMode.LOW
+    "medium", "mid" -> AiThinkingMode.MEDIUM
+    "high", "max", "highest" -> AiThinkingMode.HIGH
+    else -> AiThinkingMode.MEDIUM
+}
+
 @Serializable
 enum class AiProviderFormat {
     AUTO,
@@ -52,6 +91,18 @@ enum class AiProviderFormat {
     }
 }
 
+/** models.dev 给出的“可调推理档位”描述，UI 据此裁剪滑杆刻度。 */
+@Serializable
+data class AiReasoningOption(
+    /** effort / toggle / budget_tokens */
+    val type: String = "",
+    /** type=effort 时的档位名（none/low/medium/high/max…）。 */
+    val values: List<String> = emptyList(),
+    /** type=budget_tokens 时的最小/最大预算。 */
+    val min: Int = 0,
+    val max: Int = 0,
+)
+
 /**
  * 单个模型的能力信息。id 是请求里使用的模型标识，name 是界面展示名。
  */
@@ -67,6 +118,8 @@ data class AiModelInfo(
     val reasoning: Boolean = false,
     /** 是否支持图片输入。 */
     val supportsImages: Boolean = false,
+    /** 模型支持的推理档位；空表示未知（按兼容档位回退）。 */
+    val reasoningOptions: List<AiReasoningOption> = emptyList(),
 )
 
 /**
@@ -82,6 +135,8 @@ data class AiProvider(
     val models: List<AiModelInfo> = emptyList(),
     /** 该供应商下已选中的模型 id（多供应商各自记住自己的选择）。 */
     val modelId: String = "",
+    /** 该供应商当前选中的推理强度。 */
+    val thinkingMode: AiThinkingMode = AiThinkingMode.AUTO,
 )
 
 /**
