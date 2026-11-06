@@ -40,6 +40,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.add
 import androidx.compose.foundation.layout.calculateEndPadding
@@ -109,6 +110,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.state.ToggleableState
@@ -223,6 +225,20 @@ fun ColumnWizardScreen(
     /** 重启倒计时卡片上点「稍后我自己重启」。 */
     onRebootLater: () -> Unit = {},
 ) {
+    // 测试专用：长按顶栏标题打开预览菜单。庆祝动画和重启倒计时都要跑完整个专题才会出现，
+    // 而验收时不能真的执行隐藏步骤（会改设备、会重启），所以留一个只播 UI、不碰设备的入口。
+    var showTestMenu by remember { mutableStateOf(false) }
+    var previewCelebrate by remember { mutableStateOf(false) }
+    var previewCountdown by remember { mutableStateOf(-1) }
+    LaunchedEffect(previewCountdown) {
+        if (previewCountdown > 0) {
+            kotlinx.coroutines.delay(1_000)
+            previewCountdown -= 1
+        } else if (previewCountdown == 0) {
+            previewCountdown = -1
+        }
+    }
+
     // 两套皮肤各自实现：这里不是换皮那么简单，卡片的构造、按钮的语义在两种设计语言里不一样，
     // 与其在一个函数里层层 if，不如两份实现共用同一批回调（执行 / 跳过 / 升级 / 回滚）。
     when (LocalUiMode.current) {
@@ -239,6 +255,7 @@ fun ColumnWizardScreen(
             onToggleOptIn = onToggleOptIn,
             onMarkDone = onMarkDone,
             onOpenAi = onOpenAi,
+            onLongPressTitle = { showTestMenu = true },
         )
 
         UiMode.Material -> ColumnWizardScreenMaterial(
@@ -254,6 +271,7 @@ fun ColumnWizardScreen(
             onToggleOptIn = onToggleOptIn,
             onMarkDone = onMarkDone,
             onOpenAi = onOpenAi,
+            onLongPressTitle = { showTestMenu = true },
         )
     }
     // 预检框两套皮肤共用 Material 版：Miuix 没有可靠的对话框 API，硬造一个只会和行为约定打架。
@@ -270,21 +288,55 @@ fun ColumnWizardScreen(
     }
     // 跑完整个专题的庆祝：这是全流程唯一值得打断一次的地方，所以做成全屏而不是内联卡片。
     // 和预检框一样套 AiAssistantMaterialTheme：Miuix 模式下才需要它生成同源调色板。
-    if (state.celebrate) {
+    if (state.celebrate || previewCelebrate) {
         AiAssistantMaterialTheme {
             ColumnCelebrationOverlay(
-                onOpenSelfCheck = onOpenSelfCheck,
-                onDismiss = onDismissCelebration,
+                onOpenSelfCheck = {
+                    previewCelebrate = false
+                    onOpenSelfCheck()
+                },
+                onDismiss = {
+                    previewCelebrate = false
+                    onDismissCelebration()
+                },
             )
         }
     }
     // 重启前倒计时：手机突然黑屏会让人以为死机了，所以先明说「X 秒后重启」并给两个出口。
-    if (state.rebootCountdown >= 0) {
+    val countdownSeconds = if (previewCountdown >= 0) previewCountdown else state.rebootCountdown
+    if (countdownSeconds >= 0) {
         AiAssistantMaterialTheme {
             RebootCountdownOverlay(
-                seconds = state.rebootCountdown,
-                onRebootNow = onRebootNow,
-                onRebootLater = onRebootLater,
+                seconds = countdownSeconds,
+                // 预览模式下这两个按钮只关预览，绝不能落到真实回调（那里会真的让设备重启）。
+                onRebootNow = {
+                    if (previewCountdown >= 0) previewCountdown = -1 else onRebootNow()
+                },
+                onRebootLater = {
+                    if (previewCountdown >= 0) previewCountdown = -1 else onRebootLater()
+                },
+            )
+        }
+    }
+    // 测试菜单：长按顶栏标题才会出现，正式流程永远碰不到。
+    if (showTestMenu) {
+        AiAssistantMaterialTheme {
+            AlertDialog(
+                onDismissRequest = { showTestMenu = false },
+                title = { Text("测试专用") },
+                text = { Text("只预览界面，不执行任何隐藏操作、也不会真的重启。长按顶栏标题可再次打开。") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showTestMenu = false
+                        previewCelebrate = true
+                    }) { Text("预览庆祝动画") }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showTestMenu = false
+                        previewCountdown = 10
+                    }) { Text("预览重启倒计时") }
+                },
             )
         }
     }
@@ -594,6 +646,7 @@ private fun ColumnWizardScreenMiuix(
     onToggleOptIn: (RepoColumnStep) -> Unit,
     onMarkDone: (RepoColumnStep) -> Unit,
     onOpenAi: () -> Unit,
+    onLongPressTitle: () -> Unit = {},
 ) {
     val colorScheme = MiuixTheme.colorScheme
     val scrollBehavior = MiuixScrollBehavior()
@@ -672,6 +725,11 @@ private fun ColumnWizardScreenMiuix(
     AppScaffold(
         topBar = {
             BlurredBar(backdrop) {
+                Box(
+                    modifier = Modifier.pointerInput(Unit) {
+                        detectTapGestures(onLongPress = { onLongPressTitle() })
+                    },
+                ) {
                 TopAppBar(
                     title = topic.title,
                     color = barColor,
@@ -690,6 +748,7 @@ private fun ColumnWizardScreenMiuix(
                     actions = {},
                     scrollBehavior = scrollBehavior,
                 )
+                }
             }
         },
         bottomBar = {
@@ -1624,6 +1683,7 @@ private fun ColumnWizardScreenMaterial(
     onToggleOptIn: (RepoColumnStep) -> Unit,
     onMarkDone: (RepoColumnStep) -> Unit,
     onOpenAi: () -> Unit,
+    onLongPressTitle: () -> Unit = {},
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
@@ -1689,7 +1749,14 @@ private fun ColumnWizardScreenMaterial(
     ExpressiveScaffold(
         topBar = {
             LargeFlexibleTopAppBar(
-                title = { Text(text = topic.title) },
+                title = {
+                    Text(
+                        text = topic.title,
+                        modifier = Modifier.pointerInput(Unit) {
+                            detectTapGestures(onLongPress = { onLongPressTitle() })
+                        },
+                    )
+                },
                 navigationIcon = { TopBarBackButton(onClick = onBack) },
                 actions = {},
                 colors = expressiveTopAppBarColors(),
