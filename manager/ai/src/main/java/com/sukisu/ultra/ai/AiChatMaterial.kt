@@ -70,6 +70,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -80,6 +81,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -1019,12 +1022,20 @@ private fun AiComposerMaterial(
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             tonalElevation = 2.dp,
         ) {
+            // 单行时三者垂直居中；输入框长到多行后，加号与发送按钮贴底。
+            val density = LocalDensity.current
+            var fieldHeightPx by remember { mutableIntStateOf(0) }
+            val multiline = fieldHeightPx > with(density) { 64.dp.roundToPx() }
             Row(
                 modifier = Modifier.fillMaxWidth().padding(6.dp),
-                // 加号、输入框、发送按钮统一垂直居中：输入框只有一行时三者要在同一水平线上。
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment = if (multiline) Alignment.Bottom else Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onAttachImage, enabled = !isSending) {
+                IconButton(
+                    onClick = onAttachImage,
+                    // 发送按钮外面有 6dp padding，贴底时给加号补同样的下边距，两个圆才对得齐。
+                    modifier = Modifier.padding(bottom = if (multiline) 6.dp else 0.dp),
+                    enabled = !isSending,
+                ) {
                     Text(
                         text = "+",
                         style = MaterialTheme.typography.titleLarge,
@@ -1043,7 +1054,9 @@ private fun AiComposerMaterial(
                         focusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
                         unfocusedBorderColor = Color.Transparent,
                     ),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .onSizeChanged { fieldHeightPx = it.height },
                 )
                 FilledIconButton(
                     onClick = if (isSending) onStop else onSend,
