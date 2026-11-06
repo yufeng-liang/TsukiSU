@@ -1718,6 +1718,10 @@
     <string name="column_celebrate_body">实际效果请用自检软件跑一遍。报红就把截图发给 AI 助手。</string>
     <string name="column_celebrate_self_check">去自检</string>
     <string name="column_celebrate_done">知道了</string>
+    <string name="reboot_countdown_title">马上重启设备</string>
+    <string name="reboot_countdown_body">屏幕会黑一下，这是正常的：重启后隐藏配置才会生效。开机后打开 App 会自己接着跑，不用重新点。</string>
+    <string name="reboot_countdown_now">立即重启</string>
+    <string name="reboot_countdown_later">稍后我自己重启</string>
     <string name="module_column_tier_recommended" translatable="true">最常用</string>
     <string name="about_contributors">主要贡献者</string>
     <string name="about_contributors_hint">拖动浏览，双指缩放，点击头像打开主页。</string>
