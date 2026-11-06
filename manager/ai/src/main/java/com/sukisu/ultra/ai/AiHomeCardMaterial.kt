@@ -1,5 +1,10 @@
 package com.sukisu.ultra.ai
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.Slider
+import androidx.compose.runtime.LaunchedEffect
+import kotlin.math.roundToInt
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
@@ -230,9 +235,7 @@ internal fun AiConfigEditorMaterial(
     val currentProvider = AiSettings.activeProvider(draft)
     val defaultProviderName = stringResource(R.string.ai_provider_default)
     val newProviderName = stringResource(R.string.ai_provider_new_name)
-    var showProviderDialog by remember { mutableStateOf(false) }
     var showDeleteProviderDialog by remember { mutableStateOf(false) }
-    var fetchingProviderModels by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val detected = if (draft.resolvedEndpoint().isNotBlank()) draft.effectiveFormat() else null
 
@@ -295,33 +298,35 @@ internal fun AiConfigEditorMaterial(
         )
     }
 
-    fun fetchProviderModels() {
-        val provider = currentProvider ?: return
-        if (provider.models.isNotEmpty() || provider.endpoint.isBlank()) return
-        scope.launch {
-            fetchingProviderModels = true
-            try {
-                val models = ModelCatalog.listModels(provider)
-                if (models.isNotEmpty()) {
-                    val enriched = ModelCatalog.enrich(models)
-                    val updated = provider.copy(models = enriched)
-                    val providers = if (draft.providers.any { it.id == provider.id }) {
-                        draft.providers.map { if (it.id == provider.id) updated else it }
-                    } else {
-                        listOf(updated)
-                    }
-                    onDraftChange(
-                        draft.copy(
-                            providers = providers,
-                            currentProviderId = provider.id,
-                            currentModelId = enriched.firstOrNull()?.id ?: "",
-                        ),
-                    )
-                }
-            } catch (_: Exception) {
-            } finally {
-                fetchingProviderModels = false
-            }
+    val providerModels = currentProvider?.models.orEmpty()
+    val textModels = providerModels.filterNot { it.looksLikeImageModel() }
+    val imageModels = providerModels.filter { it.looksLikeImageModel() }
+    val selectedModel = AiSettings.activeModel(draft)
+
+    fun selectModel(model: AiModelInfo) {
+        val provider = currentProvider
+        if (provider != null && draft.providers.any { it.id == provider.id }) {
+            onDraftChange(
+                draft.copy(
+                    providers = draft.providers.map {
+                        if (it.id == provider.id) it.copy(modelId = model.id) else it
+                    },
+                    currentModelId = model.id,
+                ),
+            )
+        } else {
+            onDraftChange(draft.copy(model = model.id, currentModelId = model.id))
+        }
+    }
+
+    // 配好地址与 Key 后自动拉一次模型目录；已有目录就不重复请求。
+    LaunchedEffect(currentProvider?.id, currentProvider?.endpoint, currentProvider?.apiKey) {
+        val provider = currentProvider ?: return@LaunchedEffect
+        if (provider.models.isEmpty() &&
+            provider.endpoint.isNotBlank() &&
+            provider.apiKey.isNotBlank()
+        ) {
+            onFetchModels(false)
         }
     }
 
@@ -381,12 +386,6 @@ internal fun AiConfigEditorMaterial(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                // 只有一个供应商时「切换」没有意义，隐藏以省出空间、避免弹出空列表。
-                if (draft.providers.size > 1) {
-                    TextButton(onClick = { showProviderDialog = true }) {
-                        Text(stringResource(R.string.ai_provider_switch))
-                    }
-                }
                 IconButton(onClick = { addProvider() }) {
                     Icon(
                         imageVector = Icons.Rounded.Add,
@@ -398,6 +397,38 @@ internal fun AiConfigEditorMaterial(
                         Icon(
                             imageVector = Icons.Rounded.Delete,
                             contentDescription = stringResource(R.string.ai_provider_delete),
+                        )
+                    }
+                }
+            }
+            // 已配置的供应商平铺成 chips：点一下就切换，不用再开对话框。
+            if (draft.providers.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    draft.providers.forEach { provider ->
+                        FilterChip(
+                            selected = provider.id == currentProvider?.id,
+                            onClick = {
+                                onDraftChange(
+                                    draft.copy(
+                                        currentProviderId = provider.id,
+                                        currentModelId = provider.modelId.ifBlank {
+                                            provider.models.firstOrNull()?.id.orEmpty()
+                                        },
+                                    ),
+                                )
+                            },
+                            label = {
+                                Text(
+                                    text = provider.name.ifBlank { provider.id },
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            },
                         )
                     }
                 }
@@ -467,89 +498,90 @@ internal fun AiConfigEditorMaterial(
                 shape = MaterialTheme.shapes.large,
                 modifier = Modifier.fillMaxWidth(),
             )
+            // 主模型：候选就是「获取模型」拉到的目录，选中后记在当前供应商上。
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.ai_model),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = AiSettings.activeModel(draft)?.name ?: draft.model,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-                TextButton(
-                    onClick = {
-                        onFetchModels(false)
-                        fetchProviderModels()
+                AiDropdownField(
+                    label = stringResource(R.string.ai_main_model),
+                    selectedLabel = selectedModel?.let { it.name.ifBlank { it.id } }
+                        ?: stringResource(R.string.ai_model_not_selected),
+                    options = providerModels.map { it.name.ifBlank { it.id } },
+                    onSelect = { index ->
+                        providerModels.getOrNull(index)?.let { selectModel(it) }
                     },
-                    enabled = !fetchingModels && !fetchingProviderModels,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(
+                    onClick = { onFetchModels(false) },
+                    enabled = !fetchingModels,
                 ) {
-                    if (fetchingModels || fetchingProviderModels) {
+                    if (fetchingModels) {
                         CircularProgressIndicator(
-                            modifier = Modifier.padding(end = 6.dp).size(14.dp),
+                            modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp,
                         )
                     } else {
                         Icon(
                             imageVector = Icons.Rounded.Refresh,
-                            contentDescription = null,
-                            modifier = Modifier.padding(end = 6.dp).size(16.dp),
+                            contentDescription = stringResource(R.string.ai_fetch_models),
                         )
                     }
-                    Text(
-                        stringResource(
-                            if (fetchingModels || fetchingProviderModels) {
-                                R.string.ai_fetching_models
-                            } else {
-                                R.string.ai_fetch_models
-                            }
-                        )
-                    )
-                }
-            }
-            // 图片模型与「获取图片模型」并排，少占一行。
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedTextField(
-                    value = draft.imageModel,
-                    onValueChange = { onDraftChange(draft.copy(imageModel = it)) },
-                    label = { Text(stringResource(R.string.ai_image_model)) },
-                    placeholder = { Text(stringResource(R.string.ai_image_model_hint)) },
-                    singleLine = true,
-                    shape = MaterialTheme.shapes.large,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(
-                    onClick = { onFetchModels(true) },
-                    enabled = !fetchingModels,
-                ) {
-                    Text(stringResource(R.string.ai_fetch_image_models))
                 }
             }
 
+            // 生图模型：候选只保留可生图的模型（按模型名/ID 识别），空 = 不启用。
             AiDropdownField(
-                label = stringResource(R.string.ai_thinking_mode),
-                selectedLabel = stringResource(draft.thinkingMode.labelRes()),
-                options = AiThinkingMode.entries.map { stringResource(it.labelRes()) },
+                label = stringResource(R.string.ai_image_model),
+                selectedLabel = draft.imageModel.ifBlank {
+                    stringResource(R.string.ai_image_model_none)
+                },
+                options = listOf(stringResource(R.string.ai_image_model_none)) +
+                    imageModels.map { it.name.ifBlank { it.id } },
                 onSelect = { index ->
-                    onDraftChange(draft.copy(thinkingMode = AiThinkingMode.entries[index]))
+                    val picked = imageModels.getOrNull(index - 1)
+                    onDraftChange(draft.copy(imageModel = picked?.id.orEmpty()))
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
-            Text(
-                text = stringResource(R.string.ai_thinking_summary),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+
+            // 主模型推理强度：五个档位用滑块选，比下拉框更直观。
+            val effortModes = AiThinkingMode.entries
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.ai_main_effort_title),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = stringResource(draft.thinkingMode.labelRes()),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Slider(
+                    value = effortModes.indexOf(draft.thinkingMode).coerceAtLeast(0).toFloat(),
+                    onValueChange = { value ->
+                        effortModes.getOrNull(value.roundToInt())?.let { mode ->
+                            onDraftChange(draft.copy(thinkingMode = mode))
+                        }
+                    },
+                    valueRange = 0f..(effortModes.size - 1).toFloat(),
+                    steps = effortModes.size - 2,
+                )
+                Text(
+                    text = stringResource(R.string.ai_thinking_summary),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
             OutlinedTextField(
                 value = draft.systemPrompt,
@@ -567,23 +599,23 @@ internal fun AiConfigEditorMaterial(
                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                 modifier = Modifier.padding(vertical = 2.dp),
             )
-            OutlinedTextField(
-                value = draft.titleModel,
-                onValueChange = { onDraftChange(draft.copy(titleModel = it)) },
-                label = { Text(stringResource(R.string.ai_title_model)) },
-                placeholder = { Text(stringResource(R.string.ai_title_model_hint)) },
-                singleLine = true,
-                shape = MaterialTheme.shapes.large,
-                modifier = Modifier.fillMaxWidth(),
-            )
             AiDropdownField(
-                label = stringResource(R.string.ai_title_effort),
-                selectedLabel = stringResource(draft.titleEffort.titleEffortLabelRes()),
-                options = AiThinkingMode.entries.map { stringResource(it.titleEffortLabelRes()) },
+                label = stringResource(R.string.ai_title_model),
+                selectedLabel = draft.titleModel.ifBlank {
+                    stringResource(R.string.ai_title_model_follow_main)
+                },
+                options = listOf(stringResource(R.string.ai_title_model_follow_main)) +
+                    textModels.map { it.name.ifBlank { it.id } },
                 onSelect = { index ->
-                    onDraftChange(draft.copy(titleEffort = AiThinkingMode.entries[index]))
+                    val picked = textModels.getOrNull(index - 1)
+                    onDraftChange(draft.copy(titleModel = picked?.id.orEmpty()))
                 },
                 modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                text = stringResource(R.string.ai_title_model_summary),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             // 测试连接收成紧凑按钮：说明放左边，按钮靠右。
@@ -1001,67 +1033,6 @@ internal fun AiConfigEditorMaterial(
 
     }
 
-    if (showProviderDialog) {
-        AlertDialog(
-            onDismissRequest = { showProviderDialog = false },
-            title = { Text(stringResource(R.string.ai_provider_switch_title)) },
-            text = {
-                Column(
-                    modifier = Modifier.heightIn(max = 360.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    draft.providers.forEach { provider ->
-                        val isCurrent = provider.id == currentProvider?.id
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onDraftChange(
-                                        draft.copy(
-                                            currentProviderId = provider.id,
-                                            currentModelId = provider.models.firstOrNull()?.id ?: "",
-                                        ),
-                                    )
-                                    showProviderDialog = false
-                                }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = provider.name.ifBlank { defaultProviderName },
-                                    style = MaterialTheme.typography.bodyLarge,
-                                )
-                                Text(
-                                    text = stringResource(provider.format.labelRes()) + " · " +
-                                        stringResource(
-                                            R.string.ai_provider_models_count,
-                                            provider.models.size,
-                                        ),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            if (isCurrent) {
-                                Text(
-                                    text = stringResource(R.string.ai_provider_current_mark),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showProviderDialog = false }) {
-                    Text(stringResource(R.string.ai_close))
-                }
-            },
-        )
-    }
-
     if (showDeleteProviderDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteProviderDialog = false },
@@ -1296,4 +1267,14 @@ private fun AiThinkingMode.titleEffortLabelRes(): Int = when (this) {
     AiThinkingMode.LOW -> R.string.ai_title_effort_low
     AiThinkingMode.MEDIUM -> R.string.ai_title_effort_medium
     AiThinkingMode.HIGH -> R.string.ai_title_effort_high
+}
+
+/** 粗略识别「可生图」的模型：只看模型 id/展示名里的关键词，文本模型不会命中。 */
+private fun AiModelInfo.looksLikeImageModel(): Boolean {
+    val key = (id + " " + name).lowercase()
+    return listOf(
+        "dall-e", "dalle", "gpt-image", "image-preview", "flux", "stable-diffusion", "sdxl",
+        "imagen", "seedream", "cogview", "kolors", "qwen-image", "wanx", "midjourney",
+        "ideogram", "recraft", "seededit",
+    ).any { key.contains(it) }
 }

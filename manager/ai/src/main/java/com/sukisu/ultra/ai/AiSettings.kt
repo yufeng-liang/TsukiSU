@@ -80,6 +80,8 @@ data class AiProvider(
     val endpoint: String = "",
     val apiKey: String = "",
     val models: List<AiModelInfo> = emptyList(),
+    /** 该供应商下已选中的模型 id（多供应商各自记住自己的选择）。 */
+    val modelId: String = "",
 )
 
 /**
@@ -94,8 +96,8 @@ data class AiConfig(
     val model: String = "",
     /** 会话标题生成使用的模型。空 = 跟随主模型。 */
     val titleModel: String = "",
-    /** 标题生成的推理强度，复用 AiThinkingMode；AUTO 表示不传。 */
-    val titleEffort: AiThinkingMode = AiThinkingMode.AUTO,
+    /** 标题生成的推理强度；默认关，模型不支持时回落到最低档。 */
+    val titleEffort: AiThinkingMode = AiThinkingMode.OFF,
     /** Optional OpenAI-compatible image model. Blank disables image generation/editing. */
     val imageModel: String = "",
     val format: AiProviderFormat = AiProviderFormat.AUTO,
@@ -460,6 +462,10 @@ object AiSettings {
     /** 当前模型：优先 currentModelId，其次与旧 model 同名，最后取第一个。 */
     fun activeModel(config: AiConfig): AiModelInfo? {
         val provider = activeProvider(config) ?: return null
+        // 供应商自己记住的模型优先，其次是全局 currentModelId。
+        if (provider.modelId.isNotBlank()) {
+            provider.models.firstOrNull { it.id == provider.modelId }?.let { return it }
+        }
         if (config.currentModelId.isNotBlank()) {
             provider.models.firstOrNull { it.id == config.currentModelId }?.let { return it }
         }

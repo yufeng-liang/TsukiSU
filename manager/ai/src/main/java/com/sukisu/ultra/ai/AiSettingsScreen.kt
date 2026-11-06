@@ -133,8 +133,33 @@ fun AiSettingsScreen(onBack: () -> Unit) {
                             if (models.isEmpty()) {
                                 Toast.makeText(context, R.string.ai_no_models, Toast.LENGTH_SHORT).show()
                             } else {
-                                modelOptions = models
-                                modelTarget = forImage
+                                // 拉到的目录直接写回当前供应商，主模型/生图/标题三个下拉框共用。
+                                val enriched = ModelCatalog.enrich(models.map { AiModelInfo(id = it) })
+                                val provider = AiSettings.activeProvider(draft)
+                                val format = provider?.format ?: draft.format
+                                val resolvedFormat = if (format == AiProviderFormat.AUTO) {
+                                    AiProviderFormat.detect(AiSettings.resolveEndpoint(draft))
+                                } else {
+                                    format
+                                }
+                                val firstId = enriched.firstOrNull()?.id.orEmpty()
+                                val updated = (provider ?: AiProvider(id = "p" + System.currentTimeMillis()))
+                                    .copy(
+                                        format = resolvedFormat,
+                                        models = enriched,
+                                        modelId = provider?.modelId?.takeIf { id -> enriched.any { it.id == id } }
+                                            ?: firstId,
+                                    )
+                                draft = draft.copy(
+                                    providers = if (provider != null && draft.providers.any { it.id == provider.id }) {
+                                        draft.providers.map { if (it.id == provider.id) updated else it }
+                                    } else {
+                                        listOf(updated)
+                                    },
+                                    currentProviderId = updated.id,
+                                    currentModelId = updated.modelId,
+                                )
+                                model.updateConfig(draft)
                             }
                         } catch (cancelled: kotlinx.coroutines.CancellationException) {
                             throw cancelled
