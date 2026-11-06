@@ -344,4 +344,20 @@
     <string name="ai_search_test_query_hint">搜索词，例如：今天新闻</string>
     <string name="ai_search_test_run">开始测试</string>
     <string name="ai_search_test_no_result">没有返回结果。</string>
+    <string name="ai_suggestion_status2">看看这台设备现在的状态</string>
+    <string name="ai_suggestion_modules2">推荐几个更新频繁的模块</string>
+    <string name="ai_suggestion_troubleshoot2">模块装了却没生效，怎么排查？</string>
+    <string name="ai_suggestion_lkm">解释一下 LKM 和 GKI 的区别</string>
+    <string name="ai_suggestion_cleanup2">帮我清理模块缓存和日志</string>
+    <string name="ai_suggestion_detect">有哪些值得关注的隐藏环境检测？</string>
+    <string name="ai_suggestion_backup">怎么备份当前的模块配置？</string>
+    <string name="ai_suggestion_beginner">适合新手的模块有哪些？</string>
+    <string name="ai_cap_status">设备状态</string>
+    <string name="ai_cap_troubleshoot">模块排查</string>
+    <string name="ai_cap_lkm">LKM 与 GKI</string>
+    <string name="ai_cap_modules2">模块推荐</string>
+    <string name="ai_cap_clean">缓存清理</string>
+    <string name="ai_cap_detect">检测项</string>
+    <string name="ai_cap_backup">备份配置</string>
+    <string name="ai_cap_beginner">新手模块</string>
 </resources>

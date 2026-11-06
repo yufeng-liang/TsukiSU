@@ -469,12 +469,34 @@ class AiChatViewModel : ViewModel() {
             .take(4)
     }
 
-    private fun defaultSuggestions(): List<String> = listOf(
-        aiContext.getString(R.string.ai_suggestion_status),
-        aiContext.getString(R.string.ai_suggestion_extensions),
-        aiContext.getString(R.string.ai_suggestion_modules),
-        aiContext.getString(R.string.ai_suggestion_chat),
-    )
+    // 未配置模型时「换一批」也要有变化：本地预置三组候选，按次轮换。
+    private var fallbackSuggestionRotation = 0
+
+    private fun defaultSuggestions(): List<String> {
+        val sets = listOf(
+            listOf(
+                R.string.ai_suggestion_status,
+                R.string.ai_suggestion_extensions,
+                R.string.ai_suggestion_modules,
+                R.string.ai_suggestion_chat,
+            ),
+            listOf(
+                R.string.ai_suggestion_status2,
+                R.string.ai_suggestion_modules2,
+                R.string.ai_suggestion_troubleshoot2,
+                R.string.ai_suggestion_lkm,
+            ),
+            listOf(
+                R.string.ai_suggestion_cleanup2,
+                R.string.ai_suggestion_detect,
+                R.string.ai_suggestion_backup,
+                R.string.ai_suggestion_beginner,
+            ),
+        )
+        val set = sets[fallbackSuggestionRotation % sets.size]
+        fallbackSuggestionRotation++
+        return set.map { aiContext.getString(it) }
+    }
 
     fun clearHistory() {
         historyGeneration++
