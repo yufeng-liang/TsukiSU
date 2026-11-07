@@ -140,6 +140,24 @@ data class AiProvider(
 )
 
 /**
+ * 运行时解析后的当前供应商快照。所有请求（聊天、标题、连接测试、拉模型）
+ * 都从这里取值，避免各调用点直接读 [AiConfig.endpoint]/[AiConfig.model]
+ * 而漏掉多供应商配置。
+ */
+data class ResolvedProvider(
+    val provider: AiProvider?,
+    val model: AiModelInfo?,
+    val endpoint: String,
+    val apiKey: String,
+    val modelId: String,
+    val format: AiProviderFormat,
+) {
+    /** 模型是否支持推理；模型能力未知时按兼容处理，只有明确不支持才跳过推理参数。 */
+    val supportsReasoning: Boolean
+        get() = model?.supportedReasoningModes()?.isNotEmpty() ?: true
+}
+
+/**
  * Everything the assistant needs to talk to a model. Endpoint is the only field
  * without a usable default; a local Ollama server works with just the address
  * and model name.
@@ -207,16 +225,11 @@ data class AiConfig(
     val currentModelId: String = "",
 ) {
     val isConfigured: Boolean
-        get() = AiSettings.activeProvider(this)?.let {
-            it.endpoint.isNotBlank() && (it.models.isNotEmpty() || model.isNotBlank())
-        } ?: (endpoint.isNotBlank() && model.isNotBlank())
+        get() = AiSettings.resolveActiveProvider(this).let {
+            it.endpoint.isNotBlank() && it.modelId.isNotBlank()
+        }
 
-    fun effectiveFormat(): AiProviderFormat {
-        val provider = AiSettings.activeProvider(this)
-        val rawFormat = provider?.format ?: format
-        val rawEndpoint = provider?.endpoint?.takeIf { it.isNotBlank() } ?: endpoint
-        return if (rawFormat == AiProviderFormat.AUTO) AiProviderFormat.detect(rawEndpoint) else rawFormat
-    }
+    fun effectiveFormat(): AiProviderFormat = AiSettings.resolveActiveProvider(this).format
 
     val isImageConfigured: Boolean
         get() = imageModel.isNotBlank() && effectiveFormat() == AiProviderFormat.OPENAI
@@ -252,42 +265,8 @@ data class AiConfig(
      * Accepts a base address or a complete endpoint. Missing schemes default to
      * plain HTTP because local inference servers rarely have TLS.
      */
-    fun resolvedEndpoint(): String {
-        val raw = (AiSettings.activeProvider(this)?.endpoint?.takeIf { it.isNotBlank() } ?: endpoint).trim()
-        if (raw.isEmpty()) return ""
-        val withScheme = if (raw.startsWith("http://", true) || raw.startsWith("https://", true)) {
-            raw
-        } else {
-            "http://$raw"
-        }
-        val base = withScheme.trimEnd('/')
-        val path = runCatching { URI(base).path.orEmpty() }.getOrDefault("")
-        val hasCustomPath = path.isNotEmpty() && path != "/"
-        return when (effectiveFormat()) {
-            AiProviderFormat.OPENAI -> when {
-                base.endsWith("/chat/completions", true) -> base
-                base.endsWith("/v1", true) -> "$base/chat/completions"
-                else -> "$base/v1/chat/completions"
-            }
-
-            AiProviderFormat.OLLAMA -> when {
-                base.endsWith("/api/chat", true) -> base
-                base.endsWith("/api", true) -> "$base/chat"
-                hasCustomPath -> "$base/api/chat"
-                else -> "$base/api/chat"
-            }
-
-            AiProviderFormat.ANTHROPIC -> when {
-                base.endsWith("/v1/messages", true) || base.endsWith("/messages", true) -> base
-                base.endsWith("/v1", true) -> "$base/messages"
-                hasCustomPath -> "$base/v1/messages"
-                else -> "$base/v1/messages"
-            }
-
-            // effectiveFormat() never returns AUTO, but keep the when exhaustive.
-            AiProviderFormat.AUTO -> base
-        }
-    }
+    fun resolvedEndpoint(): String =
+        AiSettings.chatEndpointOf(AiSettings.resolveActiveProvider(this))
 }
 
 @Serializable
@@ -514,31 +493,83 @@ object AiSettings {
         )
     }
 
-    /** 当前模型：优先 currentModelId，其次与旧 model 同名，最后取第一个。 */
-    fun activeModel(config: AiConfig): AiModelInfo? {
-        val provider = activeProvider(config) ?: return null
-        // 供应商自己记住的模型优先，其次是全局 currentModelId。
-        if (provider.modelId.isNotBlank()) {
-            provider.models.firstOrNull { it.id == provider.modelId }?.let { return it }
+    /**
+     * 统一解析当前生效的供应商配置。优先级：
+     * currentProviderId 命中的供应商 → 第一个填了 API Key 的供应商 → 第一个供应商 → 旧字段合成的 legacy。
+     * endpoint/apiKey 缺失时回落到 [AiConfig] 旧字段，兼容迁移前的单配置。
+     * [modelIdOverride] 用于显式指定模型（如标题生成单独指定模型）。
+     */
+    fun resolveActiveProvider(config: AiConfig, modelIdOverride: String? = null): ResolvedProvider {
+        val provider = config.providers.firstOrNull { it.id == config.currentProviderId }
+            ?: config.providers.firstOrNull { it.apiKey.isNotBlank() }
+            ?: config.providers.firstOrNull()
+            ?: activeProvider(config)
+        val endpoint = provider?.endpoint?.takeIf { it.isNotBlank() } ?: config.endpoint
+        val apiKey = provider?.apiKey?.takeIf { it.isNotBlank() } ?: config.apiKey
+        val candidates = buildList {
+            modelIdOverride?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
+            provider?.modelId?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
+            config.currentModelId.trim().takeIf { it.isNotBlank() }?.let { add(it) }
+            config.model.trim().takeIf { it.isNotBlank() }?.let { add(it) }
         }
-        if (config.currentModelId.isNotBlank()) {
-            provider.models.firstOrNull { it.id == config.currentModelId }?.let { return it }
-        }
-        if (config.model.isNotBlank()) {
-            provider.models.firstOrNull { it.id == config.model || it.name == config.model }?.let { return it }
-        }
-        return provider.models.firstOrNull()
+        // 候选 id 必须能在模型目录里找到；目录为空时保留候选字符串本身。
+        val model = candidates.firstNotNullOfOrNull { id ->
+            provider?.models?.firstOrNull { it.id == id || it.name == id }
+        } ?: provider?.models?.firstOrNull()
+        val modelId = model?.id?.takeIf { it.isNotBlank() } ?: candidates.firstOrNull().orEmpty()
+        val rawFormat = provider?.format?.takeIf { it != AiProviderFormat.AUTO }
+            ?: config.format.takeIf { it != AiProviderFormat.AUTO }
+        val format = rawFormat ?: AiProviderFormat.detect(endpoint)
+        return ResolvedProvider(provider, model, endpoint.trim(), apiKey.trim(), modelId, format)
     }
 
+    /** 当前模型：统一走 [resolveActiveProvider]，保证与请求实际使用的模型一致。 */
+    fun activeModel(config: AiConfig): AiModelInfo? = resolveActiveProvider(config).model
+
     /** 统一取值口：当前供应商优先，缺失时回落到旧 endpoint 字段。 */
-    fun resolveEndpoint(config: AiConfig): String =
-        activeProvider(config)?.endpoint?.takeIf { it.isNotBlank() } ?: config.endpoint
+    fun resolveEndpoint(config: AiConfig): String = resolveActiveProvider(config).endpoint
 
-    fun resolveApiKey(config: AiConfig): String =
-        activeProvider(config)?.apiKey?.takeIf { it.isNotBlank() } ?: config.apiKey
+    fun resolveApiKey(config: AiConfig): String = resolveActiveProvider(config).apiKey
 
-    fun resolveModel(config: AiConfig): String =
-        activeModel(config)?.id?.takeIf { it.isNotBlank() } ?: config.model
+    fun resolveModel(config: AiConfig): String = resolveActiveProvider(config).modelId
+
+    /** 按协议补全聊天请求地址；[ResolvedProvider.format] 保证不是 AUTO。 */
+    fun chatEndpointOf(resolved: ResolvedProvider): String {
+        val raw = resolved.endpoint.trim()
+        if (raw.isEmpty()) return ""
+        val withScheme = if (raw.startsWith("http://", true) || raw.startsWith("https://", true)) {
+            raw
+        } else {
+            "http://$raw"
+        }
+        val base = withScheme.trimEnd('/')
+        val path = runCatching { URI(base).path.orEmpty() }.getOrDefault("")
+        val hasCustomPath = path.isNotEmpty() && path != "/"
+        return when (resolved.format) {
+            AiProviderFormat.OPENAI -> when {
+                base.endsWith("/chat/completions", true) -> base
+                base.endsWith("/v1", true) -> "$base/chat/completions"
+                else -> "$base/v1/chat/completions"
+            }
+
+            AiProviderFormat.OLLAMA -> when {
+                base.endsWith("/api/chat", true) -> base
+                base.endsWith("/api", true) -> "$base/chat"
+                hasCustomPath -> "$base/api/chat"
+                else -> "$base/api/chat"
+            }
+
+            AiProviderFormat.ANTHROPIC -> when {
+                base.endsWith("/v1/messages", true) || base.endsWith("/messages", true) -> base
+                base.endsWith("/v1", true) -> "$base/messages"
+                hasCustomPath -> "$base/v1/messages"
+                else -> "$base/v1/messages"
+            }
+
+            // detect() 不会返回 AUTO，这里只是保持 when 完整。
+            AiProviderFormat.AUTO -> base
+        }
+    }
 
     /** 从 endpoint 提取 host，用于迁移时生成供应商展示名。 */
     private fun hostOf(endpoint: String): String {

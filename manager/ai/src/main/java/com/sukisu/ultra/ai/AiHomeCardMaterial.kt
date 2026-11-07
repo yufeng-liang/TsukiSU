@@ -252,6 +252,15 @@ internal fun AiConfigEditorMaterial(
     val scope = rememberCoroutineScope()
     val detected = if (draft.resolvedEndpoint().isNotBlank()) draft.effectiveFormat() else null
 
+    /**
+     * 计算切换后应保留的推理档位：模型明确不支持推理时清回 AUTO，
+     * 避免旧模型的 HIGH/MEDIUM 残留到下一次请求里。
+     */
+    fun thinkingModeFor(provider: AiProvider?, model: AiModelInfo?): AiThinkingMode {
+        if (model != null && model.supportedReasoningModes().isEmpty()) return AiThinkingMode.AUTO
+        return provider?.thinkingMode ?: AiThinkingMode.AUTO
+    }
+
     fun updateCurrentProvider(transform: (AiProvider) -> AiProvider) {
         val existing = currentProvider
         if (existing != null && draft.providers.any { it.id == existing.id }) {
@@ -302,11 +311,14 @@ internal fun AiConfigEditorMaterial(
         val existing = currentProvider ?: return
         val remaining = draft.providers.filterNot { it.id == existing.id }
         val first = remaining.firstOrNull() ?: return
+        val firstModel = first.models.firstOrNull { it.id == first.modelId } ?: first.models.firstOrNull()
         onDraftChange(
             draft.copy(
                 providers = remaining,
                 currentProviderId = first.id,
-                currentModelId = first.models.firstOrNull()?.id ?: "",
+                currentModelId = first.modelId.ifBlank { firstModel?.id.orEmpty() },
+                // 删除当前供应商后同步重置推理档位，避免旧供应商的高档位残留。
+                thinkingMode = thinkingModeFor(first, firstModel),
             ),
         )
     }
@@ -318,14 +330,16 @@ internal fun AiConfigEditorMaterial(
         } else {
             draft.providers + updated
         }
+        val updatedModel = updated.models.firstOrNull { it.id == updated.modelId }
+            ?: updated.models.firstOrNull()
         onDraftChange(
             draft.copy(
                 providers = providers,
                 currentProviderId = updated.id,
                 currentModelId = updated.modelId.ifBlank {
-                    updated.models.firstOrNull()?.id.orEmpty()
+                    updatedModel?.id.orEmpty()
                 },
-                thinkingMode = updated.thinkingMode,
+                thinkingMode = thinkingModeFor(updated, updatedModel),
             ),
         )
     }
@@ -337,17 +351,26 @@ internal fun AiConfigEditorMaterial(
 
     fun selectModel(model: AiModelInfo) {
         val provider = currentProvider
+        // 切换模型时把推理档位重置为默认 AUTO，避免旧模型的高档位残留到新模型请求里。
+        val nextThinking = AiThinkingMode.AUTO
         if (provider != null && draft.providers.any { it.id == provider.id }) {
             onDraftChange(
                 draft.copy(
                     providers = draft.providers.map {
-                        if (it.id == provider.id) it.copy(modelId = model.id) else it
+                        if (it.id == provider.id) {
+                            it.copy(modelId = model.id, thinkingMode = nextThinking)
+                        } else {
+                            it
+                        }
                     },
                     currentModelId = model.id,
+                    thinkingMode = nextThinking,
                 ),
             )
         } else {
-            onDraftChange(draft.copy(model = model.id, currentModelId = model.id))
+            onDraftChange(
+                draft.copy(model = model.id, currentModelId = model.id, thinkingMode = nextThinking),
+            )
         }
     }
 
@@ -387,13 +410,17 @@ internal fun AiConfigEditorMaterial(
                 options = draft.providers.map { it.name.ifBlank { it.id } },
                 onSelect = { index ->
                     draft.providers.getOrNull(index)?.let { provider ->
+                        val modelId = provider.modelId.ifBlank {
+                            provider.models.firstOrNull()?.id.orEmpty()
+                        }
+                        val model = provider.models.firstOrNull { it.id == modelId }
+                            ?: provider.models.firstOrNull()
                         onDraftChange(
                             draft.copy(
                                 currentProviderId = provider.id,
-                                currentModelId = provider.modelId.ifBlank {
-                                    provider.models.firstOrNull()?.id.orEmpty()
-                                },
-                                thinkingMode = provider.thinkingMode,
+                                currentModelId = modelId,
+                                // 切换供应商时按新供应商的模型能力校验推理档位。
+                                thinkingMode = thinkingModeFor(provider, model),
                             ),
                         )
                     }
@@ -1295,6 +1322,15 @@ private fun ReasoningEffortSection(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        // 档位校验必须放在空档位分支之前：模型明确不支持推理时要把历史残留的档位清回 AUTO。
+        LaunchedEffect(model?.id) {
+            if (modes.isEmpty()) {
+                if (selected != AiThinkingMode.AUTO) onSelect(AiThinkingMode.AUTO)
+            } else if (selected !in modes) {
+                val nearest = modes.minByOrNull { kotlin.math.abs(it.ordinal - selected.ordinal) }
+                nearest?.let(onSelect)
+            }
+        }
         if (modes.isEmpty()) {
             Text(
                 text = stringResource(R.string.ai_reasoning_unsupported),
@@ -1304,12 +1340,6 @@ private fun ReasoningEffortSection(
             return@Column
         }
         val haptic = LocalHapticFeedback.current
-        LaunchedEffect(model?.id) {
-            if (selected !in modes) {
-                val nearest = modes.minByOrNull { kotlin.math.abs(it.ordinal - selected.ordinal) }
-                nearest?.let(onSelect)
-            }
-        }
         val index = modes.indexOf(selected).takeIf { it >= 0 } ?: 0
         Slider(
             value = index.toFloat(),

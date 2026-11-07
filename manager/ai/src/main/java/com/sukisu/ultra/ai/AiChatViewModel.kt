@@ -684,7 +684,9 @@ class AiChatViewModel : ViewModel() {
             _uiState.update { it.copy(error = aiContext.getString(R.string.ai_error_disabled)) }
             return
         }
-        if (!config.isConfigured) {
+        // 显式解析当前供应商：多供应商配置下 endpoint/model 可能都不在 AiConfig 旧字段上。
+        val resolved = AiSettings.resolveActiveProvider(config)
+        if (resolved.endpoint.isBlank() || resolved.modelId.isBlank()) {
             _uiState.update { it.copy(error = aiContext.getString(R.string.ai_error_not_configured)) }
             return
         }

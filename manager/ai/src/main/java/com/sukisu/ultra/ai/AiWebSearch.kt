@@ -105,6 +105,12 @@ object AiWebSearch {
     private const val MAX_ERROR_BODY_CHARS = 300
     private const val MIN_PROVIDER_TIMEOUT_MS = 1_000L
 
+    /** 抓取/接口响应的原始字节上限：防止超大页面把内存打满。 */
+    private const val MAX_RESPONSE_BYTES = 512 * 1024
+
+    /** HTML 抓取最多跟随的重定向次数；每一跳都要重新做 SSRF 校验。 */
+    private const val MAX_HTML_REDIRECTS = 5
+
     /** 连通性测试用的固定查询词。 */
     private const val TEST_QUERY = "今天有什么新闻"
 
@@ -446,19 +452,37 @@ object AiWebSearch {
 
     /** 通用兜底：直接 GET 网页并抽正文（元宝搜索没有抓取 API）。 */
     private fun fetchHtml(url: String, timeoutMs: Long): PageOutcome {
-        val request = Request.Builder()
-            .url(url)
-            .header("User-Agent", PAGE_USER_AGENT)
-            .header("Accept", "text/html,application/xhtml+xml")
-            .get()
+        var currentUrl = AiWebUrlGuard.requireSafeUrl(url)
+        // 禁止 OkHttp 自动跟随重定向，改为逐跳校验，防止 302 到内网地址绕过入口检查。
+        val htmlClient = clientWithTimeout(timeoutMs).newBuilder()
+            .followRedirects(false)
+            .followSslRedirects(false)
             .build()
-        clientWithTimeout(timeoutMs).newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return PageOutcome.Failure("服务返回 HTTP ${response.code}")
-            val body = response.body.string()
-            val text = htmlToText(body).take(MAX_PAGE_CHARS)
-            return text.takeIf { it.isNotBlank() }
-                ?.let { PageOutcome.Success(it) }
-                ?: PageOutcome.Failure("页面没有可读正文")
+        var redirects = 0
+        while (true) {
+            val request = Request.Builder()
+                .url(currentUrl)
+                .header("User-Agent", PAGE_USER_AGENT)
+                .header("Accept", "text/html,application/xhtml+xml")
+                .get()
+                .build()
+            val response = htmlClient.newCall(request).execute()
+            if (response.isRedirect) {
+                val location = response.header("Location")
+                response.close()
+                if (location.isNullOrBlank()) return PageOutcome.Failure("服务返回重定向但缺少 Location")
+                if (redirects++ >= MAX_HTML_REDIRECTS) return PageOutcome.Failure("重定向次数过多")
+                currentUrl = AiWebUrlGuard.resolveRedirect(currentUrl, location)
+                continue
+            }
+            response.use {
+                if (!it.isSuccessful) return PageOutcome.Failure("服务返回 HTTP ${it.code}")
+                val body = it.readBodyLimited(MAX_RESPONSE_BYTES)
+                val text = htmlToText(body).take(MAX_PAGE_CHARS)
+                return text.takeIf { it.isNotBlank() }
+                    ?.let { PageOutcome.Success(it) }
+                    ?: PageOutcome.Failure("页面没有可读正文")
+            }
         }
     }
 
@@ -491,7 +515,7 @@ object AiWebSearch {
         }
         val request = builder.post(body.toRequestBody(jsonMediaType)).build()
         clientWithTimeout(timeoutMs).newCall(request).execute().use { response ->
-            return response.code to response.body.string()
+            return response.code to response.readBodyLimited(MAX_RESPONSE_BYTES)
         }
     }
 
