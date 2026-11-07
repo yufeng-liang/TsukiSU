@@ -37,6 +37,14 @@ data class ModuleRepoUiState(
      */
     val columnsLoaded: Boolean = false,
     /**
+     * 当前展示的专栏来自本地缓存，而不是本次网络成功的结果。
+     *
+     * 缓存只用于「先有内容可看」：它不把 [columnsLoaded] 置 true，下一次进页面/刷新仍会继续
+     * 尝试网络，成功后 [columnsLoaded] 与 [columnsCached] 再相应更新。界面判断「有没有数据
+     * 可显示」看 [columns] 是否为空即可，不需要把本字段算进加载态。
+     */
+    val columnsCached: Boolean = false,
+    /**
      * 最近一次专栏请求失败了。
      *
      * 失败本身仍然静默（不写 [error]、不弹提示），但要让专栏区留一行「没加载出来 + 重试」：

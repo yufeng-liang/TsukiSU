@@ -172,8 +172,19 @@ class ModuleRepoViewModel(
     init {
         // 进程内已有专栏缓存就先渲染出来，网络回来再覆盖。没有这一步，每进一次详情页都要
         // 新建一个 ViewModel、重新等一整趟网络，看起来就是「永远在转圈」。
-        RepoColumnRepositoryImpl.peekCached()?.let { cached ->
-            _uiState.update { it.copy(columns = cached) }
+        // 读磁盘是 IO：放到协程里，不阻塞主线程。
+        viewModelScope.launch {
+            RepoColumnRepositoryImpl.peekCached()?.let { cached ->
+                _uiState.update { state ->
+                    // 读缓存是异步的，可能比网络请求还慢：已经有数据（网络结果或别处先放的缓存）
+                    // 就不要再拿旧缓存覆盖它。
+                    if (state.columns.isEmpty()) {
+                        state.copy(columns = cached, columnsCached = true)
+                    } else {
+                        state
+                    }
+                }
+            }
         }
     }
 
@@ -192,18 +203,31 @@ class ModuleRepoViewModel(
         viewModelScope.launch {
             try {
                 val result = columnRepo.fetchColumns()
+                // 磁盘缓存的读取本身会切到 IO 线程，放在主线程切换之前完成。
+                val cached = if (result.isFailure) RepoColumnRepositoryImpl.peekCached() else null
                 withContext(Dispatchers.Main) {
                     // 失败不写 error、不弹提示（专栏拉不到不等于商店坏了），但要留一个标记让
                     // 专栏区显示「没加载出来 + 重试」，否则用户看到的就是专栏凭空消失。
                     result.onSuccess { columns ->
-                        _uiState.update { it.copy(columns = columns, columnsLoaded = true, columnsFailed = false) }
+                        _uiState.update {
+                            it.copy(
+                                columns = columns,
+                                columnsLoaded = true,
+                                columnsCached = false,
+                                columnsFailed = false,
+                            )
+                        }
                     }.onFailure {
                         // 断网/被墙时退到上次成功拉到的缓存：有内容可点比空一块好，
                         // 这时候不打「没加载出来」——缓存本身就是上一次的结果。
-                        val cached = RepoColumnRepositoryImpl.peekCached()
+                        // 注意不能置 columnsLoaded：这次网络请求是失败的，下次刷新还要继续重试。
                         if (cached != null) {
                             _uiState.update {
-                                it.copy(columns = cached, columnsLoaded = true, columnsFailed = false)
+                                it.copy(
+                                    columns = cached,
+                                    columnsCached = true,
+                                    columnsFailed = false,
+                                )
                             }
                         } else {
                             _uiState.update { it.copy(columnsFailed = true) }
