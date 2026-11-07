@@ -388,7 +388,8 @@ class MainActivity : ComponentActivity() {
                         val settingsActions = SettingsScreenActions(
                             onSetProxyMode = settingsViewModel::setProxyMode,
                             onSetProxyPinnedId = settingsViewModel::setProxyPinnedId,
-                            onTestProxies = settingsViewModel::testProxies,
+                            onTestProxies = { settingsViewModel.testProxies(force = true) },
+                            onEnsureProxyTested = settingsViewModel::ensureProxyTested,
                         )
                         // 列表原本只在 ViewModel init 时读一次，进子页顺带重读一遍，
                         // 「重进本页刷新」的承诺在子页同样成立。

@@ -192,6 +192,7 @@
     <string name="profile_selinux_rules">规则</string>
     <string name="recently_installed">最近安装</string>
     <string name="module_update">更新</string>
+    <string name="module_update_progress">下载中 %1$d%%</string>
     <string name="module_downloading">正在下载模块：%s</string>
     <string name="module_start_downloading">开始下载：%s</string>
     <string name="new_version_available">发现新版本：%s，点击升级！</string>
@@ -1665,6 +1666,7 @@
     <!-- GitHub 下载加速 -->
     <string name="settings_proxy_title">GitHub 下载加速</string>
     <string name="settings_proxy_summary">自动模式会把直连和每个代理一起测速，谁快用谁；开了系统代理或 VPN 时优先走直连。这里的测速只作参考，自动模式会在下载时重新测速。</string>
+    <string name="settings_proxy_intro">这个加速只影响 App 内从 GitHub 下载模块/更新的请求，不改变系统代理，也不影响其它 App。网络能直连 GitHub 时选官方直连最快；直连经常超时就选自动选优，让 App 帮你挑一个能用的镜像。</string>
     <string name="settings_proxy_entry_summary">测速直连与所有代理，GitHub 下载自动走最快的线路。</string>
     <string name="settings_proxy_mode_official">官方直连</string>
     <string name="settings_proxy_mode_auto">自动选优</string>

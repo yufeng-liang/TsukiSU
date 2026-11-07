@@ -161,6 +161,8 @@ fun ModulePagerMaterial(
     actions: ModuleActions,
     contribution: ModuleContributionController,
     bottomInnerPadding: Dp,
+    updatingModuleId: String? = null,
+    updateProgress: Int = 0,
 ) {
     val snackBarHost = remember { SnackbarHostState() }
     val haptic = LocalHapticFeedback.current
@@ -479,6 +481,8 @@ fun ModulePagerMaterial(
                         actions = actions,
                         onModuleAddShortcut = { module, type -> onModuleAddShortcut(module, type) },
                         closeSearch = closeSearch,
+                        updatingModuleId = updatingModuleId,
+                        updateProgress = updateProgress,
                     )
                 }
             )
@@ -591,6 +595,8 @@ fun ModulePagerMaterial(
                 actions = actions,
                 onModuleAddShortcut = { module, type -> onModuleAddShortcut(module, type) },
                 reorderEnabled = uiState.sortManual,
+                updatingModuleId = updatingModuleId,
+                updateProgress = updateProgress,
                 header = if (uiState.moduleList.isEmpty()) null else {
                     {
                         Text(
@@ -637,6 +643,8 @@ private fun ModuleList(
     reorderEnabled: Boolean = false,
     closeSearch: () -> Unit? = {},
     header: (@Composable () -> Unit)? = null,
+    updatingModuleId: String? = null,
+    updateProgress: Int = 0,
 ) {
     val loadingDialog = rememberLoadingDialog()
     val haptic = LocalHapticFeedback.current
@@ -697,6 +705,8 @@ private fun ModuleList(
                     },
                     onExecuteAction = { actions.onExecuteModuleAction(module) },
                     closeSearch = { closeSearch() },
+                    updatingModuleId = updatingModuleId,
+                    updateProgress = updateProgress,
                     dragHandleModifier = if (reorderEnabled) {
                         Modifier.draggableHandle(
                             onDragStarted = {
@@ -879,9 +889,13 @@ private fun ModuleItem(
     onOpenWebUi: () -> Unit,
     onExecuteAction: () -> Unit,
     closeSearch: () -> Unit,
+    updatingModuleId: String? = null,
+    updateProgress: Int = 0,
     dragHandleModifier: Modifier? = null,
 ) {
     val hasDescription = module.description.isNotBlank()
+    // 正在下载这个模块时，标题旁的「更新」标签和底部按钮都换成进度胶囊。
+    val updating = updatingModuleId == module.id
     // 这一格不再需要收录状态：模块页的「分享此模块」入口已去掉（收录与否改在上传页看），
     // 于是也不必为了一个不存在的按钮，给每个渲染到的模块发一次 /check 请求。
     val maxLinesLimit = LocalModuleDescriptionMaxLines.current
@@ -933,7 +947,13 @@ private fun ModuleItem(
                             style = MaterialTheme.typography.titleMedium,
                             textDecoration = textDecoration,
                         )
-                        if (updateUrl.isNotEmpty()) {
+                        if (updating) {
+                            StatusTag(
+                                label = stringResource(R.string.module_update_progress, updateProgress),
+                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                backgroundColor = MaterialTheme.colorScheme.tertiaryContainer,
+                            )
+                        } else if (updateUrl.isNotEmpty()) {
                             StatusTag(
                                 label = stringResource(R.string.module_update),
                                 contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -1130,30 +1150,49 @@ private fun ModuleItem(
                 Spacer(modifier = Modifier.weight(1f, true))
 
                 AnimatedVisibility(
-                    visible = hasUpdate,
+                    visible = hasUpdate || updating,
                     enter = fadeIn(),
                     exit = fadeOut()
                 ) {
                     Row {
-                        Button(
-                            modifier = Modifier.defaultMinSize(52.dp, 32.dp),
-                            enabled = !module.remove,
-                            onClick = onUpdate,
-                            shape = ButtonDefaults.textShape,
-                            contentPadding = ButtonDefaults.TextButtonContentPadding
-                        ) {
-                            Icon(
-                                modifier = Modifier.size(20.dp),
-                                imageVector = Icons.Outlined.Download,
-                                contentDescription = null
-                            )
-                            if (!module.hasActionScript || !module.hasWebUi) {
-                                Text(
-                                    modifier = Modifier.padding(start = 7.dp),
-                                    fontFamily = MaterialTheme.typography.labelMedium.fontFamily,
-                                    fontSize = MaterialTheme.typography.labelMedium.fontSize,
-                                    text = stringResource(R.string.module_update)
+                        if (updating) {
+                            // 下载中显示不可点的百分比胶囊，避免重复触发同一次下载。
+                            Surface(
+                                modifier = Modifier.defaultMinSize(52.dp, 32.dp),
+                                shape = RoundedCornerShape(50),
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                        text = stringResource(R.string.module_update_progress, updateProgress),
+                                        fontFamily = MaterialTheme.typography.labelMedium.fontFamily,
+                                        fontSize = MaterialTheme.typography.labelMedium.fontSize,
+                                    )
+                                }
+                            }
+                        } else {
+                            Button(
+                                modifier = Modifier.defaultMinSize(52.dp, 32.dp),
+                                enabled = !module.remove,
+                                onClick = onUpdate,
+                                shape = ButtonDefaults.textShape,
+                                contentPadding = ButtonDefaults.TextButtonContentPadding
+                            ) {
+                                Icon(
+                                    modifier = Modifier.size(20.dp),
+                                    imageVector = Icons.Outlined.Download,
+                                    contentDescription = null
                                 )
+                                if (!module.hasActionScript || !module.hasWebUi) {
+                                    Text(
+                                        modifier = Modifier.padding(start = 7.dp),
+                                        fontFamily = MaterialTheme.typography.labelMedium.fontFamily,
+                                        fontSize = MaterialTheme.typography.labelMedium.fontSize,
+                                        text = stringResource(R.string.module_update)
+                                    )
+                                }
                             }
                         }
 

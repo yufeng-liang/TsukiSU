@@ -92,7 +92,8 @@ fun SettingPager(
         onOpenExtensions = { navigator.push(Route.Extensions) },
         onSetProxyMode = viewModel::setProxyMode,
         onSetProxyPinnedId = viewModel::setProxyPinnedId,
-        onTestProxies = viewModel::testProxies,
+        onTestProxies = { viewModel.testProxies(force = true) },
+        onEnsureProxyTested = viewModel::ensureProxyTested,
         onOpenProxySettings = { navigator.push(Route.ProxySettings) },
     )
 

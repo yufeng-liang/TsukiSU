@@ -92,6 +92,7 @@
     <string name="profile_selinux_context">SELinux 上下文</string>
     <string name="profile_selinux_domain">定域</string>
     <string name="module_update">更新</string>
+    <string name="module_update_progress">下載中 %1$d%%</string>
     <string name="module_start_downloading">準備下載模組：%s</string>
     <string name="module_action_success">模組 Action 已成功執行。</string>
     <string name="new_version_available">版本 %s 現已開放下載，點選開始更新。</string>
@@ -1403,6 +1404,7 @@
     <!-- GitHub 下載加速 -->
     <string name="settings_proxy_title">GitHub 下載加速</string>
     <string name="settings_proxy_summary">自動模式會同時為直連與每個代理測速，誰快用誰；開啟系統代理或 VPN 時優先走直連。這裡的測速僅供參考，自動模式會在下載時重新測速。</string>
+    <string name="settings_proxy_intro">這個加速只影響 App 內從 GitHub 下載模組/更新的請求，不改變系統代理，也不影響其它 App。網路能直連 GitHub 時選官方直連最快；直連經常逾時就選自動選優，讓 App 幫你挑一個能用的鏡像。</string>
     <string name="settings_proxy_entry_summary">為直連與所有代理測速，GitHub 下載自動走最快的線路。</string>
     <string name="settings_proxy_mode_official">官方直連</string>
     <string name="settings_proxy_mode_auto">自動選優</string>

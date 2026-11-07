@@ -144,6 +144,8 @@ data class SettingsUiState(
     val proxyEntries: List<ProxyEntry> = emptyList(),
     val proxyHealth: List<ProxyHealth> = emptyList(),
     val proxyTesting: Boolean = false,
+    /** 最近一次测速完成的时间戳；0 表示本次进程内还没测过。 */
+    val proxyTestedAt: Long = 0L,
 )
 
 /**
@@ -249,5 +251,7 @@ data class SettingsScreenActions(
     val onSetProxyMode: (String) -> Unit = {},
     val onSetProxyPinnedId: (String) -> Unit = {},
     val onTestProxies: () -> Unit = {},
+    /** 进入页面时自动测速；内部带 3 分钟缓存，不会重复请求。 */
+    val onEnsureProxyTested: () -> Unit = {},
     val onOpenProxySettings: () -> Unit = {},
 )

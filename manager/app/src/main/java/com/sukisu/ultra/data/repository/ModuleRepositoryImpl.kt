@@ -81,11 +81,15 @@ class ModuleRepositoryImpl : ModuleRepository {
             val versionCode = updateJson.optLong("versionCode", 0L)
             val zipUrl = updateJson.optString("zipUrl", "")
             val changelog = updateJson.optString("changelog", "")
+            // updateJson 允许声明 sha256 / size：声明了才做完整性校验，
+            // 也只有声明了才允许这单下载走 GitHub 加速（代理是 TLS 终点，校验不了的字节不能过第三方）。
+            val sha256 = updateJson.optString("sha256", "")
+            val size = updateJson.optLong("size", 0L)
 
             if (versionCode <= module.versionCode || zipUrl.isEmpty()) {
                 ModuleUpdateInfo.Empty
             } else {
-                ModuleUpdateInfo(zipUrl, version, changelog, versionCode)
+                ModuleUpdateInfo(zipUrl, version, changelog, versionCode, sha256, size)
             }
         }.onFailure { if (it is CancellationException) throw it }
     }

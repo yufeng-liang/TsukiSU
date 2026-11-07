@@ -206,6 +206,7 @@
     <string name="profile_selinux_rules">Rules</string>
     <string name="recently_installed">Recently installed</string>
     <string name="module_update">Update</string>
+    <string name="module_update_progress">Downloading %1$d%%</string>
     <string name="module_downloading">Downloading module: %s</string>
     <string name="module_start_downloading">Start downloading: %s</string>
     <string name="module_action_success">Module action executed successfully.</string>
@@ -1677,6 +1678,7 @@
     <!-- GitHub 下载加速 -->
     <string name="settings_proxy_title">GitHub download acceleration</string>
     <string name="settings_proxy_summary">Auto mode speed-tests the direct connection and every proxy, then uses the fastest one. With a system proxy or VPN on, the direct connection is preferred. The test here is a reference only; auto mode re-tests at download time.</string>
+    <string name="settings_proxy_intro">This acceleration only affects module/update downloads from GitHub inside this app. It does not change the system proxy or affect other apps. Choose Direct if GitHub is reachable; choose Auto when direct connections often time out.</string>
     <string name="settings_proxy_entry_summary">Speed-test the direct connection and every proxy, then use the fastest one for GitHub downloads.</string>
     <string name="settings_proxy_mode_official">Official direct</string>
     <string name="settings_proxy_mode_auto">Auto (fastest)</string>

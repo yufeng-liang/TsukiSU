@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -53,6 +54,10 @@ fun ModulePager(
     val viewModel = viewModel<ModuleViewModel>()
     val scope = rememberCoroutineScope()
     val rawUiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    // 当前正在下载更新的模块与进度：列表里只有这一项显示「下载中 xx%」胶囊。
+    var updatingModuleId by remember { mutableStateOf<String?>(null) }
+    var updateProgress by remember { mutableIntStateOf(0) }
 
     val webUILauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -164,6 +169,9 @@ fun ModulePager(
             viewModel.dismissConfirmRequest()
         },
         onConfirmUpdate = { request ->
+            // 开始下载前先把进度复位并把「下载中」胶囊挂到目标模块上。
+            updatingModuleId = request.module.id
+            updateProgress = 0
             scope.launch {
                 download(
                     url = request.downloadUrl,
@@ -171,12 +179,19 @@ fun ModulePager(
                     // Registry releases are size + SHA-256 checked, kept app-private and
                     // re-verified by the flash step; other updateJson sources are unchanged.
                     expected = request.expected,
+                    onProgress = { progress ->
+                        updateProgress = progress.coerceIn(0, 100)
+                    },
                     onFailed = { failed ->
+                        // 失败后收掉进度胶囊，恢复原来的「更新」按钮。
+                        updatingModuleId = null
                         viewModel.emitEffect(
                             ModuleEffect.Toast(downloadFailureMessage(context, failed, request.fileName))
                         )
                     },
                     onDownloaded = { uri ->
+                        // 跳转刷入前先收掉进度胶囊，避免返回列表时还停留在下载态。
+                        updatingModuleId = null
                         if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
                             navigator.push(Route.Flash(FlashIt.FlashModules(listOf(uri))))
                             viewModel.markNeedRefresh()
@@ -281,6 +296,8 @@ fun ModulePager(
             actions = actions,
             contribution = contribution,
             bottomInnerPadding = bottomInnerPadding,
+            updatingModuleId = updatingModuleId,
+            updateProgress = updateProgress,
         )
 
         UiMode.Material -> ModulePagerMaterial(
@@ -290,6 +307,8 @@ fun ModulePager(
             actions = actions,
             contribution = contribution,
             bottomInnerPadding = bottomInnerPadding,
+            updatingModuleId = updatingModuleId,
+            updateProgress = updateProgress,
         )
     }
 
