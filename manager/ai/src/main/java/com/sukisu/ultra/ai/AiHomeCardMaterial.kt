@@ -68,6 +68,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalView
@@ -1321,29 +1323,42 @@ private fun ReasoningEffortSection(
             valueRange = 0f..modes.lastIndex.toFloat(),
             steps = (modes.size - 2).coerceAtLeast(0),
         )
-        // Slider 的轨道两端各内缩一个 thumb 半径（M3 默认 10dp），
-        // 刻度文字也按同样内边距排：首尾贴住轨道端点、中间均分，才会和圆点对齐。
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp),
-        ) {
-            modes.forEachIndexed { index, mode ->
-                Text(
-                    text = stringResource(mode.labelRes()),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (mode == selected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    textAlign = when (index) {
-                        0 -> TextAlign.Start
-                        modes.lastIndex -> TextAlign.End
-                        else -> TextAlign.Center
-                    },
-                    modifier = Modifier.weight(1f),
-                )
+        // Slider 的轨道两端各内缩一个 thumb 半径（M3 默认 10dp），刻度圆点也按这个范围均分；
+        // 这里用同样的几何把每个文字的中心放到对应刻度圆点上（等宽单元格会把首尾拉偏）。
+        Layout(
+            content = {
+                modes.forEach { mode ->
+                    Text(
+                        text = stringResource(mode.labelRes()),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (mode == selected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) { measurables, constraints ->
+            val placeables = measurables.map { it.measure(Constraints()) }
+            val width = constraints.maxWidth
+            val pad = 10.dp.roundToPx()
+            val step = if (placeables.size > 1) {
+                (width - pad * 2).toFloat() / (placeables.size - 1)
+            } else {
+                0f
+            }
+            val height = placeables.maxOfOrNull { it.height } ?: 0
+            layout(width, height) {
+                placeables.forEachIndexed { index, placeable ->
+                    val centerX = pad + step * index
+                    placeable.place(
+                        x = (centerX - placeable.width / 2f).roundToInt()
+                            .coerceIn(0, (width - placeable.width).coerceAtLeast(0)),
+                        y = 0,
+                    )
+                }
             }
         }
         Text(

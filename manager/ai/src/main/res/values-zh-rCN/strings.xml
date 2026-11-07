@@ -46,7 +46,7 @@
     <string name="ai_streaming">流式输出</string>
     <string name="ai_streaming_summary">逐字显示模型回复。</string>
     <string name="ai_tool_calling">原生工具调用</string>
-    <string name="ai_tool_calling_summary">使用服务商的 function calling 接口，仅聊天模型可关闭。</string>
+    <string name="ai_tool_calling_summary">使用提供商的 function calling 接口，仅聊天模型可关闭。</string>
     <string name="ai_keep_history">保留聊天记录</string>
     <string name="ai_keep_history_summary">对话仅保存在本机。</string>
     <string name="ai_system_prompt">自定义指令</string>
@@ -107,7 +107,7 @@
     <string name="ai_no_models">接口没有返回可用模型</string>
     <string name="ai_fetch_models_failed">获取模型失败</string>
     <string name="ai_thinking_mode">推理强度</string>
-    <string name="ai_thinking_summary">取决于服务商。自动由模型决定，关闭不使用推理，低/中/高在支持时设置强度。</string>
+    <string name="ai_thinking_summary">取决于提供商。自动由模型决定，关闭不使用推理，低/中/高在支持时设置强度。</string>
     <string name="ai_thinking_auto">自动</string>
     <string name="ai_thinking_off">关闭</string>
     <string name="ai_thinking_low">低</string>
@@ -243,7 +243,7 @@
     <string name="ai_risk_body_extension_write">允许助手修改内核级扩展，包括 KPM、CPU/版本伪装、umount 路径、动态管理器和 SuSFS。错误操作可能导致挂载隐藏、模块失效或系统不稳定。</string>
     <string name="ai_risk_body_module_install">允许助手下载并安装模块。恶意或不兼容的模块可能导致无法开机或设备被入侵。</string>
     <string name="ai_risk_body_code_execution">允许助手提供 shell 代码块，并在你确认后使用管理器的 root shell 执行。命令可以修改任意文件或设置。</string>
-    <string name="ai_risk_body_advanced_api">高级 API 模式会开放请求超时、重试、生成参数、自定义 HTTP 请求头和原始请求体覆盖。错误的值可能导致所有请求失败、把数据发往错误地址或泄露 API Key。仅在你了解服务商 API 时启用</string>
+    <string name="ai_risk_body_advanced_api">高级 API 模式会开放请求超时、重试、生成参数、自定义 HTTP 请求头和原始请求体覆盖。错误的值可能导致所有请求失败、把数据发往错误地址或泄露 API Key。仅在你了解提供商 API 时启用</string>
     <string name="ai_advanced_mode">高级 API 模式</string>
     <string name="ai_advanced_mode_summary">仅限专家的请求选项。默认隐藏，启用时需要输入确认短语。</string>
     <string name="ai_advanced_phrase">输入 ADVANCED 以确认</string>
@@ -258,7 +258,7 @@
     <string name="ai_connection_trust">提示词、设备上下文和 API Key 会发送到该地址。请只使用你信任的 AI 服务；开发者不运营也不控制第三方 AI 接口。</string>
     <string name="ai_shell_confirm_title">执行一条 shell 命令</string>
     <string name="ai_composer_attach_image">附一张截图</string>
-    <string name="ai_image_unsupported">当前模型没有标记为支持图片。如果你的服务商支持，请先在助手设置里打开。</string>
+    <string name="ai_image_unsupported">当前模型没有标记为支持图片。如果你的提供商支持，请先在助手设置里打开。</string>
     <string name="ai_shell_denied">这条命令没有执行。</string>
     <string name="ai_image_only_message">发送了 %1$d 张图片</string>
     <string name="ai_image_unreadable">这张图读不出来。</string>
