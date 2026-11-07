@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -188,11 +189,23 @@ object AiWebController {
             }
         }
 
-        // 通用抓取兜底：直接 GET 网页再抽正文。
-        when (val fallback = AiWebSearch.fetchHtmlPage(cleaned)) {
+        // 通用抓取兜底：直接 GET 网页再抽正文，但必须仍留在整条链的总预算内。
+        val fallbackBudgetMs = SEARCH_CHAIN_BUDGET_MS - elapsedMs(startedAt)
+        if (fallbackBudgetMs <= 0) {
+            errors += "直接抓取：总耗时接近上限，已跳过"
+            return@withContext buildAggregateFetchError(errors)
+        }
+        val fallback = withTimeoutOrNull(minOf(PROVIDER_TIMEOUT_MS, fallbackBudgetMs)) {
+            AiWebSearch.fetchHtmlPage(cleaned)
+        }
+        when (fallback) {
             is PageOutcome.Success -> withSearchSource(fallback.text, "直接抓取")
             is PageOutcome.Failure -> {
                 errors += "直接抓取：${fallback.message}"
+                buildAggregateFetchError(errors)
+            }
+            null -> {
+                errors += "直接抓取：请求超时"
                 buildAggregateFetchError(errors)
             }
         }

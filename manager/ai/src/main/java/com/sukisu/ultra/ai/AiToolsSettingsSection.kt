@@ -46,6 +46,20 @@ import kotlinx.coroutines.launch
 private val SettingsRowShape = RoundedCornerShape(12.dp)
 
 /**
+ * 与 [AiMcpClient.validUrl] 保持一致的即时校验：只允许 https；
+ * 本机回环地址额外允许 http，方便本地调试。`httpx://` 等非法 scheme 一律拒绝。
+ */
+private fun isValidMcpUrl(raw: String): Boolean {
+    val text = raw.trim()
+    if (text.isEmpty()) return false
+    val uri = runCatching { java.net.URI(text) }.getOrNull() ?: return false
+    val scheme = uri.scheme?.lowercase() ?: return false
+    val host = uri.host?.lowercase()?.trim('[', ']') ?: return false
+    val loopback = host == "localhost" || host == "127.0.0.1" || host == "::1"
+    return scheme == "https" || (scheme == "http" && loopback)
+}
+
+/**
  * AI 设置页里的「MCP 服务器」分组（联网搜索分组已拆分到 [AiSearchSettingsSection]）。
  *
  * 这里刻意只用 Material3 控件：设置页的 Material / Miuix 两套外壳都调用同一个 composable，
@@ -165,7 +179,8 @@ private fun McpServerAddDialog(
                     text = stringResource(R.string.ai_mcp_transport),
                     style = MaterialTheme.typography.labelLarge,
                 )
-                val transportOptions = listOf("STREAMABLE_HTTP" to "Streamable HTTP", "SSE" to "SSE")
+                // SSE（legacy）客户端尚未实现，先只提供 Streamable HTTP，避免选了不生效的选项。
+                val transportOptions = listOf("STREAMABLE_HTTP" to "Streamable HTTP")
                 SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                     transportOptions.forEachIndexed { index, (value, label) ->
                         SegmentedButton(
@@ -186,6 +201,12 @@ private fun McpServerAddDialog(
                     label = { Text(stringResource(R.string.ai_mcp_url)) },
                     placeholder = { Text("https://example.com/mcp") },
                     singleLine = true,
+                    isError = url.isNotBlank() && !isValidMcpUrl(url),
+                    supportingText = {
+                        if (url.isNotBlank() && !isValidMcpUrl(url)) {
+                            Text(stringResource(R.string.ai_mcp_url_invalid))
+                        }
+                    },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                     shape = MaterialTheme.shapes.large,
                     modifier = Modifier.fillMaxWidth(),
@@ -244,7 +265,7 @@ private fun McpServerAddDialog(
         },
         confirmButton = {
             TextButton(
-                enabled = name.isNotBlank() && url.trim().startsWith("http"),
+                enabled = name.isNotBlank() && isValidMcpUrl(url),
                 onClick = {
                     onSave(
                         AiMcpServer(
@@ -346,6 +367,12 @@ private fun McpServerDetailDialog(
                     onValueChange = { url = it },
                     label = { Text(stringResource(R.string.ai_mcp_url)) },
                     singleLine = true,
+                    isError = url.isNotBlank() && !isValidMcpUrl(url),
+                    supportingText = {
+                        if (url.isNotBlank() && !isValidMcpUrl(url)) {
+                            Text(stringResource(R.string.ai_mcp_url_invalid))
+                        }
+                    },
                     shape = MaterialTheme.shapes.large,
                 )
                 OutlinedTextField(
@@ -358,7 +385,7 @@ private fun McpServerDetailDialog(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(
-                        enabled = !loading,
+                        enabled = !loading && isValidMcpUrl(url),
                         onClick = {
                             loading = true
                             toolsError = null
@@ -368,6 +395,7 @@ private fun McpServerDetailDialog(
                                     name = name,
                                     url = url,
                                     enabled = server.enabled,
+                                    transport = server.transport,
                                     headers = parseHeaders(headersText),
                                 )
                                 val result = runCatching { AiMcpClient.listTools(target) }
@@ -423,7 +451,7 @@ private fun McpServerDetailDialog(
         },
         confirmButton = {
             TextButton(
-                enabled = name.isNotBlank() && url.isNotBlank(),
+                enabled = name.isNotBlank() && isValidMcpUrl(url),
                 onClick = {
                     AiMcpSettings.update(
                         server.copy(

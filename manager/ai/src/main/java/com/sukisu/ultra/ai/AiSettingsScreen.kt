@@ -66,8 +66,6 @@ fun AiSettingsScreen(onBack: () -> Unit) {
     var draft by remember(state.config) { mutableStateOf(state.config) }
     var testState by remember { mutableStateOf(AiTestState()) }
     var fetchingModels by remember { mutableStateOf(false) }
-    var modelOptions by remember { mutableStateOf<List<String>>(emptyList()) }
-    var modelTarget by remember { mutableStateOf<Boolean?>(null) }
     var pendingNetworkAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     val networkPermissionLauncher = rememberLauncherForActivityResult(
@@ -218,16 +216,6 @@ fun AiSettingsScreen(onBack: () -> Unit) {
             onBack()
         },
     )
-
-    val target = modelTarget
-    if (target != null) {
-        val onSelect: (String) -> Unit = { selected ->
-            draft = if (target) draft.copy(imageModel = selected) else draft.copy(model = selected)
-            modelTarget = null
-        }
-        val dismiss = { modelTarget = null }
-        AiModelListDialogMaterial(modelOptions, onSelect, dismiss)
-    }
 }
 
 @Composable
@@ -383,30 +371,6 @@ private fun AiSettingsMiuix(
             }
         }
     }
-}
-
-@Composable
-private fun AiModelListDialogMaterial(
-    models: List<String>,
-    onSelect: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AiExpressiveDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.ai_select_model)) },
-        text = {
-            LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
-                items(models) { model ->
-                    TextButton(onClick = { onSelect(model) }) {
-                        Text(model)
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
-        },
-    )
 }
 
 @Composable
