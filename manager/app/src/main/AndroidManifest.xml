@@ -35,6 +35,10 @@
             <action android:name="com.android.camera.action.CROP" />
             <data android:mimeType="image/*" />
         </intent>
+        <!-- 检测器包名：Android 11+ 的包可见性限制下，不显式声明就查不到它们是否已安装，
+             向导会把「已装」误判成「未装」并重复下载安装。 -->
+        <package android:name="com.chunqiunativecheck" />
+        <package android:name="com.eltavine.duckdetector" />
     </queries>
 
     <application

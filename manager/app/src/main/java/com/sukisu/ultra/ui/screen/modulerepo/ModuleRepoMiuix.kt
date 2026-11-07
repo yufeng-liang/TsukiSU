@@ -938,8 +938,8 @@ private fun MiuixStoreHeader(
             source = coolapkSource,
             onSetSourceEnabled = onSetSourceEnabled,
         )
-        // 专栏横滑区目前是 Material 实现，Miuix 主题下同样可用；P1 拆执行向导时再各写一套。
-        ModuleColumnStrip(
+        // 专栏横滑区用 Miuix 自己的一套卡片与按钮，避免 Material 组件在 Miuix 主题下回落成紫色。
+        ModuleColumnStripMiuix(
             columns = columns,
             onOpenColumn = onOpenColumn,
             failed = columnsFailed,

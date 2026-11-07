@@ -97,7 +97,7 @@ class ColumnStepRunnerImpl(
                 KIND_WRITE_HMA_CONFIG -> writeHmaConfig(step, log)
                 KIND_RUN_COMMAND -> runCommand(step, log)
                 KIND_VERIFY -> verify(step)
-                KIND_REBOOT -> reboot(step)
+                KIND_REBOOT -> reboot(step, log)
                 KIND_ASK_USER -> askUser(step)
                 else -> failed("未知步骤类型：${step.kind.ifBlank { "（空）" }}，本版本暂不支持")
             }
@@ -911,9 +911,23 @@ class ColumnStepRunnerImpl(
         }
     }
 
-    private fun reboot(step: RepoColumnStep): ColumnStepResult {
+    /**
+     * 真正发起一次重启。
+     *
+     * 用独立进程 `su -c reboot`：重启会立刻杀掉本进程，走 root shell 的 exec 很可能等不到返回，
+     * 反而把「重启已发出」误判成失败；独立进程只要能成功拉起，就认为重启命令已经发出去。
+     * 返回 SUCCESS 让上层把这一步记为完成；真正回来后的续跑由 ViewModel 的 pendingResume 负责。
+     * 返回前把关键日志写出去（[StepLog] 是边写边回调的，这里再补一行明确状态）。
+     */
+    private fun reboot(step: RepoColumnStep, log: StepLog): ColumnStepResult {
         // 同上：note 已经在说明区展示，message 只讲这一步现在要做什么。
-        return ColumnStepResult(ColumnStepStatus.NEEDS_USER, "重启后回来继续")
+        log.line("执行重启命令：reboot（${step.title}）")
+        return try {
+            ProcessBuilder("su", "-c", "reboot").start()
+            ColumnStepResult(ColumnStepStatus.SUCCESS, "设备正在重启…", log.text())
+        } catch (e: Exception) {
+            failed("重启失败：${e.message ?: e.javaClass.simpleName}，请手动重启设备后回来继续", log)
+        }
     }
 
     private fun askUser(step: RepoColumnStep): ColumnStepResult {

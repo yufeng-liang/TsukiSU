@@ -179,9 +179,7 @@ fun HomePagerMaterial(
                 WarningCard(customText(CustomTextKey.HOME_WARN_PREVIEW_MODE), level = WarningLevel.Notice)
             }
             if (state.showAiHomeCard && AiFeatureBridge.isAvailable) {
-                Box(Modifier.aiSharedElement(visible = AiSharedTransition.cardVisible)) {
-                    AiFeatureBridge.HomeCard(onOpenChat = actions.onOpenAi)
-                }
+                AiFeatureBridge.HomeCard(onOpenChat = actions.onOpenAi)
             }
             if (state.hideEnvCard != null) {
                 HideEnvCard(

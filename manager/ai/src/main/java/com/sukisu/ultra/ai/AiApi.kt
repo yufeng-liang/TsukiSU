@@ -114,19 +114,23 @@ object AiApiClient {
         useTools: Boolean = tools.isNotEmpty(),
         maxTokens: Int = 4096,
         onDelta: (String) -> Unit = {},
+        modelIdOverride: String? = null,
     ): AiCompletion {
-        require(config.endpoint.isNotBlank()) { "API address is empty" }
-        require(config.model.isNotBlank()) { "Model name is empty" }
-        val url = config.resolvedEndpoint()
+        // 所有请求统一从多供应商配置里解析当前生效的 endpoint/key/model，
+        // 不再直接读 config.endpoint/config.model（否则切换供应商后仍打旧地址）。
+        val resolved = AiSettings.resolveActiveProvider(config, modelIdOverride)
+        require(resolved.endpoint.isNotBlank()) { "API address is empty" }
+        require(resolved.modelId.isNotBlank()) { "Model name is empty" }
+        val url = AiSettings.chatEndpointOf(resolved)
         require(url.isNotBlank()) { "API address is invalid" }
         val options = config.advancedOptions()
-        return when (config.effectiveFormat()) {
+        return when (resolved.format) {
             AiProviderFormat.OLLAMA ->
-                ollama(config, options, url, messages, tools, useTools, maxTokens, onDelta)
+                ollama(config, resolved, options, url, messages, tools, useTools, maxTokens, onDelta)
             AiProviderFormat.ANTHROPIC ->
-                anthropic(config, options, url, messages, tools, useTools, maxTokens, onDelta)
+                anthropic(config, resolved, options, url, messages, tools, useTools, maxTokens, onDelta)
             AiProviderFormat.OPENAI, AiProviderFormat.AUTO ->
-                openAi(config, options, url, messages, tools, useTools, maxTokens, onDelta)
+                openAi(config, resolved, options, url, messages, tools, useTools, maxTokens, onDelta)
         }
     }
 
@@ -152,18 +156,20 @@ object AiApiClient {
      * `/models`, Ollama `/api/tags`, and Anthropic `/v1/models`.
      */
     suspend fun fetchModels(config: AiConfig): List<String> {
-        require(config.endpoint.isNotBlank()) { "API address is empty" }
-        val format = config.effectiveFormat()
+        val resolved = AiSettings.resolveActiveProvider(config)
+        require(resolved.endpoint.isNotBlank()) { "API address is empty" }
+        val format = resolved.format
+        val chatUrl = AiSettings.chatEndpointOf(resolved)
         val url = when (format) {
             AiProviderFormat.OPENAI, AiProviderFormat.AUTO ->
-                config.resolvedEndpoint().removeSuffix("/chat/completions") + "/models"
+                chatUrl.removeSuffix("/chat/completions") + "/models"
             AiProviderFormat.OLLAMA ->
-                config.resolvedEndpoint().removeSuffix("/api/chat") + "/api/tags"
+                chatUrl.removeSuffix("/api/chat") + "/api/tags"
             AiProviderFormat.ANTHROPIC ->
-                config.resolvedEndpoint().removeSuffix("/messages") + "/models"
+                chatUrl.removeSuffix("/messages") + "/models"
         }
         val builder = Request.Builder().url(url).get()
-        val key = config.apiKey.trim()
+        val key = resolved.apiKey
         if (key.isNotEmpty()) {
             when (format) {
                 AiProviderFormat.ANTHROPIC -> builder.header("x-api-key", key)
@@ -200,6 +206,7 @@ object AiApiClient {
 
     private suspend fun openAi(
         config: AiConfig,
+        resolved: ResolvedProvider,
         options: AiAdvancedOptions,
         url: String,
         messages: List<AiApiMessage>,
@@ -208,13 +215,15 @@ object AiApiClient {
         maxTokens: Int,
         onDelta: (String) -> Unit,
     ): AiCompletion {
+        // 模型明确不支持推理时不带 reasoning_effort，避免网关 400。
+        val thinkingMode = if (resolved.supportsReasoning) config.thinkingMode else AiThinkingMode.AUTO
         val payload = buildJsonObject {
-            put("model", config.model)
+            put("model", resolved.modelId)
             put("messages", openAiMessages(messages))
             put("stream", config.streaming)
             put("temperature", if (config.advancedMode) options.temperature else config.temperature)
             put("max_tokens", maxTokens)
-            when (config.thinkingMode) {
+            when (thinkingMode) {
                 AiThinkingMode.OFF -> put("reasoning_effort", "none")
                 AiThinkingMode.LOW -> put("reasoning_effort", "low")
                 AiThinkingMode.MEDIUM -> put("reasoning_effort", "medium")
@@ -236,7 +245,7 @@ object AiApiClient {
                 if (config.advancedMode) put("parallel_tool_calls", options.parallelToolCalls)
             }
         }.mergeExtraBody(config, options)
-        val request = request(url, config, payload.toString())
+        val request = request(url, config, resolved, payload.toString())
         return withCall(request, config) { response ->
             val contentType = response.header("Content-Type").orEmpty()
             val readLine = response.readLineSupplier()
@@ -454,6 +463,7 @@ object AiApiClient {
 
     private suspend fun ollama(
         config: AiConfig,
+        resolved: ResolvedProvider,
         options: AiAdvancedOptions,
         url: String,
         messages: List<AiApiMessage>,
@@ -462,8 +472,9 @@ object AiApiClient {
         maxTokens: Int,
         onDelta: (String) -> Unit,
     ): AiCompletion {
+        val thinkingMode = if (resolved.supportsReasoning) config.thinkingMode else AiThinkingMode.AUTO
         val payload = buildJsonObject {
-            put("model", config.model)
+            put("model", resolved.modelId)
             put("messages", buildJsonArray {
                 messages.forEach { message ->
                     addJsonObject {
@@ -505,7 +516,7 @@ object AiApiClient {
                     }
                 }
             }
-            when (config.thinkingMode) {
+            when (thinkingMode) {
                 AiThinkingMode.OFF -> put("think", false)
                 AiThinkingMode.LOW -> put("think", "low")
                 AiThinkingMode.MEDIUM -> put("think", "medium")
@@ -516,7 +527,7 @@ object AiApiClient {
                 putJsonArray("tools") { tools.forEach { add(it.toOllamaJson()) } }
             }
         }.mergeExtraBody(config, options)
-        val request = request(url, config, payload.toString())
+        val request = request(url, config, resolved, payload.toString())
         return withCall(request, config) { response ->
             val readLine = response.readLineSupplier()
             if (config.streaming) {
@@ -600,6 +611,7 @@ object AiApiClient {
 
     private suspend fun anthropic(
         config: AiConfig,
+        resolved: ResolvedProvider,
         options: AiAdvancedOptions,
         url: String,
         messages: List<AiApiMessage>,
@@ -611,13 +623,14 @@ object AiApiClient {
         val system = messages.filter { it.role == "system" }
             .joinToString("\n\n") { it.content }
             .ifBlank { null }
+        val thinkingMode = if (resolved.supportsReasoning) config.thinkingMode else AiThinkingMode.AUTO
         val payload = buildJsonObject {
-            put("model", config.model)
+            put("model", resolved.modelId)
             put("max_tokens", maxTokens)
             put("temperature", if (config.advancedMode) options.temperature else config.temperature)
             if (system != null) put("system", system)
             put("messages", anthropicMessages(messages))
-            when (config.thinkingMode) {
+            when (thinkingMode) {
                 AiThinkingMode.LOW -> putJsonObject("thinking") {
                     put("type", "enabled")
                     put("budget_tokens", 1024)
@@ -646,7 +659,7 @@ object AiApiClient {
                 putJsonArray("tools") { tools.forEach { add(it.toAnthropicJson()) } }
             }
         }.mergeExtraBody(config, options)
-        val request = request(url, config, payload.toString()).newBuilder()
+        val request = request(url, config, resolved, payload.toString()).newBuilder()
             .header("anthropic-version", "2023-06-01")
             .build()
         return withCall(request, config) { response ->
@@ -856,11 +869,11 @@ object AiApiClient {
         return { if (lines.hasNext()) lines.next() else null }
     }
 
-    private fun request(url: String, config: AiConfig, body: String): Request {
+    private fun request(url: String, config: AiConfig, resolved: ResolvedProvider, body: String): Request {
         val builder = Request.Builder().url(url).post(body.toRequestBody(mediaType))
-        val key = config.apiKey.trim()
+        val key = resolved.apiKey
         if (key.isNotEmpty()) {
-            if (config.effectiveFormat() == AiProviderFormat.ANTHROPIC) {
+            if (resolved.format == AiProviderFormat.ANTHROPIC) {
                 builder.header("x-api-key", key)
             } else if (url.contains("openai.azure.com", ignoreCase = true)) {
                 builder.header("api-key", key)

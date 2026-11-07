@@ -1693,6 +1693,10 @@
     <string name="column_wizard_opt_in">Include in run-all</string>
     <string name="column_wizard_installed" translatable="true">Installed</string>
     <string name="column_wizard_reinstall" translatable="true">Reinstall</string>
+    <string name="column_wizard_test_title" translatable="true">Test only</string>
+    <string name="column_wizard_test_body" translatable="true">Preview only; no hidden operations run and the device will not reboot. Long-press the top bar title to reopen.</string>
+    <string name="column_wizard_test_celebrate" translatable="true">Preview celebration</string>
+    <string name="column_wizard_test_countdown" translatable="true">Preview reboot countdown</string>
     <string name="column_wizard_run_all_rest">Run remaining steps</string>
     <string name="module_column_guide_title">Which level do you need?</string>
     <string name="module_column_tier_day">Day-to-day</string>

@@ -955,7 +955,8 @@ private fun AiWelcomeMaterial(
     Column(
         modifier = modifier.fillMaxWidth().padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        // 标题、说明、卡片、换一批按层级拉开间距，避免全部挤在一起。
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

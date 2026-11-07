@@ -285,7 +285,7 @@
     <string name="ai_provider_default">Default</string>
     <string name="ai_provider_switch">Switch</string>
     <string name="ai_provider_switch_title">Choose a provider</string>
-    <string name="ai_provider_add">+ Add provider</string>
+    <string name="ai_provider_add">Add provider</string>
     <string name="ai_provider_delete">Delete current provider</string>
     <string name="ai_provider_delete_message">Delete &quot;%1$s&quot;?</string>
     <string name="ai_provider_current_mark">Current</string>

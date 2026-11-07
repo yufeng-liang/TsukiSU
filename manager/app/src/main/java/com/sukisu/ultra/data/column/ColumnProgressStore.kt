@@ -1,6 +1,7 @@
 package com.sukisu.ultra.data.column
 
 import android.content.Context
+import android.provider.Settings
 import com.sukisu.ultra.ksuApp
 import org.json.JSONArray
 import org.json.JSONObject
@@ -27,6 +28,21 @@ data class ColumnProgressEntry(
 
     val progressText: String get() = "$settledSteps / $totalSteps"
 }
+
+/**
+ * 「重启后要继续」标记的内容。
+ *
+ * [lastStepId] 记录发起重启前最后执行的那一步（通常就是 reboot 自己）：设备回来后把它补记为
+ * 完成，避免恢复出来的 PENDING 让一键执行反复排入重启、形成死循环。
+ * [bootCount] 是写入时的系统启动次数，用来证明「真的重启过」——只有当前启动次数大于它才认为
+ * 续跑标记有效。
+ */
+data class ColumnPendingResume(
+    val columnId: String,
+    val topicId: String,
+    val lastStepId: String,
+    val bootCount: Int,
+)
 
 /**
  * 主页卡片与向导之间的进度索引。
@@ -99,8 +115,16 @@ object ColumnProgressStore {
      *
      * 只由 [com.sukisu.ultra.ui.viewmodel.ColumnWizardViewModel.runAll] 在真的调 reboot 前写入：
      * 设备重启会杀掉进程，没这个标记的话用户回来只能自己再点一次一键执行。
+     *
+     * @param lastStepId 发起重启前最后执行的那一步（通常就是 reboot 自己），回来后会补记为成功，
+     * 避免恢复出来的 PENDING 让一键执行再次排入重启、形成死循环。
      */
-    fun markPendingResume(context: Context, columnId: String, topicId: String) {
+    fun markPendingResume(
+        context: Context,
+        columnId: String,
+        topicId: String,
+        lastStepId: String = "",
+    ) {
         runCatching {
             prefs(context).edit()
                 .putString(
@@ -108,10 +132,14 @@ object ColumnProgressStore {
                     JSONObject()
                         .put("columnId", columnId)
                         .put("topicId", topicId)
+                        .put("lastStepId", lastStepId)
+                        .put("bootCount", readBootCount(context))
                         .put("at", System.currentTimeMillis())
                         .toString(),
                 )
-                .apply()
+                // 必须同步落盘：写完这条标记后马上就要重启，apply() 的异步写可能还没落盘
+                // 进程就被杀了，那这次续跑标记等于没写。
+                .commit()
         }
     }
 
@@ -120,31 +148,54 @@ object ColumnProgressStore {
      *
      * 不清除是有意的：重启后 App 可能被拉起两次（用户点开一次、系统恢复一次），
      * 谁先读到谁负责跑完，跑完或失败时再显式 [clearPendingResume]。
-     * 超过 [PENDING_RESUME_TTL_MS] 的标记视为过期，直接返回 null。
+     *
+     * 只有当前系统启动次数严格大于写入时记录的次数，才说明设备真的重启过；否则（用户点了
+     * 「稍后」又回到 App、或者只是进程被杀）标记无效，直接清掉并返回 null，避免误续跑。
+     * 超过 [PENDING_RESUME_TTL_MS] 的标记视为过期，同样清掉。
      */
     fun peekPendingResume(
         context: Context,
         now: Long = System.currentTimeMillis(),
-    ): Pair<String, String>? {
+    ): ColumnPendingResume? {
         val raw = runCatching { prefs(context).getString(KEY_PENDING_RESUME, null) }.getOrNull()
             ?: return null
-        return runCatching {
+        val parsed = runCatching {
             val item = JSONObject(raw)
             val columnId = item.optString("columnId")
             val topicId = item.optString("topicId")
+            val lastStepId = item.optString("lastStepId")
+            val bootCount = item.optInt("bootCount", -1)
             val at = item.optLong("at")
-            if (columnId.isEmpty() || topicId.isEmpty()) return null
-            if (now - at > PENDING_RESUME_TTL_MS) return null
-            columnId to topicId
+            if (columnId.isEmpty() || topicId.isEmpty()) return@runCatching null
+            if (now - at > PENDING_RESUME_TTL_MS) return@runCatching null
+            ColumnPendingResume(columnId, topicId, lastStepId, bootCount)
         }.getOrNull()
+        if (parsed == null) {
+            clearPendingResume(context)
+            return null
+        }
+        val currentBootCount = readBootCount(context)
+        // 记录里没有 BOOT_COUNT（-1，例如旧版本写的标记或系统读不到）时按「无法确认」处理：
+        // 宁可让用户手动再点一次，也不要凭一个旧标记自动跑。
+        if (parsed.bootCount < 0 || currentBootCount <= parsed.bootCount) {
+            clearPendingResume(context)
+            return null
+        }
+        return parsed
     }
 
     fun clearPendingResume(context: Context) {
-        runCatching { prefs(context).edit().remove(KEY_PENDING_RESUME).apply() }
+        // 同步落盘：紧接着可能还有一次重启，异步写有丢标记的风险。
+        runCatching { prefs(context).edit().remove(KEY_PENDING_RESUME).commit() }
     }
 
+    /** 系统启动次数（Settings.Global.BOOT_COUNT）；读不到返回 -1，按「无法确认」处理。 */
+    private fun readBootCount(context: Context): Int = runCatching {
+        Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, -1)
+    }.getOrDefault(-1)
+
     /** 主页 / 模块页的便捷入口：拿到应用上下文再读。 */
-    fun peekPendingResume(): Pair<String, String>? = peekPendingResume(ksuApp)
+    fun peekPendingResume(): ColumnPendingResume? = peekPendingResume(ksuApp)
 
     fun clearPendingResume() = clearPendingResume(ksuApp)
 

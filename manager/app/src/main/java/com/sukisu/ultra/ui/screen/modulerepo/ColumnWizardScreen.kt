@@ -292,12 +292,19 @@ fun ColumnWizardScreen(
         AiAssistantMaterialTheme {
             ColumnCelebrationOverlay(
                 onOpenSelfCheck = {
-                    previewCelebrate = false
-                    onOpenSelfCheck()
+                    // 预览态只关预览：既不能跳走，也不能碰真实的庆祝状态。
+                    if (previewCelebrate) {
+                        previewCelebrate = false
+                    } else {
+                        onOpenSelfCheck()
+                    }
                 },
                 onDismiss = {
-                    previewCelebrate = false
-                    onDismissCelebration()
+                    if (previewCelebrate) {
+                        previewCelebrate = false
+                    } else {
+                        onDismissCelebration()
+                    }
                 },
             )
         }
@@ -323,19 +330,19 @@ fun ColumnWizardScreen(
         AiAssistantMaterialTheme {
             AlertDialog(
                 onDismissRequest = { showTestMenu = false },
-                title = { Text("测试专用") },
-                text = { Text("只预览界面，不执行任何隐藏操作、也不会真的重启。长按顶栏标题可再次打开。") },
+                title = { Text(stringResource(R.string.column_wizard_test_title)) },
+                text = { Text(stringResource(R.string.column_wizard_test_body)) },
                 confirmButton = {
                     TextButton(onClick = {
                         showTestMenu = false
                         previewCelebrate = true
-                    }) { Text("预览庆祝动画") }
+                    }) { Text(stringResource(R.string.column_wizard_test_celebrate)) }
                 },
                 dismissButton = {
                     TextButton(onClick = {
                         showTestMenu = false
                         previewCountdown = 10
-                    }) { Text("预览重启倒计时") }
+                    }) { Text(stringResource(R.string.column_wizard_test_countdown)) }
                 },
             )
         }
@@ -1287,6 +1294,7 @@ private fun WizardStepCardMiuix(
                 enabled = !busy,
                 installed = installed,
                 onRun = onRun,
+                onReinstall = onUpgrade,
                 onMarkDone = onMarkDone,
             )
         }
@@ -1310,6 +1318,8 @@ private fun StepPrimaryActionMiuix(
     enabled: Boolean,
     installed: Boolean = false,
     onRun: () -> Unit,
+    /** 已安装时点「重新安装」：带 force 重跑，覆盖已装的版本。 */
+    onReinstall: () -> Unit,
     onMarkDone: () -> Unit,
 ) {
     // NEEDS_USER 是「等你动手」，点它是「我做完了」，不是「重跑一遍」——重跑只会再下载一次、
@@ -1325,7 +1335,11 @@ private fun StepPrimaryActionMiuix(
     if (label == null) return
     MiuixTextButton(
         text = stringResource(label),
-        onClick = if (status == ColumnStepStatus.NEEDS_USER) onMarkDone else onRun,
+        onClick = when {
+            status == ColumnStepStatus.NEEDS_USER -> onMarkDone
+            status == ColumnStepStatus.PENDING && installed -> onReinstall
+            else -> onRun
+        },
         enabled = enabled && status != ColumnStepStatus.RUNNING,
         minWidth = 0.dp,
         minHeight = 0.dp,
@@ -2016,6 +2030,7 @@ private fun WizardStepCard(
                     enabled = !busy,
                     installed = installed,
                     onRun = onRun,
+                    onReinstall = onUpgrade,
                     onMarkDone = onMarkDone,
                 )
             }
@@ -2227,6 +2242,8 @@ private fun StepPrimaryAction(
     enabled: Boolean,
     installed: Boolean = false,
     onRun: () -> Unit,
+    /** 已安装时点「重新安装」：带 force 重跑，覆盖已装的版本。 */
+    onReinstall: () -> Unit,
     onMarkDone: () -> Unit,
 ) {
     // NEEDS_USER 是「等你动手」，点它是「我做完了」，不是「重跑一遍」——重跑只会再下载一次、
@@ -2241,7 +2258,11 @@ private fun StepPrimaryAction(
     }
     if (label == null) return
     FilledTonalButton(
-        onClick = if (status == ColumnStepStatus.NEEDS_USER) onMarkDone else onRun,
+        onClick = when {
+            status == ColumnStepStatus.NEEDS_USER -> onMarkDone
+            status == ColumnStepStatus.PENDING && installed -> onReinstall
+            else -> onRun
+        },
         enabled = enabled && status != ColumnStepStatus.RUNNING,
         modifier = Modifier.height(32.dp),
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -104,6 +105,7 @@ import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
+import top.yukonga.miuix.kmp.basic.TextButton as MiuixTextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -189,7 +191,7 @@ private fun ColumnEntryCard(column: RepoColumn, onClick: () -> Unit, modifier: M
     // 比酷安卡和模块卡都暗一档，同一个列表里显得像另一套设计。
     TonalCard(
         onClick = onClick,
-        modifier = if (modifier != Modifier) modifier else Modifier.width(236.dp),
+        modifier = if (modifier != Modifier) modifier else Modifier.widthIn(max = 236.dp),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -218,6 +220,114 @@ private fun ColumnEntryCard(column: RepoColumn, onClick: () -> Unit, modifier: M
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * 商店列表头的专栏横滑区（Miuix 版）。
+ *
+ * 结构与 Material 版 [ModuleColumnStrip] 一一对应：标题、加载失败出口、单卡铺满 / 多卡横滑。
+ * 卡片、按钮、文字都换成 Miuix 自己那套，避免在 Miuix 主题里混进 Material 组件后回落成紫色。
+ */
+@Composable
+fun ModuleColumnStripMiuix(
+    columns: List<RepoColumn>,
+    onOpenColumn: (RepoColumn) -> Unit,
+    modifier: Modifier = Modifier,
+    failed: Boolean = false,
+    onRetry: () -> Unit = {},
+) {
+    if (columns.isEmpty() && !failed) return
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            // 和 Miuix 商店列表的卡片边距对齐：列表本身不给外层内边距，卡片各自留 12dp。
+            .padding(horizontal = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        MiuixText(
+            text = stringResource(R.string.module_column_section_title),
+            color = colorScheme.onSurface,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        if (columns.isEmpty()) {
+            // 拉失败时留一行出口：整块隐藏会让用户以为专栏没了（v4.1.4 的用户反馈就是这个）。
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MiuixText(
+                    text = stringResource(R.string.module_column_load_failed),
+                    color = colorScheme.onSurfaceVariantSummary,
+                    fontSize = 13.sp,
+                    modifier = Modifier.weight(1f),
+                )
+                MiuixTextButton(
+                    text = stringResource(R.string.module_column_retry),
+                    onClick = onRetry,
+                    minWidth = 0.dp,
+                    minHeight = 0.dp,
+                    insideMargin = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                )
+            }
+            return@Column
+        }
+        if (columns.size == 1) {
+            // 只有一个专栏时横滑没有意义，卡片直接占满整行。
+            ColumnEntryCardMiuix(
+                column = columns.first(),
+                onClick = { onOpenColumn(columns.first()) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(columns, key = { it.id }) { column ->
+                    ColumnEntryCardMiuix(column = column, onClick = { onOpenColumn(column) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ColumnEntryCardMiuix(
+    column: RepoColumn,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // insideMargin 就是 AppCard 自带的内边距，内容里不再叠一层 padding。
+    AppCard(
+        modifier = if (modifier != Modifier) modifier else Modifier.widthIn(max = 236.dp),
+        insideMargin = PaddingValues(16.dp),
+        onClick = onClick,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            ColumnIconBadgeMiuix(columnGlyph(column.accent))
+            Column(modifier = Modifier.weight(1f)) {
+                MiuixText(
+                    text = column.title,
+                    color = colorScheme.onSurface,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                // 副标题一行说清这栏是干什么的，专题数量在详情页里看得到，入口卡上不重复占一行。
+                MiuixText(
+                    text = column.subtitle,
+                    color = colorScheme.onSurfaceVariantSummary,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }

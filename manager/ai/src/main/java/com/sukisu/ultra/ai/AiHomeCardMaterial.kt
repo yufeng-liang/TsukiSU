@@ -68,6 +68,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalView
@@ -250,6 +252,15 @@ internal fun AiConfigEditorMaterial(
     val scope = rememberCoroutineScope()
     val detected = if (draft.resolvedEndpoint().isNotBlank()) draft.effectiveFormat() else null
 
+    /**
+     * 计算切换后应保留的推理档位：模型明确不支持推理时清回 AUTO，
+     * 避免旧模型的 HIGH/MEDIUM 残留到下一次请求里。
+     */
+    fun thinkingModeFor(provider: AiProvider?, model: AiModelInfo?): AiThinkingMode {
+        if (model != null && model.supportedReasoningModes().isEmpty()) return AiThinkingMode.AUTO
+        return provider?.thinkingMode ?: AiThinkingMode.AUTO
+    }
+
     fun updateCurrentProvider(transform: (AiProvider) -> AiProvider) {
         val existing = currentProvider
         if (existing != null && draft.providers.any { it.id == existing.id }) {
@@ -300,11 +311,14 @@ internal fun AiConfigEditorMaterial(
         val existing = currentProvider ?: return
         val remaining = draft.providers.filterNot { it.id == existing.id }
         val first = remaining.firstOrNull() ?: return
+        val firstModel = first.models.firstOrNull { it.id == first.modelId } ?: first.models.firstOrNull()
         onDraftChange(
             draft.copy(
                 providers = remaining,
                 currentProviderId = first.id,
-                currentModelId = first.models.firstOrNull()?.id ?: "",
+                currentModelId = first.modelId.ifBlank { firstModel?.id.orEmpty() },
+                // 删除当前供应商后同步重置推理档位，避免旧供应商的高档位残留。
+                thinkingMode = thinkingModeFor(first, firstModel),
             ),
         )
     }
@@ -316,14 +330,16 @@ internal fun AiConfigEditorMaterial(
         } else {
             draft.providers + updated
         }
+        val updatedModel = updated.models.firstOrNull { it.id == updated.modelId }
+            ?: updated.models.firstOrNull()
         onDraftChange(
             draft.copy(
                 providers = providers,
                 currentProviderId = updated.id,
                 currentModelId = updated.modelId.ifBlank {
-                    updated.models.firstOrNull()?.id.orEmpty()
+                    updatedModel?.id.orEmpty()
                 },
-                thinkingMode = updated.thinkingMode,
+                thinkingMode = thinkingModeFor(updated, updatedModel),
             ),
         )
     }
@@ -335,17 +351,26 @@ internal fun AiConfigEditorMaterial(
 
     fun selectModel(model: AiModelInfo) {
         val provider = currentProvider
+        // 切换模型时把推理档位重置为默认 AUTO，避免旧模型的高档位残留到新模型请求里。
+        val nextThinking = AiThinkingMode.AUTO
         if (provider != null && draft.providers.any { it.id == provider.id }) {
             onDraftChange(
                 draft.copy(
                     providers = draft.providers.map {
-                        if (it.id == provider.id) it.copy(modelId = model.id) else it
+                        if (it.id == provider.id) {
+                            it.copy(modelId = model.id, thinkingMode = nextThinking)
+                        } else {
+                            it
+                        }
                     },
                     currentModelId = model.id,
+                    thinkingMode = nextThinking,
                 ),
             )
         } else {
-            onDraftChange(draft.copy(model = model.id, currentModelId = model.id))
+            onDraftChange(
+                draft.copy(model = model.id, currentModelId = model.id, thinkingMode = nextThinking),
+            )
         }
     }
 
@@ -385,13 +410,17 @@ internal fun AiConfigEditorMaterial(
                 options = draft.providers.map { it.name.ifBlank { it.id } },
                 onSelect = { index ->
                     draft.providers.getOrNull(index)?.let { provider ->
+                        val modelId = provider.modelId.ifBlank {
+                            provider.models.firstOrNull()?.id.orEmpty()
+                        }
+                        val model = provider.models.firstOrNull { it.id == modelId }
+                            ?: provider.models.firstOrNull()
                         onDraftChange(
                             draft.copy(
                                 currentProviderId = provider.id,
-                                currentModelId = provider.modelId.ifBlank {
-                                    provider.models.firstOrNull()?.id.orEmpty()
-                                },
-                                thinkingMode = provider.thinkingMode,
+                                currentModelId = modelId,
+                                // 切换供应商时按新供应商的模型能力校验推理档位。
+                                thinkingMode = thinkingModeFor(provider, model),
                             ),
                         )
                     }
@@ -1293,6 +1322,15 @@ private fun ReasoningEffortSection(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        // 档位校验必须放在空档位分支之前：模型明确不支持推理时要把历史残留的档位清回 AUTO。
+        LaunchedEffect(model?.id) {
+            if (modes.isEmpty()) {
+                if (selected != AiThinkingMode.AUTO) onSelect(AiThinkingMode.AUTO)
+            } else if (selected !in modes) {
+                val nearest = modes.minByOrNull { kotlin.math.abs(it.ordinal - selected.ordinal) }
+                nearest?.let(onSelect)
+            }
+        }
         if (modes.isEmpty()) {
             Text(
                 text = stringResource(R.string.ai_reasoning_unsupported),
@@ -1302,12 +1340,6 @@ private fun ReasoningEffortSection(
             return@Column
         }
         val haptic = LocalHapticFeedback.current
-        LaunchedEffect(model?.id) {
-            if (selected !in modes) {
-                val nearest = modes.minByOrNull { kotlin.math.abs(it.ordinal - selected.ordinal) }
-                nearest?.let(onSelect)
-            }
-        }
         val index = modes.indexOf(selected).takeIf { it >= 0 } ?: 0
         Slider(
             value = index.toFloat(),
@@ -1321,19 +1353,42 @@ private fun ReasoningEffortSection(
             valueRange = 0f..modes.lastIndex.toFloat(),
             steps = (modes.size - 2).coerceAtLeast(0),
         )
-        Row(modifier = Modifier.fillMaxWidth()) {
-            modes.forEach { mode ->
-                Text(
-                    text = stringResource(mode.labelRes()),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (mode == selected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f),
-                )
+        // Slider 的轨道两端各内缩一个 thumb 半径（M3 默认 10dp），刻度圆点也按这个范围均分；
+        // 这里用同样的几何把每个文字的中心放到对应刻度圆点上（等宽单元格会把首尾拉偏）。
+        Layout(
+            content = {
+                modes.forEach { mode ->
+                    Text(
+                        text = stringResource(mode.labelRes()),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (mode == selected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) { measurables, constraints ->
+            val placeables = measurables.map { it.measure(Constraints()) }
+            val width = constraints.maxWidth
+            val pad = 10.dp.roundToPx()
+            val step = if (placeables.size > 1) {
+                (width - pad * 2).toFloat() / (placeables.size - 1)
+            } else {
+                0f
+            }
+            val height = placeables.maxOfOrNull { it.height } ?: 0
+            layout(width, height) {
+                placeables.forEachIndexed { index, placeable ->
+                    val centerX = pad + step * index
+                    placeable.place(
+                        x = (centerX - placeable.width / 2f).roundToInt()
+                            .coerceIn(0, (width - placeable.width).coerceAtLeast(0)),
+                        y = 0,
+                    )
+                }
             }
         }
         Text(

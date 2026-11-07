@@ -1419,6 +1419,10 @@
     <string name="column_wizard_opt_in">納入一鍵執行</string>
     <string name="column_wizard_installed" translatable="true">已安裝</string>
     <string name="column_wizard_reinstall" translatable="true">重新安裝</string>
+    <string name="column_wizard_test_title" translatable="true">測試專用</string>
+    <string name="column_wizard_test_body" translatable="true">只預覽介面，不執行任何隱藏操作、也不會真的重新開機。長按頂欄標題可再次開啟。</string>
+    <string name="column_wizard_test_celebrate" translatable="true">預覽慶祝動畫</string>
+    <string name="column_wizard_test_countdown" translatable="true">預覽重新開機倒數</string>
     <string name="column_wizard_run_all_rest">一鍵執行剩餘步驟</string>
     <string name="module_column_guide_title">你該從哪一檔開始</string>
     <string name="module_column_tier_day">日用級</string>

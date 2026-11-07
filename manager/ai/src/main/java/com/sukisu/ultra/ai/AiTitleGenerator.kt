@@ -55,8 +55,10 @@ object AiTitleGenerator {
             // 这里仍保留高级模式的 headers/extraBody，避免破坏自定义网关。
             // 标题生成不需要推理：默认关；如果该模型不接受「关」，回落到最低档重试一次。
             val effort = config.titleEffort.takeIf { it != AiThinkingMode.AUTO } ?: AiThinkingMode.OFF
+            // 标题模型为空时跟随当前供应商的主模型，不能回落到旧 config.model。
+            val titleModel = config.titleModel.trim().ifEmpty { AiSettings.resolveModel(config) }
             val titleConfig = config.copy(
-                model = config.titleModel.trim().ifEmpty { config.model },
+                model = titleModel,
                 temperature = 0.2f,
                 // 一次拿到完整结果即可，标题请求不需要流式与工具。
                 streaming = false,
@@ -74,6 +76,7 @@ object AiTitleGenerator {
                     tools = emptyList(),
                     useTools = false,
                     maxTokens = MAX_TITLE_TOKENS,
+                    modelIdOverride = titleModel,
                 )
             } catch (error: Exception) {
                 if (effort != AiThinkingMode.OFF) throw error
@@ -84,6 +87,7 @@ object AiTitleGenerator {
                     tools = emptyList(),
                     useTools = false,
                     maxTokens = MAX_TITLE_TOKENS,
+                    modelIdOverride = titleModel,
                 )
             }
             sanitize(completion.text)

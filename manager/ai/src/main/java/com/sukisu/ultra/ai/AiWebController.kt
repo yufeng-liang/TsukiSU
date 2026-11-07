@@ -151,11 +151,8 @@ object AiWebController {
      * 元宝没有抓取接口，最后统一用通用 GET + 正文抽取兜底。
      */
     suspend fun fetchPage(url: String): String = withContext(Dispatchers.IO) {
-        val cleaned = url.trim()
-        require(cleaned.isNotEmpty()) { "url is required" }
-        require(cleaned.startsWith("http://") || cleaned.startsWith("https://")) {
-            "url must start with http:// or https://"
-        }
+        // 入口统一做 SSRF 校验：只允许 http/https，且解析后的地址不能是内网/环回。
+        val cleaned = AiWebUrlGuard.requireSafeUrl(url)
 
         val config = AiSearchSettings.load()
         if (!config.searchEnabled) {
@@ -415,14 +412,14 @@ object AiWebController {
             .build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                val body = runCatching { response.body.string() }.getOrDefault("")
+                val body = runCatching { response.readBodyLimited(8 * 1024) }.getOrDefault("")
                 throw IllegalStateException(
                     "HTTP ${response.code} from ${URI(url).host}" +
                         if (body.isNotBlank()) ": ${stripHtml(body).take(300)}" else ""
                 )
             }
-            val body = response.body.string()
-            return body.take(MAX_BODY)
+            // MAX_BODY 是原始字节上限，流式读取避免先把超大响应全读进内存。
+            return response.readBodyLimited(MAX_BODY)
         }
     }
 
