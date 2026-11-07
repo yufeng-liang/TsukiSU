@@ -1321,8 +1321,14 @@ private fun ReasoningEffortSection(
             valueRange = 0f..modes.lastIndex.toFloat(),
             steps = (modes.size - 2).coerceAtLeast(0),
         )
-        Row(modifier = Modifier.fillMaxWidth()) {
-            modes.forEach { mode ->
+        // Slider 的轨道两端各内缩一个 thumb 半径（M3 默认 10dp），
+        // 刻度文字也按同样内边距排：首尾贴住轨道端点、中间均分，才会和圆点对齐。
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp),
+        ) {
+            modes.forEachIndexed { index, mode ->
                 Text(
                     text = stringResource(mode.labelRes()),
                     style = MaterialTheme.typography.labelSmall,
@@ -1331,7 +1337,11 @@ private fun ReasoningEffortSection(
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },
-                    textAlign = TextAlign.Center,
+                    textAlign = when (index) {
+                        0 -> TextAlign.Start
+                        modes.lastIndex -> TextAlign.End
+                        else -> TextAlign.Center
+                    },
                     modifier = Modifier.weight(1f),
                 )
             }

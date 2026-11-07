@@ -23,6 +23,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -162,17 +165,20 @@ private fun McpServerAddDialog(
                     text = stringResource(R.string.ai_mcp_transport),
                     style = MaterialTheme.typography.labelLarge,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = transport == "STREAMABLE_HTTP",
-                        onClick = { transport = "STREAMABLE_HTTP" },
-                        label = { Text("Streamable HTTP") },
-                    )
-                    FilterChip(
-                        selected = transport == "SSE",
-                        onClick = { transport = "SSE" },
-                        label = { Text("SSE") },
-                    )
+                val transportOptions = listOf("STREAMABLE_HTTP" to "Streamable HTTP", "SSE" to "SSE")
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    transportOptions.forEachIndexed { index, (value, label) ->
+                        SegmentedButton(
+                            selected = transport == value,
+                            onClick = { transport = value },
+                            shape = SegmentedButtonDefaults.itemShape(
+                                index = index,
+                                count = transportOptions.size,
+                            ),
+                        ) {
+                            Text(label)
+                        }
+                    }
                 }
                 OutlinedTextField(
                     value = url,

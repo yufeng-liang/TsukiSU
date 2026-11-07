@@ -593,8 +593,7 @@ class MainActivity : ComponentActivity() {
                                 entry<Route.AiAssistant>(
                                     // 容器变换由页面内的共享元素动画负责，nav 侧保持瞬时切换；
                                     // 滑动返回也关掉，返回键交给 AiChatContainer 先播完收起动画再出栈。
-                                    transition = NavTransitions.None,
-                                    swipeDismiss = NavSwipeDirection.None,
+                                    swipeDismiss = swipeDismiss,
                                 ) {
                                     if (!AiFeatureBridge.isAvailable) {
                                         LaunchedEffect(Unit) { navigator.pop() }
@@ -602,28 +601,22 @@ class MainActivity : ComponentActivity() {
                                         // The assistant is always MD3; inside the Miuix shell it needs
                                         // the MD3 colour scheme of the current appearance settings.
                                         AiAssistantMaterialTheme {
-                                            val isTop = navigator.backStack.lastOrNull() == Route.AiAssistant
-                                            AiChatSharedPage(
-                                                backEnabled = isTop,
+                                            AiFeatureBridge.ChatScreen(
                                                 onClose = {
                                                     if (navigator.current() == Route.AiAssistant) navigator.pop()
                                                 },
-                                            ) { requestClose ->
-                                                AiFeatureBridge.ChatScreen(
-                                                    onClose = requestClose,
-                                                    onOpenSettings = { navigator.push(Route.AiSettings) },
-                                                    onNavigate = { target ->
-                                                        when (target) {
-                                                            is ManagerAiTarget.Tab -> {
-                                                                viewModel.openMainPage(target.pageIndex, target.section)
-                                                                navigator.popUntil { it is Route.Main }
-                                                            }
-
-                                                            is ManagerAiTarget.Push -> navigator.navigateTo(target.route)
+                                                onOpenSettings = { navigator.push(Route.AiSettings) },
+                                                onNavigate = { target ->
+                                                    when (target) {
+                                                        is ManagerAiTarget.Tab -> {
+                                                            viewModel.openMainPage(target.pageIndex, target.section)
+                                                            navigator.popUntil { it is Route.Main }
                                                         }
-                                                    },
-                                                )
-                                            }
+
+                                                        is ManagerAiTarget.Push -> navigator.navigateTo(target.route)
+                                                    }
+                                                },
+                                            )
                                         }
                                     }
                                 }
