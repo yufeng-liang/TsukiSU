@@ -176,6 +176,8 @@ fun ModulePagerMiuix(
     actions: ModuleActions,
     contribution: ModuleContributionController,
     bottomInnerPadding: Dp,
+    updatingModuleId: String? = null,
+    updateProgress: Int = 0,
 ) {
     val modules = uiState.moduleList
     val searchStatus = uiState.searchStatus
@@ -534,6 +536,8 @@ fun ModulePagerMiuix(
                         end = 0.dp,
                         bottom = maxOf(bottomInnerPadding, imeBottomPadding),
                     ),
+                    updatingModuleId = updatingModuleId,
+                    updateProgress = updateProgress,
                 )
             }
         },
@@ -642,6 +646,8 @@ fun ModulePagerMiuix(
                             contentPadding = contentPadding,
                             listState = listState,
                             reorderEnabled = uiState.sortManual,
+                            updatingModuleId = updatingModuleId,
+                            updateProgress = updateProgress,
                             summary = if (uiState.moduleList.isEmpty()) null else stringResource(
                                 R.string.module_summary,
                                 uiState.moduleList.count { it.enabled },
@@ -802,6 +808,8 @@ private fun ModuleList(
     listState: LazyListState = rememberLazyListState(),
     reorderEnabled: Boolean = false,
     summary: String? = null,
+    updatingModuleId: String? = null,
+    updateProgress: Int = 0,
 ) {
     val loadingDialog = rememberLoadingDialog()
     val scope = rememberCoroutineScope()
@@ -878,6 +886,8 @@ private fun ModuleList(
                             actions.onOpenWebUi(module)
                         }
                     },
+                    updatingModuleId = updatingModuleId,
+                    updateProgress = updateProgress,
                     dragHandleModifier = if (reorderEnabled) {
                         Modifier.draggableHandle(
                             onDragStarted = {
@@ -908,9 +918,13 @@ fun ModuleItem(
     onExecuteAction: () -> Unit,
     onAddActionShortcut: (ShortcutType) -> Unit,
     onOpenWebUi: () -> Unit,
+    updatingModuleId: String? = null,
+    updateProgress: Int = 0,
     dragHandleModifier: Modifier? = null,
 ) {
     val secondaryContainer = colorScheme.secondaryContainer.copy(alpha = 0.8f)
+    // 正在下载这个模块时，更新按钮换成不可点的百分比胶囊。
+    val updating = updatingModuleId == module.id
     // 这一格不再需要收录状态：模块页的「分享此模块」入口已去掉（收录与否改在上传页看），
     // 于是也不必为了一个不存在的按钮，给每个渲染到的模块发一次 /check 请求。
     val actionIconTint = colorScheme.onSurface.copy(alpha = if (isInDarkTheme()) 0.7f else 0.9f)
@@ -1165,36 +1179,55 @@ fun ModuleItem(
                 Spacer(Modifier.weight(1f))
 
                 AnimatedVisibility(
-                    visible = hasUpdate,
+                    visible = hasUpdate || updating,
                     enter = fadeIn(),
                     exit = fadeOut()
                 ) {
-                    IconButton(
-                        modifier = Modifier.padding(end = 8.dp),
-                        backgroundColor = updateBg,
-                        enabled = !module.remove,
-                        minHeight = 35.dp,
-                        minWidth = 35.dp,
-                        onClick = onUpdate,
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    if (updating) {
+                        // 下载中显示不可点的百分比胶囊，避免重复触发同一次下载。
+                        Box(
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(updateBg)
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center,
                         ) {
-                            Icon(
-                                modifier = Modifier.size(20.dp),
-                                imageVector = MiuixIcons.UploadCloud,
-                                tint = updateTint,
-                                contentDescription = stringResource(R.string.module_update),
-                            )
                             Text(
-                                modifier = Modifier.padding(start = 4.dp, end = 3.dp),
-                                text = stringResource(R.string.module_update),
+                                text = stringResource(R.string.module_update_progress, updateProgress),
                                 color = updateTint,
                                 fontWeight = FontWeight.Medium,
-                                fontSize = 15.sp
+                                fontSize = 15.sp,
                             )
+                        }
+                    } else {
+                        IconButton(
+                            modifier = Modifier.padding(end = 8.dp),
+                            backgroundColor = updateBg,
+                            enabled = !module.remove,
+                            minHeight = 35.dp,
+                            minWidth = 35.dp,
+                            onClick = onUpdate,
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                Icon(
+                                    modifier = Modifier.size(20.dp),
+                                    imageVector = MiuixIcons.UploadCloud,
+                                    tint = updateTint,
+                                    contentDescription = stringResource(R.string.module_update),
+                                )
+                                Text(
+                                    modifier = Modifier.padding(start = 4.dp, end = 3.dp),
+                                    text = stringResource(R.string.module_update),
+                                    color = updateTint,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 15.sp
+                                )
+                            }
                         }
                     }
                 }

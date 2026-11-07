@@ -24,6 +24,8 @@ import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamiccolor.ColorSpec
 import com.sukisu.ultra.Natives
 import com.sukisu.ultra.R
+import com.sukisu.ultra.data.proxy.ProxyEntry
+import com.sukisu.ultra.data.proxy.ProxyHealth
 import com.sukisu.ultra.data.proxy.ProxyMode
 import com.sukisu.ultra.data.proxy.ProxyRuntime
 import com.sukisu.ultra.data.repository.SettingsRepository
@@ -59,6 +61,24 @@ import com.sukisu.ultra.ui.util.ThemePackageStorage
 import com.sukisu.ultra.ui.util.ThemeTrialManager
 import com.sukisu.ultra.ui.util.findActivity
 import java.io.File
+
+/** 进入加速页时复用上次测速结果的窗口；超过这个时间才重新探测。 */
+private const val PROXY_TEST_CACHE_MS = 3 * 60 * 1000L
+
+/**
+ * 按测速延迟升序排列代理；不可达/未测统一排在最后。
+ *
+ * [sortedWith] 是稳定排序，所以同延迟、以及都排在最后的条目会保持原有相对顺序。
+ */
+private fun sortProxyEntriesByLatency(
+    entries: List<ProxyEntry>,
+    health: Map<String, ProxyHealth>,
+): List<ProxyEntry> = entries.sortedWith(
+    compareBy<ProxyEntry> { entry ->
+        val item = health[entry.id]
+        if (item == null || !item.reachable) Long.MAX_VALUE else item.latencyMs
+    },
+)
 
 private data class CurrentThemePayload(
     val data: ThemePackageData,
@@ -2278,7 +2298,9 @@ class SettingsViewModel(
         viewModelScope.launch {
             try {
                 val entries = withContext(Dispatchers.IO) { ProxyRuntime.list.load() }
-                _uiState.update { it.copy(proxyEntries = entries) }
+                // 列表刷新不能打乱刚测出来的展示顺序：缓存还在有效期内时按现有健康结果重排。
+                val health = _uiState.value.proxyHealth.associateBy { it.id }
+                _uiState.update { it.copy(proxyEntries = sortProxyEntriesByLatency(entries, health)) }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -2288,12 +2310,26 @@ class SettingsViewModel(
     }
 
     /**
-     * 测速全部代理。结果只用于展示；下载选路仍由 [ProxyMode.AUTO] 的排序决定。
+     * 进入加速页时尝试自动测速：命中 [PROXY_TEST_CACHE_MS] 缓存则直接复用上次结果。
      */
-    fun testProxies() {
+    fun ensureProxyTested() {
+        testProxies(force = false)
+    }
+
+    /**
+     * 测速全部代理。结果只用于展示；下载选路仍由 [ProxyMode.AUTO] 的排序决定。
+     *
+     * @param force true 表示用户手动点「测试全部」，跳过 3 分钟缓存强制重测。
+     */
+    fun testProxies(force: Boolean = false) {
         // 守卫和置位放在同一线程的同一临界区：先置 proxyTesting 再 launch，
         // 这样两次点击即便都发生在协程真正开始前，第二次也能被上面的守卫挡掉。
-        if (_uiState.value.proxyTesting) return
+        val snapshot = _uiState.value
+        if (snapshot.proxyTesting) return
+        val now = System.currentTimeMillis()
+        if (!force && snapshot.proxyTestedAt > 0L && now - snapshot.proxyTestedAt < PROXY_TEST_CACHE_MS) {
+            return
+        }
         _uiState.update { it.copy(proxyTesting = true) }
         viewModelScope.launch {
             try {
@@ -2303,7 +2339,15 @@ class SettingsViewModel(
                 val health = withContext(Dispatchers.IO) {
                     ProxyRuntime.prober.probeAll(entries, sampleUrl = null)
                 }
-                _uiState.update { it.copy(proxyEntries = entries, proxyHealth = health) }
+                // 测完按延迟升序展示；不可达/未测排在最后（稳定排序保留原顺序）。
+                val sortedEntries = sortProxyEntriesByLatency(entries, health.associateBy { it.id })
+                _uiState.update {
+                    it.copy(
+                        proxyEntries = sortedEntries,
+                        proxyHealth = health,
+                        proxyTestedAt = System.currentTimeMillis(),
+                    )
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {

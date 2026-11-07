@@ -27,6 +27,7 @@ import com.sukisu.ultra.Natives
 import com.sukisu.ultra.R
 import com.sukisu.ultra.data.model.Module
 import com.sukisu.ultra.data.model.ModuleUpdateInfo
+import com.sukisu.ultra.data.registry.ExpectedFile
 import com.sukisu.ultra.data.repository.ModuleRepository
 import com.sukisu.ultra.data.repository.ModuleRepositoryImpl
 import com.sukisu.ultra.data.repository.SettingsRepository
@@ -623,6 +624,11 @@ class ModuleViewModel(
                 module = module,
                 downloadUrl = updateInfo.downloadUrl,
                 fileName = "${module.name}-${updateInfo.version}.zip",
+                // updateJson 声明了 sha256 才带期望值：有了它下载才会走 GitHub 加速，
+                // 且落地后由 Flash 步骤再校验一次；没声明就还是原来的直连行为。
+                expected = updateInfo.sha256.trim().takeIf { it.isNotEmpty() }?.let {
+                    ExpectedFile(size = updateInfo.size, sha256 = it)
+                },
             ),
             title = if (changelog.isNotBlank()) res.getString(R.string.module_changelog) else res.getString(R.string.module_update),
             content = changelog.ifBlank { res.getString(R.string.module_start_downloading).format(module.name) },
