@@ -30,6 +30,7 @@ import com.sukisu.ultra.ksuApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -92,6 +93,9 @@ class ColumnWizardViewModel(
     /** 已经预取过密钥的专题 id，避免重复网络请求。 */
     private var prefetchedTopicId: String? = null
 
+    /** 密钥预取任务；续跑 / 单步执行前先等它完成，避免「密钥还没拉到」导致步骤失败。 */
+    private var keyboxJob: Job? = null
+
     /**
      * 进入向导时调用。同一专栏下的同一专题重复调用不会重置已有进度（导航返回再进来还能看到上次跑到哪）。
      *
@@ -124,7 +128,7 @@ class ColumnWizardViewModel(
         if (!restored.isNullOrEmpty()) {
             appendLog("已恢复上次的进度（${restored.size} 步已处理），接着往下做就行")
         }
-        prefetchKeybox(topic)
+        keyboxJob = prefetchKeybox(topic)
         // 恢复出来的进度可能已经全部落定（上次做完就退出了），这时要立刻进入完成态，
         // 否则自检与回滚这两个入口永远不会出现。这条路径不弹庆祝：用户只是重新进来看一眼。
         maybeFinish(allowCelebrate = false)
@@ -147,15 +151,26 @@ class ColumnWizardViewModel(
      */
     private fun resumePendingRunIfAny() {
         val pending = ColumnProgressStore.peekPendingResume(ksuApp) ?: return
-        if (pending.first != columnId || pending.second != topic?.id) return
+        if (pending.columnId != columnId || pending.topicId != topic?.id) return
         if (_uiState.value.done) {
             ColumnProgressStore.clearPendingResume(ksuApp)
             return
         }
+        // 重启前最后执行的那一步（通常就是 reboot 自己）已经随这次重启完成：补记为 SUCCESS。
+        // 少了这一步，恢复出来的 PENDING 会让 runAll 再次排入重启 → 再次重启 → 再次恢复，死循环。
+        if (pending.lastStepId.isNotEmpty()) {
+            val item = _uiState.value.stepStates.firstOrNull { it.step.id == pending.lastStepId }
+            if (item != null && !item.status.isSettled) {
+                updateStep(pending.lastStepId) {
+                    it.copy(status = ColumnStepStatus.SUCCESS, message = "设备已重启（自动续跑）")
+                }
+                appendLog("上次重启前执行的「${item.step.title}」已随重启完成")
+            }
+        }
         appendLog("检测到上次一键执行被重启打断，接着往下跑")
         viewModelScope.launch {
-            // 让 start() 里那几条异步流程（体检、进度复核）先落一步，避免同时改 _uiState
-            kotlinx.coroutines.yield()
+            // 等密钥预取完成再续跑：否则需要 keybox 的步骤可能因为「还没拉到密钥」直接失败。
+            keyboxJob?.join()
             runAll()
         }
     }
@@ -406,8 +421,14 @@ class ColumnWizardViewModel(
         var stopReason: String? = null
         for (step in steps) {
             val status = state.stepStates.firstOrNull { it.step.id == step.id }?.status
-            // 已经处理过的直接跳过（NEEDS_USER 也算：重跑只会重复下载或重复打开安装器）
-            if (status?.isSettled == true || status == ColumnStepStatus.NEEDS_USER) continue
+            // 已经处理过的直接跳过（SUCCESS / SKIPPED）
+            if (status?.isSettled == true) continue
+            // NEEDS_USER 是「等你动手」：前面的步骤没处理完，后面的步骤不能越过它继续跑，
+            // 否则一键执行会假装成功、把没装好的东西留到最后自检才暴露。
+            if (status == ColumnStepStatus.NEEDS_USER) {
+                stopReason = "「${step.title}」需要你手动处理后点「我已处理」"
+                break
+            }
             if (step.optIn && step.id !in state.optedIn) continue
             if (step.optional) {
                 stopReason = "「${step.title}」是可选项，装不装由你决定"
@@ -433,6 +454,8 @@ class ColumnWizardViewModel(
         appendLog("一键执行：本次自动处理 ${planned.size} 个步骤")
         viewModelScope.launch {
             try {
+                // 等密钥预取完成再开始，避免需要 keybox 的步骤因为「还没拉到」直接失败。
+                keyboxJob?.join()
                 for ((index, step) in planned.withIndex()) {
                     if (!isActive) break
                     // 重启会杀掉进程：先把「这个专题还没跑完」落盘，设备回来后 start() 会自动续上。
@@ -441,7 +464,8 @@ class ColumnWizardViewModel(
                         val runningColumn = columnId
                         val runningTopic = topic
                         if (runningColumn != null && runningTopic != null) {
-                            ColumnProgressStore.markPendingResume(ksuApp, runningColumn, runningTopic.id)
+                            // lastStepId 记下 reboot 自己：回来后补记为成功，不会被再次排入。
+                            ColumnProgressStore.markPendingResume(ksuApp, runningColumn, runningTopic.id, step.id)
                         }
                         // 手机突然黑屏重启会吓到人：先倒计时并在界面上说清楚「回来后会自动接着跑」。
                         if (!confirmRebootBeforeRunning()) {
@@ -453,6 +477,18 @@ class ColumnWizardViewModel(
                     if (result.isFailure) {
                         _uiState.update { it.copy(error = result.message) }
                         appendLog("步骤「${step.title}」失败，一键执行停在这里（修正后可以重试这一步）")
+                        return@launch
+                    }
+                    // NEEDS_USER 不是成功：必须停下来等用户处理，不能继续跑后面的步骤。
+                    if (result.status == ColumnStepStatus.NEEDS_USER) {
+                        appendLog("「${step.title}」需要你手动处理后点「我已处理」，一键执行先停在这里")
+                        return@launch
+                    }
+                    // 重启命令已经发出去：进程马上会被杀掉，后面的步骤要等设备回来后由续跑逻辑接着做。
+                    if (step.kind.trim().equals("reboot", ignoreCase = true) &&
+                        result.status == ColumnStepStatus.SUCCESS
+                    ) {
+                        appendLog("设备正在重启，回来后会自动接着跑剩下的步骤")
                         return@launch
                     }
                     appendLog("进度：${index + 1}/${planned.size}")
@@ -486,12 +522,12 @@ class ColumnWizardViewModel(
      *
      * 失败不阻塞向导——日志里说明一句，涉及密钥的步骤会自己要求用户提供文件。
      */
-    private fun prefetchKeybox(topic: RepoColumnTopic) {
-        if (prefetchedTopicId == topic.id) return
+    private fun prefetchKeybox(topic: RepoColumnTopic): Job? {
+        if (prefetchedTopicId == topic.id) return keyboxJob
         val hasKeyboxStep = topic.steps.any { it.fileContent.contains("\${keybox}") }
-        if (topic.keybox == null && !hasKeyboxStep) return
+        if (topic.keybox == null && !hasKeyboxStep) return null
         prefetchedTopicId = topic.id
-        viewModelScope.launch {
+        keyboxJob = viewModelScope.launch {
             val auto = keyboxFetcher.fetchAuto()
             auto.onSuccess { content ->
                 // 用户在等待期间自己选过文件，就以用户的为准：自动源没有摘要校验，不能静默顶掉手选的
@@ -514,6 +550,7 @@ class ColumnWizardViewModel(
             }
             appendLog("没能自动获取密钥材料：${reason ?: "未知原因"}；涉及密钥的步骤会要求你自己选择文件")
         }
+        return keyboxJob
     }
 
     /**
@@ -559,6 +596,20 @@ class ColumnWizardViewModel(
         _uiState.update { it.copy(running = true, error = "") }
         viewModelScope.launch {
             try {
+                // 密钥还在预取时先等一等：否则需要 keybox 的步骤会拿着 null 直接失败。
+                keyboxJob?.join()
+                // 重启步骤同样要先倒计时：单步执行也不能让手机毫无征兆地黑屏。
+                if (step.kind.trim().equals("reboot", ignoreCase = true)) {
+                    val runningColumn = columnId
+                    val runningTopic = topic
+                    if (runningColumn != null && runningTopic != null) {
+                        ColumnProgressStore.markPendingResume(ksuApp, runningColumn, runningTopic.id, step.id)
+                    }
+                    if (!confirmRebootBeforeRunning()) {
+                        appendLog("已暂停：等你手动重启设备")
+                        return@launch
+                    }
+                }
                 val result = executeStep(step, force)
                 _uiState.update { it.copy(error = if (result.isFailure) result.message else "") }
                 if (result.isFailure) {
