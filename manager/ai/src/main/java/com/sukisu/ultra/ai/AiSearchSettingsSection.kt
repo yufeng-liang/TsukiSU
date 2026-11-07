@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -52,6 +53,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -340,9 +342,21 @@ private fun SearchProviderDetailDialog(
     val uriHandler = LocalUriHandler.current
     val keyUrl = keyUrlOf(provider)
     val isTesting = testing == provider
+    // Key 输入只改本地草稿，停止输入 500ms 后才落盘，避免每敲一个字符都写 SharedPreferences。
+    var draftKey by remember(provider) { mutableStateOf(config.keyOf(provider)) }
+    LaunchedEffect(draftKey) {
+        if (draftKey != config.keyOf(provider)) {
+            delay(500)
+            onKeyChange(draftKey)
+        }
+    }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            // 关闭弹窗时把尚未到 debounce 的输入补一次落盘，避免丢字。
+            if (draftKey != config.keyOf(provider)) onKeyChange(draftKey)
+            onDismiss()
+        },
         title = { Text(providerTitle(provider)) },
         text = {
             Column(
@@ -355,8 +369,8 @@ private fun SearchProviderDetailDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 OutlinedTextField(
-                    value = config.keyOf(provider),
-                    onValueChange = onKeyChange,
+                    value = draftKey,
+                    onValueChange = { draftKey = it },
                     label = { Text(stringResource(R.string.ai_search_api_key)) },
                     singleLine = true,
                     enabled = sectionEnabled,
@@ -405,8 +419,8 @@ private fun SearchProviderDetailDialog(
                         modifier = Modifier.weight(1f),
                     )
                     IconButton(
-                        // 停用的服务也允许测试：用户经常是先测通再打开；测试进行中全部禁点。
-                        enabled = sectionEnabled && testing == null,
+                        // 停用的服务也允许测试：用户经常是先测通再打开；只按「是否有测试在跑」禁用。
+                        enabled = testing == null,
                         onClick = onTest,
                     ) {
                         if (isTesting) {

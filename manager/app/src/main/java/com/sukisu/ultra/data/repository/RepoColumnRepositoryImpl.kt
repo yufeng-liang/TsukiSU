@@ -1,5 +1,6 @@
 package com.sukisu.ultra.data.repository
 
+import android.util.Log
 import com.sukisu.ultra.data.model.RepoColumn
 import com.sukisu.ultra.ksuApp
 import com.sukisu.ultra.ui.util.hasAnyNetwork
@@ -8,6 +9,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.CacheControl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import java.time.Duration
@@ -52,31 +54,81 @@ class RepoColumnRepositoryImpl(
      * `newBuilder` 复制的是共享的连接池与线程池，不会额外建连接资源。
      */
     companion object {
+        private const val TAG = "RepoColumnRepository"
+
         /**
          * 进程级内存缓存：专栏文档很小（几十 KB），但每次进详情页都会新建一个 ViewModel，
-         * 没有缓存就要重新等一次网络。只在这里留一份，不做失效判断——调用方拿到缓存先渲染，
-         * 再自己决定要不要刷新。
+         * 没有缓存就要重新等一次网络。只在这里留一份，超过 [CACHE_TTL_MS] 视为过期，
+         * 避免长驻进程一直拿旧数据。
          */
         @Volatile
         private var cachedColumns: List<RepoColumn>? = null
 
+        /** 内存缓存的写入时间，用来让内存缓存也遵守 [CACHE_TTL_MS]，不会在长驻进程里永不失效。 */
+        @Volatile
+        private var cachedColumnsAt: Long = 0L
+
         /** 上次成功拉到的原始 JSON；断网时拿它兜底，至少让专栏区有东西可点。 */
         private const val CACHE_FILE_NAME = "columns-cache.json"
+
+        /** 磁盘缓存超过这个大小直接删掉：正常专栏文档只有几十 KB。 */
+        private const val CACHE_MAX_BYTES = 2L * 1024 * 1024
+
+        /** 磁盘缓存保留 7 天，过期视为没有缓存。 */
+        private const val CACHE_TTL_MS = 7L * 24 * 60 * 60 * 1000
+
+        private const val CACHE_BODY_KEY = "body"
+        private const val CACHE_SAVED_AT_KEY = "savedAt"
 
         private fun cacheFile(): File = File(ksuApp.cacheDir, CACHE_FILE_NAME)
 
         /**
-         * 供上层同步取用：拿到就先渲染，网络回来再覆盖。
+         * 供上层取用：拿到就先渲染，网络回来再覆盖。
          *
          * 内存没有就退到磁盘缓存——用户上次联网看过的专栏，这次断网进来仍然看得到。
+         * 读磁盘放到 IO 线程：缓存文件可能几十 KB，不该在主线程做文件 IO。
          */
-        fun peekCached(): List<RepoColumn>? = cachedColumns ?: runCatching {
-            val file = cacheFile()
-            if (!file.isFile) return@runCatching null
-            val columns = RepoColumnParser.parse(file.readText()) ?: return@runCatching null
-            cachedColumns = columns
-            columns
-        }.getOrNull()
+        suspend fun peekCached(): List<RepoColumn>? {
+            cachedColumns?.let { memory ->
+                if (System.currentTimeMillis() - cachedColumnsAt <= CACHE_TTL_MS) return memory
+                // 内存缓存也过期：长驻进程不能一直拿 7 天前的旧数据。
+                cachedColumns = null
+                cachedColumnsAt = 0L
+            }
+            return withContext(Dispatchers.IO) {
+                runCatching {
+                    val file = cacheFile()
+                    if (!file.isFile) return@runCatching null
+                    // 先看大小再读：坏掉或被替换成大文件的缓存不能整个读进内存。
+                    if (file.length() > CACHE_MAX_BYTES) {
+                        Log.w(TAG, "专栏缓存超过 2MB，已删除（${file.length()} bytes）")
+                        runCatching { file.delete() }
+                        return@runCatching null
+                    }
+                    val text = file.readText()
+                    val wrapper = runCatching { JSONObject(text) }.getOrNull()
+                    val body: String
+                    val savedAt: Long
+                    if (wrapper != null && wrapper.has(CACHE_BODY_KEY)) {
+                        body = wrapper.optString(CACHE_BODY_KEY)
+                        savedAt = wrapper.optLong(CACHE_SAVED_AT_KEY, 0L)
+                    } else {
+                        // 兼容旧版本直接写原始 columns JSON 的缓存：用文件修改时间当保存时间。
+                        body = text
+                        savedAt = file.lastModified()
+                    }
+                    if (savedAt <= 0L || System.currentTimeMillis() - savedAt > CACHE_TTL_MS) {
+                        Log.w(TAG, "专栏缓存已过期，删除后重新拉取")
+                        runCatching { file.delete() }
+                        return@runCatching null
+                    }
+                    val columns = RepoColumnParser.parse(body) ?: return@runCatching null
+                    cachedColumns = columns
+                    cachedColumnsAt = System.currentTimeMillis()
+                    columns
+                }.getOrNull()
+            }
+        }
     }
 
     private val client: OkHttpClient by lazy {
@@ -97,9 +149,18 @@ class RepoColumnRepositoryImpl(
                 // 解析不出 columns 数组说明这份文档不是专栏（地址被换掉、CDN 返回了别的内容）。
                 val columns = RepoColumnParser.parse(body)
                     ?: throw IOException("columns document has no column list")
+                // 空列表多半是远端临时故障或占位内容：不能拿它覆盖上一次的好缓存。
+                if (columns.isEmpty()) throw IOException("columns document contains no columns")
                 cachedColumns = columns
-                // 落盘：下次断网/不开代理时 peekCached() 能从磁盘捞回来。
-                runCatching { cacheFile().writeText(body) }
+                cachedColumnsAt = System.currentTimeMillis()
+                // 落盘：下次断网/不开代理时 peekCached() 能从磁盘捞回来。包装一层 savedAt
+                // 供 peekCached() 判断 7 天过期；写入失败至少留一条日志，不能静默吞掉。
+                val payload = JSONObject()
+                    .put(CACHE_SAVED_AT_KEY, System.currentTimeMillis())
+                    .put(CACHE_BODY_KEY, body)
+                    .toString()
+                runCatching { cacheFile().writeText(payload) }
+                    .onFailure { Log.w(TAG, "写入专栏缓存失败", it) }
                 return@withContext Result.success(columns)
             } catch (e: CancellationException) {
                 // 取消不是失败：吞掉它会把这层变成一个「正常的失败结果」，上层就再也取消不掉了。

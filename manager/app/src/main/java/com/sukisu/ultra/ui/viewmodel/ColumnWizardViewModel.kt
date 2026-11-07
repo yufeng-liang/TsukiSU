@@ -289,7 +289,9 @@ class ColumnWizardViewModel(
                         }
                     }
                     "installapp" -> {
-                        val pkg = step.source.moduleId.trim()
+                        // 真实执行（ColumnStepRunnerImpl / detectInstalledApps）读的是 packageName，
+                        // 预检必须用同一字段；旧数据可能只填了 moduleId，所以留作兜底。
+                        val pkg = step.source.packageName.trim().ifEmpty { step.source.moduleId.trim() }
                         if (pkg.isNotEmpty() && packageInstalled(pkg)) {
                             ColumnPreflightAction.SKIP to "应用已安装，会跳过"
                         } else {
@@ -774,23 +776,24 @@ class ColumnWizardViewModel(
     private suspend fun confirmRebootBeforeRunning(): Boolean {
         val decision = CompletableDeferred<Boolean>()
         rebootDecision = decision
-        var left = REBOOT_COUNTDOWN_SECONDS
-        _uiState.update { it.copy(rebootCountdown = left) }
-        appendLog("${left} 秒后重启设备；回来后会自动接着跑剩下的步骤，不用再点一次")
-        while (left > 0) {
-            // 每秒看一次用户有没有点按钮；没点就继续倒数。
-            val answered = withTimeoutOrNull(1_000L) { decision.await() }
-            if (answered != null) {
-                _uiState.update { it.copy(rebootCountdown = -1) }
-                rebootDecision = null
-                return answered
-            }
-            left -= 1
+        try {
+            var left = REBOOT_COUNTDOWN_SECONDS
             _uiState.update { it.copy(rebootCountdown = left) }
+            appendLog("${left} 秒后重启设备；回来后会自动接着跑剩下的步骤，不用再点一次")
+            while (left > 0) {
+                // 每秒看一次用户有没有点按钮；没点就继续倒数。
+                val answered = withTimeoutOrNull(1_000L) { decision.await() }
+                if (answered != null) return answered
+                left -= 1
+                _uiState.update { it.copy(rebootCountdown = left) }
+            }
+            return true
+        } finally {
+            // 协程被取消（用户退出页面/ViewModel 销毁）时也必须复位，否则倒计时卡片
+            // 会永远停在界面上，rebootDecision 也会一直挂着一个再也等不到结果的 deferred。
+            rebootDecision = null
+            _uiState.update { it.copy(rebootCountdown = -1) }
         }
-        _uiState.update { it.copy(rebootCountdown = -1) }
-        rebootDecision = null
-        return true
     }
 
     /** 倒计时卡片上的「立即重启」。 */

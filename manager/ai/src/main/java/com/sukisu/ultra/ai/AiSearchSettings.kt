@@ -114,6 +114,14 @@ object AiSearchSettings {
 
     /** 旧版配置迁移：keys 为空且旧 apiKey 有效时，把单一服务商迁成「一家启用 + 独立 Key」。 */
     private fun migrateLegacy(config: AiSearchConfig): AiSearchConfig {
+        val migrated = migrateLegacyConfig(config)
+        // 只有真的发生了迁移才回写，避免每次 load 都写盘。
+        if (migrated != config) writeConfig(migrated)
+        return migrated
+    }
+
+    /** 旧版配置迁移的纯计算部分（不做 IO），便于单元测试。 */
+    internal fun migrateLegacyConfig(config: AiSearchConfig): AiSearchConfig {
         if (config.keys.isNotEmpty()) return config
         val provider = config.provider
         val legacyKey = config.apiKey.trim()
@@ -121,7 +129,7 @@ object AiSearchSettings {
         // 否则升级后会静默退回默认的 Firecrawl，与旧行为不一致。
         // 其余服务商没有 Key 说明旧配置本来也没在用，保持默认（Firecrawl 匿名）即可。
         if (legacyKey.isEmpty() && provider != AiSearchProvider.ANYSEARCH) return config
-        val migrated = normalizeForWrite(
+        return normalizeForWrite(
             config.copy(
                 keys = if (legacyKey.isEmpty()) emptyMap() else mapOf(provider.name to legacyKey),
                 enabled = setOf(provider),
@@ -129,8 +137,6 @@ object AiSearchSettings {
                 order = listOf(provider) + AiSearchProvider.orderDefault.filter { it != provider },
             ),
         )
-        writeConfig(migrated)
-        return migrated
     }
 
     /**

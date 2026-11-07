@@ -71,7 +71,10 @@ fun AiHomeCardMiuix(onOpenChat: () -> Unit) {
         state.isSending -> stringResource(R.string.ai_status_working)
         state.messages.lastOrNull()?.role == AiMessageRole.ERROR ->
             stringResource(R.string.ai_status_error)
-        else -> stringResource(R.string.ai_status_ready, config.model)
+        else -> stringResource(
+            R.string.ai_status_ready,
+            AiSettings.activeModel(config)?.name ?: config.model,
+        )
     }
     val snippet = when {
         state.pendingApproval != null -> state.pendingApproval?.request?.let {

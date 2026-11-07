@@ -37,10 +37,11 @@ fun AiModelInfo?.supportedReasoningModes(): List<AiThinkingMode> {
     val options = reasoningOptions
     val effort = options.firstOrNull { it.type.equals("effort", ignoreCase = true) }
     if (effort != null && effort.values.isNotEmpty()) {
+        // 保留原有顺序并去重；无法识别的档位直接丢弃，避免多个不同名称挤到同一档。
         return buildList {
             add(AiThinkingMode.AUTO)
-            effort.values.forEach { add(it.toThinkingMode()) }
-        }
+            effort.values.mapNotNullTo(this) { it.toThinkingMode() }
+        }.distinct()
     }
     if (options.any { it.type.equals("toggle", ignoreCase = true) }) {
         return listOf(AiThinkingMode.AUTO, AiThinkingMode.OFF, AiThinkingMode.LOW)
@@ -55,13 +56,13 @@ fun AiModelInfo?.supportedReasoningModes(): List<AiThinkingMode> {
     return AiThinkingMode.entries.toList()
 }
 
-/** 把 models.dev 的 effort 名称映射到本项目的能力枚举。 */
-fun String.toThinkingMode(): AiThinkingMode = when (trim().lowercase()) {
+/** 把 models.dev 的 effort 名称映射到本项目的能力枚举；未知值返回 null（调用方丢弃）。 */
+fun String.toThinkingMode(): AiThinkingMode? = when (trim().lowercase()) {
     "none", "off", "disabled" -> AiThinkingMode.OFF
     "minimal", "low" -> AiThinkingMode.LOW
     "medium", "mid" -> AiThinkingMode.MEDIUM
     "high", "max", "highest" -> AiThinkingMode.HIGH
-    else -> AiThinkingMode.MEDIUM
+    else -> null
 }
 
 @Serializable

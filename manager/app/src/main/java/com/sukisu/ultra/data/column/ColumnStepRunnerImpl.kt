@@ -199,7 +199,7 @@ class ColumnStepRunnerImpl(
         // NEEDS_USER 而不是 SUCCESS：确认安装这一步不在商店手里，向导要停下等用户点完回来。
         return ColumnStepResult(
             ColumnStepStatus.NEEDS_USER,
-            "已打开系统安装界面，请在弹窗里确认安装（装完回来说一声继续）",
+            "已打开系统安装界面，请按提示确认安装；装完后回到这里点「我已处理」继续",
             log.text(),
         )
     }

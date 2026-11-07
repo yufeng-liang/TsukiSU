@@ -566,7 +566,7 @@ object AiWebSearch {
         (this[key] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
 }
 
-/** 是否必须填 Key：只有 AnySearch 支持匿名访问。 */
+/** 是否必须填 Key：Tavily / 元宝必须填写；Firecrawl / AnySearch 允许匿名（额度更低）。 */
 internal fun AiSearchProvider.requiresApiKey(): Boolean = when (this) {
     // Firecrawl / AnySearch 都允许匿名访问（额度与频率更低，Firecrawl 在代理 IP 上会被拒绝）。
     AiSearchProvider.ANYSEARCH, AiSearchProvider.FIRECRAWL -> false

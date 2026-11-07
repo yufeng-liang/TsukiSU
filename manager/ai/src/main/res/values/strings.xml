@@ -12,6 +12,7 @@
     <string name="ai_testing">Testing…</string>
     <string name="ai_endpoint">API address</string>
     <string name="ai_endpoint_hint">http://127.0.0.1:11434 or http://192.168.1.2:1234</string>
+    <string name="ai_endpoint_invalid">Enter a valid http:// or https:// address</string>
     <string name="ai_api_key">API key (optional)</string>
     <string name="ai_api_key_hint">Leave empty for local servers without auth</string>
     <string name="ai_show_key">Show API key</string>
@@ -306,6 +307,7 @@
     <string name="ai_mcp_remove">Remove</string>
     <string name="ai_mcp_name">Name</string>
     <string name="ai_mcp_url">URL (https://...)</string>
+    <string name="ai_mcp_url_invalid">Must be https:// (http:// is only allowed for localhost debugging)</string>
     <string name="ai_mcp_save">Save</string>
     <string name="ai_mcp_cancel">Cancel</string>
     <string name="ai_mcp_detail_title">Server details</string>

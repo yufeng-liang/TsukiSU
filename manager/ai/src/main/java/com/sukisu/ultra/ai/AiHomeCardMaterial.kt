@@ -8,8 +8,6 @@ import kotlin.math.roundToInt
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -244,7 +242,6 @@ internal fun AiConfigEditorMaterial(
     }
     val currentProvider = AiSettings.activeProvider(draft)
     val defaultProviderName = stringResource(R.string.ai_provider_default)
-    val newProviderName = stringResource(R.string.ai_provider_new_name)
     var showDeleteProviderDialog by remember { mutableStateOf(false) }
     var showProviderEditor by remember { mutableStateOf(false) }
     var editingProvider by remember { mutableStateOf<AiProvider?>(null) }
@@ -261,52 +258,6 @@ internal fun AiConfigEditorMaterial(
         return provider?.thinkingMode ?: AiThinkingMode.AUTO
     }
 
-    fun updateCurrentProvider(transform: (AiProvider) -> AiProvider) {
-        val existing = currentProvider
-        if (existing != null && draft.providers.any { it.id == existing.id }) {
-            onDraftChange(
-                draft.copy(
-                    providers = draft.providers.map {
-                        if (it.id == existing.id) transform(it) else it
-                    },
-                ),
-            )
-            return
-        }
-        val seed = existing ?: AiProvider(
-            id = "p" + System.currentTimeMillis(),
-            name = newProviderName,
-            format = draft.format,
-            endpoint = draft.endpoint,
-            apiKey = draft.apiKey,
-        )
-        val updated = transform(seed)
-        onDraftChange(
-            draft.copy(
-                providers = listOf(updated),
-                currentProviderId = updated.id,
-                currentModelId = updated.models.firstOrNull()?.id ?: "",
-            ),
-        )
-    }
-
-    fun addProvider() {
-        val provider = AiProvider(
-            id = "p" + System.currentTimeMillis(),
-            name = newProviderName,
-            format = draft.format,
-            endpoint = draft.endpoint,
-            apiKey = draft.apiKey,
-        )
-        onDraftChange(
-            draft.copy(
-                providers = draft.providers + provider,
-                currentProviderId = provider.id,
-                currentModelId = "",
-            ),
-        )
-    }
-
     fun deleteCurrentProvider() {
         val existing = currentProvider ?: return
         val remaining = draft.providers.filterNot { it.id == existing.id }
@@ -317,8 +268,8 @@ internal fun AiConfigEditorMaterial(
                 providers = remaining,
                 currentProviderId = first.id,
                 currentModelId = first.modelId.ifBlank { firstModel?.id.orEmpty() },
-                // 删除当前供应商后同步重置推理档位，避免旧供应商的高档位残留。
-                thinkingMode = thinkingModeFor(first, firstModel),
+                // 删除当前供应商后同步切到剩余供应商的推理档位，避免沿用被删供应商的旧档位。
+                thinkingMode = first.thinkingMode,
             ),
         )
     }
@@ -379,7 +330,11 @@ internal fun AiConfigEditorMaterial(
         val provider = currentProvider ?: return@LaunchedEffect
         if (provider.models.isEmpty() &&
             provider.endpoint.isNotBlank() &&
-            provider.apiKey.isNotBlank()
+            (
+                provider.apiKey.isNotBlank() ||
+                    provider.format == AiProviderFormat.OLLAMA ||
+                    provider.looksLikeLocalEndpoint()
+                )
         ) {
             onFetchModels(false)
         }
@@ -476,9 +431,10 @@ internal fun AiConfigEditorMaterial(
                     label = stringResource(R.string.ai_main_model),
                     selectedLabel = selectedModel?.let { it.name.ifBlank { it.id } }
                         ?: stringResource(R.string.ai_model_not_selected),
-                    options = providerModels.map { it.name.ifBlank { it.id } },
+                    // 只列文本模型，避免把生图模型设成聊天主模型。
+                    options = textModels.map { it.name.ifBlank { it.id } },
                     onSelect = { index ->
-                        providerModels.getOrNull(index)?.let { selectModel(it) }
+                        textModels.getOrNull(index)?.let { selectModel(it) }
                     },
                     modifier = Modifier.weight(1f),
                 )
@@ -1247,65 +1203,24 @@ private fun AiModelInfo.looksLikeImageModel(): Boolean {
     ).any { key.contains(it) }
 }
 
-/** 供应商页签：整块可点，长按进入编辑。 */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun ProviderTab(
-    name: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = if (selected) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            MaterialTheme.colorScheme.surfaceContainerHigh
-        },
-        contentColor = if (selected) {
-            MaterialTheme.colorScheme.onPrimaryContainer
-        } else {
-            MaterialTheme.colorScheme.onSurface
-        },
-        modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick),
-    ) {
-        Text(
-            text = name,
-            style = MaterialTheme.typography.labelLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-        )
+/** 判断供应商地址是否指向本机/局域网，无 Key 的 Ollama 也应允许自动拉模型目录。 */
+private fun AiProvider.looksLikeLocalEndpoint(): Boolean {
+    val raw = endpoint.trim()
+    if (raw.isEmpty()) return false
+    val withScheme = if (raw.startsWith("http://", true) || raw.startsWith("https://", true)) {
+        raw
+    } else {
+        "http://$raw"
     }
-}
-
-/** 「添加提供商」页签：虚线描边、和普通页签同高。 */
-@Composable
-private fun AddProviderTab(onClick: () -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surface,
-        contentColor = MaterialTheme.colorScheme.primary,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = Modifier.clickable(onClick = onClick),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.Add,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-            )
-            Text(
-                text = stringResource(R.string.ai_provider_add_tab),
-                style = MaterialTheme.typography.labelLarge,
-            )
-        }
-    }
+    val host = runCatching { java.net.URI(withScheme).host }.getOrNull()
+        ?.lowercase()
+        ?: return false
+    if (host == "localhost" || host == "127.0.0.1" || host == "::1") return true
+    val parts = host.split('.').mapNotNull { it.toIntOrNull() }
+    if (parts.size != 4) return false
+    return parts[0] == 10 ||
+        (parts[0] == 192 && parts[1] == 168) ||
+        (parts[0] == 172 && parts[1] in 16..31)
 }
 
 /** 推理强度滑杆：档位随模型能力变化，每跨一档给一次轻触感。 */

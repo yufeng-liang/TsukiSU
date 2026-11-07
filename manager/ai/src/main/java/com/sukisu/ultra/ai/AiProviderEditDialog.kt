@@ -28,6 +28,12 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 
+/** 供应商地址必须是完整的 http(s) URL，保存前即时校验。 */
+private fun isHttpEndpoint(value: String): Boolean {
+    val uri = runCatching { java.net.URI(value.trim()) }.getOrNull() ?: return false
+    return (uri.scheme == "http" || uri.scheme == "https") && !uri.host.isNullOrBlank()
+}
+
 /**
  * 新增/编辑供应商的弹窗。
  *
@@ -81,6 +87,12 @@ internal fun AiProviderEditDialog(
                     label = { Text(stringResource(R.string.ai_endpoint)) },
                     placeholder = { Text(stringResource(R.string.ai_endpoint_hint)) },
                     singleLine = true,
+                    isError = endpoint.isNotBlank() && !isHttpEndpoint(endpoint),
+                    supportingText = {
+                        if (endpoint.isNotBlank() && !isHttpEndpoint(endpoint)) {
+                            Text(stringResource(R.string.ai_endpoint_invalid))
+                        }
+                    },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                     shape = MaterialTheme.shapes.large,
                     modifier = Modifier.fillMaxWidth(),
@@ -110,6 +122,7 @@ internal fun AiProviderEditDialog(
         },
         confirmButton = {
             TextButton(
+                enabled = isHttpEndpoint(endpoint),
                 onClick = {
                     val finalName = name.trim().ifBlank { suggestedName }
                     onConfirm(
