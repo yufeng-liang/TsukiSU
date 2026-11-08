@@ -44,6 +44,7 @@ class ColumnSelfCheckRunnerImpl : ColumnSelfCheckRunner {
         ColumnCheckIds.ROOT_MANAGER -> checkRootManager(shell)
         ColumnCheckIds.ZYGISK_NEXT -> checkZygiskNext(shell)
         ColumnCheckIds.HYBRID_MOUNT -> checkHybridMount(shell)
+        ColumnCheckIds.MOUNT_HIDE -> checkMountHide(shell)
         ColumnCheckIds.HMA_CONFIG -> checkHmaConfig(shell)
         ColumnCheckIds.DENYLIST -> checkDenylistPolicy(shell)
         ColumnCheckIds.PATHMASK -> checkPathMask(shell)
@@ -146,6 +147,24 @@ class ColumnSelfCheckRunnerImpl : ColumnSelfCheckRunner {
         val first = dirs.firstOrNull()
             ?: return failed(ColumnCheckIds.PATHMASK, "未检测到名字含 pathmask 的模块目录")
         return passed(ColumnCheckIds.PATHMASK, "已安装（${first.substringAfterLast('/')}）")
+    }
+
+    /**
+     * mount 隐藏方案：Hybrid Mount 与 pathmask 是同类，任一存在即可。
+     * 两者都没有也不代表一定不安全——不少银行只看 root 管理器和 denylist，
+     * 所以这一项只作提示，不拦流程。
+     */
+    private fun checkMountHide(shell: Shell): ColumnCheckResult {
+        val hybrid = shell.execCmd("[ -d /data/adb/modules/hybrid_mount ] && echo yes").text.trim()
+        val pathmaskDirs = shell.execCmd(
+            "ls -d /data/adb/modules/*[Pp][Aa][Tt][Hh][Mm][Aa][Ss][Kk]* 2>/dev/null"
+        ).nonBlankLines
+        return when {
+            hybrid == "yes" -> passed(ColumnCheckIds.MOUNT_HIDE, "已安装 Hybrid Mount")
+            pathmaskDirs.isNotEmpty() ->
+                passed(ColumnCheckIds.MOUNT_HIDE, "已安装 pathmask（${pathmaskDirs.first().substringAfterLast('/')}）")
+            else -> failed(ColumnCheckIds.MOUNT_HIDE, "未装 mount 隐藏方案（Hybrid Mount / pathmask 都没有；多数银行不查这一层，可按需安装）")
+        }
     }
 
     /** 7. Tricky Store 目标列表：target.txt 存在且至少有一行非空内容。 */
