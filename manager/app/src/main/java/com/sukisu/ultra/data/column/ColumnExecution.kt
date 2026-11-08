@@ -119,16 +119,18 @@ object ColumnCheckIds {
     const val KEYBOX = "keybox-valid"
     const val HYBRID_MOUNT = "hybrid-mount"
     const val PATHMASK = "pathmask"
+
+    /** mount 隐藏方案：Hybrid Mount 与 pathmask 任一存在即算通过，都没有也不算硬伤。 */
+    const val MOUNT_HIDE = "mount-hide"
     const val ADB = "adb-disabled"
 
     /** 全部自检项，顺序即界面展示顺序：底座 → 隐藏 → 密钥 → 收尾。 */
     val ALL = listOf(
         ROOT_MANAGER,
         ZYGISK_NEXT,
-        HYBRID_MOUNT,
+        MOUNT_HIDE,
         HMA_CONFIG,
         DENYLIST,
-        PATHMASK,
         TARGET_LIST,
         KEYBOX,
         ADB,
