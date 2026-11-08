@@ -513,6 +513,8 @@ class MainActivity : ComponentActivity() {
                                         ColumnWizardScreen(
                                             topic = topic,
                                             state = wizardState,
+                                            // 主页「接着进行」带过来的下一步 id，进页面后高亮对应步骤。
+                                            highlightStepId = key.highlightStepId,
                                             onRunStep = wizardViewModel::runStep,
                                             onSkipStep = wizardViewModel::skipStep,
                                             onRollback = wizardViewModel::rollback,
