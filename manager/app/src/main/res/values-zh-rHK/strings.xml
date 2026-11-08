@@ -612,7 +612,7 @@
     <string name="module_column_step_kind_ask_user">手動操作</string>
 
     <!-- 专栏执行向导：逐步执行与自检 -->
-    <string name="column_wizard_open">開始執行</string>
+    <string name="column_wizard_open">進入專題</string>
     <string name="column_wizard_start">開始</string>
     <string name="column_wizard_start_first">開始第一步</string>
     <string name="column_wizard_run">執行</string>
@@ -640,7 +640,7 @@
     <string name="column_wizard_status_needs_user">需要你處理</string>
     <string name="column_wizard_confirm_title">執行前確認</string>
     <string name="column_wizard_cancel">取消</string>
-    <string name="column_wizard_readonly_note">點下方的「開始執行」進嚮導：能自動的步驟會替你跑完，會改到裝置的地方都會先問過你。</string>
+    <string name="column_wizard_readonly_note">點下方的「進入專題」，再點「一鍵執行」：能自動的步驟會替你跑完，會改到裝置的地方都會先問過你。</string>
     <string name="column_wizard_empty">這個專題還沒有可執行的步驟。</string>
     <string name="column_wizard_open_link">開啟官方頁面</string>
     <string name="column_wizard_open_ai">進入 AI 助理</string>
