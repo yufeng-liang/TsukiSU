@@ -179,6 +179,8 @@ fun ModulePager(
                     // Registry releases are size + SHA-256 checked, kept app-private and
                     // re-verified by the flash step; other updateJson sources are unchanged.
                     expected = request.expected,
+                    // 用户要求：updateJson 没带 sha256 时也要享受 GitHub 下载加速。
+                    allowProxyWithoutHash = true,
                     onProgress = { progress ->
                         updateProgress = progress.coerceIn(0, 100)
                     },
