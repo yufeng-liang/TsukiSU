@@ -1729,6 +1729,8 @@
     <string name="column_preflight_cancel" translatable="true">Cancel</string>
     <string name="column_health_title_short" translatable="true">Device check</string>
     <string name="column_health_score" translatable="true">%1$d of %2$d checks passed</string>
+    <string name="column_health_total">%1$d checks</string>
+    <string name="column_health_passed">%1$d passed</string>
     <string name="column_health_day_level" translatable="true">Daily-use hiding</string>
     <string name="column_health_integrity_level" translatable="true">Google three-green</string>
     <string name="column_health_ready" translatable="true">Ready</string>
