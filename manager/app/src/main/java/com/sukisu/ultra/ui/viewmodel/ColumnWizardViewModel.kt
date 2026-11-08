@@ -437,7 +437,8 @@ class ColumnWizardViewModel(
                 break
             }
             if (step.optIn && step.id !in state.optedIn) continue
-            if (step.optional) {
+            // 可选但用户已经勾了「纳入一键执行」的，就当作要执行；只有没勾的才停下来问。
+            if (step.optional && step.id !in state.optedIn) {
                 stopReason = "「${step.title}」是可选项，装不装由你决定"
                 break
             }

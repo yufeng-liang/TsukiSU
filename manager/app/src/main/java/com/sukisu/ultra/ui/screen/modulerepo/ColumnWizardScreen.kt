@@ -77,6 +77,7 @@ import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Button
@@ -110,6 +111,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -1185,6 +1187,13 @@ private fun WizardStepCardMiuix(
     val statusColor = wizardStatusColorMiuix(uiState.status)
     // note 常是整段说明，全展开会把卡片撑得很高：默认只看 3 行，超出时才给「展开 / 收起」。
     var noteExpanded by rememberSaveable(step.id) { mutableStateOf(false) }
+    // Miuix 没有 onTextLayout 的溢出回调，这里按字符数近似判断：超过折叠阈值才需要展开入口。
+    val noteCanExpand = step.note.length > NOTE_COLLAPSED_CHARS
+    val noteArrowRotation by animateFloatAsState(
+        targetValue = if (noteExpanded) 180f else 0f,
+        animationSpec = tween(durationMillis = 180),
+        label = "wizardNoteArrowMiuix",
+    )
     val canSkip = step.optional && (
         uiState.status == ColumnStepStatus.PENDING ||
             uiState.status == ColumnStepStatus.FAILED ||
@@ -1273,39 +1282,25 @@ private fun WizardStepCardMiuix(
                         )
                     }
                 }
-                if (step.note.isNotEmpty()) {
-                    // 「展开 / 收起」只在正文真的被截断时出现，并且贴在这一行的最右侧。
-                    val noteOverflows = step.note.length > NOTE_COLLAPSED_CHARS
-                    val noteLabel = stringResource(
-                        if (noteExpanded) R.string.column_wizard_note_less
-                        else R.string.column_wizard_note_more,
+                if (installed && uiState.status == ColumnStepStatus.PENDING) {
+                    MiuixText(
+                        text = stringResource(R.string.column_wizard_installed_skip),
+                        color = successGreenMiuix(),
+                        fontSize = 12.sp,
                     )
-                    val noteArrow = if (noteExpanded) "＜" else "＞"
-                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-                        MiuixText(
-                            text = step.note,
-                            color = colorScheme.onSurfaceVariantSummary,
-                            fontSize = 13.sp,
-                            lineHeight = 18.sp,
-                            maxLines = if (noteExpanded) Int.MAX_VALUE else NOTE_COLLAPSED_LINES,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable(enabled = noteOverflows) { noteExpanded = !noteExpanded },
-                        )
-                        if (noteOverflows) {
-                            MiuixText(
-                                text = "$noteLabel $noteArrow",
-                                color = colorScheme.primary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .clickable { noteExpanded = !noteExpanded }
-                                    .padding(start = 4.dp, top = 1.dp, bottom = 1.dp),
-                            )
-                        }
-                    }
+                }
+                if (step.note.isNotEmpty()) {
+                    MiuixText(
+                        text = step.note,
+                        color = colorScheme.onSurfaceVariantSummary,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        maxLines = if (noteExpanded) Int.MAX_VALUE else NOTE_COLLAPSED_LINES,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = noteCanExpand) { noteExpanded = !noteExpanded },
+                    )
                 }
                 // 官方只肯走群/网盘发的检测器（春秋），商店给不了直链，但能把官方入口摆出来；
                 // 链接来自索引仓，只放行 http/https，点了也只是打开浏览器，不执行任何东西。
@@ -1411,6 +1406,26 @@ private fun WizardStepCardMiuix(
                             ),
                         )
                     }
+                }
+            }
+            if (step.note.isNotEmpty() && noteCanExpand) {
+                // 展开/收起入口挪到标题行最右侧：不再和正文抢宽度，箭头随状态旋转。
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.Top)
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .clickable { noteExpanded = !noteExpanded },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    MiuixIcon(
+                        imageVector = Icons.Rounded.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = colorScheme.primary,
+                        modifier = Modifier
+                            .size(22.dp)
+                            .rotate(noteArrowRotation),
+                    )
                 }
             }
         }
@@ -1541,6 +1556,11 @@ private fun CommandBlockMiuix(command: String) {
 @Composable
 private fun WizardLogCardMiuix(log: List<String>, expanded: Boolean, onToggle: () -> Unit) {
     val colorScheme = MiuixTheme.colorScheme
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = tween(durationMillis = 180),
+        label = "wizardLogArrowMiuix",
+    )
     val visible = remember(log, expanded) {
         if (expanded) log else log.takeLast(LOG_COLLAPSED_LINES)
     }
@@ -1558,19 +1578,23 @@ private fun WizardLogCardMiuix(log: List<String>, expanded: Boolean, onToggle: (
                 fontWeight = FontWeight.SemiBold,
             )
             if (log.size > LOG_COLLAPSED_LINES) {
-                MiuixTextButton(
-                    text = stringResource(
-                        if (expanded) {
-                            R.string.column_wizard_collapse_log
-                        } else {
-                            R.string.column_wizard_expand_log
-                        },
-                    ),
-                    onClick = onToggle,
-                    minWidth = 0.dp,
-                    minHeight = 0.dp,
-                    insideMargin = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                )
+                // 展开入口也统一成右上角箭头，和步骤卡保持同一种交互。
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onToggle),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    MiuixIcon(
+                        imageVector = Icons.Rounded.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = colorScheme.primary,
+                        modifier = Modifier
+                            .size(22.dp)
+                            .rotate(arrowRotation),
+                    )
+                }
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -2100,6 +2124,13 @@ private fun WizardStepCard(
     val skipped = uiState.status == ColumnStepStatus.SKIPPED
     // note 常是整段说明，全展开会把卡片撑得很高：默认只看 3 行，超出时才给「展开 / 收起」。
     var noteExpanded by rememberSaveable(step.id) { mutableStateOf(false) }
+    // onTextLayout 只在排版后才知道正文是否被截断；先假定不溢出，排版完再决定要不要露出箭头。
+    var noteOverflows by remember(step.id) { mutableStateOf(false) }
+    val noteArrowRotation by animateFloatAsState(
+        targetValue = if (noteExpanded) 180f else 0f,
+        animationSpec = tween(durationMillis = 180),
+        label = "wizardNoteArrow",
+    )
     val context = LocalContext.current
     val canSkip = step.optional && (
         uiState.status == ColumnStepStatus.PENDING ||
@@ -2147,6 +2178,26 @@ private fun WizardStepCard(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
+                if (step.note.isNotEmpty() && noteOverflows) {
+                    // 展开/收起入口挪到标题行最右侧：不再和正文抢宽度，箭头随状态旋转。
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.Top)
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .clickable { noteExpanded = !noteExpanded },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .size(22.dp)
+                                .rotate(noteArrowRotation),
+                        )
+                    }
+                }
             }
             // 元信息压成一行：动作类型 · 状态 · 可选。原来分成两行、又和标题挤在一列，看着像错位。
             Row(
@@ -2189,41 +2240,27 @@ private fun WizardStepCard(
                     )
                 }
             }
-            if (step.note.isNotEmpty()) {
-                // 「展开 / 收起」只在正文真的被截断时出现，并且贴在这一行的最右侧。
-                var noteOverflows by remember(step.id) { mutableStateOf(false) }
-                val noteLabel = stringResource(
-                    if (noteExpanded) R.string.column_wizard_note_less
-                    else R.string.column_wizard_note_more,
+            if (installed && uiState.status == ColumnStepStatus.PENDING) {
+                Text(
+                    text = stringResource(R.string.column_wizard_installed_skip),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = successGreen(),
                 )
-                val noteArrow = if (noteExpanded) "‹" else "›"
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        text = step.note,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = if (noteExpanded) Int.MAX_VALUE else NOTE_COLLAPSED_LINES,
-                        overflow = TextOverflow.Ellipsis,
-                        onTextLayout = { layout ->
-                            if (!noteExpanded) noteOverflows = layout.hasVisualOverflow
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable(enabled = noteOverflows) { noteExpanded = !noteExpanded },
-                    )
-                    if (noteOverflows) {
-                        Text(
-                            text = "$noteLabel $noteArrow",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .clickable { noteExpanded = !noteExpanded }
-                                .padding(start = 4.dp, top = 1.dp, bottom = 1.dp),
-                        )
-                    }
-                }
+            }
+            if (step.note.isNotEmpty()) {
+                Text(
+                    text = step.note,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = if (noteExpanded) Int.MAX_VALUE else NOTE_COLLAPSED_LINES,
+                    overflow = TextOverflow.Ellipsis,
+                    onTextLayout = { layout ->
+                        if (!noteExpanded) noteOverflows = layout.hasVisualOverflow
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = noteOverflows) { noteExpanded = !noteExpanded },
+                )
             }
             // 官方只肯走群/网盘发的检测器（春秋），商店给不了直链，但能把官方入口摆出来；
             // 链接来自索引仓，只放行 http/https，点了也只是打开浏览器，不执行任何东西。
@@ -2441,6 +2478,11 @@ private fun WizardLogCard(
     expanded: Boolean,
     onToggle: () -> Unit,
 ) {
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = tween(durationMillis = 180),
+        label = "wizardLogArrow",
+    )
     // 折叠时只露最后几行：日志是「刚才发生了什么」，最新的永远在最下面。
     // 用 remember 缓存裁剪结果：日志每追加一行都会重组整张卡片，没必要每次都重算。
     val visible = remember(log, expanded) {
@@ -2465,19 +2507,21 @@ private fun WizardLogCard(
                 )
                 // 只有真的折掉了东西才给「展开」：五行以内展开也没有新内容。
                 if (log.size > LOG_COLLAPSED_LINES) {
-                    TextButton(
-                        onClick = onToggle,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    // 展开入口也统一成右上角箭头，和步骤卡保持同一种交互。
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .clickable(onClick = onToggle),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Text(
-                            text = stringResource(
-                                if (expanded) {
-                                    R.string.column_wizard_collapse_log
-                                } else {
-                                    R.string.column_wizard_expand_log
-                                },
-                            ),
-                            style = MaterialTheme.typography.labelMedium,
+                        Icon(
+                            imageVector = Icons.Rounded.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .size(22.dp)
+                                .rotate(arrowRotation),
                         )
                     }
                 }
