@@ -51,8 +51,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
@@ -83,7 +85,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
@@ -114,9 +115,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -1115,12 +1119,23 @@ private fun WizardStepCardMiuix(
             uiState.status == ColumnStepStatus.FAILED ||
             uiState.status == ColumnStepStatus.NEEDS_USER
         )
+    // 整张卡片点击就是执行动作：不再依赖标题行右侧的小按钮。
+    // PENDING 已安装时语义是「重新安装」，所以要改写为 onUpgrade。
+    val cardAction: (() -> Unit)? = when (uiState.status) {
+        ColumnStepStatus.PENDING -> if (installed) onUpgrade else onRun
+        ColumnStepStatus.FAILED -> onRun
+        ColumnStepStatus.NEEDS_USER -> onMarkDone
+        else -> null
+    }
+    val canRun = cardAction != null && !busy
 
     AppCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = canRun) { cardAction?.invoke() },
         insideMargin = PaddingValues(16.dp),
     ) {
-        // 标题行：序号/状态徽章 + 标题 + 右侧唯一动作。和 Material 版同一套结构。
+        // 标题行：序号/状态徽章 + 标题；执行动作由整张卡片承担。和 Material 版同一套结构。
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -1182,19 +1197,36 @@ private fun WizardStepCardMiuix(
                 }
                 if (step.note.isNotEmpty()) {
                     // 与 Material 版同一套交互：「展开 / 收起」接在正文末尾、整段可点。
-                    val noteSuffix = stringResource(
+                    val noteLabel = stringResource(
                         if (noteExpanded) R.string.column_wizard_note_less
                         else R.string.column_wizard_note_more,
                     )
+                    val noteArrow = if (noteExpanded) "＜" else "＞"
+                    val noteSuffix = "$noteLabel $noteArrow"
                     val noteReserve = noteSuffix.length + 1
-                    val noteDisplay = when {
-                        noteExpanded -> step.note + "  " + noteSuffix
-                        noteCut in 1 until step.note.length ->
-                            step.note.substring(0, noteCut) + "…" + noteSuffix
+                    val noteBody = when {
+                        noteExpanded -> step.note
+                        noteCut in 1 until step.note.length -> step.note.substring(0, noteCut) + "…"
                         else -> step.note
                     }
+                    val noteAnnotated = buildAnnotatedString {
+                        append(noteBody)
+                        when {
+                            noteExpanded -> {
+                                append("  ")
+                                withStyle(SpanStyle(color = colorScheme.primary, fontWeight = FontWeight.SemiBold)) {
+                                    append(noteSuffix)
+                                }
+                            }
+                            noteCut in 1 until step.note.length ->
+                                withStyle(SpanStyle(color = colorScheme.primary, fontWeight = FontWeight.SemiBold)) {
+                                    append(noteSuffix)
+                                }
+                            else -> Unit
+                        }
+                    }
                     MiuixText(
-                        text = noteDisplay,
+                        text = noteAnnotated,
                         modifier = Modifier.clickable { noteExpanded = !noteExpanded },
                         color = colorScheme.onSurfaceVariantSummary,
                         fontSize = 13.sp,
@@ -1255,48 +1287,46 @@ private fun WizardStepCardMiuix(
                         fontSize = 13.sp,
                     )
                 }
-                // 可选步骤的「纳入一键执行」开关挪到底部，和状态徽章分开：
-                // 以前它和状态图标并排出现两个圆点，看起来像渲染错了。
-                if (step.optIn || canSkip) {
+                // 可选步骤的「纳入一键执行」开关单独一行，跳过则统一放卡片最底部右对齐。
+                if (step.optIn) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        if (step.optIn) {
-                            MiuixCheckbox(
-                                state = if (optedIn) ToggleableState.On else ToggleableState.Off,
-                                onClick = onToggleOptIn,
-                                enabled = !busy,
-                            )
-                            MiuixText(
-                                text = stringResource(R.string.column_wizard_opt_in),
-                                color = colorScheme.onSurfaceVariantSummary,
-                                fontSize = 12.sp,
-                            )
-                        }
-                        Spacer(Modifier.weight(1f))
-                        if (canSkip) {
-                            MiuixTextButton(
-                                text = stringResource(R.string.column_wizard_skip),
-                                onClick = onSkip,
-                                enabled = !busy,
-                                minWidth = 0.dp,
-                                minHeight = 0.dp,
-                                insideMargin = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                            )
-                        }
+                        MiuixCheckbox(
+                            state = if (optedIn) ToggleableState.On else ToggleableState.Off,
+                            onClick = onToggleOptIn,
+                            enabled = !busy,
+                        )
+                        MiuixText(
+                            text = stringResource(R.string.column_wizard_opt_in),
+                            color = colorScheme.onSurfaceVariantSummary,
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+                if (canSkip) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        MiuixTextButton(
+                            text = stringResource(R.string.column_wizard_skip),
+                            onClick = onSkip,
+                            enabled = !busy,
+                            minWidth = 0.dp,
+                            minHeight = 0.dp,
+                            insideMargin = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            colors = MiuixButtonDefaults.textButtonColors(
+                                color = Color.Transparent,
+                                textColor = colorScheme.onSurfaceVariantSummary,
+                            ),
+                        )
                     }
                 }
             }
-            StepPrimaryActionMiuix(
-                status = uiState.status,
-                enabled = !busy,
-                installed = installed,
-                onRun = onRun,
-                onReinstall = onUpgrade,
-                onMarkDone = onMarkDone,
-            )
         }
         // 命令原文单独占一整行：右侧按钮占掉宽度后，窄列里折行的 shell 命令既难读也容易被误抄。
         if (step.kind == STEP_KIND_RUN_COMMAND && step.command.isNotEmpty()) {
@@ -1304,48 +1334,6 @@ private fun WizardStepCardMiuix(
             CommandBlockMiuix(command = step.command)
         }
     }
-}
-
-/** 右侧动作区（Miuix）。没动作的步骤（已成功/已跳过）不占位，标题就能多留一点宽度。 */
-/**
- * 标题右侧唯一的动作（Miuix）：执行 / 重试 / 我已处理。
- *
- * 只放一个按钮。跳过不是主路径，挪到卡片下方；两个按钮并排是标题被挤成三行的直接原因。
- */
-@Composable
-private fun StepPrimaryActionMiuix(
-    status: ColumnStepStatus,
-    enabled: Boolean,
-    installed: Boolean = false,
-    onRun: () -> Unit,
-    /** 已安装时点「重新安装」：带 force 重跑，覆盖已装的版本。 */
-    onReinstall: () -> Unit,
-    onMarkDone: () -> Unit,
-) {
-    // NEEDS_USER 是「等你动手」，点它是「我做完了」，不是「重跑一遍」——重跑只会再下载一次、
-    // 再弹一次安装器。所以这里接的是 onMarkDone，不是 onRun。
-    val label = when (status) {
-        ColumnStepStatus.PENDING ->
-            if (installed) R.string.column_wizard_reinstall else R.string.column_wizard_run
-        ColumnStepStatus.RUNNING -> R.string.column_wizard_run
-        ColumnStepStatus.FAILED -> R.string.column_wizard_retry
-        ColumnStepStatus.NEEDS_USER -> R.string.column_wizard_done_step
-        ColumnStepStatus.SUCCESS, ColumnStepStatus.SKIPPED -> null
-    }
-    if (label == null) return
-    MiuixTextButton(
-        text = stringResource(label),
-        onClick = when {
-            status == ColumnStepStatus.NEEDS_USER -> onMarkDone
-            status == ColumnStepStatus.PENDING && installed -> onReinstall
-            else -> onRun
-        },
-        enabled = enabled && status != ColumnStepStatus.RUNNING,
-        minWidth = 0.dp,
-        minHeight = 0.dp,
-        insideMargin = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-        colors = MiuixButtonDefaults.textButtonColorsPrimary(),
-    )
 }
 
 /** 步骤状态图标（Miuix）：空心圆 / 转圈 / 绿勾 / 红叉 / 灰色横线 / 人形。 */
@@ -1357,11 +1345,11 @@ private fun StepPrimaryActionMiuix(
 @Composable
 private fun StepBadgeMiuix(index: Int, status: ColumnStepStatus) {
     val colorScheme = MiuixTheme.colorScheme
-    Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+    Box(modifier = Modifier.size(32.dp), contentAlignment = Alignment.Center) {
         when (status) {
             ColumnStepStatus.PENDING -> Box(
                 modifier = Modifier
-                    .size(22.dp)
+                    .size(30.dp)
                     .clip(CircleShape)
                     .background(colorScheme.surfaceContainerHighest),
                 contentAlignment = Alignment.Center,
@@ -1369,33 +1357,34 @@ private fun StepBadgeMiuix(index: Int, status: ColumnStepStatus) {
                 MiuixText(
                     text = index.toString(),
                     color = colorScheme.onSurfaceVariantSummary,
-                    fontSize = 11.sp,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
 
             ColumnStepStatus.RUNNING -> MiuixCircularProgressIndicator(
                 progress = null,
-                size = 18.dp,
-                strokeWidth = 2.dp,
+                size = 22.dp,
+                strokeWidth = 2.5.dp,
             )
 
             ColumnStepStatus.SUCCESS -> MiuixIcon(
                 imageVector = Icons.Rounded.CheckCircle,
                 contentDescription = null,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(24.dp),
                 tint = successGreenMiuix(),
             )
 
             ColumnStepStatus.FAILED -> MiuixIcon(
                 imageVector = Icons.Rounded.Close,
                 contentDescription = null,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(24.dp),
                 tint = colorScheme.error,
             )
 
             ColumnStepStatus.SKIPPED -> Box(
                 modifier = Modifier
-                    .size(22.dp)
+                    .size(30.dp)
                     .clip(CircleShape)
                     .background(colorScheme.surfaceContainerHighest),
                 contentAlignment = Alignment.Center,
@@ -1403,37 +1392,49 @@ private fun StepBadgeMiuix(index: Int, status: ColumnStepStatus) {
                 MiuixText(
                     text = index.toString(),
                     color = colorScheme.outline,
-                    fontSize = 11.sp,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
 
             ColumnStepStatus.NEEDS_USER -> MiuixIcon(
                 imageVector = Icons.Rounded.Person,
                 contentDescription = null,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(24.dp),
                 tint = colorScheme.primary,
             )
         }
     }
 }
 
-/** 命令原文块（Miuix）：等宽字体 + 浅底，长按可以选中复制。 */
+/** 命令原文块（Miuix）：圆角浅底 + 左侧主色竖条，等宽字体，长按可以选中复制。 */
 @Composable
 private fun CommandBlockMiuix(command: String) {
     val colorScheme = MiuixTheme.colorScheme
     SelectionContainer {
-        MiuixText(
-            text = command,
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(colorScheme.onSurface.copy(alpha = 0.06f))
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            color = colorScheme.onSurface,
-            fontSize = 12.sp,
-            fontFamily = FontFamily.Monospace,
-            lineHeight = 18.sp,
-        )
+                .height(IntrinsicSize.Min)
+                .clip(RoundedCornerShape(12.dp))
+                .background(colorScheme.surfaceContainerHigh),
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .fillMaxHeight()
+                    .background(colorScheme.primary),
+            )
+            Column(modifier = Modifier.padding(12.dp)) {
+                MiuixText(
+                    text = command,
+                    color = colorScheme.onSurfaceVariantSummary,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
+                    lineHeight = 18.sp,
+                )
+            }
+        }
     }
 }
 
@@ -2003,14 +2004,26 @@ private fun WizardStepCard(
             uiState.status == ColumnStepStatus.FAILED ||
             uiState.status == ColumnStepStatus.NEEDS_USER
         )
+    // 整张卡片点击就是执行动作：不再依赖标题行右侧的小按钮。
+    // PENDING 已安装时语义是「重新安装」，所以要改写为 onUpgrade。
+    val cardAction: (() -> Unit)? = when (uiState.status) {
+        ColumnStepStatus.PENDING -> if (installed) onUpgrade else onRun
+        ColumnStepStatus.FAILED -> onRun
+        ColumnStepStatus.NEEDS_USER -> onMarkDone
+        else -> null
+    }
+    val canRun = cardAction != null && !busy
 
-    WizardCard(modifier = Modifier.fillMaxWidth()) {
+    WizardCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = canRun) { cardAction?.invoke() },
+    ) {
         Column(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            // 标题行：左边一个序号/状态徽章，右边只留一个动作。
-            // 以前把「执行」「跳过」并排塞在标题右边，带括号的长标题会被挤成三行。
+            // 标题行：左边一个序号/状态徽章，右边不再放按钮；执行动作由整张卡片承担。
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -2024,14 +2037,6 @@ private fun WizardStepCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
-                )
-                StepPrimaryAction(
-                    status = uiState.status,
-                    enabled = !busy,
-                    installed = installed,
-                    onRun = onRun,
-                    onReinstall = onUpgrade,
-                    onMarkDone = onMarkDone,
                 )
             }
             // 元信息压成一行：动作类型 · 状态 · 可选。原来分成两行、又和标题挤在一列，看着像错位。
@@ -2078,19 +2083,36 @@ private fun WizardStepCard(
             if (step.note.isNotEmpty()) {
                 // 「展开 / 收起」不进布局，直接接在正文末尾：折叠时它落在我截断的那一行，
                 // 展开时跟在最后一句后面。整段文字都能点，不用去瞄一个小按钮。
-                val noteSuffix = stringResource(
+                val noteLabel = stringResource(
                     if (noteExpanded) R.string.column_wizard_note_less
                     else R.string.column_wizard_note_more,
                 )
+                val noteArrow = if (noteExpanded) "‹" else "›"
+                val noteSuffix = "$noteLabel $noteArrow"
                 val noteReserve = noteSuffix.length + 1
-                val noteDisplay = when {
-                    noteExpanded -> step.note + "  " + noteSuffix
-                    noteCut in 1 until step.note.length ->
-                        step.note.substring(0, noteCut) + "…" + noteSuffix
+                val noteBody = when {
+                    noteExpanded -> step.note
+                    noteCut in 1 until step.note.length -> step.note.substring(0, noteCut) + "…"
                     else -> step.note
                 }
+                val noteAnnotated = buildAnnotatedString {
+                    append(noteBody)
+                    when {
+                        noteExpanded -> {
+                            append("  ")
+                            withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)) {
+                                append(noteSuffix)
+                            }
+                        }
+                        noteCut in 1 until step.note.length ->
+                            withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)) {
+                                append(noteSuffix)
+                            }
+                        else -> Unit
+                    }
+                }
                 Text(
-                    text = noteDisplay,
+                    text = noteAnnotated,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = if (noteExpanded) Int.MAX_VALUE else NOTE_COLLAPSED_LINES,
@@ -2175,8 +2197,7 @@ private fun WizardStepCard(
             if (step.kind == STEP_KIND_RUN_COMMAND && step.command.isNotEmpty()) {
                 CommandBlock(command = step.command)
             }
-            // 可选步骤的「纳入一键执行」开关放最后，和状态徽章分开：
-            // 以前它和状态图标并排出现两个圆点，看起来像渲染错了。
+            // 可选步骤的「纳入一键执行」开关单独一行，跳过统一放卡片最底部右对齐。
             if (step.optIn) {
                 Row(
                     modifier = Modifier
@@ -2198,81 +2219,28 @@ private fun WizardStepCard(
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (canSkip) {
-                        Spacer(modifier = Modifier.weight(1f))
-                        TextButton(
-                            onClick = onSkip,
-                            enabled = !busy,
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                        ) {
-                            Text(
-                                text = stringResource(R.string.column_wizard_skip),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
                 }
-            } else if (canSkip) {
-                TextButton(
-                    onClick = onSkip,
-                    enabled = !busy,
-                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+            }
+            if (canSkip) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = stringResource(R.string.column_wizard_skip),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    TextButton(
+                        onClick = onSkip,
+                        enabled = !busy,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.column_wizard_skip),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }
-    }
-}
-
-/** 右侧动作区。没动作的步骤（已成功/已跳过）不占位，标题就能多留一点宽度。 */
-/**
- * 标题右侧唯一的动作：执行 / 重试 / 我已处理。
- *
- * 只放一个按钮。跳过不是主路径，挪到卡片下方；两个按钮并排是标题被挤成三行的直接原因。
- */
-@Composable
-private fun StepPrimaryAction(
-    status: ColumnStepStatus,
-    enabled: Boolean,
-    installed: Boolean = false,
-    onRun: () -> Unit,
-    /** 已安装时点「重新安装」：带 force 重跑，覆盖已装的版本。 */
-    onReinstall: () -> Unit,
-    onMarkDone: () -> Unit,
-) {
-    // NEEDS_USER 是「等你动手」，点它是「我做完了」，不是「重跑一遍」——重跑只会再下载一次、
-    // 再弹一次安装器。所以这里接的是 onMarkDone，不是 onRun。
-    val label = when (status) {
-        ColumnStepStatus.PENDING ->
-            if (installed) R.string.column_wizard_reinstall else R.string.column_wizard_run
-        ColumnStepStatus.RUNNING -> R.string.column_wizard_run
-        ColumnStepStatus.FAILED -> R.string.column_wizard_retry
-        ColumnStepStatus.NEEDS_USER -> R.string.column_wizard_done_step
-        ColumnStepStatus.SUCCESS, ColumnStepStatus.SKIPPED -> null
-    }
-    if (label == null) return
-    FilledTonalButton(
-        onClick = when {
-            status == ColumnStepStatus.NEEDS_USER -> onMarkDone
-            status == ColumnStepStatus.PENDING && installed -> onReinstall
-            else -> onRun
-        },
-        enabled = enabled && status != ColumnStepStatus.RUNNING,
-        modifier = Modifier.height(32.dp),
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-    ) {
-        Text(
-            text = stringResource(label),
-            style = MaterialTheme.typography.labelMedium,
-            maxLines = 1,
-            softWrap = false,
-        )
     }
 }
 
@@ -2284,51 +2252,53 @@ private fun StepPrimaryAction(
  */
 @Composable
 private fun StepBadge(index: Int, status: ColumnStepStatus) {
-    Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+    Box(modifier = Modifier.size(32.dp), contentAlignment = Alignment.Center) {
         when (status) {
             ColumnStepStatus.PENDING -> Box(
                 modifier = Modifier
-                    .size(22.dp)
+                    .size(30.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceContainerHighest),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = index.toString(),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
             ColumnStepStatus.RUNNING -> CircularProgressIndicator(
-                modifier = Modifier.size(18.dp),
-                strokeWidth = 2.dp,
+                modifier = Modifier.size(22.dp),
+                strokeWidth = 2.5.dp,
             )
 
             ColumnStepStatus.SUCCESS -> Icon(
                 imageVector = Icons.Rounded.CheckCircle,
                 contentDescription = null,
                 tint = successGreen(),
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(24.dp),
             )
 
             ColumnStepStatus.FAILED -> Icon(
                 imageVector = Icons.Rounded.Close,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.error,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(24.dp),
             )
 
             ColumnStepStatus.SKIPPED -> Box(
                 modifier = Modifier
-                    .size(22.dp)
+                    .size(30.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceContainerHighest),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = index.toString(),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.outline,
                 )
             }
@@ -2338,27 +2308,39 @@ private fun StepBadge(index: Int, status: ColumnStepStatus) {
                 imageVector = Icons.Rounded.Person,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(24.dp),
             )
         }
     }
 }
 
-/** 命令原文：等宽字体 + 可选中的容器，用户要能长按复制去自己跑一遍。 */
+/** 命令原文：圆角浅底 + 左侧主色竖条，等宽字体，长按可以选中复制。 */
 @Composable
 private fun CommandBlock(command: String) {
     SelectionContainer {
-        Text(
-            text = command,
-            style = MaterialTheme.typography.bodySmall,
-            fontFamily = FontFamily.Monospace,
-            color = MaterialTheme.colorScheme.onSurface,
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(MaterialTheme.shapes.small)
-                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-        )
+                .height(IntrinsicSize.Min)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.primary),
+            )
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text(
+                    text = command,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 
