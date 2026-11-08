@@ -175,6 +175,8 @@ private const val COLUMN_LINK_AI = "sukisu://ai"
 
 /** 步骤说明默认折叠时露出的行数：note 常是一整段，全展开会把卡片撑得比标题高好几倍。 */
 private const val NOTE_COLLAPSED_LINES = 3
+// Miuix 的文本没有 onTextLayout，只能按字数粗截：13sp 下约 24 字一行，三行约 72 字。
+private const val NOTE_COLLAPSED_CHARS = 72
 
 /** 与 `RepoColumnStep.kind` 的取值一致；只有这个类型要在卡片里原文展示命令。 */
 private const val STEP_KIND_RUN_COMMAND = "runCommand"
@@ -1127,6 +1129,8 @@ private fun WizardStepCardMiuix(
     val statusColor = wizardStatusColorMiuix(uiState.status)
     // note 常是整段说明，全展开会把卡片撑得很高：默认只看 3 行，超出时才给「展开 / 收起」。
     var noteExpanded by rememberSaveable(step.id) { mutableStateOf(false) }
+    // 折叠时「展开」要正好接在被截断那一行的末尾，所以得先量出截断点。
+    var noteCut by remember(step.id) { mutableStateOf(-1) }
     val canSkip = step.optional && (
         uiState.status == ColumnStepStatus.PENDING ||
             uiState.status == ColumnStepStatus.FAILED ||
@@ -1216,33 +1220,33 @@ private fun WizardStepCardMiuix(
                     }
                 }
                 if (step.note.isNotEmpty()) {
-                    // 正文最多三行，展开按钮固定在右侧，不参与正文的截断计算。
+                    // 「展开 / 收起」内嵌在正文截断处，不单独占列；按字数粗截，MiuixText 没有 onTextLayout。
                     val noteLabel = stringResource(
                         if (noteExpanded) R.string.column_wizard_note_less
                         else R.string.column_wizard_note_more,
                     )
                     val noteArrow = if (noteExpanded) "＜" else "＞"
-                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                        MiuixText(
-                            text = step.note,
-                            modifier = Modifier.weight(1f),
-                            color = colorScheme.onSurfaceVariantSummary,
-                            fontSize = 13.sp,
-                            lineHeight = 18.sp,
-                            maxLines = if (noteExpanded) Int.MAX_VALUE else NOTE_COLLAPSED_LINES,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        MiuixText(
-                            text = "$noteLabel $noteArrow",
-                            color = colorScheme.primary,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .clickable { noteExpanded = !noteExpanded }
-                                .padding(horizontal = 4.dp, vertical = 2.dp),
-                        )
+                    val noteSuffix = "$noteLabel $noteArrow"
+                    val noteBody = if (noteExpanded) {
+                        step.note
+                    } else {
+                        step.note.take(NOTE_COLLAPSED_CHARS)
                     }
+                    val noteAnnotated = buildAnnotatedString {
+                        append(noteBody)
+                        if (!noteExpanded && step.note.length > NOTE_COLLAPSED_CHARS) append("…")
+                        append(" ")
+                        withStyle(SpanStyle(color = colorScheme.primary, fontWeight = FontWeight.SemiBold)) {
+                            append(noteSuffix)
+                        }
+                    }
+                    MiuixText(
+                        text = noteAnnotated,
+                        color = colorScheme.onSurfaceVariantSummary,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        modifier = Modifier.clickable { noteExpanded = !noteExpanded },
+                    )
                 }
                 // 官方只肯走群/网盘发的检测器（春秋），商店给不了直链，但能把官方入口摆出来；
                 // 链接来自索引仓，只放行 http/https，点了也只是打开浏览器，不执行任何东西。
@@ -2041,6 +2045,8 @@ private fun WizardStepCard(
     val skipped = uiState.status == ColumnStepStatus.SKIPPED
     // note 常是整段说明，全展开会把卡片撑得很高：默认只看 3 行，超出时才给「展开 / 收起」。
     var noteExpanded by rememberSaveable(step.id) { mutableStateOf(false) }
+    // 折叠时「展开」要正好接在被截断那一行的末尾，所以得先量出截断点。
+    var noteCut by remember(step.id) { mutableStateOf(-1) }
     val context = LocalContext.current
     val canSkip = step.optional && (
         uiState.status == ColumnStepStatus.PENDING ||
@@ -2131,32 +2137,42 @@ private fun WizardStepCard(
                 }
             }
             if (step.note.isNotEmpty()) {
-                // 正文最多三行，展开按钮固定在右侧，不参与正文的截断计算。
+                // 「展开 / 收起」内嵌在正文截断处：不单独占列，也不抢正文宽度。
                 val noteLabel = stringResource(
                     if (noteExpanded) R.string.column_wizard_note_less
                     else R.string.column_wizard_note_more,
                 )
                 val noteArrow = if (noteExpanded) "‹" else "›"
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                    Text(
-                        text = step.note,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = if (noteExpanded) Int.MAX_VALUE else NOTE_COLLAPSED_LINES,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = "$noteLabel $noteArrow",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .clickable { noteExpanded = !noteExpanded }
-                            .padding(horizontal = 4.dp, vertical = 2.dp),
-                    )
+                val noteSuffix = "$noteLabel $noteArrow"
+                val noteReserve = noteSuffix.length + 1
+                val noteBody = when {
+                    noteExpanded -> step.note
+                    noteCut in 1 until step.note.length -> step.note.substring(0, noteCut) + "…"
+                    else -> step.note
                 }
+                val noteAnnotated = buildAnnotatedString {
+                    append(noteBody)
+                    if (noteExpanded || noteCut in 1 until step.note.length) {
+                        if (noteExpanded) append("  ")
+                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)) {
+                            append(noteSuffix)
+                        }
+                    }
+                }
+                Text(
+                    text = noteAnnotated,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = if (noteExpanded) Int.MAX_VALUE else NOTE_COLLAPSED_LINES,
+                    overflow = TextOverflow.Ellipsis,
+                    onTextLayout = { layout ->
+                        if (!noteExpanded && noteCut < 0 && layout.hasVisualOverflow) {
+                            noteCut = (layout.getLineEnd(NOTE_COLLAPSED_LINES - 1, true) - noteReserve)
+                                .coerceAtLeast(1)
+                        }
+                    },
+                    modifier = Modifier.clickable { noteExpanded = !noteExpanded },
+                )
             }
             // 官方只肯走群/网盘发的检测器（春秋），商店给不了直链，但能把官方入口摆出来；
             // 链接来自索引仓，只放行 http/https，点了也只是打开浏览器，不执行任何东西。
