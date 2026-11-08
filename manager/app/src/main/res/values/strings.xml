@@ -1619,6 +1619,7 @@
     <string name="module_column_steps_hide">Collapse steps</string>
     <string name="module_column_progress_done">Completed</string>
     <string name="column_wizard_health_scanning">Checking device status…</string>
+    <string name="column_health_scanning">Checking…</string>
     <string name="home_hide_env_done_title">Hide environment completed</string>
     <string name="home_hide_env_done_summary">See what you gained, or pick another topic</string>
     <string name="module_column_verify_title">How to confirm</string>
