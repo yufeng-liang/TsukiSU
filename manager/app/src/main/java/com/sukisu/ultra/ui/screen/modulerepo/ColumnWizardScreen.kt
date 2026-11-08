@@ -41,6 +41,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -114,6 +115,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.luminance
@@ -128,6 +130,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -927,23 +930,27 @@ private fun ColumnHealthCardMiuix(
                             fontWeight = FontWeight.SemiBold,
                         )
                         MiuixText(
-                            text = stringResource(
-                                R.string.column_health_score,
-                                report.passedCount,
-                                report.totalCount,
-                            ),
+                            text = stringResource(R.string.column_health_total, report.totalCount),
+                            color = colorScheme.primary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        MiuixText(
+                            text = " · ",
+                            color = colorScheme.onSurfaceVariantSummary,
+                            fontSize = 13.sp,
+                        )
+                        MiuixText(
+                            text = stringResource(R.string.column_health_passed, report.passedCount),
                             color = successGreenMiuix(),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
                         )
-                        Spacer(Modifier.width(2.dp))
-                        MiuixIcon(
-                            imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                            contentDescription = stringResource(
-                                if (expanded) R.string.column_health_collapse else R.string.column_health_expand,
-                            ),
-                            modifier = Modifier.size(18.dp),
+                        Spacer(Modifier.width(4.dp))
+                        TriangleArrow(
+                            expanded = expanded,
                             tint = colorScheme.onSurfaceVariantSummary,
+                            size = 10.dp,
                         )
                     }
                     Spacer(Modifier.height(10.dp))
@@ -1418,14 +1425,7 @@ private fun WizardStepCardMiuix(
                         .clickable { noteExpanded = !noteExpanded },
                     contentAlignment = Alignment.Center,
                 ) {
-                    MiuixIcon(
-                        imageVector = Icons.Rounded.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = colorScheme.primary,
-                        modifier = Modifier
-                            .size(22.dp)
-                            .rotate(noteArrowRotation),
-                    )
+                    TriangleArrow(expanded = noteExpanded, tint = colorScheme.primary)
                 }
             }
         }
@@ -1586,14 +1586,7 @@ private fun WizardLogCardMiuix(log: List<String>, expanded: Boolean, onToggle: (
                         .clickable(onClick = onToggle),
                     contentAlignment = Alignment.Center,
                 ) {
-                    MiuixIcon(
-                        imageVector = Icons.Rounded.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = colorScheme.primary,
-                        modifier = Modifier
-                            .size(22.dp)
-                            .rotate(arrowRotation),
-                    )
+                    TriangleArrow(expanded = expanded, tint = colorScheme.primary)
                 }
             }
         }
@@ -2188,14 +2181,7 @@ private fun WizardStepCard(
                             .clickable { noteExpanded = !noteExpanded },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.KeyboardArrowDown,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .size(22.dp)
-                                .rotate(noteArrowRotation),
-                        )
+                        TriangleArrow(expanded = noteExpanded, tint = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -2515,14 +2501,7 @@ private fun WizardLogCard(
                             .clickable(onClick = onToggle),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.KeyboardArrowDown,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .size(22.dp)
-                                .rotate(arrowRotation),
-                        )
+                        TriangleArrow(expanded = expanded, tint = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -2775,21 +2754,25 @@ private fun ColumnHealthCard(
                                 modifier = Modifier.weight(1f),
                             )
                             Text(
-                                text = stringResource(
-                                    R.string.column_health_score,
-                                    report.passedCount,
-                                    report.totalCount,
-                                ),
+                                text = stringResource(R.string.column_health_total, report.totalCount),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Text(
+                                text = " · ",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            )
+                            Text(
+                                text = stringResource(R.string.column_health_passed, report.passedCount),
                                 style = MaterialTheme.typography.labelLarge,
                                 color = successGreen(),
                             )
-                            Icon(
-                                imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                                contentDescription = stringResource(
-                                    if (expanded) R.string.column_health_collapse else R.string.column_health_expand,
-                                ),
+                            Spacer(Modifier.width(4.dp))
+                            TriangleArrow(
+                                expanded = expanded,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp),
+                                size = 10.dp,
                             )
                         }
                         Spacer(Modifier.height(8.dp))
@@ -3020,4 +3003,39 @@ private fun ColumnPreflightDialog(
             }
         },
     )
+}
+
+/**
+ * 展开/收起用的实心小三角。
+ *
+ * Material 自带的 ExpandMore 是描边折线，看着像字母 v；这里直接画一个实心三角，
+ * 展开时整体转 180°，和右侧推进感一致。
+ */
+@Composable
+private fun TriangleArrow(
+    expanded: Boolean,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    size: Dp = 12.dp,
+) {
+    val rotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = tween(durationMillis = 180),
+        label = "triangleArrow",
+    )
+    Canvas(
+        modifier = modifier
+            .size(size)
+            .graphicsLayer { rotationZ = rotation },
+    ) {
+        val w = this.size.width
+        val h = this.size.height
+        val path = Path().apply {
+            moveTo(w * 0.5f, h * 0.78f)
+            lineTo(w * 0.08f, h * 0.24f)
+            lineTo(w * 0.92f, h * 0.24f)
+            close()
+        }
+        drawPath(path, tint)
+    }
 }

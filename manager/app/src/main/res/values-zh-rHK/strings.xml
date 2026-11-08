@@ -701,6 +701,8 @@
     <string name="column_preflight_cancel" translatable="true">取消</string>
     <string name="column_health_title_short" translatable="true">裝置現況</string>
     <string name="column_health_score" translatable="true">%2$d 項檢查 · %1$d 項通過</string>
+    <string name="column_health_total">%1$d 項檢查</string>
+    <string name="column_health_passed">%1$d 項通過</string>
     <string name="column_health_day_level" translatable="true">日常級隱藏</string>
     <string name="column_health_integrity_level" translatable="true">Google 三綠</string>
     <string name="column_health_ready" translatable="true">已就緒</string>
