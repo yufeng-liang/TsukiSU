@@ -5,12 +5,12 @@ import com.sukisu.ultra.data.model.RepoColumn
 /**
  * 官方专栏索引的地址。
  *
- * 和「酷安社区模块」源一样走 jsDelivr：`raw.githubusercontent.com` 在国内常见网络下连不上，
- * 而专栏是给这些用户看的。内容由索引仓 `SukiSU-Community/modules-repo` 的 `json/columns.json`
- * 随模块索引一起重建发布，改专栏内容不用发 App 版本。
+ * 首选 GitHub raw：它不做 CDN 缓存，索引仓合并后立即是最新内容；jsDelivr 的 @main 别名
+ * 实测会在合并后十几个小时里继续返回旧文件（2026-11 删步骤时踩过），所以只作为兜底。
+ * raw 在国内常见网络下可能连不上，失败后由 [OFFICIAL_COLUMNS_FALLBACK_URLS] 的 CDN 顶上。
  */
 const val OFFICIAL_COLUMNS_URL =
-    "https://cdn.jsdelivr.net/gh/SukiSU-Community/modules-repo@main/json/columns.json"
+    "https://raw.githubusercontent.com/SukiSU-Community/modules-repo/main/json/columns.json"
 
 /**
  * 商店「专栏」的只读数据源。
