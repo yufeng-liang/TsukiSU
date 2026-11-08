@@ -1232,13 +1232,15 @@ private fun WizardStepCardMiuix(
                             maxLines = if (noteExpanded) Int.MAX_VALUE else NOTE_COLLAPSED_LINES,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        MiuixTextButton(
+                        MiuixText(
                             text = "$noteLabel $noteArrow",
-                            onClick = { noteExpanded = !noteExpanded },
-                            minWidth = 0.dp,
-                            minHeight = 0.dp,
-                            insideMargin = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-                            colors = MiuixButtonDefaults.textButtonColorsPrimary(),
+                            color = colorScheme.primary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .clickable { noteExpanded = !noteExpanded }
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
                         )
                     }
                 }
@@ -1247,24 +1249,41 @@ private fun WizardStepCardMiuix(
                 if (step.link.isNotEmpty()) {
                     // 与 Material 版同一套：sukisu://ai 是站内「进入 AI 助手」，其余按外链处理。
                     val isAiEntry = step.link == COLUMN_LINK_AI
-                    MiuixTextButton(
-                        text = stringResource(
-                            if (isAiEntry) R.string.column_wizard_open_ai else R.string.column_wizard_open_link,
-                        ),
-                        onClick = {
-                            if (isAiEntry) {
-                                onOpenAi()
-                            } else {
-                                runCatching {
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(step.link)))
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable {
+                                if (isAiEntry) {
+                                    onOpenAi()
+                                } else {
+                                    runCatching {
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(step.link)))
+                                    }
                                 }
                             }
-                        },
-                        minWidth = 0.dp,
-                        minHeight = 0.dp,
-                        insideMargin = PaddingValues(horizontal = 0.dp, vertical = 2.dp),
-                        colors = MiuixButtonDefaults.textButtonColorsPrimary(),
-                    )
+                            .padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        MiuixText(
+                            text = stringResource(
+                                if (isAiEntry) R.string.column_wizard_open_ai else R.string.column_wizard_open_link,
+                            ),
+                            color = colorScheme.primary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        MiuixIcon(
+                            imageVector = if (isAiEntry) {
+                                Icons.Rounded.AutoAwesome
+                            } else {
+                                Icons.AutoMirrored.Rounded.OpenInNew
+                            },
+                            contentDescription = null,
+                            tint = colorScheme.primary,
+                            modifier = Modifier.size(13.dp),
+                        )
+                    }
                 }
                 // 已装但上游有新版：跳过不等于「已经是最新」。只有用户点这里才会带 force
                 // 覆盖安装——向导不会替他把旧模块换掉。
@@ -1279,6 +1298,7 @@ private fun WizardStepCardMiuix(
                         minWidth = 0.dp,
                         minHeight = 0.dp,
                         insideMargin = PaddingValues(horizontal = 0.dp, vertical = 2.dp),
+                        colors = MiuixButtonDefaults.textButtonColorsPrimary(),
                     )
                 }
                 if (uiState.message.isNotEmpty()) {
@@ -1643,7 +1663,7 @@ private fun WizardBottomBarMiuix(
                 ) {
                     MiuixText(
                         text = stringResource(R.string.column_wizard_run_all),
-                        fontSize = 15.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                     )
                 }
@@ -1675,7 +1695,7 @@ private fun WizardBottomBarMiuix(
                 ) {
                     MiuixText(
                         text = stringResource(R.string.column_wizard_run_all_rest),
-                        fontSize = 15.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                     )
                 }
@@ -2126,16 +2146,16 @@ private fun WizardStepCard(
                         maxLines = if (noteExpanded) Int.MAX_VALUE else NOTE_COLLAPSED_LINES,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    TextButton(
-                        onClick = { noteExpanded = !noteExpanded },
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-                    ) {
-                        Text(
-                            text = "$noteLabel $noteArrow",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
+                    Text(
+                        text = "$noteLabel $noteArrow",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable { noteExpanded = !noteExpanded }
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                    )
                 }
             }
             // 官方只肯走群/网盘发的检测器（春秋），商店给不了直链，但能把官方入口摆出来；
@@ -2537,6 +2557,7 @@ private fun WizardBottomBar(
                     Text(
                         text = stringResource(R.string.column_wizard_run_all),
                         style = MaterialTheme.typography.labelLarge,
+                        fontSize = 16.sp,
                     )
                 }
             } else {
@@ -2565,6 +2586,7 @@ private fun WizardBottomBar(
                     Text(
                         text = stringResource(R.string.column_wizard_run_all_rest),
                         style = MaterialTheme.typography.labelLarge,
+                        fontSize = 16.sp,
                     )
                 }
             }
