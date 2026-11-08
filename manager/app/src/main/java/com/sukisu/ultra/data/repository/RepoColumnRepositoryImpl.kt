@@ -175,8 +175,16 @@ class RepoColumnRepositoryImpl(
     private fun fetchBody(target: String): String {
         // 不读 okhttp 磁盘缓存：jsDelivr 给这类 JSON 的 max-age 是 7 天，走共享客户端的缓存会
         // 让运营改过的专栏文案要等一周才生效。noCache 只禁「读缓存」，仍会正常发请求。
+        // jsDelivr 对 @main 别名的服务端缓存也可能滞后很久（实测 PR 合并后仍返回旧内容），
+        // 所以给它加一个按分钟变化的参数，强制回源。
+        val url = if (target.contains("jsdelivr.net")) {
+            val separator = if (target.contains('?')) '&' else '?'
+            "$target${separator}t=${System.currentTimeMillis() / 60_000}"
+        } else {
+            target
+        }
         val request = Request.Builder()
-            .url(target)
+            .url(url)
             .cacheControl(CacheControl.Builder().noCache().build())
             .build()
         return client.newCall(request).execute().use { response ->
