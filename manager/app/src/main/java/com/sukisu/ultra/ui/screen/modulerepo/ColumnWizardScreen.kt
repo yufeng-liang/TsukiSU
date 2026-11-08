@@ -1,5 +1,7 @@
 package com.sukisu.ultra.ui.screen.modulerepo
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -54,6 +56,7 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -811,18 +814,12 @@ private fun ColumnWizardScreenMiuix(
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (state.health != null) {
+            if (state.healthScanning || state.health != null) {
+                // 体检期间也占住卡片位置：骨架高度接近完成态，结果出来时下方内容不会突然跳一下。
                 item(key = "wizard-health") {
-                    ColumnHealthCardMiuix(report = state.health)
-                }
-            } else {
-                // 体检是 root 探针，需要几秒；给个明确的中态，别让人以为这块忘了渲染。
-                item(key = "wizard-health-scanning") {
-                    MiuixText(
-                        text = stringResource(R.string.column_wizard_health_scanning),
-                        color = colorScheme.onSurfaceVariantSummary,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+                    ColumnHealthCardMiuix(
+                        report = if (state.healthScanning) null else state.health,
+                        scanning = state.healthScanning,
                     )
                 }
             }
@@ -896,19 +893,104 @@ private fun ColumnWizardScreenMiuix(
 
 /** 设备现状体检卡（Miuix）。只提示「之前配过一部分」，绝不用来决定跳过哪一步。 */
 @Composable
-private fun ColumnHealthCardMiuix(report: ColumnHealthReport) {
+private fun ColumnHealthCardMiuix(
+    report: ColumnHealthReport?,
+    scanning: Boolean = report == null,
+) {
     // 与 Material 版同一套交互：默认只给结论，点标题行展开九项明细。
     var expanded by rememberSaveable { mutableStateOf(false) }
     val colorScheme = MiuixTheme.colorScheme
-    val missing = report.checks.filter { !it.passed }
     AppCard(
-        modifier = Modifier.fillMaxWidth(),
+        // 固定最小高度，loading 和内容之间切换时外框不跳。
+        modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp),
         insideMargin = PaddingValues(16.dp),
     ) {
+        if (scanning || report == null) {
+            ColumnHealthScanningMiuix()
+        } else {
+            AnimatedVisibility(visible = !scanning, enter = fadeIn(tween(220))) {
+                Column {
+                    val missing = report.checks.filter { !it.passed }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { expanded = !expanded },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        MiuixText(
+                            text = stringResource(R.string.column_health_title_short),
+                            modifier = Modifier.weight(1f),
+                            color = colorScheme.onSurface,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        MiuixText(
+                            text = stringResource(
+                                R.string.column_health_score,
+                                report.passedCount,
+                                report.totalCount,
+                            ),
+                            color = successGreenMiuix(),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Spacer(Modifier.width(2.dp))
+                        MiuixIcon(
+                            imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                            contentDescription = stringResource(
+                                if (expanded) R.string.column_health_collapse else R.string.column_health_expand,
+                            ),
+                            modifier = Modifier.size(18.dp),
+                            tint = colorScheme.onSurfaceVariantSummary,
+                        )
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    HealthLevelRowMiuix(
+                        ok = report.dayLevelReady,
+                        title = stringResource(R.string.column_health_day_level),
+                        okText = stringResource(R.string.column_health_ready),
+                        noText = stringResource(R.string.column_health_not_ready),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    HealthLevelRowMiuix(
+                        ok = report.integrityLevelReady,
+                        title = stringResource(R.string.column_health_integrity_level),
+                        okText = stringResource(R.string.column_health_ready),
+                        noText = stringResource(R.string.column_health_not_ready),
+                    )
+                    if (expanded) {
+                        Spacer(Modifier.height(10.dp))
+                        MiuixHorizontalDivider()
+                        Spacer(Modifier.height(8.dp))
+                        report.checks.forEachIndexed { index, check ->
+                            if (index > 0) Spacer(Modifier.height(6.dp))
+                            HealthCheckDetailRowMiuix(check)
+                        }
+                    } else {
+                        Spacer(Modifier.height(8.dp))
+                        MiuixText(
+                            text = if (missing.isEmpty()) {
+                                stringResource(R.string.column_health_all_pass)
+                            } else {
+                                stringResource(R.string.column_health_missing_hint, missing.size)
+                            },
+                            color = colorScheme.onSurfaceVariantSummary,
+                            fontSize = 13.sp,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 体检中的骨架（Miuix）：标题行 + 小进度圈 + 三条灰条，整体高度贴近完成态。 */
+@Composable
+private fun ColumnHealthScanningMiuix() {
+    val colorScheme = MiuixTheme.colorScheme
+    Column(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { expanded = !expanded },
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             MiuixText(
@@ -918,61 +1000,35 @@ private fun ColumnHealthCardMiuix(report: ColumnHealthReport) {
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
             )
-            MiuixText(
-                text = stringResource(
-                    R.string.column_health_score,
-                    report.passedCount,
-                    report.totalCount,
-                ),
-                color = successGreenMiuix(),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
+            MiuixCircularProgressIndicator(
+                progress = null,
+                size = 16.dp,
+                strokeWidth = 2.dp,
             )
-            Spacer(Modifier.width(2.dp))
-            MiuixIcon(
-                imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                contentDescription = stringResource(
-                    if (expanded) R.string.column_health_collapse else R.string.column_health_expand,
-                ),
-                modifier = Modifier.size(18.dp),
-                tint = colorScheme.onSurfaceVariantSummary,
-            )
-        }
-        Spacer(Modifier.height(10.dp))
-        HealthLevelRowMiuix(
-            ok = report.dayLevelReady,
-            title = stringResource(R.string.column_health_day_level),
-            okText = stringResource(R.string.column_health_ready),
-            noText = stringResource(R.string.column_health_not_ready),
-        )
-        Spacer(Modifier.height(6.dp))
-        HealthLevelRowMiuix(
-            ok = report.integrityLevelReady,
-            title = stringResource(R.string.column_health_integrity_level),
-            okText = stringResource(R.string.column_health_ready),
-            noText = stringResource(R.string.column_health_not_ready),
-        )
-        if (expanded) {
-            Spacer(Modifier.height(10.dp))
-            MiuixHorizontalDivider()
-            Spacer(Modifier.height(8.dp))
-            report.checks.forEachIndexed { index, check ->
-                if (index > 0) Spacer(Modifier.height(6.dp))
-                HealthCheckDetailRowMiuix(check)
-            }
-        } else {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.width(6.dp))
             MiuixText(
-                text = if (missing.isEmpty()) {
-                    stringResource(R.string.column_health_all_pass)
-                } else {
-                    stringResource(R.string.column_health_missing_hint, missing.size)
-                },
+                text = stringResource(R.string.column_health_scanning),
                 color = colorScheme.onSurfaceVariantSummary,
-                fontSize = 13.sp,
+                fontSize = 12.sp,
             )
         }
+        Spacer(Modifier.height(12.dp))
+        HealthSkeletonBarMiuix(0.6f)
+        Spacer(Modifier.height(8.dp))
+        HealthSkeletonBarMiuix(0.45f)
+        Spacer(Modifier.height(8.dp))
+        HealthSkeletonBarMiuix(0.7f)
     }
+}
+
+@Composable
+private fun HealthSkeletonBarMiuix(widthFraction: Float) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth(widthFraction)
+            .height(14.dp)
+            .background(MiuixTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(4.dp)),
+    )
 }
 
 /** 明细里的一行（Miuix）：通过/未通过图标 + 探针原话。 */
@@ -1859,18 +1915,12 @@ private fun ColumnWizardScreenMaterial(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            if (state.health != null) {
+            if (state.healthScanning || state.health != null) {
+                // 体检期间也占住卡片位置：骨架高度接近完成态，结果出来时下方内容不会突然跳一下。
                 item(key = "wizard-health") {
-                    ColumnHealthCard(report = state.health)
-                }
-            } else {
-                // 体检是 root 探针，需要几秒；给个明确的中态，别让人以为这块忘了渲染。
-                item(key = "wizard-health-scanning") {
-                    Text(
-                        text = stringResource(R.string.column_wizard_health_scanning),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+                    ColumnHealthCard(
+                        report = if (state.healthScanning) null else state.health,
+                        scanning = state.healthScanning,
                     )
                 }
             }
@@ -2643,84 +2693,139 @@ private fun successGreen(): Color = if (MaterialTheme.colorScheme.surfaceBright.
  */
 
 @Composable
-private fun ColumnHealthCard(report: ColumnHealthReport) {
+private fun ColumnHealthCard(
+    report: ColumnHealthReport?,
+    scanning: Boolean = report == null,
+) {
     // 明细默认收起：进专题第一眼要的是「这台机器配过没有」这个结论，不是九行探针输出。
     // 想核对每一项再点开——结论文案与明细在同一张卡里，不跳页。
     var expanded by rememberSaveable { mutableStateOf(false) }
-    val missing = report.checks.filter { !it.passed }
     WizardCard(
-        modifier = Modifier.fillMaxWidth(),
+        // 固定最小高度，loading 和内容之间切换时外框不跳。
+        modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp),
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { expanded = !expanded }
-                    .padding(vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.column_health_title_short),
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = stringResource(
-                        R.string.column_health_score,
-                        report.passedCount,
-                        report.totalCount,
-                    ),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = successGreen(),
-                )
-                Icon(
-                    imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                    contentDescription = stringResource(
-                        if (expanded) R.string.column_health_collapse else R.string.column_health_expand,
-                    ),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            HealthLevelRow(
-                ok = report.dayLevelReady,
-                title = stringResource(R.string.column_health_day_level),
-                okText = stringResource(R.string.column_health_ready),
-                noText = stringResource(R.string.column_health_not_ready),
-            )
-            Spacer(Modifier.height(6.dp))
-            HealthLevelRow(
-                ok = report.integrityLevelReady,
-                title = stringResource(R.string.column_health_integrity_level),
-                okText = stringResource(R.string.column_health_ready),
-                noText = stringResource(R.string.column_health_not_ready),
-            )
-            if (expanded) {
-                Spacer(Modifier.height(10.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Spacer(Modifier.height(8.dp))
-                report.checks.forEachIndexed { index, check ->
-                    if (index > 0) Spacer(Modifier.height(6.dp))
-                    HealthCheckDetailRow(check)
-                }
+            if (scanning || report == null) {
+                ColumnHealthScanning()
             } else {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = if (missing.isEmpty()) {
-                        stringResource(R.string.column_health_all_pass)
-                    } else {
-                        stringResource(R.string.column_health_missing_hint, missing.size)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                AnimatedVisibility(visible = !scanning, enter = fadeIn(tween(220))) {
+                    Column {
+                        val missing = report.checks.filter { !it.passed }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { expanded = !expanded }
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.column_health_title_short),
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                text = stringResource(
+                                    R.string.column_health_score,
+                                    report.passedCount,
+                                    report.totalCount,
+                                ),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = successGreen(),
+                            )
+                            Icon(
+                                imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                                contentDescription = stringResource(
+                                    if (expanded) R.string.column_health_collapse else R.string.column_health_expand,
+                                ),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        HealthLevelRow(
+                            ok = report.dayLevelReady,
+                            title = stringResource(R.string.column_health_day_level),
+                            okText = stringResource(R.string.column_health_ready),
+                            noText = stringResource(R.string.column_health_not_ready),
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        HealthLevelRow(
+                            ok = report.integrityLevelReady,
+                            title = stringResource(R.string.column_health_integrity_level),
+                            okText = stringResource(R.string.column_health_ready),
+                            noText = stringResource(R.string.column_health_not_ready),
+                        )
+                        if (expanded) {
+                            Spacer(Modifier.height(10.dp))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            Spacer(Modifier.height(8.dp))
+                            report.checks.forEachIndexed { index, check ->
+                                if (index > 0) Spacer(Modifier.height(6.dp))
+                                HealthCheckDetailRow(check)
+                            }
+                        } else {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = if (missing.isEmpty()) {
+                                    stringResource(R.string.column_health_all_pass)
+                                } else {
+                                    stringResource(R.string.column_health_missing_hint, missing.size)
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
             }
         }
     }
+}
+
+/** 体检中的骨架（Material）：标题行 + 小进度圈 + 三条灰条，整体高度贴近完成态。 */
+@Composable
+private fun ColumnHealthScanning() {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.column_health_title_short),
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.weight(1f),
+            )
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp,
+            )
+            Text(
+                text = stringResource(R.string.column_health_scanning),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        HealthSkeletonBar(0.6f)
+        Spacer(Modifier.height(8.dp))
+        HealthSkeletonBar(0.45f)
+        Spacer(Modifier.height(8.dp))
+        HealthSkeletonBar(0.7f)
+    }
+}
+
+@Composable
+private fun HealthSkeletonBar(widthFraction: Float) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth(widthFraction)
+            .height(14.dp)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(4.dp)),
+    )
 }
 
 /** 明细里的一行：通过/未通过图标 + 探针原话（探针没给话就退回状态文字）。 */

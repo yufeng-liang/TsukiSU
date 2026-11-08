@@ -124,15 +124,29 @@ object ColumnCheckIds {
     const val MOUNT_HIDE = "mount-hide"
     const val ADB = "adb-disabled"
 
+    // 下面这些是「设备现状卡」用的安装检测项，只展示，不参与任何 verify 步骤判据。
+    const val LSPOSED = "lsposed"
+    const val HMA_OSS = "hma-oss"
+    const val TEESIMULATOR = "teesimulator"
+    const val PIF = "pif"
+    const val FUSE_FIXER = "fuse-fixer"
+    const val TRICKY_STORE = "tricky-store"
+
     /** 全部自检项，顺序即界面展示顺序：底座 → 隐藏 → 密钥 → 收尾。 */
     val ALL = listOf(
         ROOT_MANAGER,
         ZYGISK_NEXT,
-        MOUNT_HIDE,
+        LSPOSED,
+        HMA_OSS,
         HMA_CONFIG,
         DENYLIST,
-        TARGET_LIST,
+        MOUNT_HIDE,
+        TEESIMULATOR,
+        PIF,
         KEYBOX,
+        TARGET_LIST,
+        TRICKY_STORE,
+        FUSE_FIXER,
         ADB,
     )
 }
@@ -183,6 +197,8 @@ data class ColumnWizardUiState(
     val preflight: ColumnPreflight? = null,
     /** 进专题时跑一次的设备体检结果，用来在顶部提示「你之前已经配过」。 */
     val health: ColumnHealthReport? = null,
+    /** 设备体检是否正在进行：界面先显示骨架卡，避免结果出来时卡片突然撑开导致高度跳变。 */
+    val healthScanning: Boolean = false,
     /**
      * 专题里那些 `installApp` 步骤声明的包名，已经在设备上装着的集合。
      *

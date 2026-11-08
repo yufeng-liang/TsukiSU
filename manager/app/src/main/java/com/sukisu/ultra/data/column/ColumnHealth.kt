@@ -26,19 +26,24 @@ data class ColumnHealthReport(
     fun passed(id: String): Boolean = checks.firstOrNull { it.id == id }?.passed == true
 
     /**
-     * 日用级（过银行/支付）的达标判据：Zygisk 加载器 + 应用列表隐藏 + 排除策略 + 关 ADB。
-     *
-     * 不看 LSPosed：HMA-OSS 是 Zygisk 模块，不需要 Xposed；只有可选的 FuseFixer 才需要。
+     * 日用级（过银行/支付）的达标判据：root 管理器 + Zygisk 加载器 + LSPosed + HMA-OSS
+     * + 应用列表隐藏 + 排除策略 + 关 ADB。
      */
     val dayLevelReady: Boolean
-        get() = passed(ColumnCheckIds.ZYGISK_NEXT) &&
+        get() = passed(ColumnCheckIds.ROOT_MANAGER) &&
+            passed(ColumnCheckIds.ZYGISK_NEXT) &&
+            passed(ColumnCheckIds.LSPOSED) &&
+            passed(ColumnCheckIds.HMA_OSS) &&
             passed(ColumnCheckIds.HMA_CONFIG) &&
             passed(ColumnCheckIds.DENYLIST) &&
             passed(ColumnCheckIds.ADB)
 
-    /** 三绿（过 Play Integrity）的达标判据：日用级 + 密钥材料有效。 */
+    /** 三绿（过 Play Integrity）的达标判据：日用级 + TEE 模拟 + PIF + 密钥材料有效。 */
     val integrityLevelReady: Boolean
-        get() = dayLevelReady && passed(ColumnCheckIds.KEYBOX)
+        get() = dayLevelReady &&
+            passed(ColumnCheckIds.TEESIMULATOR) &&
+            passed(ColumnCheckIds.PIF) &&
+            passed(ColumnCheckIds.KEYBOX)
 }
 
 /** 把自检结果按专题用到的 checkId 裁成一份报告，顺序沿用传入的 id 顺序。 */

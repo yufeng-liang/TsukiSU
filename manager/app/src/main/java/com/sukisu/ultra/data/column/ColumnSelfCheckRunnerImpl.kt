@@ -43,6 +43,12 @@ class ColumnSelfCheckRunnerImpl : ColumnSelfCheckRunner {
     private fun checkOne(shell: Shell, id: String): ColumnCheckResult = when (id) {
         ColumnCheckIds.ROOT_MANAGER -> checkRootManager(shell)
         ColumnCheckIds.ZYGISK_NEXT -> checkZygiskNext(shell)
+        ColumnCheckIds.LSPOSED -> checkLsposed(shell)
+        ColumnCheckIds.HMA_OSS -> checkHmaOss(shell)
+        ColumnCheckIds.TEESIMULATOR -> checkTeeSimulator(shell)
+        ColumnCheckIds.PIF -> checkPif(shell)
+        ColumnCheckIds.FUSE_FIXER -> checkFuseFixer(shell)
+        ColumnCheckIds.TRICKY_STORE -> checkTrickyStoreInstalled(shell)
         ColumnCheckIds.HYBRID_MOUNT -> checkHybridMount(shell)
         ColumnCheckIds.MOUNT_HIDE -> checkMountHide(shell)
         ColumnCheckIds.HMA_CONFIG -> checkHmaConfig(shell)
@@ -92,6 +98,89 @@ class ColumnSelfCheckRunnerImpl : ColumnSelfCheckRunner {
             passed(ColumnCheckIds.ZYGISK_NEXT, "已安装（ZygiskNext $version）")
         }
     }
+
+    /**
+     * 模块安装检测的公共逻辑：probe 输出候选模块目录，取第一个存在目录作为结果。
+     * 目录存在即算安装；有 module.prop 时顺带读 version，读不到也不影响「已安装」判定。
+     */
+    private fun checkModuleByProbe(
+        shell: Shell,
+        id: String,
+        label: String,
+        probe: String,
+        missing: String,
+    ): ColumnCheckResult {
+        val dir = shell.execCmd(probe).nonBlankLines.firstOrNull()
+            ?: return failed(id, missing)
+        val version = shell.execCmd(
+            "if [ -f \"$dir/module.prop\" ]; then sed -n 's/^version=//p' \"$dir/module.prop\" | head -n 1; fi"
+        ).text.trim().trimStart('v', 'V')
+        return if (version.isEmpty()) {
+            passed(id, "已安装（$label，未读到版本号）")
+        } else {
+            passed(id, "已安装（$label $version）")
+        }
+    }
+
+    /** LSPosed：Zygisk 版和经典版两个目录任一存在即可。 */
+    private fun checkLsposed(shell: Shell): ColumnCheckResult = checkModuleByProbe(
+        shell = shell,
+        id = ColumnCheckIds.LSPOSED,
+        label = "LSPosed",
+        probe = "for d in /data/adb/modules/zygisk_lsposed /data/adb/modules/lsposed; " +
+            "do [ -d \"\$d\" ] && echo \"\$d\"; done",
+        missing = "未检测到 /data/adb/modules/zygisk_lsposed 或 /data/adb/modules/lsposed",
+    )
+
+    /** HMA-OSS：固定目录或名字含 hma_oss 的模块目录任一存在即可。 */
+    private fun checkHmaOss(shell: Shell): ColumnCheckResult = checkModuleByProbe(
+        shell = shell,
+        id = ColumnCheckIds.HMA_OSS,
+        label = "HMA-OSS",
+        probe = "for d in /data/adb/modules/*; do [ -d \"\$d\" ] || continue; " +
+            "b=\${d##*/}; case \"\$b\" in *[Hh][Mm][Aa]_[Oo][Ss][Ss]*) echo \"\$d\";; esac; done",
+        missing = "未检测到名字含 hma_oss 的模块目录",
+    )
+
+    /** TeeSimulator：模块目录或 /data/adb/teesim 任一存在即可。 */
+    private fun checkTeeSimulator(shell: Shell): ColumnCheckResult = checkModuleByProbe(
+        shell = shell,
+        id = ColumnCheckIds.TEESIMULATOR,
+        label = "TeeSimulator",
+        probe = "for d in /data/adb/modules/teesim /data/adb/teesim; " +
+            "do [ -d \"\$d\" ] && echo \"\$d\"; done",
+        missing = "未检测到 /data/adb/modules/teesim 或 /data/adb/teesim",
+    )
+
+    /** Play Integrity Fix：两个常见模块目录任一存在即可。 */
+    private fun checkPif(shell: Shell): ColumnCheckResult = checkModuleByProbe(
+        shell = shell,
+        id = ColumnCheckIds.PIF,
+        label = "PIF",
+        probe = "for d in /data/adb/modules/playintegrityfix /data/adb/modules/playintegrityfork; " +
+            "do [ -d \"\$d\" ] && echo \"\$d\"; done",
+        missing = "未检测到 /data/adb/modules/playintegrityfix 或 /data/adb/modules/playintegrityfork",
+    )
+
+    /** FuseFixer：模块目录名含 fusefixer / fuse_fixer（大小写不敏感）即可。 */
+    private fun checkFuseFixer(shell: Shell): ColumnCheckResult = checkModuleByProbe(
+        shell = shell,
+        id = ColumnCheckIds.FUSE_FIXER,
+        label = "FuseFixer",
+        probe = "for d in /data/adb/modules/*; do [ -d \"\$d\" ] || continue; " +
+            "b=\${d##*/}; case \"\$b\" in *[Ff][Uu][Ss][Ee]*[Ff][Ii][Xx][Ee][Rr]*) echo \"\$d\";; esac; done",
+        missing = "未检测到名字含 fusefixer / fuse_fixer 的模块目录",
+    )
+
+    /** Tricky Store 安装状态（旧方案）：只表示装没装，target.txt 由 target-list 单独检查。 */
+    private fun checkTrickyStoreInstalled(shell: Shell): ColumnCheckResult = checkModuleByProbe(
+        shell = shell,
+        id = ColumnCheckIds.TRICKY_STORE,
+        label = "Tricky Store",
+        probe = "for d in /data/adb/modules/tricky_store /data/adb/tricky_store; " +
+            "do [ -d \"\$d\" ] && echo \"\$d\"; done",
+        missing = "未检测到 /data/adb/modules/tricky_store 或 /data/adb/tricky_store",
+    )
 
     /** 3. Hybrid Mount：模块目录存在即可。 */
     private fun checkHybridMount(shell: Shell): ColumnCheckResult {

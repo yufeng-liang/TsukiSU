@@ -118,6 +118,8 @@ class ColumnWizardViewModel(
                     message = saved?.second.orEmpty(),
                 )
             },
+            // 体检要跑 root 探针，先置为扫描中，让界面从第一帧就显示骨架卡。
+            healthScanning = true,
         )
         val savedOptedIn = runCatching {
             progressPrefs().getStringSet(optedKey(topic.id), null)
@@ -205,6 +207,7 @@ class ColumnWizardViewModel(
     fun runHealthCheck() {
         if (healthRunning) return
         healthRunning = true
+        _uiState.update { it.copy(healthScanning = true) }
         viewModelScope.launch {
             try {
                 val results = selfCheck.check(ColumnCheckIds.ALL)
@@ -215,6 +218,8 @@ class ColumnWizardViewModel(
                 appendLog("设备体检没跑成：${error.message ?: "未知错误"}（不影响后续步骤）")
             } finally {
                 healthRunning = false
+                // 无论成功还是失败都要结束扫描态，否则骨架会一直转。
+                _uiState.update { it.copy(healthScanning = false) }
             }
         }
     }
