@@ -1291,9 +1291,9 @@ private fun WizardStepCardMiuix(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier
                                 .weight(1f)
-                                .clickable { noteExpanded = !noteExpanded },
+                                .clickable(enabled = noteOverflows) { noteExpanded = !noteExpanded },
                         )
-                        if (noteExpanded || noteOverflows) {
+                        if (noteOverflows) {
                             MiuixText(
                                 text = "$noteLabel $noteArrow",
                                 color = colorScheme.primary,
@@ -1329,9 +1329,11 @@ private fun WizardStepCardMiuix(
                         horizontalArrangement = Arrangement.spacedBy(3.dp),
                     ) {
                         MiuixText(
-                            text = stringResource(
-                                if (isAiEntry) R.string.column_wizard_open_ai else R.string.column_wizard_open_link,
-                            ),
+                            text = if (isAiEntry) {
+                                stringResource(R.string.column_wizard_open_ai)
+                            } else {
+                                step.linkLabel.ifBlank { stringResource(R.string.column_wizard_open_link) }
+                            },
                             color = colorScheme.primary,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
@@ -2207,9 +2209,9 @@ private fun WizardStepCard(
                         },
                         modifier = Modifier
                             .weight(1f)
-                            .clickable { noteExpanded = !noteExpanded },
+                            .clickable(enabled = noteOverflows) { noteExpanded = !noteExpanded },
                     )
-                    if (noteExpanded || noteOverflows) {
+                    if (noteOverflows) {
                         Text(
                             text = "$noteLabel $noteArrow",
                             style = MaterialTheme.typography.labelSmall,
@@ -2247,9 +2249,11 @@ private fun WizardStepCard(
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
                 ) {
                     Text(
-                        text = stringResource(
-                            if (isAiEntry) R.string.column_wizard_open_ai else R.string.column_wizard_open_link,
-                        ),
+                        text = if (isAiEntry) {
+                            stringResource(R.string.column_wizard_open_ai)
+                        } else {
+                            step.linkLabel.ifBlank { stringResource(R.string.column_wizard_open_link) }
+                        },
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                     )

@@ -280,29 +280,53 @@ class ColumnSelfCheckRunnerImpl : ColumnSelfCheckRunner {
         }
     }
 
-    /** 8. keybox：文件要够大，证书要没过期（能解析出 notAfter 时才比）。 */
+    /** keybox 可能落在这两个目录：TEESimulator 读 teesim，TrickyStore 读 tricky_store。 */
+    private val keyboxPaths = listOf(
+        "/data/adb/teesim/keybox.xml",
+        "/data/adb/tricky_store/keybox.xml",
+    )
+
+    /** 超过这个天数没有任何更新，就在体检里提示换一份（keybox 会被 Google 吊销）。 */
+    private val keyboxStaleDays = 7L
+
+    /** 8. keybox：文件要够大，证书要没过期；放太久（>7 天）额外提示换一份。 */
     private fun checkKeybox(shell: Shell): ColumnCheckResult {
-        val probe = shell.execCmd(
-            "if [ -f /data/adb/tricky_store/keybox.xml ]; then echo FILE; " +
-                "wc -c < /data/adb/tricky_store/keybox.xml; else echo NOFILE; fi"
-        )
-        if (probe.line(0) != "FILE") {
-            return failed(ColumnCheckIds.KEYBOX, "未检测到 /data/adb/tricky_store/keybox.xml")
-        }
-        val size = probe.line(1)?.toLongOrNull() ?: 0L
+        val path = keyboxPaths.firstOrNull { shell.execCmd("test -f $it && echo y").text.trim() == "y" }
+            ?: return failed(
+                ColumnCheckIds.KEYBOX,
+                "未检测到 keybox.xml（${keyboxPaths.joinToString(" / ")}）",
+            )
+        val probe = shell.execCmd("wc -c < $path; stat -c %Y $path 2>/dev/null || echo 0")
+        val size = probe.line(0)?.trim()?.toLongOrNull() ?: 0L
         if (size <= 1000L) {
             return failed(ColumnCheckIds.KEYBOX, "keybox.xml 只有 $size 字节，内容不完整")
         }
-        val xml = shell.execCmd("cat /data/adb/tricky_store/keybox.xml").text
+        val modifiedSeconds = probe.line(1)?.trim()?.toLongOrNull() ?: 0L
+        val ageDays = if (modifiedSeconds > 0L) {
+            (System.currentTimeMillis() / 1000L - modifiedSeconds) / 86_400L
+        } else {
+            -1L
+        }
+        val stale = ageDays > keyboxStaleDays
+        val ageNote = when {
+            ageDays < 0L -> ""
+            stale -> "，$ageDays 天没更新过，建议重新获取"
+            else -> "，$ageDays 天前更新"
+        }
+        val xml = shell.execCmd("cat $path").text
         // 读不出到期时间不等于无效：keybox 的格式不止一种，缺 NotAfter 时只按大小判定，
         // 并在 detail 里说清楚「有效期没验」，不冒充成「已验证」。
         val expiry = parseKeyboxExpiry(xml)
-            ?: return passed(ColumnCheckIds.KEYBOX, "文件存在（$size 字节），但未能解析证书到期时间，请自行确认有效期")
+            ?: return if (stale) {
+                failed(ColumnCheckIds.KEYBOX, "文件存在（$size 字节）$ageNote，请重新获取后重试")
+            } else {
+                passed(ColumnCheckIds.KEYBOX, "文件存在（$size 字节）$ageNote，但未能解析证书到期时间，请自行确认有效期")
+            }
         val today = LocalDate.now()
-        return if (expiry.isBefore(today)) {
-            failed(ColumnCheckIds.KEYBOX, "证书已在 $expiry 过期")
-        } else {
-            passed(ColumnCheckIds.KEYBOX, "证书有效，最早 $expiry 到期（$size 字节）")
+        return when {
+            expiry.isBefore(today) -> failed(ColumnCheckIds.KEYBOX, "证书已在 $expiry 过期（$path$ageNote）")
+            stale -> failed(ColumnCheckIds.KEYBOX, "证书到 $expiry，但$ageNote")
+            else -> passed(ColumnCheckIds.KEYBOX, "证书有效，最早 $expiry 到期（$size 字节$ageNote）")
         }
     }
 
