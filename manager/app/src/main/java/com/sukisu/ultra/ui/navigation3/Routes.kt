@@ -152,6 +152,8 @@ sealed interface Route : NavKey, Parcelable {
     data class ColumnWizard(
         val columnId: String,
         val topicId: String,
+        /** 从主页「接着进行」卡片进入时要高亮的步骤 id；直接从专栏进入时为空串。 */
+        val highlightStepId: String = "",
     ) : Route
 
     /**

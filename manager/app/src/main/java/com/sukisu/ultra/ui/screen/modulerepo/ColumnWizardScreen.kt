@@ -51,10 +51,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
@@ -63,6 +61,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.clickable
@@ -115,6 +114,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -228,6 +228,8 @@ fun ColumnWizardScreen(
     onRebootNow: () -> Unit = {},
     /** 重启倒计时卡片上点「稍后我自己重启」。 */
     onRebootLater: () -> Unit = {},
+    /** 主页「接着进行」带过来的步骤 id；命中时给对应步骤卡加深色描边提示。 */
+    highlightStepId: String = "",
 ) {
     // 测试专用：长按顶栏标题打开预览菜单。庆祝动画和重启倒计时都要跑完整个专题才会出现，
     // 而验收时不能真的执行隐藏步骤（会改设备、会重启），所以留一个只播 UI、不碰设备的入口。
@@ -259,6 +261,7 @@ fun ColumnWizardScreen(
             onToggleOptIn = onToggleOptIn,
             onMarkDone = onMarkDone,
             onOpenAi = onOpenAi,
+            highlightStepId = highlightStepId,
             onLongPressTitle = { showTestMenu = true },
         )
 
@@ -275,6 +278,7 @@ fun ColumnWizardScreen(
             onToggleOptIn = onToggleOptIn,
             onMarkDone = onMarkDone,
             onOpenAi = onOpenAi,
+            highlightStepId = highlightStepId,
             onLongPressTitle = { showTestMenu = true },
         )
     }
@@ -657,6 +661,7 @@ private fun ColumnWizardScreenMiuix(
     onToggleOptIn: (RepoColumnStep) -> Unit,
     onMarkDone: (RepoColumnStep) -> Unit,
     onOpenAi: () -> Unit,
+    highlightStepId: String = "",
     onLongPressTitle: () -> Unit = {},
 ) {
     val colorScheme = MiuixTheme.colorScheme
@@ -675,6 +680,14 @@ private fun ColumnWizardScreenMiuix(
     // 列表照样完整，「开始第一步」也能点；否则会出现「专题有 8 步、界面一片空白」的假死。
     val orderedStates = topic.steps.map { step ->
         state.stepStates.firstOrNull { it.step.id == step.id } ?: ColumnStepUiState(step = step)
+    }
+    // 从主页「接着进行」进来时高亮下一步：先把列表滚到那一步，用户才看得到。
+    val listState = rememberLazyListState()
+    LaunchedEffect(highlightStepId) {
+        if (highlightStepId.isNotEmpty()) {
+            val index = orderedStates.indexOfFirst { it.step.id == highlightStepId }
+            if (index >= 0) listState.animateScrollToItem(index)
+        }
     }
     val total = orderedStates.size
     val finished = orderedStates.count {
@@ -780,6 +793,7 @@ private fun ColumnWizardScreenMiuix(
             .only(WindowInsetsSides.Horizontal),
     ) { innerPadding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
                 .fillMaxSize()
@@ -853,6 +867,7 @@ private fun ColumnWizardScreenMiuix(
                     onUpgrade = { onUpgradeStep(uiState.step) },
                     onMarkDone = { onMarkDone(uiState.step) },
                     onOpenAi = onOpenAi,
+                    highlighted = highlightStepId.isNotEmpty() && uiState.step.id == highlightStepId,
                 )
             }
             if (state.log.isNotEmpty()) {
@@ -1102,6 +1117,7 @@ private fun WizardStepCardMiuix(
     onUpgrade: () -> Unit,
     onMarkDone: () -> Unit,
     onOpenAi: () -> Unit,
+    highlighted: Boolean = false,
 ) {
     val colorScheme = MiuixTheme.colorScheme
     // 「打开官方页面」要用它 startActivity；Composable 里取一次，别在 onClick 里取。
@@ -1111,9 +1127,6 @@ private fun WizardStepCardMiuix(
     val statusColor = wizardStatusColorMiuix(uiState.status)
     // note 常是整段说明，全展开会把卡片撑得很高：默认只看 3 行，超出时才给「展开 / 收起」。
     var noteExpanded by rememberSaveable(step.id) { mutableStateOf(false) }
-    // 折叠时的截断点：-1 = 还没量过。量到之后固定下来，避免每帧重排；
-    // 有了它才能把「…展开」正好接在被截断的那一行末尾，而不是另起一行。
-    var noteCut by remember(step.id) { mutableStateOf(-1) }
     val canSkip = step.optional && (
         uiState.status == ColumnStepStatus.PENDING ||
             uiState.status == ColumnStepStatus.FAILED ||
@@ -1132,6 +1145,13 @@ private fun WizardStepCardMiuix(
     AppCard(
         modifier = Modifier
             .fillMaxWidth()
+            .then(
+                if (highlighted) {
+                    Modifier.border(2.dp, colorScheme.primary, RoundedCornerShape(16.dp))
+                } else {
+                    Modifier
+                },
+            )
             .clickable(enabled = canRun) { cardAction?.invoke() },
         insideMargin = PaddingValues(16.dp),
     ) {
@@ -1196,50 +1216,31 @@ private fun WizardStepCardMiuix(
                     }
                 }
                 if (step.note.isNotEmpty()) {
-                    // 与 Material 版同一套交互：「展开 / 收起」接在正文末尾、整段可点。
+                    // 正文最多三行，展开按钮固定在右侧，不参与正文的截断计算。
                     val noteLabel = stringResource(
                         if (noteExpanded) R.string.column_wizard_note_less
                         else R.string.column_wizard_note_more,
                     )
                     val noteArrow = if (noteExpanded) "＜" else "＞"
-                    val noteSuffix = "$noteLabel $noteArrow"
-                    val noteReserve = noteSuffix.length + 1
-                    val noteBody = when {
-                        noteExpanded -> step.note
-                        noteCut in 1 until step.note.length -> step.note.substring(0, noteCut) + "…"
-                        else -> step.note
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                        MiuixText(
+                            text = step.note,
+                            modifier = Modifier.weight(1f),
+                            color = colorScheme.onSurfaceVariantSummary,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                            maxLines = if (noteExpanded) Int.MAX_VALUE else NOTE_COLLAPSED_LINES,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        MiuixTextButton(
+                            text = "$noteLabel $noteArrow",
+                            onClick = { noteExpanded = !noteExpanded },
+                            minWidth = 0.dp,
+                            minHeight = 0.dp,
+                            insideMargin = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                            colors = MiuixButtonDefaults.textButtonColorsPrimary(),
+                        )
                     }
-                    val noteAnnotated = buildAnnotatedString {
-                        append(noteBody)
-                        when {
-                            noteExpanded -> {
-                                append("  ")
-                                withStyle(SpanStyle(color = colorScheme.primary, fontWeight = FontWeight.SemiBold)) {
-                                    append(noteSuffix)
-                                }
-                            }
-                            noteCut in 1 until step.note.length ->
-                                withStyle(SpanStyle(color = colorScheme.primary, fontWeight = FontWeight.SemiBold)) {
-                                    append(noteSuffix)
-                                }
-                            else -> Unit
-                        }
-                    }
-                    MiuixText(
-                        text = noteAnnotated,
-                        modifier = Modifier.clickable { noteExpanded = !noteExpanded },
-                        color = colorScheme.onSurfaceVariantSummary,
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp,
-                        maxLines = if (noteExpanded) Int.MAX_VALUE else NOTE_COLLAPSED_LINES,
-                        overflow = TextOverflow.Ellipsis,
-                        onTextLayout = { layout ->
-                            if (!noteExpanded && noteCut < 0 && layout.hasVisualOverflow) {
-                                noteCut = (layout.getLineEnd(NOTE_COLLAPSED_LINES - 1, true) - noteReserve)
-                                    .coerceAtLeast(1)
-                            }
-                        },
-                    )
                 }
                 // 官方只肯走群/网盘发的检测器（春秋），商店给不了直链，但能把官方入口摆出来；
                 // 链接来自索引仓，只放行 http/https，点了也只是打开浏览器，不执行任何东西。
@@ -1351,12 +1352,12 @@ private fun StepBadgeMiuix(index: Int, status: ColumnStepStatus) {
                 modifier = Modifier
                     .size(30.dp)
                     .clip(CircleShape)
-                    .background(colorScheme.surfaceContainerHighest),
+                    .background(colorScheme.surfaceContainerHigh),
                 contentAlignment = Alignment.Center,
             ) {
                 MiuixText(
                     text = index.toString(),
-                    color = colorScheme.onSurfaceVariantSummary,
+                    color = colorScheme.onSurface,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -1386,12 +1387,12 @@ private fun StepBadgeMiuix(index: Int, status: ColumnStepStatus) {
                 modifier = Modifier
                     .size(30.dp)
                     .clip(CircleShape)
-                    .background(colorScheme.surfaceContainerHighest),
+                    .background(colorScheme.surfaceContainerHigh),
                 contentAlignment = Alignment.Center,
             ) {
                 MiuixText(
                     text = index.toString(),
-                    color = colorScheme.outline,
+                    color = colorScheme.onSurface,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -1407,33 +1408,46 @@ private fun StepBadgeMiuix(index: Int, status: ColumnStepStatus) {
     }
 }
 
-/** 命令原文块（Miuix）：圆角浅底 + 左侧主色竖条，等宽字体，长按可以选中复制。 */
+/** 代码块统一使用的深色背景，Material / Miuix 两套主题共用。 */
+private val CodeBlockBackground = Color(0xFF11151C)
+
+/**
+ * 给 shell 命令做简单高亮：命令名、选项、路径、管道符分别用不同颜色。
+ * 只按空格切 token，不追求完整 shell 语法；用于展示已足够。
+ */
+private fun highlightCommand(command: String): AnnotatedString = buildAnnotatedString {
+    val tokens = command.split(' ')
+    tokens.forEachIndexed { index, token ->
+        if (index > 0) append(' ')
+        val color = when {
+            index == 0 -> Color(0xFF7DD3FC)
+            token == "|" || token == ">" || token == "&&" || token == ";" -> Color(0xFF94A3B8)
+            token.startsWith("-") -> Color(0xFFFCA5A5)
+            token.startsWith("/") -> Color(0xFF86EFAC)
+            else -> Color(0xFFE5E7EB)
+        }
+        withStyle(SpanStyle(color = color)) { append(token) }
+    }
+}
+
+/** 命令原文块（Miuix）：深色圆角底，等宽字体 + 语法高亮，长按可以选中复制。 */
 @Composable
 private fun CommandBlockMiuix(command: String) {
-    val colorScheme = MiuixTheme.colorScheme
     SelectionContainer {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(IntrinsicSize.Min)
                 .clip(RoundedCornerShape(12.dp))
-                .background(colorScheme.surfaceContainerHigh),
+                .background(CodeBlockBackground)
+                .padding(12.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .width(3.dp)
-                    .fillMaxHeight()
-                    .background(colorScheme.primary),
+            MiuixText(
+                text = highlightCommand(command),
+                color = Color(0xFFE5E7EB),
+                fontSize = 12.sp,
+                fontFamily = FontFamily.Monospace,
+                lineHeight = 18.sp,
             )
-            Column(modifier = Modifier.padding(12.dp)) {
-                MiuixText(
-                    text = command,
-                    color = colorScheme.onSurfaceVariantSummary,
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace,
-                    lineHeight = 18.sp,
-                )
-            }
         }
     }
 }
@@ -1698,6 +1712,7 @@ private fun ColumnWizardScreenMaterial(
     onToggleOptIn: (RepoColumnStep) -> Unit,
     onMarkDone: (RepoColumnStep) -> Unit,
     onOpenAi: () -> Unit,
+    highlightStepId: String = "",
     onLongPressTitle: () -> Unit = {},
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -1706,6 +1721,14 @@ private fun ColumnWizardScreenMaterial(
     // 列表照样完整，「开始第一步」也能点；否则会出现「专题有 8 步、界面一片空白」的假死。
     val orderedStates = topic.steps.map { step ->
         state.stepStates.firstOrNull { it.step.id == step.id } ?: ColumnStepUiState(step = step)
+    }
+    // 从主页「接着进行」进来时高亮下一步：先把列表滚到那一步，用户才看得到。
+    val listState = rememberLazyListState()
+    LaunchedEffect(highlightStepId) {
+        if (highlightStepId.isNotEmpty()) {
+            val index = orderedStates.indexOfFirst { it.step.id == highlightStepId }
+            if (index >= 0) listState.animateScrollToItem(index)
+        }
     }
     val total = orderedStates.size
     val finished = orderedStates.count {
@@ -1792,6 +1815,7 @@ private fun ColumnWizardScreenMaterial(
         contentWindowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal),
     ) { innerPadding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
@@ -1866,6 +1890,7 @@ private fun ColumnWizardScreenMaterial(
                     onUpgrade = { onUpgradeStep(uiState.step) },
                     onMarkDone = { onMarkDone(uiState.step) },
                     onOpenAi = onOpenAi,
+                    highlighted = highlightStepId.isNotEmpty() && uiState.step.id == highlightStepId,
                 )
             }
             if (state.log.isNotEmpty()) {
@@ -1990,14 +2015,12 @@ private fun WizardStepCard(
     onUpgrade: () -> Unit,
     onMarkDone: () -> Unit,
     onOpenAi: () -> Unit,
+    highlighted: Boolean = false,
 ) {
     val step = uiState.step
     val skipped = uiState.status == ColumnStepStatus.SKIPPED
     // note 常是整段说明，全展开会把卡片撑得很高：默认只看 3 行，超出时才给「展开 / 收起」。
     var noteExpanded by rememberSaveable(step.id) { mutableStateOf(false) }
-    // 折叠时的截断点：-1 = 还没量过。量到之后固定下来，避免每帧重排；
-    // 有了它才能把「…展开」正好接在被截断的那一行末尾，而不是另起一行。
-    var noteCut by remember(step.id) { mutableStateOf(-1) }
     val context = LocalContext.current
     val canSkip = step.optional && (
         uiState.status == ColumnStepStatus.PENDING ||
@@ -2017,6 +2040,13 @@ private fun WizardStepCard(
     WizardCard(
         modifier = Modifier
             .fillMaxWidth()
+            .then(
+                if (highlighted) {
+                    Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp))
+                } else {
+                    Modifier
+                },
+            )
             .clickable(enabled = canRun) { cardAction?.invoke() },
     ) {
         Column(
@@ -2081,52 +2111,32 @@ private fun WizardStepCard(
                 }
             }
             if (step.note.isNotEmpty()) {
-                // 「展开 / 收起」不进布局，直接接在正文末尾：折叠时它落在我截断的那一行，
-                // 展开时跟在最后一句后面。整段文字都能点，不用去瞄一个小按钮。
+                // 正文最多三行，展开按钮固定在右侧，不参与正文的截断计算。
                 val noteLabel = stringResource(
                     if (noteExpanded) R.string.column_wizard_note_less
                     else R.string.column_wizard_note_more,
                 )
                 val noteArrow = if (noteExpanded) "‹" else "›"
-                val noteSuffix = "$noteLabel $noteArrow"
-                val noteReserve = noteSuffix.length + 1
-                val noteBody = when {
-                    noteExpanded -> step.note
-                    noteCut in 1 until step.note.length -> step.note.substring(0, noteCut) + "…"
-                    else -> step.note
-                }
-                val noteAnnotated = buildAnnotatedString {
-                    append(noteBody)
-                    when {
-                        noteExpanded -> {
-                            append("  ")
-                            withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)) {
-                                append(noteSuffix)
-                            }
-                        }
-                        noteCut in 1 until step.note.length ->
-                            withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)) {
-                                append(noteSuffix)
-                            }
-                        else -> Unit
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                    Text(
+                        text = step.note,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = if (noteExpanded) Int.MAX_VALUE else NOTE_COLLAPSED_LINES,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    TextButton(
+                        onClick = { noteExpanded = !noteExpanded },
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                    ) {
+                        Text(
+                            text = "$noteLabel $noteArrow",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                     }
                 }
-                Text(
-                    text = noteAnnotated,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = if (noteExpanded) Int.MAX_VALUE else NOTE_COLLAPSED_LINES,
-                    overflow = TextOverflow.Ellipsis,
-                    onTextLayout = { layout ->
-                        // 第一遍按全文量：被省略号截断就记住第三行的可见末尾，留出后缀宽度再截，
-                        // 第二遍拼上「…展开」正好填满那一行，不会再被省略号吃掉。
-                        if (!noteExpanded && noteCut < 0 && layout.hasVisualOverflow) {
-                            noteCut = (layout.getLineEnd(NOTE_COLLAPSED_LINES - 1, true) - noteReserve)
-                                .coerceAtLeast(1)
-                        }
-                    },
-                    modifier = Modifier.clickable { noteExpanded = !noteExpanded },
-                )
             }
             // 官方只肯走群/网盘发的检测器（春秋），商店给不了直链，但能把官方入口摆出来；
             // 链接来自索引仓，只放行 http/https，点了也只是打开浏览器，不执行任何东西。
@@ -2258,14 +2268,14 @@ private fun StepBadge(index: Int, status: ColumnStepStatus) {
                 modifier = Modifier
                     .size(30.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = index.toString(),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
 
@@ -2292,14 +2302,14 @@ private fun StepBadge(index: Int, status: ColumnStepStatus) {
                 modifier = Modifier
                     .size(30.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = index.toString(),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.outline,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
 
@@ -2314,32 +2324,24 @@ private fun StepBadge(index: Int, status: ColumnStepStatus) {
     }
 }
 
-/** 命令原文：圆角浅底 + 左侧主色竖条，等宽字体，长按可以选中复制。 */
+/** 命令原文：深色圆角底，等宽字体 + 语法高亮，长按可以选中复制。 */
 @Composable
 private fun CommandBlock(command: String) {
     SelectionContainer {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(IntrinsicSize.Min)
                 .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                .background(CodeBlockBackground)
+                .padding(12.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .width(3.dp)
-                    .fillMaxHeight()
-                    .background(MaterialTheme.colorScheme.primary),
+            Text(
+                text = highlightCommand(command),
+                fontFamily = FontFamily.Monospace,
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                color = Color(0xFFE5E7EB),
             )
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text(
-                    text = command,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 12.sp,
-                    lineHeight = 18.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
         }
     }
 }

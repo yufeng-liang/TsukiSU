@@ -677,7 +677,8 @@ class ColumnWizardViewModel(
             appendLog("「${step.title}」不是可选项，不能跳过；确实做过了请点「标记为已完成」")
             return
         }
-        updateStep(step.id) { it.copy(status = ColumnStepStatus.SKIPPED, message = "已跳过") }
+        // 状态标签已经显示「已跳过」，这里不再重复写一遍。
+        updateStep(step.id) { it.copy(status = ColumnStepStatus.SKIPPED, message = "") }
         appendLog("跳过步骤「${step.title}」")
         maybeFinish()
     }
@@ -685,7 +686,8 @@ class ColumnWizardViewModel(
     /** 用户按提示自己做完了（重启回来、装好了 APK、自己确认过），把这一步标成完成。 */
     fun markDone(step: RepoColumnStep) {
         if (runningStep) return
-        updateStep(step.id) { it.copy(status = ColumnStepStatus.SUCCESS, message = "已完成（用户确认）") }
+        // 状态标签同样已显示完成，不再重复。
+        updateStep(step.id) { it.copy(status = ColumnStepStatus.SUCCESS, message = "") }
         appendLog("「${step.title}」已标记为完成")
         maybeFinish()
     }
@@ -859,6 +861,7 @@ class ColumnWizardViewModel(
                     totalSteps = state.stepStates.size,
                     done = state.done,
                     nextStepTitle = next?.step?.title.orEmpty(),
+                    nextStepId = next?.step?.id.orEmpty(),
                 ),
             )
         }

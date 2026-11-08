@@ -23,6 +23,8 @@ data class ColumnProgressEntry(
     val done: Boolean,
     /** 下一步该做什么的标题；全部落定时为空串。 */
     val nextStepTitle: String,
+    /** 下一步的步骤 id；主页卡片用它直达向导并高亮该步骤，空串表示没有下一步。 */
+    val nextStepId: String = "",
 ) {
     val isRunning: Boolean get() = !done && settledSteps in 1 until totalSteps
 
@@ -219,6 +221,7 @@ object ColumnProgressStore {
                             totalSteps = item.optInt("totalSteps"),
                             done = item.optBoolean("done"),
                             nextStepTitle = item.optString("nextStepTitle"),
+                            nextStepId = item.optString("nextStepId"),
                         ),
                     )
                 }
@@ -238,7 +241,8 @@ object ColumnProgressStore {
                     .put("settledSteps", entry.settledSteps)
                     .put("totalSteps", entry.totalSteps)
                     .put("done", entry.done)
-                    .put("nextStepTitle", entry.nextStepTitle),
+                    .put("nextStepTitle", entry.nextStepTitle)
+                    .put("nextStepId", entry.nextStepId),
             )
         }
         runCatching {
