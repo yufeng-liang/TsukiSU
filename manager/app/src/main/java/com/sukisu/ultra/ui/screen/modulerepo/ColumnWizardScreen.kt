@@ -924,7 +924,7 @@ private fun ColumnHealthCardMiuix(report: ColumnHealthReport) {
                     report.passedCount,
                     report.totalCount,
                 ),
-                color = if (missing.isEmpty()) successGreenMiuix() else colorScheme.primary,
+                color = successGreenMiuix(),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
             )
@@ -1373,11 +1373,11 @@ private fun WizardStepCardMiuix(
 @Composable
 private fun StepBadgeMiuix(index: Int, status: ColumnStepStatus) {
     val colorScheme = MiuixTheme.colorScheme
-    Box(modifier = Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+    Box(modifier = Modifier.size(64.dp), contentAlignment = Alignment.Center) {
         when (status) {
             ColumnStepStatus.PENDING -> Box(
                 modifier = Modifier
-                    .size(30.dp)
+                    .size(60.dp)
                     .clip(CircleShape)
                     .background(colorScheme.surfaceContainerHigh),
                 contentAlignment = Alignment.Center,
@@ -1385,34 +1385,34 @@ private fun StepBadgeMiuix(index: Int, status: ColumnStepStatus) {
                 MiuixText(
                     text = index.toString(),
                     color = colorScheme.onSurface,
-                    fontSize = 14.sp,
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
 
             ColumnStepStatus.RUNNING -> MiuixCircularProgressIndicator(
                 progress = null,
-                size = 22.dp,
-                strokeWidth = 2.5.dp,
+                size = 40.dp,
+                strokeWidth = 3.dp,
             )
 
             ColumnStepStatus.SUCCESS -> MiuixIcon(
                 imageVector = Icons.Rounded.CheckCircle,
                 contentDescription = null,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(40.dp),
                 tint = successGreenMiuix(),
             )
 
             ColumnStepStatus.FAILED -> MiuixIcon(
                 imageVector = Icons.Rounded.Close,
                 contentDescription = null,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(40.dp),
                 tint = colorScheme.error,
             )
 
             ColumnStepStatus.SKIPPED -> Box(
                 modifier = Modifier
-                    .size(30.dp)
+                    .size(60.dp)
                     .clip(CircleShape)
                     .background(colorScheme.surfaceContainerHigh),
                 contentAlignment = Alignment.Center,
@@ -1420,7 +1420,7 @@ private fun StepBadgeMiuix(index: Int, status: ColumnStepStatus) {
                 MiuixText(
                     text = index.toString(),
                     color = colorScheme.onSurface,
-                    fontSize = 14.sp,
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
@@ -1428,7 +1428,7 @@ private fun StepBadgeMiuix(index: Int, status: ColumnStepStatus) {
             ColumnStepStatus.NEEDS_USER -> MiuixIcon(
                 imageVector = Icons.Rounded.Person,
                 contentDescription = null,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(40.dp),
                 tint = colorScheme.primary,
             )
         }
@@ -2297,52 +2297,52 @@ private fun WizardStepCard(
  */
 @Composable
 private fun StepBadge(index: Int, status: ColumnStepStatus) {
-    Box(modifier = Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+    Box(modifier = Modifier.size(64.dp), contentAlignment = Alignment.Center) {
         when (status) {
             ColumnStepStatus.PENDING -> Box(
                 modifier = Modifier
-                    .size(30.dp)
+                    .size(60.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceContainerHigh),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = index.toString(),
-                    style = MaterialTheme.typography.labelLarge,
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
             }
 
             ColumnStepStatus.RUNNING -> CircularProgressIndicator(
-                modifier = Modifier.size(22.dp),
-                strokeWidth = 2.5.dp,
+                modifier = Modifier.size(40.dp),
+                strokeWidth = 3.dp,
             )
 
             ColumnStepStatus.SUCCESS -> Icon(
                 imageVector = Icons.Rounded.CheckCircle,
                 contentDescription = null,
                 tint = successGreen(),
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(40.dp),
             )
 
             ColumnStepStatus.FAILED -> Icon(
                 imageVector = Icons.Rounded.Close,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.error,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(40.dp),
             )
 
             ColumnStepStatus.SKIPPED -> Box(
                 modifier = Modifier
-                    .size(30.dp)
+                    .size(60.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceContainerHigh),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = index.toString(),
-                    style = MaterialTheme.typography.labelLarge,
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -2353,7 +2353,7 @@ private fun StepBadge(index: Int, status: ColumnStepStatus) {
                 imageVector = Icons.Rounded.Person,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(40.dp),
             )
         }
     }
@@ -2674,11 +2674,7 @@ private fun ColumnHealthCard(report: ColumnHealthReport) {
                         report.totalCount,
                     ),
                     style = MaterialTheme.typography.labelLarge,
-                    color = if (missing.isEmpty()) {
-                        successGreen()
-                    } else {
-                        MaterialTheme.colorScheme.primary
-                    },
+                    color = successGreen(),
                 )
                 Icon(
                     imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
