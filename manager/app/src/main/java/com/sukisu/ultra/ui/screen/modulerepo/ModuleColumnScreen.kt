@@ -1,11 +1,17 @@
 package com.sukisu.ultra.ui.screen.modulerepo
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.height
 import android.util.Log
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -481,11 +487,24 @@ private fun ModuleColumnScreenMaterial(
             .filter { it.columnId == column.id }
             .associateBy { it.topicId }
     }
-    // 引导卡按档位跳到对应专题：列表里 header(0)、guide(1)，专题从 2 开始。
+    // 引导卡按档位跳到对应专题：映射到具体 topicId 后再滚动 + 短暂高亮，避免用户滚过去找不到刚点的是哪张卡。
+    var highlightedTopicId by remember(column.id) { mutableStateOf("") }
     val onGuideSelect: (String) -> Unit = { tier ->
-        val topic = column.topics.firstOrNull { it.tier == tier && it.steps.isNotEmpty() }
-        val index = topic?.let { column.topics.indexOf(it) }?.plus(2)
-        if (index != null) scope?.launch { listState.animateScrollToItem(index) }
+        val topicId = when (tier) {
+            "day", "game" -> "pass-bank"
+            "integrity" -> "pass-integrity"
+            else -> column.topics.firstOrNull { it.tier == tier }?.id
+        }
+        val topic = column.topics.firstOrNull { it.id == topicId }
+            ?: column.topics.firstOrNull { it.tier == tier && it.steps.isNotEmpty() }
+        if (topic != null) {
+            scope.launch {
+                listState.animateScrollToItem(columnTopicsStartIndex(column) + column.topics.indexOf(topic))
+                highlightedTopicId = topic.id
+                delay(1500)
+                highlightedTopicId = ""
+            }
+        }
     }
 
     ExpressiveScaffold(
@@ -515,7 +534,12 @@ private fun ModuleColumnScreenMaterial(
                 item(key = "column-guide") { ColumnGuideCard(column.guide, onSelectTopic = onGuideSelect) }
             }
             items(column.topics, key = { it.id }) { topic ->
-                TopicCard(topic = topic, progress = progressByTopic[topic.id], onOpenWizard = onOpenWizard)
+                TopicCard(
+                    topic = topic,
+                    progress = progressByTopic[topic.id],
+                    onOpenWizard = onOpenWizard,
+                    highlighted = topic.id == highlightedTopicId,
+                )
             }
             if (column.topics.isEmpty()) {
                 item(key = "column-empty") {
@@ -537,22 +561,23 @@ private fun ColumnHeaderCard(column: RepoColumn) {
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // 顶栏大标题已经是专栏标题，这里不再重复一遍标题行；图标跟商店列表卡走同一套 accent 映射。
-            ColumnIconBadge(columnGlyph(column.accent))
-            if (column.subtitle.isNotEmpty()) {
+            // 图标和专栏名并排：标题字号拉大，形成明确的页面主标题，说明文字只保留一句。
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                ColumnIconBadge(columnGlyph(column.accent))
                 Text(
-                    text = column.subtitle,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = column.title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
                 )
             }
-            if (column.description.isNotEmpty()) {
-                Text(text = column.description, style = MaterialTheme.typography.bodyMedium)
-            }
             Text(
-                text = stringResource(R.string.column_wizard_readonly_note),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
+                text = stringResource(R.string.column_header_intro),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -563,13 +588,24 @@ private fun TopicCard(
     topic: RepoColumnTopic,
     progress: ColumnProgressEntry?,
     onOpenWizard: (RepoColumnTopic) -> Unit,
+    highlighted: Boolean = false,
 ) {
     // 索引里的空串偶尔会混进来：先滤掉，免得渲染出一条只有圆点的空行。
     val requires = remember(topic.requires) { topic.requires.filter { it.isNotBlank() } }
     val verifyHints = remember(topic.verifyHints) { topic.verifyHints.filter { it.isNotBlank() } }
     // 没有步骤但还有前置/验证时，折叠区照样要留入口，否则那两块内容永远看不到。
     val hasDetails = topic.steps.isNotEmpty() || requires.isNotEmpty() || verifyHints.isNotEmpty()
-    TonalCard(modifier = Modifier.fillMaxWidth()) {
+    TonalCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (highlighted) {
+                    Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp))
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -619,20 +655,27 @@ private fun TopicCard(
                     stepCount = topic.steps.size,
                     onToggle = { detailsExpanded = !detailsExpanded },
                 )
-                if (detailsExpanded) {
-                    // 「前置条件 → 步骤 → 怎么确认」按用户实际动手的顺序排。
-                    if (requires.isNotEmpty()) {
-                        Section(
-                            title = stringResource(R.string.module_column_requires_title),
-                            lines = requires,
-                        )
-                    }
-                    topic.steps.forEachIndexed { index, step -> StepRow(index = index, step = step) }
-                    if (verifyHints.isNotEmpty()) {
-                        Section(
-                            title = stringResource(R.string.module_column_verify_title),
-                            lines = verifyHints,
-                        )
+                // 展开/收起用高度动画，列表不会因为内容突然出现而整体跳一下。
+                AnimatedVisibility(
+                    visible = detailsExpanded,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // 「前置条件 → 步骤 → 怎么确认」按用户实际动手的顺序排。
+                        if (requires.isNotEmpty()) {
+                            Section(
+                                title = stringResource(R.string.module_column_requires_title),
+                                lines = requires,
+                            )
+                        }
+                        topic.steps.forEachIndexed { index, step -> StepRow(index = index, step = step) }
+                        if (verifyHints.isNotEmpty()) {
+                            Section(
+                                title = stringResource(R.string.module_column_verify_title),
+                                lines = verifyHints,
+                            )
+                        }
                     }
                 }
             }
@@ -1046,10 +1089,24 @@ private fun ModuleColumnScreenMiuix(
             .filter { it.columnId == column.id }
             .associateBy { it.topicId }
     }
+    // 引导卡按档位跳到对应专题：映射到具体 topicId 后再滚动 + 短暂高亮，避免用户滚过去找不到刚点的是哪张卡。
+    var highlightedTopicId by remember(column.id) { mutableStateOf("") }
     val onGuideSelect: (String) -> Unit = { tier ->
-        val topic = column.topics.firstOrNull { it.tier == tier && it.steps.isNotEmpty() }
-        val index = topic?.let { columnTopicsStartIndex(column) + column.topics.indexOf(it) }
-        if (index != null) scope?.launch { listState.animateScrollToItem(index) }
+        val topicId = when (tier) {
+            "day", "game" -> "pass-bank"
+            "integrity" -> "pass-integrity"
+            else -> column.topics.firstOrNull { it.tier == tier }?.id
+        }
+        val topic = column.topics.firstOrNull { it.id == topicId }
+            ?: column.topics.firstOrNull { it.tier == tier && it.steps.isNotEmpty() }
+        if (topic != null) {
+            scope.launch {
+                listState.animateScrollToItem(columnTopicsStartIndex(column) + column.topics.indexOf(topic))
+                highlightedTopicId = topic.id
+                delay(1500)
+                highlightedTopicId = ""
+            }
+        }
     }
 
     AppScaffold(
@@ -1123,6 +1180,7 @@ private fun ModuleColumnScreenMiuix(
                     topic = topic,
                     progress = progressByTopic[topic.id],
                     onOpenWizard = onOpenWizard,
+                    highlighted = topic.id == highlightedTopicId,
                 )
             }
             if (column.topics.isEmpty()) {
@@ -1149,26 +1207,24 @@ private fun ModuleColumnHeaderMiuix(column: RepoColumn) {
     // insideMargin 就是 AppCard 自带的内边距（默认 0），这里给 16dp，content 里不再叠一层 padding。
     AppCard(modifier = Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            ColumnIconBadgeMiuix(columnGlyph(column.accent))
-            if (column.subtitle.isNotEmpty()) {
+            // 图标和专栏名并排：标题字号拉大，形成明确的页面主标题，说明文字只保留一句。
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                ColumnIconBadgeMiuix(columnGlyph(column.accent))
                 MiuixText(
-                    text = column.subtitle,
+                    text = column.title,
                     color = colorScheme.onSurface,
-                    fontSize = 16.sp,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.SemiBold,
-                )
-            }
-            if (column.description.isNotEmpty()) {
-                MiuixText(
-                    text = column.description,
-                    color = colorScheme.onSurfaceVariantSummary,
-                    fontSize = 14.sp,
+                    modifier = Modifier.weight(1f),
                 )
             }
             MiuixText(
-                text = stringResource(R.string.column_wizard_readonly_note),
-                color = colorScheme.primary,
-                fontSize = 12.sp,
+                text = stringResource(R.string.column_header_intro),
+                color = colorScheme.onSurfaceVariantSummary,
+                fontSize = 13.sp,
             )
         }
     }
@@ -1275,6 +1331,7 @@ private fun TopicCardMiuix(
     topic: RepoColumnTopic,
     progress: ColumnProgressEntry?,
     onOpenWizard: (RepoColumnTopic) -> Unit,
+    highlighted: Boolean = false,
 ) {
     // 索引里的空串偶尔会混进来：先滤掉，免得渲染出一条只有圆点的空行。
     val requires = remember(topic.requires) { topic.requires.filter { it.isNotBlank() } }
@@ -1283,7 +1340,18 @@ private fun TopicCardMiuix(
     val hasDetails = topic.steps.isNotEmpty() || requires.isNotEmpty() || verifyHints.isNotEmpty()
     var detailsExpanded by remember(topic.id) { mutableStateOf(false) }
 
-    AppCard(modifier = Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
+    AppCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (highlighted) {
+                    Modifier.border(2.dp, colorScheme.primary, RoundedCornerShape(16.dp))
+                } else {
+                    Modifier
+                },
+            ),
+        insideMargin = PaddingValues(16.dp),
+    ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -1327,20 +1395,27 @@ private fun TopicCardMiuix(
                     stepCount = topic.steps.size,
                     onToggle = { detailsExpanded = !detailsExpanded },
                 )
-                if (detailsExpanded) {
-                    // 「前置条件 → 步骤 → 怎么确认」按用户实际动手的顺序排。
-                    if (requires.isNotEmpty()) {
-                        SectionMiuix(
-                            title = stringResource(R.string.module_column_requires_title),
-                            lines = requires,
-                        )
-                    }
-                    topic.steps.forEachIndexed { index, step -> StepRowMiuix(index = index, step = step) }
-                    if (verifyHints.isNotEmpty()) {
-                        SectionMiuix(
-                            title = stringResource(R.string.module_column_verify_title),
-                            lines = verifyHints,
-                        )
+                // 展开/收起用高度动画，列表不会因为内容突然出现而整体跳一下。
+                AnimatedVisibility(
+                    visible = detailsExpanded,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // 「前置条件 → 步骤 → 怎么确认」按用户实际动手的顺序排。
+                        if (requires.isNotEmpty()) {
+                            SectionMiuix(
+                                title = stringResource(R.string.module_column_requires_title),
+                                lines = requires,
+                            )
+                        }
+                        topic.steps.forEachIndexed { index, step -> StepRowMiuix(index = index, step = step) }
+                        if (verifyHints.isNotEmpty()) {
+                            SectionMiuix(
+                                title = stringResource(R.string.module_column_verify_title),
+                                lines = verifyHints,
+                            )
+                        }
                     }
                 }
             }

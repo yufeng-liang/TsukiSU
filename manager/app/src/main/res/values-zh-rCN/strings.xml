@@ -1628,7 +1628,7 @@
     <string name="module_column_step_kind_ask_user">手动操作</string>
 
     <!-- 专栏执行向导：逐步执行与自检 -->
-    <string name="column_wizard_open">开始执行</string>
+    <string name="column_wizard_open">进入专题</string>
     <string name="column_wizard_start">开始</string>
     <string name="column_wizard_start_first">开始第一步</string>
     <string name="column_wizard_run">执行</string>
@@ -1656,7 +1656,8 @@
     <string name="column_wizard_status_needs_user">需要你处理</string>
     <string name="column_wizard_confirm_title">执行前确认</string>
     <string name="column_wizard_cancel">取消</string>
-    <string name="column_wizard_readonly_note">点下面的「开始执行」进向导：能自动的步骤会替你跑完，会改到设备的地方都会先问过你。</string>
+    <string name="column_wizard_readonly_note">点下面的「进入专题」，再点「一键执行」：能自动的步骤会替你跑完，会改到设备的地方都会先问过你。</string>
+    <string name="column_header_intro">一套经过社区实测的隐藏环境配置。可以根据自己需求选择对应专题进行隐藏。</string>
     <string name="column_wizard_empty">这个专题还没有可执行的步骤。</string>
     <string name="column_wizard_open_link">打开官方页面</string>
     <string name="column_wizard_open_ai">进入 AI 助手</string>
@@ -1683,6 +1684,7 @@
     <string name="column_wizard_run_all">一键执行</string>
     <string name="column_wizard_opt_in">纳入一键执行</string>
     <string name="column_wizard_installed" translatable="true">已安装</string>
+    <string name="column_wizard_installed_skip">已安装，将跳过</string>
     <string name="column_wizard_reinstall" translatable="true">重新安装</string>
     <string name="column_wizard_test_title" translatable="true">测试专用</string>
     <string name="column_wizard_test_body" translatable="true">只预览界面，不执行任何隐藏操作、也不会真的重启。长按顶栏标题可再次打开。</string>

@@ -1640,7 +1640,7 @@
     <string name="module_column_step_kind_ask_user">Do it manually</string>
 
     <!-- 专栏执行向导：逐步执行与自检 -->
-    <string name="column_wizard_open">Start</string>
+    <string name="column_wizard_open">Open</string>
     <string name="column_wizard_start">Start</string>
     <string name="column_wizard_start_first">Start the first step</string>
     <string name="column_wizard_run">Run</string>
@@ -1668,7 +1668,8 @@
     <string name="column_wizard_status_needs_user">Needs you</string>
     <string name="column_wizard_confirm_title">Confirm this step</string>
     <string name="column_wizard_cancel">Cancel</string>
-    <string name="column_wizard_readonly_note">Tap Start to enter the guide: steps that can run automatically will be done for you, and anything that changes the device is asked first.</string>
+    <string name="column_wizard_readonly_note">Tap Open to enter the topic: steps that can run automatically will be done for you, and anything that changes the device is asked first.</string>
+    <string name="column_header_intro">A community-tested hiding setup. Pick the topic that fits your needs.</string>
     <string name="column_wizard_empty">This topic has no steps to run yet.</string>
     <string name="column_wizard_open_link">Open official page</string>
     <string name="column_wizard_open_ai">Open AI assistant</string>
@@ -1695,6 +1696,7 @@
     <string name="column_wizard_run_all">Run all</string>
     <string name="column_wizard_opt_in">Include in run-all</string>
     <string name="column_wizard_installed" translatable="true">Installed</string>
+    <string name="column_wizard_installed_skip">Installed, will skip</string>
     <string name="column_wizard_reinstall" translatable="true">Reinstall</string>
     <string name="column_wizard_test_title" translatable="true">Test only</string>
     <string name="column_wizard_test_body" translatable="true">Preview only; no hidden operations run and the device will not reboot. Long-press the top bar title to reopen.</string>
