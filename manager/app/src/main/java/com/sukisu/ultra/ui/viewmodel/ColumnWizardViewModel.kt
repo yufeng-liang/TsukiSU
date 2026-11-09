@@ -142,6 +142,9 @@ class ColumnWizardViewModel(
         detectInstalledApps(topic)
         // 上次一键执行跑到一半被重启打断：设备回来了就接着跑，用户不用再点一次。
         resumePendingRunIfAny()
+        // 设备上已有的 keybox.xml 超过 7 天（或还没生成）时，后台自动拉一份新的写进去。
+        // 只在专题确实需要密钥材料时做，普通配置专题不该悄悄联网。
+        refreshKeyboxAge(autoUpdate = true)
     }
 
     /**
@@ -221,6 +224,94 @@ class ColumnWizardViewModel(
                 // 无论成功还是失败都要结束扫描态，否则骨架会一直转。
                 _uiState.update { it.copy(healthScanning = false) }
             }
+        }
+    }
+
+    /**
+     * 读设备上现有 keybox.xml 的年龄（天），读不到返回 -1。
+     *
+     * teesim 和 tricky_store 读同一份密钥材料，但两个模块的落盘路径不同：谁先存在就看谁。
+     * 这里只读时间戳，不解密、不校验内容，失败也静默收敛成 -1。
+     */
+    private suspend fun keyboxFileAgeDays(): Int = withContext(Dispatchers.IO) {
+        val command = "for f in /data/adb/teesim/keybox.xml /data/adb/tricky_store/keybox.xml; do " +
+            "if [ -f \"\$f\" ]; then stat -c %Y \"\$f\"; break; fi; done"
+        val outcome = ColumnRootIo.exec(command)
+        if (!outcome.isSuccess) return@withContext -1
+        val timestamp = outcome.out.firstNotNullOfOrNull { it.trim().toLongOrNull() } ?: return@withContext -1
+        val nowSeconds = System.currentTimeMillis() / 1000
+        ((nowSeconds - timestamp) / 86_400L).toInt().coerceAtLeast(0)
+    }
+
+    /**
+     * 刷新「密钥材料多久没更新了」。
+     *
+     * [autoUpdate] 为 true 时顺带判断要不要自动更新：只对需要 keybox 的专题生效，
+     * 且只在文件超过 7 天或根本不存在时动手，避免每次进专题都联网。
+     */
+    fun refreshKeyboxAge(autoUpdate: Boolean = false) {
+        val currentTopic = topic ?: return
+        val needsKeybox = topicNeedsKeybox(currentTopic)
+        viewModelScope.launch {
+            val age = keyboxFileAgeDays()
+            _uiState.update { it.copy(keyboxAgeDays = age) }
+            if (autoUpdate && needsKeybox && (age > KEYBOX_AUTO_UPDATE_DAYS || age < 0)) {
+                updateKeybox(auto = true)
+            }
+        }
+    }
+
+    /**
+     * 拉取并写入密钥材料；自动更新和用户点「更新密钥」共用这一条路径。
+     *
+     * 写入只针对设备上真实装着的模块目录：没有 teesim 就不该凭空创建 /data/adb/teesim，
+     * 否则等于替用户造了一个半残目录。每写完一份都 chmod 644，保证模块进程读得到。
+     */
+    fun updateKeybox(auto: Boolean = false) {
+        if (_uiState.value.keyboxUpdating) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(keyboxUpdating = true) }
+            try {
+                // 自动更新等预取任务结束，复用它已经拉到的内容，不再重复下载；手动更新则强制拉最新。
+                if (auto) keyboxJob?.join()
+                val content = if (auto) keyboxContent else null
+                val fetched = content ?: keyboxFetcher.fetchAuto().getOrElse { error ->
+                    appendLog("更新密钥材料失败：${error.message ?: "未知错误"}")
+                    return@launch
+                }
+                val written = withContext(Dispatchers.IO) { writeKeyboxToDevice(fetched) }
+                if (written.isEmpty()) {
+                    appendLog(
+                        "已获取密钥材料（${fetched.length} 字节），但设备上没有 teesim / tricky_store 模块，未写入",
+                    )
+                } else {
+                    appendLog("密钥材料已更新（${fetched.length} 字节）：${written.joinToString("、")}")
+                }
+                refreshKeyboxAge()
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                appendLog("更新密钥材料失败：${error.message ?: "未知错误"}")
+            } finally {
+                _uiState.update { it.copy(keyboxUpdating = false) }
+            }
+        }
+    }
+
+    /** 按模块目录是否存在决定写哪份 keybox.xml；返回实际写入的模块名。 */
+    private fun writeKeyboxToDevice(content: String): List<String> {
+        val targets = listOf(
+            Triple("/data/adb/modules/teesim", "/data/adb/teesim/keybox.xml", "teesim"),
+            Triple("/data/adb/modules/tricky_store", "/data/adb/tricky_store/keybox.xml", "tricky_store"),
+        )
+        return targets.mapNotNull { (moduleDir, path, label) ->
+            if (!ColumnRootIo.isDirectory(moduleDir)) return@mapNotNull null
+            ColumnRootIo.writeText(path, content)
+            // keybox 会被模块进程以非 root 身份读取，600 权限（writeText 的默认）不够。
+            if (!ColumnRootIo.exec("chmod 644 ${ColumnRootIo.shellQuote(path)}").isSuccess) {
+                appendLog("已写入 $path，但 chmod 644 失败，模块可能读不到这份密钥")
+            }
+            label
         }
     }
 
@@ -525,6 +616,10 @@ class ColumnWizardViewModel(
         else -> false
     }
 
+    /** 专题是否真的会用到密钥材料：声明了直链，或有步骤正文带 `${keybox}` 占位。 */
+    private fun topicNeedsKeybox(topic: RepoColumnTopic): Boolean =
+        topic.keybox != null || topic.steps.any { it.fileContent.contains("\${keybox}") }
+
     /**
      * 预取密钥材料：先试自动源，失败再试专题里登记的地址，都失败才让用户自己选文件。
      *
@@ -532,8 +627,7 @@ class ColumnWizardViewModel(
      */
     private fun prefetchKeybox(topic: RepoColumnTopic): Job? {
         if (prefetchedTopicId == topic.id) return keyboxJob
-        val hasKeyboxStep = topic.steps.any { it.fileContent.contains("\${keybox}") }
-        if (topic.keybox == null && !hasKeyboxStep) return null
+        if (!topicNeedsKeybox(topic)) return null
         prefetchedTopicId = topic.id
         keyboxJob = viewModelScope.launch {
             val auto = keyboxFetcher.fetchAuto()
@@ -950,6 +1044,9 @@ class ColumnWizardViewModel(
 
         /** 一份完整 keybox.xml（3 级证书链 + ECDSA 私钥）通常在 10 KiB 以上，低于这个数一定是选错了文件。 */
         const val MIN_KEYBOX_LENGTH = 1000
+
+        /** keybox.xml 超过这么多天就认为过期，进专题时自动换一份新的。 */
+        const val KEYBOX_AUTO_UPDATE_DAYS = 7
 
         /** 向导进度单独放一个文件，别和设置项混在一起。 */
         const val COLUMN_PREFS = "column_wizard"

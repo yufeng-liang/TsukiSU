@@ -220,6 +220,14 @@ data class ColumnWizardUiState(
      * 或「我稍后自己重启」。倒计时走完就按原计划重启。
      */
     val rebootCountdown: Int = -1,
+    /**
+     * 设备上现有 keybox.xml 距今多少天；-1 表示没检测到文件或读取失败。
+     *
+     * 只用来提示「密钥材料该换了」和决定进专题时要不要自动更新，不参与任何步骤的通过判定。
+     */
+    val keyboxAgeDays: Int = -1,
+    /** keybox 正在拉取/写入：界面据此把「更新密钥」按钮换成转圈，防止重复触发。 */
+    val keyboxUpdating: Boolean = false,
 )
 
 /** 预检时对某一步的判定，决定「一键执行」要不要把它列给用户看。 */

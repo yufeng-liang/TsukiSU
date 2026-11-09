@@ -519,6 +519,8 @@ class MainActivity : ComponentActivity() {
                                             onSkipStep = wizardViewModel::skipStep,
                                             onRollback = wizardViewModel::rollback,
                                             onProvideKeybox = { text -> wizardViewModel.provideKeybox(text) },
+                                            // 体检明细里的「更新密钥」：重新拉取 keybox 并写入 teesim / tricky_store。
+                                            onUpdateKeybox = { wizardViewModel.updateKeybox() },
                                             // 升级：用户在步骤卡上明确点了「升级到 vX」，才带 force 覆盖安装
                                             onUpgradeStep = { step -> wizardViewModel.runStep(step, force = true) },
                                             // 走预检：有会覆盖已有配置的步骤时先让用户确认。
