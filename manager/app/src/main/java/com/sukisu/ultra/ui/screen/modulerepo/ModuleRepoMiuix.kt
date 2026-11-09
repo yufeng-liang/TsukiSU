@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -854,8 +855,10 @@ private fun MiuixCoolapkCommunityCard(
                         awaitingConfirm = true
                     }
                 },
-                modifier = Modifier.height(34.dp),
-                cornerRadius = 17.dp,
+                // 高度不能再压到 34dp：miuix Button 的内边距算下来更高，固定 34dp 会把「开启」上下裁掉。
+                modifier = Modifier.heightIn(min = 40.dp),
+                cornerRadius = 20.dp,
+                insideMargin = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
                 colors = MiuixButtonDefaults.buttonColorsPrimary(),
             ) {
                 Text(
@@ -863,7 +866,8 @@ private fun MiuixCoolapkCommunityCard(
                         if (awaitingConfirm) R.string.module_repo_coolapk_confirm
                         else R.string.module_repo_coolapk_enable
                     ),
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
                     maxLines = 1,
                 )
             }
