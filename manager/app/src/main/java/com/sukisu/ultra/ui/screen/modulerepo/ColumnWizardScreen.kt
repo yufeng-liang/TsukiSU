@@ -240,6 +240,8 @@ fun ColumnWizardScreen(
     onRebootLater: () -> Unit = {},
     /** 主页「接着进行」带过来的步骤 id；命中时给对应步骤卡加深色描边提示。 */
     highlightStepId: String = "",
+    /** 体检明细里点「更新密钥」：重新拉取并写入 keybox.xml。 */
+    onUpdateKeybox: () -> Unit = {},
 ) {
     // 测试专用：长按顶栏标题打开预览菜单。庆祝动画和重启倒计时都要跑完整个专题才会出现，
     // 而验收时不能真的执行隐藏步骤（会改设备、会重启），所以留一个只播 UI、不碰设备的入口。
@@ -272,6 +274,7 @@ fun ColumnWizardScreen(
             onMarkDone = onMarkDone,
             onOpenAi = onOpenAi,
             highlightStepId = highlightStepId,
+            onUpdateKeybox = onUpdateKeybox,
             onLongPressTitle = { showTestMenu = true },
         )
 
@@ -289,6 +292,7 @@ fun ColumnWizardScreen(
             onMarkDone = onMarkDone,
             onOpenAi = onOpenAi,
             highlightStepId = highlightStepId,
+            onUpdateKeybox = onUpdateKeybox,
             onLongPressTitle = { showTestMenu = true },
         )
     }
@@ -672,6 +676,7 @@ private fun ColumnWizardScreenMiuix(
     onMarkDone: (RepoColumnStep) -> Unit,
     onOpenAi: () -> Unit,
     highlightStepId: String = "",
+    onUpdateKeybox: () -> Unit = {},
     onLongPressTitle: () -> Unit = {},
 ) {
     val colorScheme = MiuixTheme.colorScheme
@@ -825,6 +830,9 @@ private fun ColumnWizardScreenMiuix(
                     ColumnHealthCardMiuix(
                         report = if (state.healthScanning) null else state.health,
                         scanning = state.healthScanning,
+                        keyboxAgeDays = state.keyboxAgeDays,
+                        keyboxUpdating = state.keyboxUpdating,
+                        onUpdateKeybox = onUpdateKeybox,
                     )
                 }
             }
@@ -901,6 +909,10 @@ private fun ColumnWizardScreenMiuix(
 private fun ColumnHealthCardMiuix(
     report: ColumnHealthReport?,
     scanning: Boolean = report == null,
+    /** 现有 keybox.xml 的天数；-1 = 没检测到，不显示「多久前更新」。 */
+    keyboxAgeDays: Int = -1,
+    keyboxUpdating: Boolean = false,
+    onUpdateKeybox: () -> Unit = {},
 ) {
     // 与 Material 版同一套交互：默认只给结论，点标题行展开九项明细。
     var expanded by rememberSaveable { mutableStateOf(false) }
@@ -973,7 +985,12 @@ private fun ColumnHealthCardMiuix(
                         Spacer(Modifier.height(8.dp))
                         report.checks.forEachIndexed { index, check ->
                             if (index > 0) Spacer(Modifier.height(6.dp))
-                            HealthCheckDetailRowMiuix(check)
+                            HealthCheckDetailRowMiuix(
+                                check = check,
+                                keyboxAgeDays = keyboxAgeDays,
+                                keyboxUpdating = keyboxUpdating,
+                                onUpdateKeybox = onUpdateKeybox,
+                            )
                         }
                     } else {
                         Spacer(Modifier.height(8.dp))
@@ -1042,7 +1059,12 @@ private fun HealthSkeletonBarMiuix(widthFraction: Float) {
 
 /** 明细里的一行（Miuix）：通过/未通过图标 + 探针原话。 */
 @Composable
-private fun HealthCheckDetailRowMiuix(check: ColumnHealthCheck) {
+private fun HealthCheckDetailRowMiuix(
+    check: ColumnHealthCheck,
+    keyboxAgeDays: Int = -1,
+    keyboxUpdating: Boolean = false,
+    onUpdateKeybox: () -> Unit = {},
+) {
     val colorScheme = MiuixTheme.colorScheme
     val tint = if (check.passed) successGreenMiuix() else colorScheme.error
     Row(
@@ -1068,6 +1090,40 @@ private fun HealthCheckDetailRowMiuix(check: ColumnHealthCheck) {
             color = colorScheme.onSurfaceVariantSummary,
             fontSize = 13.sp,
         )
+        // 只有 keybox 这一行能「就地更新」：它是一份会过期的外部材料，其余探针看的是装没装。
+        if (check.id == "keybox") {
+            Column(horizontalAlignment = Alignment.End) {
+                if (keyboxAgeDays >= 0) {
+                    MiuixText(
+                        text = stringResource(R.string.column_keybox_age, keyboxAgeDays),
+                        color = colorScheme.onSurfaceVariantSummary,
+                        fontSize = 11.sp,
+                    )
+                }
+                if (keyboxUpdating) {
+                    MiuixText(
+                        text = stringResource(R.string.column_keybox_updating),
+                        color = colorScheme.onSurfaceVariantSummary,
+                        fontSize = 11.sp,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    MiuixCircularProgressIndicator(
+                        progress = null,
+                        size = 16.dp,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    MiuixTextButton(
+                        text = stringResource(R.string.column_keybox_update),
+                        onClick = onUpdateKeybox,
+                        minWidth = 0.dp,
+                        minHeight = 0.dp,
+                        insideMargin = PaddingValues(horizontal = 0.dp, vertical = 2.dp),
+                        colors = MiuixButtonDefaults.textButtonColorsPrimary(),
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -1815,6 +1871,7 @@ private fun ColumnWizardScreenMaterial(
     onMarkDone: (RepoColumnStep) -> Unit,
     onOpenAi: () -> Unit,
     highlightStepId: String = "",
+    onUpdateKeybox: () -> Unit = {},
     onLongPressTitle: () -> Unit = {},
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -1940,6 +1997,9 @@ private fun ColumnWizardScreenMaterial(
                     ColumnHealthCard(
                         report = if (state.healthScanning) null else state.health,
                         scanning = state.healthScanning,
+                        keyboxAgeDays = state.keyboxAgeDays,
+                        keyboxUpdating = state.keyboxUpdating,
+                        onUpdateKeybox = onUpdateKeybox,
                     )
                 }
             }
@@ -2723,6 +2783,10 @@ private fun successGreen(): Color = if (MaterialTheme.colorScheme.surfaceBright.
 private fun ColumnHealthCard(
     report: ColumnHealthReport?,
     scanning: Boolean = report == null,
+    /** 现有 keybox.xml 的天数；-1 = 没检测到，不显示「多久前更新」。 */
+    keyboxAgeDays: Int = -1,
+    keyboxUpdating: Boolean = false,
+    onUpdateKeybox: () -> Unit = {},
 ) {
     // 明细默认收起：进专题第一眼要的是「这台机器配过没有」这个结论，不是九行探针输出。
     // 想核对每一项再点开——结论文案与明细在同一张卡里，不跳页。
@@ -2795,7 +2859,12 @@ private fun ColumnHealthCard(
                             Spacer(Modifier.height(8.dp))
                             report.checks.forEachIndexed { index, check ->
                                 if (index > 0) Spacer(Modifier.height(6.dp))
-                                HealthCheckDetailRow(check)
+                                HealthCheckDetailRow(
+                                    check = check,
+                                    keyboxAgeDays = keyboxAgeDays,
+                                    keyboxUpdating = keyboxUpdating,
+                                    onUpdateKeybox = onUpdateKeybox,
+                                )
                             }
                         } else {
                             Spacer(Modifier.height(8.dp))
@@ -2861,7 +2930,12 @@ private fun HealthSkeletonBar(widthFraction: Float) {
 
 /** 明细里的一行：通过/未通过图标 + 探针原话（探针没给话就退回状态文字）。 */
 @Composable
-private fun HealthCheckDetailRow(check: ColumnHealthCheck) {
+private fun HealthCheckDetailRow(
+    check: ColumnHealthCheck,
+    keyboxAgeDays: Int = -1,
+    keyboxUpdating: Boolean = false,
+    onUpdateKeybox: () -> Unit = {},
+) {
     val tint = if (check.passed) successGreen() else MaterialTheme.colorScheme.error
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -2886,6 +2960,40 @@ private fun HealthCheckDetailRow(check: ColumnHealthCheck) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
         )
+        // 只有 keybox 这一行能「就地更新」：它是一份会过期的外部材料，其余探针看的是装没装。
+        if (check.id == "keybox") {
+            Column(horizontalAlignment = Alignment.End) {
+                if (keyboxAgeDays >= 0) {
+                    Text(
+                        text = stringResource(R.string.column_keybox_age, keyboxAgeDays),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (keyboxUpdating) {
+                    Text(
+                        text = stringResource(R.string.column_keybox_updating),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    TextButton(
+                        onClick = onUpdateKeybox,
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.column_keybox_update),
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

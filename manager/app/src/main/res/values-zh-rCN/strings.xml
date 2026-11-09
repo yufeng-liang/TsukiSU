@@ -1717,6 +1717,9 @@
     <string name="column_preflight_cancel" translatable="true">取消</string>
     <string name="column_health_title_short" translatable="true">设备现状</string>
     <string name="column_health_score" translatable="true">%2$d 项检查 · %1$d 项通过</string>
+    <string name="column_keybox_update" translatable="true">更新密钥</string>
+    <string name="column_keybox_updating" translatable="true">更新中…</string>
+    <string name="column_keybox_age" translatable="true">%1$d 天前更新</string>
     <string name="column_health_total">%1$d 项检查</string>
     <string name="column_health_passed">%1$d 项通过</string>
     <string name="column_health_day_level" translatable="true">日用级隐藏</string>
