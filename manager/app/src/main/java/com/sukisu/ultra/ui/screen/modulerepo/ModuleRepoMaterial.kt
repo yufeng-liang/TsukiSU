@@ -639,8 +639,9 @@ private fun CoolapkCommunityEntryCard(
                         awaitingConfirm = true
                     }
                 },
-                modifier = Modifier.height(34.dp),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+                // 别用 height(34.dp)：会把 labelLarge 压扁导致「开启」下半截被裁掉。
+                modifier = Modifier.defaultMinSize(minHeight = 38.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
             ) {
                 // 按钮宽度会被左边说明挤压，这里禁止换行：文案已经压到「开启 / 确认开启」，
                 // 单行放得下，不要让它折成两行顶高整张卡。

@@ -3006,36 +3006,29 @@ private fun ColumnPreflightDialog(
 }
 
 /**
- * 展开/收起用的实心小三角。
+ * 展开/收起箭头。
  *
- * Material 自带的 ExpandMore 是描边折线，看着像字母 v；这里直接画一个实心三角，
- * 展开时整体转 180°，和右侧推进感一致。
+ * 用 Material 自带的折线箭头 ExpandMore，展开时整体转 180°；
+ * 默认 16dp，比旧的实心三角大一圈，在标题行右侧更清楚。
  */
 @Composable
 private fun TriangleArrow(
     expanded: Boolean,
     tint: Color,
     modifier: Modifier = Modifier,
-    size: Dp = 12.dp,
+    size: Dp = 16.dp,
 ) {
     val rotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
         animationSpec = tween(durationMillis = 180),
-        label = "triangleArrow",
+        label = "expandArrow",
     )
-    Canvas(
+    Icon(
+        imageVector = Icons.Outlined.ExpandMore,
+        contentDescription = null,
+        tint = tint,
         modifier = modifier
             .size(size)
             .graphicsLayer { rotationZ = rotation },
-    ) {
-        val w = this.size.width
-        val h = this.size.height
-        val path = Path().apply {
-            moveTo(w * 0.5f, h * 0.78f)
-            lineTo(w * 0.08f, h * 0.24f)
-            lineTo(w * 0.92f, h * 0.24f)
-            close()
-        }
-        drawPath(path, tint)
-    }
+    )
 }
