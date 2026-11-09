@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.add
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
@@ -639,9 +640,10 @@ private fun CoolapkCommunityEntryCard(
                         awaitingConfirm = true
                     }
                 },
-                // 别用 height(34.dp)：会把 labelLarge 压扁导致「开启」下半截被裁掉。
-                modifier = Modifier.defaultMinSize(minHeight = 38.dp),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                // 高度给足：M3 按钮的文本行高比 34dp / 38dp 都大，压到那个高度就会把「开启」上下裁掉。
+                // 用默认最小高度 40dp + 上下 10dp 内边距，靠 contentPadding 托住文本行高。
+                modifier = Modifier.heightIn(min = 40.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
             ) {
                 // 按钮宽度会被左边说明挤压，这里禁止换行：文案已经压到「开启 / 确认开启」，
                 // 单行放得下，不要让它折成两行顶高整张卡。
