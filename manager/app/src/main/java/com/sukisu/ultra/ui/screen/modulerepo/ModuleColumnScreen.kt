@@ -146,11 +146,6 @@ fun ModuleColumnStrip(
             .padding(horizontal = horizontalPadding),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            text = stringResource(R.string.module_column_section_title),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-        )
         if (columns.isEmpty()) {
             // 拉失败时留一行出口：整块隐藏会让用户以为专栏没了（v4.1.4 的用户反馈就是这个）。
             Row(
@@ -253,12 +248,6 @@ fun ModuleColumnStripMiuix(
             .padding(horizontal = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        MiuixText(
-            text = stringResource(R.string.module_column_section_title),
-            color = colorScheme.onSurface,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
         if (columns.isEmpty()) {
             // 拉失败时留一行出口：整块隐藏会让用户以为专栏没了（v4.1.4 的用户反馈就是这个）。
             Row(
@@ -358,7 +347,7 @@ private fun ColumnIconBadge(image: ImageVector) {
             imageVector = image,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(22.dp),
+            modifier = Modifier.size(26.dp),
         )
     }
 }
@@ -1244,7 +1233,7 @@ private fun ColumnIconBadgeMiuix(image: ImageVector) {
             imageVector = image,
             contentDescription = null,
             tint = colorScheme.primary,
-            modifier = Modifier.size(22.dp),
+            modifier = Modifier.size(26.dp),
         )
     }
 }
