@@ -471,10 +471,17 @@ private fun ModuleColumnScreenMaterial(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     // 每个专题的进度（做过哪步、第几步）只在进页面时读一次 SharedPreferences。
-    val progressByTopic = remember(column.id) {
-        ColumnProgressStore.snapshot()
-            .filter { it.columnId == column.id }
-            .associateBy { it.topicId }
+    // 索引里加过/删过步骤时，持久化的 totalSteps 会过期（专题现在是 13 步、旧记录还是 12 步），
+    // 所以分母一律以当前索引为准，分子也不超过分母，避免出现「查看 13 个步骤」却显示「1 / 12」。
+    val progressByTopic: Map<String, ColumnProgressEntry> = remember(column.id) {
+        val saved = ColumnProgressStore.snapshot().filter { it.columnId == column.id }
+        column.topics.mapNotNull { topic ->
+            val entry = saved.firstOrNull { it.topicId == topic.id } ?: return@mapNotNull null
+            topic.id to entry.copy(
+                settledSteps = entry.settledSteps.coerceAtMost(topic.steps.size),
+                totalSteps = topic.steps.size,
+            )
+        }.toMap()
     }
     // 引导卡按档位跳到对应专题：映射到具体 topicId 后再滚动 + 短暂高亮，避免用户滚过去找不到刚点的是哪张卡。
     var highlightedTopicId by remember(column.id) { mutableStateOf("") }
@@ -1073,10 +1080,17 @@ private fun ModuleColumnScreenMiuix(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     // 每个专题的进度（做过哪步、第几步）只在进页面时读一次 SharedPreferences。
-    val progressByTopic = remember(column.id) {
-        ColumnProgressStore.snapshot()
-            .filter { it.columnId == column.id }
-            .associateBy { it.topicId }
+    // 索引里加过/删过步骤时，持久化的 totalSteps 会过期（专题现在是 13 步、旧记录还是 12 步），
+    // 所以分母一律以当前索引为准，分子也不超过分母，避免出现「查看 13 个步骤」却显示「1 / 12」。
+    val progressByTopic: Map<String, ColumnProgressEntry> = remember(column.id) {
+        val saved = ColumnProgressStore.snapshot().filter { it.columnId == column.id }
+        column.topics.mapNotNull { topic ->
+            val entry = saved.firstOrNull { it.topicId == topic.id } ?: return@mapNotNull null
+            topic.id to entry.copy(
+                settledSteps = entry.settledSteps.coerceAtMost(topic.steps.size),
+                totalSteps = topic.steps.size,
+            )
+        }.toMap()
     }
     // 引导卡按档位跳到对应专题：映射到具体 topicId 后再滚动 + 短暂高亮，避免用户滚过去找不到刚点的是哪张卡。
     var highlightedTopicId by remember(column.id) { mutableStateOf("") }
