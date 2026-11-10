@@ -204,9 +204,29 @@ object ColumnProgressStore {
 
     private fun celebratedKey(columnId: String, topicId: String) = "celebrated/$columnId/$topicId"
 
-    fun clearPendingResume(context: Context) {
-        // 同步落盘：紧接着可能还有一次重启，异步写有丢标记的风险。
-        runCatching { prefs(context).edit().remove(KEY_PENDING_RESUME).commit() }
+    /**
+     * 清掉「待继续」标记。
+     *
+     * 不传 [columnId]/[topicId] 时清掉全局那一条（仅用于确实希望全部清除的场景）；
+     * 传了归属时先比对标记里的「专栏 + 专题」，只有属于当前专题才删——否则专题 B 完成或回滚
+     * 会把专题 A 重启前写的续跑标记一起清掉，A 回来就不会自动接着跑了。
+     */
+    fun clearPendingResume(context: Context, columnId: String? = null, topicId: String? = null) {
+        if (columnId == null || topicId == null) {
+            // 同步落盘：紧接着可能还有一次重启，异步写有丢标记的风险。
+            runCatching { prefs(context).edit().remove(KEY_PENDING_RESUME).commit() }
+            return
+        }
+        val owner = runCatching {
+            val raw = prefs(context).getString(KEY_PENDING_RESUME, null) ?: return@runCatching null
+            val item = JSONObject(raw)
+            (item.optString("columnId") to item.optString("topicId"))
+                .takeIf { it.first.isNotEmpty() && it.second.isNotEmpty() }
+        }.getOrNull()
+        // 标记已被其他路径清掉（owner 为 null）时什么都不用做；只有归属完全一致才删。
+        if (owner != null && owner.first == columnId && owner.second == topicId) {
+            runCatching { prefs(context).edit().remove(KEY_PENDING_RESUME).commit() }
+        }
     }
 
     /** 系统启动次数（Settings.Global.BOOT_COUNT）；读不到返回 -1，按「无法确认」处理。 */
