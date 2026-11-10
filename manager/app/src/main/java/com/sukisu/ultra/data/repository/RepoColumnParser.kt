@@ -105,6 +105,8 @@ object RepoColumnParser {
             id = id,
             title = title,
             summary = item.text("summary"),
+            // 缺省 true：只有索引显式写 false（环境自检那种）才不庆祝。
+            celebrate = item.optBoolean("celebrate", true),
             riskLevel = if (risk in RISK_LEVELS) risk else DEFAULT_RISK_LEVEL,
             layers = item.optJSONArray("layers").toStringList(),
             requires = item.optJSONArray("requires").toStringList(),

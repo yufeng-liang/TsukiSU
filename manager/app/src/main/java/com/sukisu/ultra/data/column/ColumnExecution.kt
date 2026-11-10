@@ -225,6 +225,12 @@ data class ColumnWizardUiState(
      *
      * 只用来提示「密钥材料该换了」和决定进专题时要不要自动更新，不参与任何步骤的通过判定。
      */
+    /**
+     * 环境自检专题跑完后的轻提示：这个专题不改设备，不该弹庆祝，但用户需要知道「跑完了」。
+     *
+     * 两三秒后自动复位，只当一条 snackbar 用，不留在页面上。
+     */
+    val selfCheckHint: Boolean = false,
     val keyboxAgeDays: Int = -1,
     /** keybox 正在拉取/写入：界面据此把「更新密钥」按钮换成转圈，防止重复触发。 */
     val keyboxUpdating: Boolean = false,

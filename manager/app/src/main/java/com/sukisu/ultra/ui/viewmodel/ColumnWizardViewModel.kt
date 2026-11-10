@@ -859,7 +859,23 @@ class ColumnWizardViewModel(
         if (state.checks.isEmpty()) runSelfCheck()
         // 走到这里说明这个专题已经没有待办：重启续跑标记可以清掉了。
         ColumnProgressStore.clearPendingResume(ksuApp)
-        _uiState.update { it.copy(done = true, celebrate = allowCelebrate) }
+        // 两个条件才庆祝：①这个专题真的会改设备（索引里 celebrate 不是 false，环境自检是 false）；
+        // ②这个专题还没庆祝过——重装、重跑一遍不该反复被同一个动画打断。
+        val celebrate = allowCelebrate &&
+            topic?.celebrate == true &&
+            !ColumnProgressStore.wasCelebrated(ksuApp, columnId.orEmpty(), topic?.id.orEmpty())
+        if (celebrate) {
+            ColumnProgressStore.markCelebrated(ksuApp, columnId.orEmpty(), topic?.id.orEmpty())
+        }
+        // 不庆祝的专题（环境自检）也要让用户知道结束了：给一条两三秒就消失的轻提示。
+        val showSelfCheckHint = allowCelebrate && !celebrate
+        _uiState.update { it.copy(done = true, celebrate = celebrate, selfCheckHint = showSelfCheckHint) }
+        if (showSelfCheckHint) {
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(3_000)
+                _uiState.update { it.copy(selfCheckHint = false) }
+            }
+        }
         appendLog("全部步骤已处理完毕，下面是当前环境的自检结果")
     }
 

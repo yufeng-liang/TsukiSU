@@ -2,6 +2,9 @@ package com.sukisu.ultra.ui.screen.modulerepo
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -181,6 +184,12 @@ private const val LOG_COLLAPSED_LINES = 5
 /** 步骤 link 写成这个协议时表示「进 AI 助手」，不跳浏览器。 */
 private const val COLUMN_LINK_AI = "sukisu://ai"
 
+/** 过银行 / 金融 App 专题的 id，与索引 json/columns.json 保持一致。 */
+private const val COLUMN_TOPIC_PASS_BANK = "pass-bank"
+
+/** 谷歌三绿 / Play Integrity 专题的 id，与索引 json/columns.json 保持一致。 */
+private const val COLUMN_TOPIC_PASS_INTEGRITY = "pass-integrity"
+
 /** 步骤说明默认折叠时露出的行数：note 常是一整段，全展开会把卡片撑得比标题高好几倍。 */
 private const val NOTE_COLLAPSED_LINES = 3
 // Miuix 的文本没有 onTextLayout，只能按字数粗截：13sp 下约 24 字一行，三行约 72 字。
@@ -259,8 +268,9 @@ fun ColumnWizardScreen(
 
     // 两套皮肤各自实现：这里不是换皮那么简单，卡片的构造、按钮的语义在两种设计语言里不一样，
     // 与其在一个函数里层层 if，不如两份实现共用同一批回调（执行 / 跳过 / 升级 / 回滚）。
-    when (LocalUiMode.current) {
-        UiMode.Miuix -> ColumnWizardScreenMiuix(
+    Box(modifier = Modifier.fillMaxSize()) {
+        when (LocalUiMode.current) {
+            UiMode.Miuix -> ColumnWizardScreenMiuix(
             topic = topic,
             state = state,
             onRunStep = onRunStep,
@@ -296,6 +306,29 @@ fun ColumnWizardScreen(
             onLongPressTitle = { showTestMenu = true },
         )
     }
+        // 环境自检跑完的轻提示：不弹庆祝（这个专题不改设备），但要让用户知道结束了。
+        AnimatedVisibility(
+            visible = state.selfCheckHint,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 96.dp),
+            enter = fadeIn() + slideInVertically { it / 2 },
+            exit = fadeOut() + slideOutVertically { it / 2 },
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.inverseSurface,
+                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                shape = RoundedCornerShape(24.dp),
+                shadowElevation = 6.dp,
+            ) {
+                Text(
+                    text = stringResource(R.string.column_self_check_done),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                )
+            }
+        }
+    }
     // 预检框两套皮肤共用 Material 版：Miuix 没有可靠的对话框 API，硬造一个只会和行为约定打架。
     // Material 模式下 AiAssistantMaterialTheme 直通（不多套一层主题），Miuix 模式下它才生成
     // 同源 MD3 调色板，免得弹框落回框架默认配色——所以统一套一层，不改变 Material 分支的行为。
@@ -313,6 +346,13 @@ fun ColumnWizardScreen(
     if (state.celebrate || previewCelebrate) {
         AiAssistantMaterialTheme {
             ColumnCelebrationOverlay(
+                // 两个会庆祝的专题各用各的说法：日光说「日用环境」，三绿说「谷歌三绿」，
+                // 用户一眼能对上自己刚跑完的是哪个专题。
+                title = when (state.topicId) {
+                    COLUMN_TOPIC_PASS_BANK -> stringResource(R.string.column_celebrate_title_day)
+                    COLUMN_TOPIC_PASS_INTEGRITY -> stringResource(R.string.column_celebrate_title_integrity)
+                    else -> stringResource(R.string.column_celebrate_title)
+                },
                 onOpenSelfCheck = {
                     // 预览态只关预览：既不能跳走，也不能碰真实的庆祝状态。
                     if (previewCelebrate) {
@@ -460,6 +500,7 @@ private fun RebootCountdownOverlay(
  */
 @Composable
 private fun ColumnCelebrationOverlay(
+    title: String,
     onOpenSelfCheck: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -610,7 +651,7 @@ private fun ColumnCelebrationOverlay(
                         }
                         Spacer(Modifier.height(14.dp))
                         Text(
-                            text = stringResource(R.string.column_celebrate_title),
+                            text = title,
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.SemiBold,
                             color = colors.onSurface,

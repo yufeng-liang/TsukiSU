@@ -557,14 +557,16 @@ private fun ColumnHeaderCard(column: RepoColumn) {
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // 图标和专栏名并排：标题字号拉大，形成明确的页面主标题，说明文字只保留一句。
+            // 顶部 AppBar 已经显示专栏名，卡里再写一遍就是重复；这里直接用副标题当主标题，
+            // 卡里只留「一句定位 + 一句说明」，不再出现两行名字。
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 ColumnIconBadge(columnGlyph(column.accent))
                 Text(
-                    text = column.title,
+                    // 副标题缺失的专栏（老索引没写 subtitle）退回专栏名，不然卡片会只剩一个图标。
+                    text = column.subtitle.ifBlank { column.title },
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
@@ -1210,14 +1212,15 @@ private fun ModuleColumnHeaderMiuix(column: RepoColumn) {
     // insideMargin 就是 AppCard 自带的内边距（默认 0），这里给 16dp，content 里不再叠一层 padding。
     AppCard(modifier = Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            // 图标和专栏名并排：标题字号拉大，形成明确的页面主标题，说明文字只保留一句。
+            // 顶部 AppBar 已经显示专栏名，卡里再写一遍就是重复；这里直接用副标题当主标题。
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 ColumnIconBadgeMiuix(columnGlyph(column.accent))
                 MiuixText(
-                    text = column.title,
+                    // 副标题缺失的专栏（老索引没写 subtitle）退回专栏名，不然卡片会只剩一个图标。
+                    text = column.subtitle.ifBlank { column.title },
                     color = colorScheme.onSurface,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.SemiBold,
