@@ -1453,7 +1453,7 @@
     <string name="column_preflight_backup_note" translatable="true">被覆寫的檔案都會先備份，之後可以從回復入口還原。</string>
     <string name="column_preflight_continue" translatable="true">繼續</string>
     <string name="column_preflight_cancel" translatable="true">取消</string>
-    <string name="column_health_title_short" translatable="true">裝置現況</string>
+    <string name="column_health_title_short" translatable="true">裝置初檢</string>
     <string name="column_health_score" translatable="true">%2$d 項檢查 · %1$d 項通過</string>
     <string name="column_keybox_update" translatable="true">更新密鑰</string>
     <string name="column_keybox_updating" translatable="true">更新中…</string>

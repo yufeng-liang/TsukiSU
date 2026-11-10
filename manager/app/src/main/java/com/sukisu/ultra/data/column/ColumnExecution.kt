@@ -124,13 +124,16 @@ object ColumnCheckIds {
     const val MOUNT_HIDE = "mount-hide"
     const val ADB = "adb-disabled"
 
-    // 下面这些是「设备现状卡」用的安装检测项，只展示，不参与任何 verify 步骤判据。
+    // 下面这些是「设备初检卡」用的安装检测项，只展示，不参与任何 verify 步骤判据。
     const val LSPOSED = "lsposed"
     const val HMA_OSS = "hma-oss"
     const val TEESIMULATOR = "teesimulator"
     const val PIF = "pif"
     const val FUSE_FIXER = "fuse-fixer"
     const val TRICKY_STORE = "tricky-store"
+
+    /** 密钥注入方案：TEESimulator 与 TrickyStore 任选其一，装哪个都算通过。 */
+    const val KEY_INJECT = "key-inject"
 
     /** 全部自检项，顺序即界面展示顺序：底座 → 隐藏 → 密钥 → 收尾。 */
     val ALL = listOf(
@@ -140,12 +143,10 @@ object ColumnCheckIds {
         HMA_OSS,
         HMA_CONFIG,
         DENYLIST,
-        MOUNT_HIDE,
-        TEESIMULATOR,
+        KEY_INJECT,
         PIF,
         KEYBOX,
         TARGET_LIST,
-        TRICKY_STORE,
         FUSE_FIXER,
         ADB,
     )

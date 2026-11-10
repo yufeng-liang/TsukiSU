@@ -3,6 +3,7 @@ package com.sukisu.ultra.data.column
 import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
+import com.sukisu.ultra.Natives
 import com.sukisu.ultra.data.model.RepoColumnStep
 import com.sukisu.ultra.data.model.RepoColumnTopic
 import com.sukisu.ultra.ksuApp
@@ -881,6 +882,14 @@ class ColumnStepRunnerImpl(
             val detail = (errors + output).takeLast(3).joinToString("；").ifBlank { "退出码非 0" }
             return failed("命令执行失败：$detail", log)
         }
+
+        // 管理器「默认卸载模块」这个开关只存在于 App Profile 里，没有等价 shell 命令，
+        // 所以由这一步顺带调一次内部 API。失败不算本步失败：命令本身已经做完了主要的事。
+        if (step.setDefaultUmount) {
+            val ok = runCatching { Natives.setDefaultUmountModules(true) }.getOrDefault(false)
+            log.line(if (ok) "已开启「默认卸载模块」" else "「默认卸载模块」开启失败，可在设置里手动打开")
+        }
+
         return ColumnStepResult(
             status = ColumnStepStatus.SUCCESS,
             message = "命令执行成功",
