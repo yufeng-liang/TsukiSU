@@ -668,7 +668,7 @@
     <string name="column_wizard_run_all">一鍵執行</string>
     <string name="column_wizard_opt_in">納入一鍵執行</string>
     <string name="column_wizard_installed" translatable="true">已安裝</string>
-    <string name="column_wizard_installed_skip">已安裝，將跳過</string>
+    <string name="column_wizard_installed_skip">已安裝 %1$s，預設跳過</string>
     <string name="column_wizard_reinstall" translatable="true">重新安裝</string>
     <string name="column_wizard_test_title" translatable="true">測試專用</string>
     <string name="column_wizard_test_body" translatable="true">只預覽介面，不執行任何隱藏操作、也不會真的重啟。長按頂欄標題可再次開啟。</string>
