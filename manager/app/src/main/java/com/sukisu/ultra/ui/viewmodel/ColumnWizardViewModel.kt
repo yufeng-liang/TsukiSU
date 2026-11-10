@@ -915,7 +915,8 @@ class ColumnWizardViewModel(
     private fun maybeFinish(allowCelebrate: Boolean = true) {
         val state = _uiState.value
         if (state.done) return
-        val allSettled = state.stepStates.all { item ->
+        // hidden 步骤是备选方案（如 OhMyKeymint），不该阻止专题完成。
+        val allSettled = state.stepStates.filter { !it.step.hidden }.all { item ->
             item.status.isSettled || (item.step.optIn && item.step.id !in state.optedIn)
         }
         if (!allSettled) return
@@ -1028,8 +1029,10 @@ class ColumnWizardViewModel(
         }
         // 汇总一条给主页卡片用：主页不该为了画一张卡去解析每个专题的步骤明细。
         val currentTopic = topic ?: return
-        val settled = state.stepStates.count { it.status.isSettled }
-        val next = state.stepStates.firstOrNull {
+        // hidden 步骤是备选方案，不占界面位置，也不进主页进度分母。
+        val visibleStates = state.stepStates.filter { !it.step.hidden }
+        val settled = visibleStates.count { it.status.isSettled }
+        val next = visibleStates.firstOrNull {
             !it.status.isSettled && (!it.step.optIn || it.step.id in state.optedIn)
         }
         runCatching {
@@ -1041,7 +1044,7 @@ class ColumnWizardViewModel(
                     topicTitle = currentTopic.title,
                     lastActiveAt = System.currentTimeMillis(),
                     settledSteps = settled,
-                    totalSteps = state.stepStates.size,
+                    totalSteps = visibleStates.size,
                     done = state.done,
                     nextStepTitle = next?.step?.title.orEmpty(),
                     nextStepId = next?.step?.id.orEmpty(),
