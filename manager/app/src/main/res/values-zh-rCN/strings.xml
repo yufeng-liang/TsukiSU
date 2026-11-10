@@ -1731,6 +1731,9 @@
     <string name="column_health_missing_hint" translatable="true">还有 %1$d 项未通过</string>
     <string name="column_health_all_pass" translatable="true">全部通过</string>
     <string name="column_celebrate_title">全部装好了</string>
+    <string name="column_self_check_done">自检完成，看上面的检查结果</string>
+    <string name="column_celebrate_title_day">日用环境已就绪</string>
+    <string name="column_celebrate_title_integrity">谷歌三绿已就绪</string>
     <string name="column_celebrate_body">实际效果请用自检软件跑一遍。报红就把截图发给 AI 助手。</string>
     <string name="column_celebrate_self_check">去自检</string>
     <string name="column_celebrate_done">知道了</string>

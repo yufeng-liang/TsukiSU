@@ -1743,6 +1743,9 @@
     <string name="column_health_missing_hint" translatable="true">%1$d checks still failing</string>
     <string name="column_health_all_pass" translatable="true">All checks passed</string>
     <string name="column_celebrate_title">All set</string>
+    <string name="column_self_check_done">Self-check finished - see the results above</string>
+    <string name="column_celebrate_title_day">Day-use environment is ready</string>
+    <string name="column_celebrate_title_integrity">Google three-green is ready</string>
     <string name="column_celebrate_body">Run a detector to see the actual result. If it reports red items, send the screenshot to the AI assistant.</string>
     <string name="column_celebrate_self_check">Run self-check</string>
     <string name="column_celebrate_done">Got it</string>

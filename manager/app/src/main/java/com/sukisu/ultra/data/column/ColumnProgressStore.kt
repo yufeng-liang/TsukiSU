@@ -186,6 +186,24 @@ object ColumnProgressStore {
         return parsed
     }
 
+    /**
+     * 这个专题是不是已经庆祝过一次。
+     *
+     * 只庆祝第一次：用户重装模块、重跑一遍时不该反复被同一个动画打断。
+     */
+    fun wasCelebrated(context: Context, columnId: String, topicId: String): Boolean =
+        runCatching { prefs(context).getBoolean(celebratedKey(columnId, topicId), false) }
+            .getOrDefault(false)
+
+    /** 记下这个专题已经庆祝过。 */
+    fun markCelebrated(context: Context, columnId: String, topicId: String) {
+        runCatching {
+            prefs(context).edit().putBoolean(celebratedKey(columnId, topicId), true).apply()
+        }
+    }
+
+    private fun celebratedKey(columnId: String, topicId: String) = "celebrated/$columnId/$topicId"
+
     fun clearPendingResume(context: Context) {
         // 同步落盘：紧接着可能还有一次重启，异步写有丢标记的风险。
         runCatching { prefs(context).edit().remove(KEY_PENDING_RESUME).commit() }

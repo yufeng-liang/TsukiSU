@@ -60,6 +60,13 @@ data class RepoColumnTopic(
     val id: String,
     val title: String,
     val summary: String,
+    /**
+     * 这个专题跑完要不要弹庆祝动画。
+     *
+     * 只有真正改动设备、让隐藏生效的专题才该庆祝；环境自检只是看现状，跑完弹「全部装好了」会很怪。
+     * 缺省 true：老索引没写这个字段时保持原有行为。
+     */
+    val celebrate: Boolean = true,
     /** 风险等级，取值 low / medium / high；解析器对缺失值一律降级成 high（宁可多给一次警告）。 */
     val riskLevel: String,
     /** 覆盖的隐藏层，例如 `["L1", "L2", "L5"]`。 */
