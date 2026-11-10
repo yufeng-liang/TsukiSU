@@ -558,6 +558,8 @@ class ColumnWizardViewModel(
         val planned = ArrayList<RepoColumnStep>()
         var stopReason: String? = null
         for (step in steps) {
+            // hidden 步骤只能由降级逻辑触发，不参与一键执行的正常排队。
+            if (step.hidden) continue
             val status = state.stepStates.firstOrNull { it.step.id == step.id }?.status
             // 已经处理过的直接跳过（SUCCESS / SKIPPED）
             if (status?.isSettled == true) continue
@@ -614,6 +616,24 @@ class ColumnWizardViewModel(
                     }
                     val result = executeStep(step, force = false)
                     if (result.isFailure) {
+                        // TEESimulator 装不上时自动降级到备选的 OhMyKeymint：它在界面上是 hidden 的，
+                        // 平时不出现，免得用户在一堆密钥方案里做选择；只有主方案失败才由这里接上。
+                        val fallback = if (step.id == COLUMN_STEP_TEE_SIMULATOR) {
+                            topic?.steps?.firstOrNull { it.hidden }
+                        } else {
+                            null
+                        }
+                        if (fallback != null) {
+                            appendLog("「${step.title}」没装上，改用备选方案「${fallback.title}」")
+                            val retry = executeStep(fallback, force = false)
+                            if (retry.isFailure) {
+                                _uiState.update { it.copy(error = retry.message) }
+                                appendLog("备选方案也失败，一键执行停在这里")
+                                return@launch
+                            }
+                            appendLog("备选方案已装好：${fallback.title}")
+                            continue
+                        }
                         _uiState.update { it.copy(error = result.message) }
                         appendLog("步骤「${step.title}」失败，一键执行停在这里（修正后可以重试这一步）")
                         return@launch
@@ -1101,6 +1121,9 @@ class ColumnWizardViewModel(
     private companion object {
         /** 重启前的倒计时秒数：够用户看清提示，又不至于等太久。 */
         const val REBOOT_COUNTDOWN_SECONDS = 10
+
+        /** 密钥注入主方案的步骤 id：它失败时自动降级到 hidden 的备选步骤。 */
+        const val COLUMN_STEP_TEE_SIMULATOR = "tee-simulator"
 
         /** 日志上限：长步骤（模块安装）输出很多，不截断会把内存和 UI 一起拖慢。 */
         const val MAX_LOG_LINES = 400

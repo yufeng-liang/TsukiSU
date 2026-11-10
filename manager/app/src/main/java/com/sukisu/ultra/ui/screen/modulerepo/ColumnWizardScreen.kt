@@ -739,7 +739,8 @@ private fun ColumnWizardScreenMiuix(
 
     // 以 topic.steps 的顺序为准，state 只提供状态：ViewModel 还没把状态铺开时（刚进页面、状态被重建），
     // 列表照样完整，「开始第一步」也能点；否则会出现「专题有 8 步、界面一片空白」的假死。
-    val orderedStates = topic.steps.map { step ->
+    // hidden 步骤是备选方案（例如 TEESimulator 装不上时才用的 OhMyKeymint），不占界面位置。
+    val orderedStates = topic.steps.filter { !it.hidden }.map { step ->
         state.stepStates.firstOrNull { it.step.id == step.id } ?: ColumnStepUiState(step = step)
     }
     // 从主页「接着进行」进来时高亮下一步：先把列表滚到那一步，用户才看得到。
@@ -870,7 +871,8 @@ private fun ColumnWizardScreenMiuix(
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (state.healthScanning || state.health != null) {
+            // 环境自检专题本身就是用检测软件做全面体检，再放一张自检卡就重复了。
+            if (topic.id != "self-check" && (state.healthScanning || state.health != null)) {
                 // 体检期间也占住卡片位置：骨架高度接近完成态，结果出来时下方内容不会突然跳一下。
                 item(key = "wizard-health") {
                     ColumnHealthCardMiuix(
@@ -1310,15 +1312,6 @@ private fun WizardStepCardMiuix(
             uiState.status == ColumnStepStatus.FAILED ||
             uiState.status == ColumnStepStatus.NEEDS_USER
         )
-    // 整张卡片点击就是执行动作：不再依赖标题行右侧的小按钮。
-    // PENDING 已安装时语义是「重新安装」，所以要改写为 onUpgrade。
-    val cardAction: (() -> Unit)? = when (uiState.status) {
-        ColumnStepStatus.PENDING -> if (installed) onUpgrade else onRun
-        ColumnStepStatus.FAILED -> onRun
-        ColumnStepStatus.NEEDS_USER -> onMarkDone
-        else -> null
-    }
-    val canRun = cardAction != null && !busy
 
     AppCard(
         modifier = Modifier
@@ -1329,8 +1322,7 @@ private fun WizardStepCardMiuix(
                 } else {
                     Modifier
                 },
-            )
-            .clickable(enabled = canRun) { cardAction?.invoke() },
+            ),
         insideMargin = PaddingValues(16.dp),
     ) {
         // 标题行：序号/状态徽章 + 标题；执行动作由整张卡片承担。和 Material 版同一套结构。
@@ -1929,7 +1921,8 @@ private fun ColumnWizardScreenMaterial(
 
     // 以 topic.steps 的顺序为准，state 只提供状态：ViewModel 还没把状态铺开时（刚进页面、状态被重建），
     // 列表照样完整，「开始第一步」也能点；否则会出现「专题有 8 步、界面一片空白」的假死。
-    val orderedStates = topic.steps.map { step ->
+    // hidden 步骤是备选方案（例如 TEESimulator 装不上时才用的 OhMyKeymint），不占界面位置。
+    val orderedStates = topic.steps.filter { !it.hidden }.map { step ->
         state.stepStates.firstOrNull { it.step.id == step.id } ?: ColumnStepUiState(step = step)
     }
     // 从主页「接着进行」进来时高亮下一步：先把列表滚到那一步，用户才看得到。
@@ -2042,7 +2035,8 @@ private fun ColumnWizardScreenMaterial(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            if (state.healthScanning || state.health != null) {
+            // 环境自检专题本身就是用检测软件做全面体检，再放一张自检卡就重复了。
+            if (topic.id != "self-check" && (state.healthScanning || state.health != null)) {
                 // 体检期间也占住卡片位置：骨架高度接近完成态，结果出来时下方内容不会突然跳一下。
                 item(key = "wizard-health") {
                     ColumnHealthCard(
@@ -2241,15 +2235,6 @@ private fun WizardStepCard(
             uiState.status == ColumnStepStatus.FAILED ||
             uiState.status == ColumnStepStatus.NEEDS_USER
         )
-    // 整张卡片点击就是执行动作：不再依赖标题行右侧的小按钮。
-    // PENDING 已安装时语义是「重新安装」，所以要改写为 onUpgrade。
-    val cardAction: (() -> Unit)? = when (uiState.status) {
-        ColumnStepStatus.PENDING -> if (installed) onUpgrade else onRun
-        ColumnStepStatus.FAILED -> onRun
-        ColumnStepStatus.NEEDS_USER -> onMarkDone
-        else -> null
-    }
-    val canRun = cardAction != null && !busy
 
     WizardCard(
         modifier = Modifier
@@ -2260,8 +2245,7 @@ private fun WizardStepCard(
                 } else {
                     Modifier
                 },
-            )
-            .clickable(enabled = canRun) { cardAction?.invoke() },
+            ),
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),

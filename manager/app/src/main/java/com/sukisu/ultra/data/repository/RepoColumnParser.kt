@@ -167,6 +167,8 @@ object RepoColumnParser {
             link = item.text("link"),
             linkLabel = item.text("linkLabel"),
             optIn = item.optBoolean("optIn", false),
+            setDefaultUmount = item.optBoolean("setDefaultUmount", false),
+            hidden = item.optBoolean("hidden", false),
         )
     }
 

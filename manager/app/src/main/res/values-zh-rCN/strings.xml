@@ -1715,7 +1715,7 @@
     <string name="column_preflight_backup_note" translatable="true">被覆盖的文件都会先备份，之后可以从回滚入口还原。</string>
     <string name="column_preflight_continue" translatable="true">继续</string>
     <string name="column_preflight_cancel" translatable="true">取消</string>
-    <string name="column_health_title_short" translatable="true">设备现状</string>
+    <string name="column_health_title_short" translatable="true">设备初检</string>
     <string name="column_health_score" translatable="true">%2$d 项检查 · %1$d 项通过</string>
     <string name="column_keybox_update" translatable="true">更新密钥</string>
     <string name="column_keybox_updating" translatable="true">更新中…</string>

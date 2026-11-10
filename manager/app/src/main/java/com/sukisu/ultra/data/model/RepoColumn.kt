@@ -193,6 +193,20 @@ data class RepoColumnStep(
      * 界面上给一个勾选框，勾了才会跑，没勾就当作已跳过——不勾不是失败。
      */
     val optIn: Boolean = false,
+    /**
+     * `runCommand` 执行成功后，顺带把管理器「默认卸载模块」的全局默认值打开。
+     *
+     * 这个开关只存在于 App 的 Profile 里（`Natives.setDefaultUmountModules`），没有等价 shell 命令，
+     * 所以只能由执行器在本步做完后调一次。索引用它把「打开默认卸载模块」并进配置隐藏开关那一步。
+     */
+    val setDefaultUmount: Boolean = false,
+    /**
+     * 不在界面上展示的步骤，只能由执行器按降级逻辑自动跑到。
+     *
+     * 典型用法是备选方案（例如 TEESimulator 装不上时改装的 OhMyKeymint）：平时不出现，
+     * 避免用户在一堆选项里做选择；主方案失败时才由执行器接上。
+     */
+    val hidden: Boolean = false,
 ) : Parcelable
 
 /** 一个步骤的取材来源：上游 GitHub 仓库，或商店索引里已有的模块。 */

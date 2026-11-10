@@ -49,8 +49,8 @@ class ColumnSelfCheckRunnerImpl : ColumnSelfCheckRunner {
         ColumnCheckIds.PIF -> checkPif(shell)
         ColumnCheckIds.FUSE_FIXER -> checkFuseFixer(shell)
         ColumnCheckIds.TRICKY_STORE -> checkTrickyStoreInstalled(shell)
+        ColumnCheckIds.KEY_INJECT -> checkKeyInject(shell)
         ColumnCheckIds.HYBRID_MOUNT -> checkHybridMount(shell)
-        ColumnCheckIds.MOUNT_HIDE -> checkMountHide(shell)
         ColumnCheckIds.HMA_CONFIG -> checkHmaConfig(shell)
         ColumnCheckIds.DENYLIST -> checkDenylistPolicy(shell)
         ColumnCheckIds.PATHMASK -> checkPathMask(shell)
@@ -182,7 +182,26 @@ class ColumnSelfCheckRunnerImpl : ColumnSelfCheckRunner {
         missing = "未检测到 /data/adb/modules/tricky_store 或 /data/adb/tricky_store",
     )
 
-    /** 3. Hybrid Mount：模块目录存在即可。 */
+    /** 3. 密钥注入：TEESimulator 与 TrickyStore 任选其一，装哪个都算通过。 */
+    private fun checkKeyInject(shell: Shell): ColumnCheckResult {
+        val probe = shell.execCmd(
+            "for d in /data/adb/modules/teesim /data/adb/modules/tricky_store /data/adb/tricky_store; " +
+                "do [ -d \"\$d\" ] && echo \"\$d\"; done"
+        ).nonBlankLines
+        val dir = probe.firstOrNull()
+        return if (dir != null) {
+            val label = when {
+                dir.contains("teesim") -> "TEESimulator"
+                dir.contains("tricky") -> "TrickyStore"
+                else -> "密钥注入模块"
+            }
+            passed(ColumnCheckIds.KEY_INJECT, "$label 已安装（$dir）")
+        } else {
+            failed(ColumnCheckIds.KEY_INJECT, "没有装密钥注入模块（TEESimulator 或 TrickyStore 任选其一）")
+        }
+    }
+
+    /** 4. Hybrid Mount：模块目录存在即可。 */
     private fun checkHybridMount(shell: Shell): ColumnCheckResult {
         val out = shell.execCmd("[ -d /data/adb/modules/hybrid_mount ] && echo yes").text
         return if (out == "yes") {
