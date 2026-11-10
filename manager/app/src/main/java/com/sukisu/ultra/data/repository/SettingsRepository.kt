@@ -23,6 +23,9 @@ interface SettingsRepository {
     var appearanceSectionExpanded: Boolean
     var homeCardSectionExpanded: Boolean
     var colorsSectionExpanded: Boolean
+    var bottomBarSectionExpanded: Boolean
+    var interactionSectionExpanded: Boolean
+    var detailsSectionExpanded: Boolean
     var customHomeTitle: String
     var customTexts: Map<String, String>
     var themeStoreBaseUrl: String
@@ -39,6 +42,22 @@ interface SettingsRepository {
     /** Hide the check icon (Miuix) or ring decoration (Material) on the home status card. */
     var hideHomeCardDecoration: Boolean
     var homeCardStickers: List<HomeCardSticker>
+    /** Custom bottom bar icon images keyed by [com.sukisu.ultra.ui.util.BottomBarIconSlot.key]. */
+    var bottomBarIcons: Map<String, String>
+    /** "classic" or "immersive"; see [com.sukisu.ultra.ui.util.HomeLayout]. */
+    var homeLayout: String
+    /** "start" or "end"; see [com.sukisu.ultra.ui.util.HomeStatusAlignment]. */
+    var homeStatusAlignment: String
+    /** Uniform scale for the immersive status area, coerced to the supported range. */
+    var homeStatusScale: Float
+    /** Independent scale for the working-status pill. */
+    var homePillScale: Float
+    /** Width of the immersive status cluster relative to the page content width. */
+    var homeStatusWidthFraction: Float
+    /** "window", "banner" or "off"; see [com.sukisu.ultra.ui.util.HomeCardImageStyle]. */
+    var homeCardImageStyle: String
+    /** Show the immersive card image even when no custom background is active. */
+    var showHomeCardImageWithoutBackground: Boolean
     var adaptiveThemeJson: String
     var adaptiveAppliedMode: Int
     var adaptiveDraftJson: String
@@ -51,6 +70,8 @@ interface SettingsRepository {
     var checkModuleUpdate: Boolean
     var autoDeleteModuleZip: Boolean
     var alternativeIcon : Boolean
+    /** When enabled, a manager self-update installs without keeping the APK in Downloads. */
+    var autoDeleteUpdateApk: Boolean
 
     /** Id of the selected launcher icon (see [com.sukisu.ultra.ui.util.BuiltinAppIcons]). */
     var appIconId: String
@@ -72,6 +93,8 @@ interface SettingsRepository {
     var enableSwipeDismiss: Boolean
     var pagerInterceptionMode: Int
     var enableBlur: Boolean
+    /** Progressive (edge gradient) blur behind the top and bottom bars. */
+    var enableProgressiveBlur: Boolean
     var enableFloatingBottomBar: Boolean
     var enableFloatingBottomBarBlur: Boolean
     var enableNavigationBadge: Boolean

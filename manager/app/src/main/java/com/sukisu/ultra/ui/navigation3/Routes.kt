@@ -74,12 +74,19 @@ sealed interface Route : NavKey, Parcelable {
     
     @Parcelize
     @Serializable
-    data object ThemeStore : Route
+    data class ThemeStore(
+        val themeId: String? = null,
+        val sourceBaseUrl: String? = null,
+    ) : Route
 
     
     @Parcelize
     @Serializable
     data object ThemeStoreAdaptiveUpload : Route
+
+    @Parcelize
+    @Serializable
+    data object ThemeStoreCurrentUpload : Route
 
     
     @Parcelize

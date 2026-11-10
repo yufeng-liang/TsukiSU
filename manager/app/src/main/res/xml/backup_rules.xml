@@ -6,6 +6,7 @@
    See https://developer.android.com/about/versions/12/backup-restore
 -->
 <full-backup-content>
+    <exclude domain="sharedpref" path="theme_device_access.xml"/>
     <!--
    SukiSU：只排除**会话令牌**那一份 sharedpref（ModuleUploadPrefs.PREFS_NAME =
    "module_upload_session"）。它存的是九十天有效的凭据 —— 服务端 KV 里只有它的

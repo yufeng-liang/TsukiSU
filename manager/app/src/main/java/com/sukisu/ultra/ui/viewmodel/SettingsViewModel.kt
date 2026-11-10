@@ -53,8 +53,13 @@ import com.sukisu.ultra.ui.util.customTextsInGroups
 import com.sukisu.ultra.ui.screen.module.ModuleNameSort
 import com.sukisu.ultra.ui.util.BuiltinAppIcon
 import com.sukisu.ultra.ui.util.BuiltinAppIcons
+import com.sukisu.ultra.ui.util.BottomBarIconSlot
 import com.sukisu.ultra.ui.util.HomeCardSticker
 import com.sukisu.ultra.ui.util.HomeCardStickerTransform
+import com.sukisu.ultra.ui.util.HomeCardImageStyle
+import com.sukisu.ultra.ui.util.HomeLayout
+import com.sukisu.ultra.ui.util.HomeStatusAlignment
+import com.sukisu.ultra.ui.util.HomeStatusStyle
 import com.sukisu.ultra.ui.util.ImportedTheme
 import com.sukisu.ultra.ui.util.ThemePackageData
 import com.sukisu.ultra.ui.util.ThemePackageStorage
@@ -85,6 +90,7 @@ private data class CurrentThemePayload(
     val backgroundFile: File?,
     val cardBackgroundFile: File?,
     val stickerFiles: List<File>,
+    val bottomBarIconFiles: Map<String, File> = emptyMap(),
     val adaptive: ThemePackageAdaptiveExport? = null,
 )
 
@@ -104,6 +110,9 @@ class SettingsViewModel(
         appearanceSectionExpanded = repo.appearanceSectionExpanded,
         homeCardSectionExpanded = repo.homeCardSectionExpanded,
         colorsSectionExpanded = repo.colorsSectionExpanded,
+        bottomBarSectionExpanded = repo.bottomBarSectionExpanded,
+        interactionSectionExpanded = repo.interactionSectionExpanded,
+        detailsSectionExpanded = repo.detailsSectionExpanded,
         customHomeTitle = repo.customHomeTitle,
         customTexts = repo.customTexts,
         themeStoreBaseUrl = repo.themeStoreBaseUrl,
@@ -181,13 +190,16 @@ class SettingsViewModel(
             val enableSwipeDismiss = repo.enableSwipeDismiss
             val pagerInterceptionMode = repo.pagerInterceptionMode
             val enableBlur = repo.enableBlur
+            val enableProgressiveBlur = repo.enableProgressiveBlur
             val enableFloatingBottomBar = repo.enableFloatingBottomBar
             val enableFloatingBottomBarBlur = repo.enableFloatingBottomBarBlur
             val enableNavigationBadge = repo.enableNavigationBadge
             val pageScale = repo.pageScale
+            val bottomBarIcons = repo.bottomBarIcons
             val moduleDescriptionMaxLines = repo.moduleDescriptionMaxLines
             val enableWebDebugging = repo.enableWebDebugging
             val autoDeleteModuleZip = repo.autoDeleteModuleZip
+            val autoDeleteUpdateApk = repo.autoDeleteUpdateApk
             val showFullStatus = repo.showFullStatus
             val hideHomeWarnings = repo.hideHomeWarnings
             val showAiHomeCard = repo.showAiHomeCard
@@ -260,6 +272,9 @@ class SettingsViewModel(
                     appearanceSectionExpanded = repo.appearanceSectionExpanded,
                     homeCardSectionExpanded = repo.homeCardSectionExpanded,
                     colorsSectionExpanded = repo.colorsSectionExpanded,
+                    bottomBarSectionExpanded = repo.bottomBarSectionExpanded,
+                    interactionSectionExpanded = repo.interactionSectionExpanded,
+                    detailsSectionExpanded = repo.detailsSectionExpanded,
                     customHomeTitle = repo.customHomeTitle,
                     customTexts = repo.customTexts,
                     adaptiveThemeActive = AdaptiveThemeStore.isActive(repo),
@@ -270,6 +285,14 @@ class SettingsViewModel(
                     hideHomeCardStatusText = repo.hideHomeCardStatusText,
                     hideHomeCardDecoration = repo.hideHomeCardDecoration,
                     homeCardStickers = repo.homeCardStickers,
+                    bottomBarIcons = bottomBarIcons,
+                    homeLayout = HomeLayout.fromValue(repo.homeLayout),
+homeStatusAlignment = HomeStatusAlignment.fromValue(repo.homeStatusAlignment),
+                    homeStatusScale = HomeStatusStyle.coerceScale(repo.homeStatusScale),
+homePillScale = HomeStatusStyle.coercePillScale(repo.homePillScale),
+                    homeStatusWidthFraction = HomeStatusStyle.coerceWidth(repo.homeStatusWidthFraction),
+                    homeCardImageStyle = HomeCardImageStyle.fromValue(repo.homeCardImageStyle),
+                    showHomeCardImageWithoutBackground = repo.showHomeCardImageWithoutBackground,
                     customAppearanceJson = customAppearanceJson,
                     customColorsPresent = appearanceData?.colors != null,
                     imageEffectsPresent = appearanceData?.image != null,
@@ -282,6 +305,7 @@ class SettingsViewModel(
                     enableSwipeDismiss = enableSwipeDismiss,
                     pagerInterceptionMode = pagerInterceptionMode,
                     enableBlur = enableBlur,
+                    enableProgressiveBlur = enableProgressiveBlur,
                     enableFloatingBottomBar = enableFloatingBottomBar,
                     enableFloatingBottomBarBlur = enableFloatingBottomBarBlur,
                     enableNavigationBadge = enableNavigationBadge,
@@ -289,6 +313,7 @@ class SettingsViewModel(
                     moduleDescriptionMaxLines = moduleDescriptionMaxLines,
                     enableWebDebugging = enableWebDebugging,
                     autoDeleteModuleZip = autoDeleteModuleZip,
+                    autoDeleteUpdateApk = autoDeleteUpdateApk,
                     showFullStatus = showFullStatus,
                     hideHomeWarnings = hideHomeWarnings,
                     showAiHomeCard = showAiHomeCard,
@@ -566,6 +591,36 @@ class SettingsViewModel(
         _uiState.update { it.copy(customBackgroundScrimPercent = percent) }
     }
 
+    fun pickBottomBarIcon(context: Context, slot: BottomBarIconSlot, uri: Uri) {
+        viewModelScope.launch {
+            val path = ImageStorage.saveBottomBarIcon(context, slot, uri)
+            if (path != null) {
+                val updated = _uiState.value.bottomBarIcons + (slot.key to path)
+                repo.bottomBarIcons = updated
+                _uiState.update { it.copy(bottomBarIcons = updated) }
+            } else {
+                Toast.makeText(context, R.string.bottom_bar_icon_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun clearBottomBarIcon(context: Context, slot: BottomBarIconSlot) {
+        viewModelScope.launch {
+            ImageStorage.clearBottomBarIcon(context, slot)
+            val updated = _uiState.value.bottomBarIcons - slot.key
+            repo.bottomBarIcons = updated
+            _uiState.update { it.copy(bottomBarIcons = updated) }
+        }
+    }
+
+    fun clearAllBottomBarIcons(context: Context) {
+        viewModelScope.launch {
+            ImageStorage.clearBottomBarIcons(context)
+            repo.bottomBarIcons = emptyMap()
+            _uiState.update { it.copy(bottomBarIcons = emptyMap()) }
+        }
+    }
+
     fun pickHomeCardImage(context: Context, uri: Uri) {
         viewModelScope.launch {
             val path = ImageStorage.saveHomeCardImage(context, uri)
@@ -604,6 +659,44 @@ class SettingsViewModel(
     fun setHideHomeCardDecoration(hidden: Boolean) {
         repo.hideHomeCardDecoration = hidden
         _uiState.update { it.copy(hideHomeCardDecoration = hidden) }
+    }
+
+    fun setHomeLayout(layout: HomeLayout) {
+        repo.homeLayout = layout.value
+        _uiState.update { it.copy(homeLayout = layout) }
+    }
+
+    fun setHomeStatusAlignment(alignment: HomeStatusAlignment) {
+        repo.homeStatusAlignment = alignment.value
+        _uiState.update { it.copy(homeStatusAlignment = alignment) }
+    }
+
+    fun setHomeStatusScale(scale: Float) {
+        val coerced = HomeStatusStyle.coerceScale(scale)
+        repo.homeStatusScale = coerced
+        _uiState.update { it.copy(homeStatusScale = coerced) }
+    }
+
+    fun setHomePillScale(scale: Float) {
+        val coerced = HomeStatusStyle.coercePillScale(scale)
+        repo.homePillScale = coerced
+        _uiState.update { it.copy(homePillScale = coerced) }
+    }
+
+    fun setHomeStatusWidthFraction(fraction: Float) {
+        val coerced = HomeStatusStyle.coerceWidth(fraction)
+        repo.homeStatusWidthFraction = coerced
+        _uiState.update { it.copy(homeStatusWidthFraction = coerced) }
+    }
+
+    fun setHomeCardImageStyle(style: HomeCardImageStyle) {
+        repo.homeCardImageStyle = style.value
+        _uiState.update { it.copy(homeCardImageStyle = style) }
+    }
+
+    fun setShowHomeCardImageWithoutBackground(show: Boolean) {
+        repo.showHomeCardImageWithoutBackground = show
+        _uiState.update { it.copy(showHomeCardImageWithoutBackground = show) }
     }
 
     fun addHomeCardSticker(context: Context, uri: Uri) {
@@ -744,6 +837,7 @@ class SettingsViewModel(
                 backgroundFile = payload.backgroundFile,
                 cardBackgroundFile = payload.cardBackgroundFile,
                 cardStickerFiles = payload.stickerFiles,
+                bottomBarIconFiles = payload.bottomBarIconFiles,
                 adaptive = payload.adaptive,
             )
                 .onSuccess {
@@ -755,9 +849,21 @@ class SettingsViewModel(
         }
     }
 
+    /** Options picked in the export dialog, reused when the upload form builds a preset package. */
+    private var pendingThemeUploadOptions: ThemePackageOptions? = null
+
+    fun prepareThemeUpload(options: ThemePackageOptions) {
+        pendingThemeUploadOptions = options
+    }
+
+    fun clearPendingThemeUploadOptions() {
+        pendingThemeUploadOptions = null
+    }
+
     suspend fun createCurrentThemePackage(context: Context): Result<File> = withContext(Dispatchers.IO) {
         runCatching {
-            val payload = currentThemePayload(ThemePackageOptions(), preferDraft = false)
+            val options = pendingThemeUploadOptions ?: ThemePackageOptions()
+            val payload = currentThemePayload(options, preferDraft = false)
             val file = File(context.cacheDir, "theme_upload_preset.sukisu")
             ThemePackageStorage.exportToFile(
                 file = file,
@@ -765,6 +871,7 @@ class SettingsViewModel(
                 backgroundFile = payload.backgroundFile,
                 cardBackgroundFile = payload.cardBackgroundFile,
                 cardStickerFiles = payload.stickerFiles,
+                bottomBarIconFiles = payload.bottomBarIconFiles,
                 adaptive = payload.adaptive,
             ).getOrThrow()
             file
@@ -810,6 +917,14 @@ class SettingsViewModel(
             emptyList()
         }
         val cardStickerFiles = stickerEntries.map { File(it.path) }
+        val bottomBarIconFiles = if (options.bottomBarIcons) {
+            repo.bottomBarIcons.mapNotNull { (slot, path) ->
+                if (BottomBarIconSlot.fromKey(slot) == null) return@mapNotNull null
+                File(path).takeIf { it.isFile }?.let { slot to it }
+            }.toMap()
+        } else {
+            emptyMap()
+        }
         val builtinIconIds = setOf(
             BuiltinAppIcons.DEFAULT_ID,
             BuiltinAppIcons.KERNELSU_ID,
@@ -839,6 +954,19 @@ class SettingsViewModel(
             hasCardBackground = if (options.homeCardImage) cardBackgroundFile != null else null,
             hideHomeCardStatusText = repo.hideHomeCardStatusText.takeIf { options.homeCardDisplay },
             hideHomeCardDecoration = repo.hideHomeCardDecoration.takeIf { options.homeCardDisplay },
+            homeLayout = HomeLayout.fromValue(repo.homeLayout).value.takeIf { options.homeCardDisplay },
+homeStatusAlignment = HomeStatusAlignment.fromValue(repo.homeStatusAlignment).value
+                .takeIf { options.homeCardDisplay },
+            homeStatusScale = HomeStatusStyle.coerceScale(repo.homeStatusScale)
+                .takeIf { options.homeCardDisplay },
+            homePillScale = HomeStatusStyle.coercePillScale(repo.homePillScale)
+                .takeIf { options.homeCardDisplay },
+            homeStatusWidthFraction = HomeStatusStyle.coerceWidth(repo.homeStatusWidthFraction)
+                .takeIf { options.homeCardDisplay },
+            homeCardImageStyle = HomeCardImageStyle.fromValue(repo.homeCardImageStyle).value
+                .takeIf { options.homeCardDisplay },
+            showHomeCardImageWithoutBackground = repo.showHomeCardImageWithoutBackground
+                .takeIf { options.homeCardDisplay },
             homeCardStickerTransforms = if (options.stickers) {
                 stickerEntries.map { it.transform }
             } else {
@@ -847,6 +975,7 @@ class SettingsViewModel(
             uiMode = repo.uiMode.takeIf { options.interfaceMode },
             appIconId = exportedIconId.takeIf { options.appIcon },
             enableBlur = repo.enableBlur.takeIf { options.interfaceSwitches },
+            enableProgressiveBlur = repo.enableProgressiveBlur.takeIf { options.interfaceSwitches },
             enableFloatingBottomBar = repo.enableFloatingBottomBar.takeIf { options.interfaceSwitches },
             enableFloatingBottomBarBlur = repo.enableFloatingBottomBarBlur.takeIf { options.interfaceSwitches },
             enableNavigationBadge = repo.enableNavigationBadge.takeIf { options.interfaceSwitches },
@@ -873,9 +1002,19 @@ class SettingsViewModel(
             } else {
                 null
             },
+            bottomBarIcons = bottomBarIconFiles.keys.toList().takeIf {
+                options.bottomBarIcons
+            },
             appearance = currentAppearanceForExport(options),
         )
-        return CurrentThemePayload(data, backgroundFile, cardBackgroundFile, cardStickerFiles, adaptive)
+        return CurrentThemePayload(
+            data,
+            backgroundFile,
+            cardBackgroundFile,
+            cardStickerFiles,
+            bottomBarIconFiles,
+            adaptive,
+        )
     }
 
     private fun currentAppearanceForExport(options: ThemePackageOptions): AppearanceOverlayData? {
@@ -967,11 +1106,31 @@ class SettingsViewModel(
             } else {
                 null
             },
+            homeLayout = if (options.homeCardDisplay) source.homeLayout else null,
+homeStatusAlignment = if (options.homeCardDisplay) source.homeStatusAlignment else null,
+            homeStatusScale = if (options.homeCardDisplay) source.homeStatusScale else null,
+homePillScale = if (options.homeCardDisplay) source.homePillScale else null,
+            homeStatusWidthFraction = if (options.homeCardDisplay) {
+                source.homeStatusWidthFraction
+            } else {
+                null
+            },
+            homeCardImageStyle = if (options.homeCardDisplay) source.homeCardImageStyle else null,
+            showHomeCardImageWithoutBackground = if (options.homeCardDisplay) {
+                source.showHomeCardImageWithoutBackground
+            } else {
+                null
+            },
             homeCardStickerTransforms = stickerTransforms,
             uiMode = if (options.interfaceMode) repo.uiMode else null,
             // The chrome and behavior switches are global settings, not per light/dark appearance,
             // so both halves always carry the live values instead of what the state captured.
             enableBlur = if (options.interfaceSwitches) repo.enableBlur else null,
+            enableProgressiveBlur = if (options.interfaceSwitches) {
+                repo.enableProgressiveBlur
+            } else {
+                null
+            },
             enableFloatingBottomBar = if (options.interfaceSwitches) {
                 repo.enableFloatingBottomBar
             } else {
@@ -1187,6 +1346,7 @@ class SettingsViewModel(
         context: Context,
         state: SettingsUiState,
         options: ThemePackageOptions,
+        imported: ImportedTheme,
     ): SettingsUiState {
         var updated = state
         if (options.colors) {
@@ -1209,7 +1369,15 @@ class SettingsViewModel(
                 adaptiveThemeActive = false,
             )
         }
-        if (options.backgroundImage) {
+        // Packages that carry no background data hide the dialog option, so the previous
+        // wallpaper is cleared along with the rest of the old preset; a package with a
+        // background only keeps the current one when the user unticked the option.
+        val backgroundImageOptionAvailable =
+            imported.backgroundPath != null ||
+                imported.light?.backgroundPath != null ||
+                imported.dark?.backgroundPath != null ||
+                (!imported.isAdaptive && imported.data.hasBackground == false)
+        if (options.backgroundImage || !backgroundImageOptionAvailable) {
             wallpaperGeneration++
             ImageStorage.clear(context)
             runCatching { ImageStorage.systemWallpaperFile(context).delete() }
@@ -1235,12 +1403,27 @@ class SettingsViewModel(
                 customBackgroundScrimPercent = ImageStorage.DEFAULT_BACKGROUND_SCRIM,
             )
         }
-        if (options.homeCardImage) {
+        // Packages without card image data leave the import dialog without the option, so the
+        // previous image is cleared instead of being carried over the new theme. Keeping it is
+        // only possible when the package declares the group and the user unticked it.
+        val homeCardImageOptionAvailable =
+            imported.cardBackgroundPath != null ||
+                imported.light?.cardBackgroundPath != null ||
+                imported.dark?.cardBackgroundPath != null ||
+                (!imported.isAdaptive && imported.data.hasCardBackground == false)
+        if (options.homeCardImage || !homeCardImageOptionAvailable) {
             ImageStorage.clearHomeCardImage(context)
             repo.homeCardImagePath = ""
             updated = updated.copy(homeCardImagePath = "")
         }
-        if (options.stickers) {
+        // Same rule as the card image: a package without sticker data clears the previous
+        // stickers; the package stickers are imported afterwards when it has them.
+        val stickersOptionAvailable =
+            imported.stickerPaths.isNotEmpty() ||
+                imported.light?.stickerPaths?.isNotEmpty() == true ||
+                imported.dark?.stickerPaths?.isNotEmpty() == true ||
+                (!imported.isAdaptive && imported.data.homeCardStickerTransforms != null)
+        if (options.stickers || !stickersOptionAvailable) {
             ImageStorage.clearHomeCardSticker(context)
             repo.homeCardStickers = emptyList()
             updated = updated.copy(homeCardStickers = emptyList())
@@ -1248,9 +1431,23 @@ class SettingsViewModel(
         if (options.homeCardDisplay) {
             repo.hideHomeCardStatusText = false
             repo.hideHomeCardDecoration = false
+            repo.homeLayout = HomeLayout.CLASSIC.value
+            repo.homeStatusAlignment = HomeStatusAlignment.START.value
+            repo.homeStatusScale = HomeStatusStyle.SCALE_DEFAULT
+            repo.homePillScale = HomeStatusStyle.PILL_SCALE_DEFAULT
+            repo.homeStatusWidthFraction = HomeStatusStyle.WIDTH_DEFAULT
+            repo.homeCardImageStyle = HomeCardImageStyle.BANNER.value
+            repo.showHomeCardImageWithoutBackground = false
             updated = updated.copy(
                 hideHomeCardStatusText = false,
                 hideHomeCardDecoration = false,
+                homeLayout = HomeLayout.CLASSIC,
+                homeStatusAlignment = HomeStatusAlignment.START,
+                homeStatusScale = HomeStatusStyle.SCALE_DEFAULT,
+                homePillScale = HomeStatusStyle.PILL_SCALE_DEFAULT,
+                homeStatusWidthFraction = HomeStatusStyle.WIDTH_DEFAULT,
+                homeCardImageStyle = HomeCardImageStyle.BANNER,
+                showHomeCardImageWithoutBackground = false,
             )
         }
         if (options.appIcon && updated.appIconId != BuiltinAppIcons.DEFAULT_ID) {
@@ -1261,6 +1458,33 @@ class SettingsViewModel(
                 dynamicColor = repo.appIconDynamicColor,
             )
             updated = updated.copy(appIconId = BuiltinAppIcons.DEFAULT_ID)
+        }
+        if (options.interfaceSwitches) {
+            // The import replaces the interface-switch group as a whole: switches the package
+            // does not carry fall back to the app defaults instead of surviving from the old
+            // preset, and the apply step below restores the package values that are present.
+            repo.enableBlur = false
+            repo.enableProgressiveBlur = false
+            repo.enableFloatingBottomBar = false
+            repo.enableFloatingBottomBarBlur = false
+            repo.enableNavigationBadge = true
+            updated = updated.copy(
+                enableBlur = false,
+                enableProgressiveBlur = false,
+                enableFloatingBottomBar = false,
+                enableFloatingBottomBarBlur = false,
+                enableNavigationBadge = true,
+            )
+        }
+        // The icon group has no always-on switch in the import dialog, so treat a package that
+        // carries no icon data as "no icons": clear the previous custom icons either way, and
+        // let the apply step import the package icons when it has them.
+        val packageHasBottomBarIcons =
+            imported.data.bottomBarIcons != null || imported.bottomBarIconPaths.isNotEmpty()
+        if (options.bottomBarIcons || !packageHasBottomBarIcons) {
+            ImageStorage.clearBottomBarIcons(context)
+            repo.bottomBarIcons = emptyMap()
+            updated = updated.copy(bottomBarIcons = emptyMap())
         }
         if (updated != state) {
             // Push only the fields the final apply update below does not republish.
@@ -1281,7 +1505,7 @@ class SettingsViewModel(
         clearFirst: Boolean = false,
     ) {
         val current = if (clearFirst) {
-            resetAppearanceForImport(context, _uiState.value, options)
+            resetAppearanceForImport(context, _uiState.value, options, imported)
         } else {
             _uiState.value
         }
@@ -1312,6 +1536,13 @@ class SettingsViewModel(
                 hideHomeCardStatusText = null,
                 hideHomeCardDecoration = null,
                 homeCardStickerTransforms = null,
+                homeLayout = null,
+                homeStatusAlignment = null,
+                homeStatusScale = null,
+                homePillScale = null,
+                homeStatusWidthFraction = null,
+                homeCardImageStyle = null,
+                showHomeCardImageWithoutBackground = null,
                 uiMode = null,
                 enableFloatingBottomBar = null,
                 enableFloatingBottomBarBlur = null,
@@ -1319,6 +1550,7 @@ class SettingsViewModel(
                 enablePredictiveBack = null,
                 enableSwipeDismiss = null,
                 enableBlur = null,
+                enableProgressiveBlur = null,
                 pagerInterceptionMode = null,
                 pageScale = null,
                 moduleDescriptionMaxLines = null,
@@ -1346,7 +1578,9 @@ class SettingsViewModel(
         var hideHomeCardDecoration = current.hideHomeCardDecoration
         var hideHomeCardStatusText = current.hideHomeCardStatusText
         var homeCardStickers = current.homeCardStickers
+        var bottomBarIcons = current.bottomBarIcons
         var enableBlur = current.enableBlur
+        var enableProgressiveBlur = current.enableProgressiveBlur
         var pagerMode = current.pagerInterceptionMode
         var pageScale = current.pageScale
         var moduleMaxLines = current.moduleDescriptionMaxLines
@@ -1391,6 +1625,25 @@ class SettingsViewModel(
                 repo.hideHomeCardStatusText = it
                 hideHomeCardStatusText = it
             }
+            data.homeLayout?.let { repo.homeLayout = HomeLayout.fromValue(it).value }
+            data.homeStatusAlignment?.let {
+                repo.homeStatusAlignment = HomeStatusAlignment.fromValue(it).value
+            }
+            data.homeStatusScale?.let {
+                repo.homeStatusScale = HomeStatusStyle.coerceScale(it)
+            }
+            data.homePillScale?.let {
+                repo.homePillScale = HomeStatusStyle.coercePillScale(it)
+            }
+            data.homeStatusWidthFraction?.let {
+                repo.homeStatusWidthFraction = HomeStatusStyle.coerceWidth(it)
+            }
+            data.homeCardImageStyle?.let {
+                repo.homeCardImageStyle = HomeCardImageStyle.fromValue(it).value
+            }
+            data.showHomeCardImageWithoutBackground?.let {
+                repo.showHomeCardImageWithoutBackground = it
+            }
         }
 
         var floatingBottomBar = current.enableFloatingBottomBar
@@ -1408,6 +1661,10 @@ class SettingsViewModel(
             data.enableBlur?.let {
                 repo.enableBlur = it
                 enableBlur = it
+            }
+            data.enableProgressiveBlur?.let {
+                repo.enableProgressiveBlur = it
+                enableProgressiveBlur = it
             }
             floatingBottomBar = data.enableFloatingBottomBar ?: current.enableFloatingBottomBar
             floatingBottomBarBlur = data.enableFloatingBottomBarBlur ?: current.enableFloatingBottomBarBlur
@@ -1514,6 +1771,22 @@ class SettingsViewModel(
             imported.stickerPaths.forEach { runCatching { File(it).delete() } }
         }
 
+        if (options.bottomBarIcons) {
+            // The field doubles as the "this package owns the icons" marker: an empty list
+            // explicitly clears the current icons, a missing field leaves them untouched.
+            if (data.bottomBarIcons != null) {
+                ImageStorage.clearBottomBarIcons(context)
+                bottomBarIcons = imported.bottomBarIconPaths.mapNotNull { (slotKey, path) ->
+                    val slot = BottomBarIconSlot.fromKey(slotKey) ?: return@mapNotNull null
+                    ImageStorage.importBottomBarIcon(context, slot, File(path))
+                        ?.let { slotKey to it }
+                }.toMap()
+                repo.bottomBarIcons = bottomBarIcons
+            }
+        } else {
+            imported.bottomBarIconPaths.values.forEach { runCatching { File(it).delete() } }
+        }
+
         var effectiveIconId = current.appIconId
         if (options.appIcon) {
             val builtinIconIds = setOf(
@@ -1603,6 +1876,7 @@ class SettingsViewModel(
             hideHomeCardDecoration = repo.hideHomeCardDecoration
             hideHomeCardStatusText = repo.hideHomeCardStatusText
             homeCardStickers = repo.homeCardStickers
+            bottomBarIcons = repo.bottomBarIcons
             backgroundUri = repo.customBackgroundUri
             homeCardImagePath = repo.homeCardImagePath
             floatingBottomBar = repo.enableFloatingBottomBar
@@ -1611,6 +1885,7 @@ class SettingsViewModel(
             predictiveBack = repo.enablePredictiveBack
             swipeDismiss = repo.enableSwipeDismiss
             enableBlur = repo.enableBlur
+            enableProgressiveBlur = repo.enableProgressiveBlur
             pagerMode = repo.pagerInterceptionMode
             pageScale = repo.pageScale
             moduleMaxLines = repo.moduleDescriptionMaxLines
@@ -1641,6 +1916,14 @@ class SettingsViewModel(
                 hideHomeCardStatusText = hideHomeCardStatusText,
                 hideHomeCardDecoration = hideHomeCardDecoration,
                 homeCardStickers = homeCardStickers,
+                bottomBarIcons = bottomBarIcons,
+                homeLayout = HomeLayout.fromValue(repo.homeLayout),
+homeStatusAlignment = HomeStatusAlignment.fromValue(repo.homeStatusAlignment),
+                homeStatusScale = HomeStatusStyle.coerceScale(repo.homeStatusScale),
+homePillScale = HomeStatusStyle.coercePillScale(repo.homePillScale),
+                homeStatusWidthFraction = HomeStatusStyle.coerceWidth(repo.homeStatusWidthFraction),
+                homeCardImageStyle = HomeCardImageStyle.fromValue(repo.homeCardImageStyle),
+                showHomeCardImageWithoutBackground = repo.showHomeCardImageWithoutBackground,
                 customAppearanceJson = repo.customAppearanceJson,
                 customColorsPresent = savedAppearance?.colors != null,
                 imageEffectsPresent = savedAppearance?.image != null,
@@ -1655,7 +1938,9 @@ class SettingsViewModel(
                 ) {
                     false
                 } else {
-                    it.useSystemWallpaper
+                    // The clear-first reset may already have turned the system wallpaper off
+                    // for a package without background data; keep that result, not the old state.
+                    current.useSystemWallpaper
                 },
                 systemWallpaperPath = if (
                     options.backgroundImage &&
@@ -1665,7 +1950,7 @@ class SettingsViewModel(
                 ) {
                     ""
                 } else {
-                    it.systemWallpaperPath
+                    current.systemWallpaperPath
                 },
                 enableFloatingBottomBar = floatingBottomBar,
                 enableFloatingBottomBarBlur = floatingBottomBarBlur,
@@ -1673,6 +1958,7 @@ class SettingsViewModel(
                 enablePredictiveBack = predictiveBack,
                 enableSwipeDismiss = swipeDismiss,
                 enableBlur = enableBlur,
+                enableProgressiveBlur = enableProgressiveBlur,
                 pagerInterceptionMode = pagerMode,
                 pageScale = pageScale,
                 moduleDescriptionMaxLines = moduleMaxLines,
@@ -1802,9 +2088,37 @@ class SettingsViewModel(
                 } else {
                     null
                 },
+                homeLayout = if (options.homeCardDisplay) variant.data.homeLayout else null,
+homeStatusAlignment = if (options.homeCardDisplay) {
+                variant.data.homeStatusAlignment
+            } else {
+                null
+            },
+                homeStatusScale = if (options.homeCardDisplay) variant.data.homeStatusScale else null,
+homePillScale = if (options.homeCardDisplay) variant.data.homePillScale else null,
+                homeStatusWidthFraction = if (options.homeCardDisplay) {
+                    variant.data.homeStatusWidthFraction
+                } else {
+                    null
+                },
+                homeCardImageStyle = if (options.homeCardDisplay) {
+                    variant.data.homeCardImageStyle
+                } else {
+                    null
+                },
+                showHomeCardImageWithoutBackground = if (options.homeCardDisplay) {
+                    variant.data.showHomeCardImageWithoutBackground
+                } else {
+                    null
+                },
                 homeCardStickerTransforms = stickerData,
                 uiMode = if (options.interfaceMode) variant.data.uiMode else null,
                 enableBlur = if (options.interfaceSwitches) variant.data.enableBlur else null,
+                enableProgressiveBlur = if (options.interfaceSwitches) {
+                    variant.data.enableProgressiveBlur
+                } else {
+                    null
+                },
                 enableFloatingBottomBar = if (options.interfaceSwitches) {
                     variant.data.enableFloatingBottomBar
                 } else {
@@ -2050,6 +2364,7 @@ class SettingsViewModel(
                     backgroundFile = payload.backgroundFile,
                     cardBackgroundFile = payload.cardBackgroundFile,
                     cardStickerFiles = payload.stickerFiles,
+                    bottomBarIconFiles = payload.bottomBarIconFiles,
                     adaptive = payload.adaptive,
                 ).getOrThrow()
                 file
@@ -2146,6 +2461,13 @@ class SettingsViewModel(
                     hideHomeCardStatusText = repo.hideHomeCardStatusText,
                     hideHomeCardDecoration = repo.hideHomeCardDecoration,
                     homeCardStickerTransforms = stickers.map { it.transform },
+                    homeLayout = repo.homeLayout,
+homeStatusAlignment = repo.homeStatusAlignment,
+                    homeStatusScale = repo.homeStatusScale,
+homePillScale = repo.homePillScale,
+                    homeStatusWidthFraction = repo.homeStatusWidthFraction,
+                    homeCardImageStyle = repo.homeCardImageStyle,
+                    showHomeCardImageWithoutBackground = repo.showHomeCardImageWithoutBackground,
                     uiMode = repo.uiMode,
                     enableFloatingBottomBar = repo.enableFloatingBottomBar,
                     enableFloatingBottomBarBlur = repo.enableFloatingBottomBarBlur,
@@ -2196,6 +2518,7 @@ class SettingsViewModel(
             ImageStorage.clear(ksuApp)
             ImageStorage.clearHomeCardImage(ksuApp)
             ImageStorage.clearHomeCardSticker(ksuApp)
+            ImageStorage.clearBottomBarIcons(ksuApp)
             ImageStorage.clearAdaptiveImages(ksuApp)
             AdaptiveThemeStore.clearDraft(repo)
             runCatching { ImageStorage.systemWallpaperFile(ksuApp).delete() }
@@ -2205,11 +2528,19 @@ class SettingsViewModel(
             repo.useSystemWallpaper = false
             repo.homeCardImagePath = ""
             repo.homeCardStickers = emptyList()
+            repo.bottomBarIcons = emptyMap()
             repo.cardBackgroundAlphaPercent = ImageStorage.DEFAULT_CARD_ALPHA
             repo.customBackgroundBlurPercent = defaultBlur
             repo.customBackgroundScrimPercent = ImageStorage.DEFAULT_BACKGROUND_SCRIM
             repo.hideHomeCardStatusText = false
             repo.hideHomeCardDecoration = false
+            repo.homeLayout = HomeLayout.CLASSIC.value
+            repo.homeStatusAlignment = HomeStatusAlignment.START.value
+            repo.homeStatusScale = HomeStatusStyle.SCALE_DEFAULT
+            repo.homePillScale = HomeStatusStyle.PILL_SCALE_DEFAULT
+            repo.homeStatusWidthFraction = HomeStatusStyle.WIDTH_DEFAULT
+            repo.homeCardImageStyle = HomeCardImageStyle.BANNER.value
+            repo.showHomeCardImageWithoutBackground = false
             repo.themeMode = 0
             repo.miuixMonet = false
             repo.keyColor = 0
@@ -2234,11 +2565,18 @@ class SettingsViewModel(
                     isSystemWallpaperBusy = false,
                     homeCardImagePath = "",
                     homeCardStickers = emptyList(),
+                    bottomBarIcons = emptyMap(),
                     cardBackgroundAlphaPercent = ImageStorage.DEFAULT_CARD_ALPHA,
                     customBackgroundBlurPercent = defaultBlur,
                     customBackgroundScrimPercent = ImageStorage.DEFAULT_BACKGROUND_SCRIM,
                     hideHomeCardStatusText = false,
                     hideHomeCardDecoration = false,
+                    homeLayout = HomeLayout.CLASSIC,
+                homeStatusAlignment = HomeStatusAlignment.START,
+                    homeStatusScale = HomeStatusStyle.SCALE_DEFAULT,
+                homePillScale = HomeStatusStyle.PILL_SCALE_DEFAULT,
+                    homeCardImageStyle = HomeCardImageStyle.BANNER,
+                    showHomeCardImageWithoutBackground = false,
                     themeMode = 0,
                     miuixMonet = false,
                     keyColor = 0,
@@ -2407,6 +2745,11 @@ class SettingsViewModel(
         repo.autoDeleteModuleZip = enabled
         _uiState.update { it.copy(autoDeleteModuleZip = enabled) }
     }
+
+    fun setAutoDeleteUpdateApk(enabled: Boolean) {
+        repo.autoDeleteUpdateApk = enabled
+        _uiState.update { it.copy(autoDeleteUpdateApk = enabled) }
+    }
     fun setAppIcon(context: Context, iconId: String) {
         val icon = BuiltinAppIcons.find(iconId)
         repo.appIconId = icon.id
@@ -2448,6 +2791,21 @@ class SettingsViewModel(
     fun setColorsSectionExpanded(expanded: Boolean) {
         repo.colorsSectionExpanded = expanded
         _uiState.update { it.copy(colorsSectionExpanded = expanded) }
+    }
+
+    fun setBottomBarSectionExpanded(expanded: Boolean) {
+        repo.bottomBarSectionExpanded = expanded
+        _uiState.update { it.copy(bottomBarSectionExpanded = expanded) }
+    }
+
+    fun setInteractionSectionExpanded(expanded: Boolean) {
+        repo.interactionSectionExpanded = expanded
+        _uiState.update { it.copy(interactionSectionExpanded = expanded) }
+    }
+
+    fun setDetailsSectionExpanded(expanded: Boolean) {
+        repo.detailsSectionExpanded = expanded
+        _uiState.update { it.copy(detailsSectionExpanded = expanded) }
     }
 
     fun setCustomHomeTitle(title: String) {
@@ -2627,6 +2985,11 @@ class SettingsViewModel(
     fun setEnableBlur(enabled: Boolean) {
         repo.enableBlur = enabled
         _uiState.update { it.copy(enableBlur = enabled) }
+    }
+
+    fun setEnableProgressiveBlur(enabled: Boolean) {
+        repo.enableProgressiveBlur = enabled
+        _uiState.update { it.copy(enableProgressiveBlur = enabled) }
     }
 
     fun setEnableFloatingBottomBar(enabled: Boolean) {
@@ -2863,6 +3226,7 @@ class SettingsViewModel(
             cardBackgroundAlphaPercent = cardBackgroundAlphaPercent,
             customBackgroundBlurPercent = customBackgroundBlurPercent,
             customBackgroundScrimPercent = customBackgroundScrimPercent,
+            enableProgressiveBlur = enableProgressiveBlur,
             enableFloatingBottomBar = enableFloatingBottomBar,
             enableFloatingBottomBarBlur = enableFloatingBottomBarBlur,
             enableNavigationBadge = enableNavigationBadge,
@@ -2872,6 +3236,13 @@ class SettingsViewModel(
             hideHomeCardStatusText = hideHomeCardStatusText,
             hideHomeCardDecoration = hideHomeCardDecoration,
             homeCardStickers = homeCardStickers,
+            homeLayout = homeLayout,
+homeStatusAlignment = homeStatusAlignment,
+            homeStatusScale = homeStatusScale,
+homePillScale = homePillScale,
+            homeStatusWidthFraction = homeStatusWidthFraction,
+            homeCardImageStyle = homeCardImageStyle,
+            showHomeCardImageWithoutBackground = showHomeCardImageWithoutBackground,
             adaptiveThemeActive = adaptiveThemeActive,
             adaptiveDraftLightCaptured = adaptiveDraftLightCaptured,
             adaptiveDraftDarkCaptured = adaptiveDraftDarkCaptured,
@@ -2886,6 +3257,9 @@ class SettingsViewModel(
             appearanceSectionExpanded = appearanceSectionExpanded,
             homeCardSectionExpanded = homeCardSectionExpanded,
             colorsSectionExpanded = colorsSectionExpanded,
+            bottomBarSectionExpanded = bottomBarSectionExpanded,
+            interactionSectionExpanded = interactionSectionExpanded,
+            detailsSectionExpanded = detailsSectionExpanded,
             showFullStatus = showFullStatus,
             hideHomeWarnings = hideHomeWarnings,
             showAiHomeCard = showAiHomeCard,

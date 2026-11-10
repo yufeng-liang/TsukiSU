@@ -31,6 +31,13 @@ import com.sukisu.ultra.data.repository.KEY_HIDE_HOME_CARD_DECORATION
 import com.sukisu.ultra.data.repository.KEY_HIDE_HOME_CARD_STATUS_TEXT
 import com.sukisu.ultra.data.repository.KEY_HOME_CARD_STICKERS
 import com.sukisu.ultra.data.repository.KEY_HOME_CARD_IMAGE_PATH
+import com.sukisu.ultra.data.repository.KEY_HOME_CARD_IMAGE_STYLE
+import com.sukisu.ultra.data.repository.KEY_HOME_LAYOUT
+import com.sukisu.ultra.data.repository.KEY_HOME_STATUS_ALIGNMENT
+import com.sukisu.ultra.data.repository.KEY_HOME_STATUS_SCALE
+import com.sukisu.ultra.data.repository.KEY_HOME_PILL_SCALE
+import com.sukisu.ultra.data.repository.KEY_HOME_STATUS_WIDTH_FRACTION
+import com.sukisu.ultra.data.repository.KEY_SHOW_HOME_CARD_IMAGE_WITHOUT_BACKGROUND
 import java.io.File
 import com.sukisu.ultra.getKernelVersion
 import com.sukisu.ultra.ksuApp
@@ -47,6 +54,10 @@ import com.sukisu.ultra.ui.util.getKpmVersion
 import com.sukisu.ultra.ui.util.getSuperuserCount
 import com.sukisu.ultra.ui.util.getSELinuxStatusRaw
 import com.sukisu.ultra.ui.util.HomeCardSticker
+import com.sukisu.ultra.ui.util.HomeCardImageStyle
+import com.sukisu.ultra.ui.util.HomeLayout
+import com.sukisu.ultra.ui.util.HomeStatusAlignment
+import com.sukisu.ultra.ui.util.HomeStatusStyle
 import com.sukisu.ultra.ui.util.listModules
 import com.sukisu.ultra.ui.util.module.LatestVersionInfo
 import com.sukisu.ultra.ui.util.resolveDeviceName
@@ -72,6 +83,47 @@ class HomeViewModel(
         }
         if (key == null || key == KEY_HOME_CARD_STICKERS) {
             updateContent { it.copy(homeCardStickers = existingHomeCardStickers()) }
+        }
+        if (key == null || key == KEY_HOME_LAYOUT) {
+            updateContent { it.copy(homeLayout = HomeLayout.fromValue(settingsRepo.homeLayout)) }
+        }
+        if (key == null || key == KEY_HOME_STATUS_ALIGNMENT) {
+            updateContent {
+                it.copy(
+                    homeStatusAlignment = HomeStatusAlignment.fromValue(
+                        settingsRepo.homeStatusAlignment
+                    )
+                )
+            }
+        }
+        if (key == null || key == KEY_HOME_STATUS_SCALE) {
+            updateContent {
+                it.copy(homeStatusScale = HomeStatusStyle.coerceScale(settingsRepo.homeStatusScale))
+            }
+        }
+        if (key == null || key == KEY_HOME_PILL_SCALE) {
+            updateContent {
+                it.copy(homePillScale = HomeStatusStyle.coercePillScale(settingsRepo.homePillScale))
+            }
+        }
+        if (key == null || key == KEY_HOME_STATUS_WIDTH_FRACTION) {
+            updateContent {
+                it.copy(
+                    homeStatusWidthFraction = HomeStatusStyle.coerceWidth(
+                        settingsRepo.homeStatusWidthFraction
+                    )
+                )
+            }
+        }
+        if (key == null || key == KEY_HOME_CARD_IMAGE_STYLE) {
+            updateContent {
+                it.copy(homeCardImageStyle = HomeCardImageStyle.fromValue(settingsRepo.homeCardImageStyle))
+            }
+        }
+        if (key == null || key == KEY_SHOW_HOME_CARD_IMAGE_WITHOUT_BACKGROUND) {
+            updateContent {
+                it.copy(showHomeCardImageWithoutBackground = settingsRepo.showHomeCardImageWithoutBackground)
+            }
         }
         if (key == null || key == "show_ai_home_card") {
             updateContent { it.copy(showAiHomeCard = settingsRepo.showAiHomeCard) }
@@ -153,7 +205,10 @@ class HomeViewModel(
         viewModelScope.launch {
             try {
                 val installed = withContext(Dispatchers.IO) {
-                    CiManagerUpdater(ksuApp).updateAndInstall(info)
+                    CiManagerUpdater(ksuApp).updateAndInstall(
+                        info,
+                        keepApk = !settingsRepo.autoDeleteUpdateApk,
+                    )
                 }
                 val message = if (installed) R.string.ci_update_install_success
                     else R.string.ci_update_install_submitted
@@ -251,6 +306,13 @@ class HomeViewModel(
             hideHomeCardStatusText = settingsRepo.hideHomeCardStatusText,
             hideHomeCardDecoration = settingsRepo.hideHomeCardDecoration,
             homeCardStickers = existingHomeCardStickers(),
+            homeLayout = HomeLayout.fromValue(settingsRepo.homeLayout),
+            homeStatusAlignment = HomeStatusAlignment.fromValue(settingsRepo.homeStatusAlignment),
+            homeStatusScale = HomeStatusStyle.coerceScale(settingsRepo.homeStatusScale),
+            homePillScale = HomeStatusStyle.coercePillScale(settingsRepo.homePillScale),
+            homeStatusWidthFraction = HomeStatusStyle.coerceWidth(settingsRepo.homeStatusWidthFraction),
+            homeCardImageStyle = HomeCardImageStyle.fromValue(settingsRepo.homeCardImageStyle),
+            showHomeCardImageWithoutBackground = settingsRepo.showHomeCardImageWithoutBackground,
             showAiHomeCard = settingsRepo.showAiHomeCard,
             hideEnvCard = hideEnvEntry,
             hideEnvCardDone = hideEnvEntry?.done == true,

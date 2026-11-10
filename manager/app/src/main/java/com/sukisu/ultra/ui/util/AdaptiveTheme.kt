@@ -164,6 +164,27 @@ object AdaptiveThemeStore {
 
         data.hideHomeCardDecoration?.let { repo.hideHomeCardDecoration = it }
         data.hideHomeCardStatusText?.let { repo.hideHomeCardStatusText = it }
+        data.homeLayout?.let {
+            repo.homeLayout = HomeLayout.fromValue(it).value
+        }
+        data.homeStatusAlignment?.let {
+            repo.homeStatusAlignment = HomeStatusAlignment.fromValue(it).value
+        }
+        data.homeStatusScale?.let {
+            repo.homeStatusScale = HomeStatusStyle.coerceScale(it)
+        }
+        data.homePillScale?.let {
+            repo.homePillScale = HomeStatusStyle.coercePillScale(it)
+        }
+        data.homeStatusWidthFraction?.let {
+            repo.homeStatusWidthFraction = HomeStatusStyle.coerceWidth(it)
+        }
+        data.homeCardImageStyle?.let {
+            repo.homeCardImageStyle = HomeCardImageStyle.fromValue(it).value
+        }
+        data.showHomeCardImageWithoutBackground?.let {
+            repo.showHomeCardImageWithoutBackground = it
+        }
 
         if (includeChrome) {
             data.uiMode
@@ -175,6 +196,7 @@ object AdaptiveThemeStore {
             data.enablePredictiveBack?.let { repo.enablePredictiveBack = it }
             data.enableSwipeDismiss?.let { repo.enableSwipeDismiss = it }
             data.enableBlur?.let { repo.enableBlur = it }
+            data.enableProgressiveBlur?.let { repo.enableProgressiveBlur = it }
             data.pagerInterceptionMode?.let { repo.pagerInterceptionMode = it.coerceIn(0, 2) }
             data.pageScale?.let { repo.pageScale = it.coerceIn(0.8f, 1.1f) }
             data.moduleDescriptionMaxLines?.let { repo.moduleDescriptionMaxLines = it.coerceIn(1, 5) }
