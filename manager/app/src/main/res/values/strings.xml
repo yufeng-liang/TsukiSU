@@ -1696,7 +1696,7 @@
     <string name="column_wizard_run_all">Run all</string>
     <string name="column_wizard_opt_in">Include in run-all</string>
     <string name="column_wizard_installed" translatable="true">Installed</string>
-    <string name="column_wizard_installed_skip">Installed, will skip</string>
+    <string name="column_wizard_installed_skip">Installed %1$s, skipping by default</string>
     <string name="column_wizard_reinstall" translatable="true">Reinstall</string>
     <string name="column_wizard_test_title" translatable="true">Test only</string>
     <string name="column_wizard_test_body" translatable="true">Preview only; no hidden operations run and the device will not reboot. Long-press the top bar title to reopen.</string>

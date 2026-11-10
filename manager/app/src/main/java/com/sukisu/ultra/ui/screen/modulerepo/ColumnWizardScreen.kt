@@ -1330,7 +1330,15 @@ private fun WizardStepCardMiuix(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            StepBadgeMiuix(index = index, status = uiState.status)
+            if (step.optIn && uiState.status == ColumnStepStatus.PENDING) {
+                // 可选步骤用左侧勾选框决定是否纳入一键执行，勾上才跑。
+                MiuixCheckbox(
+                    state = if (optedIn) ToggleableState.On else ToggleableState.Off,
+                    onClick = onToggleOptIn,
+                    enabled = !busy,
+                )
+            }
+            StepBadgeMiuix(index = index, status = uiState.status, installed = installed)
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1387,7 +1395,7 @@ private fun WizardStepCardMiuix(
                 }
                 if (installed && uiState.status == ColumnStepStatus.PENDING) {
                     MiuixText(
-                        text = stringResource(R.string.column_wizard_installed_skip),
+                        text = stringResource(R.string.column_wizard_installed_skip, step.title.trim().removePrefix("装").removePrefix("安装").trim()),
                         color = successGreenMiuix(),
                         fontSize = 12.sp,
                     )
@@ -1474,45 +1482,6 @@ private fun WizardStepCardMiuix(
                         fontSize = 13.sp,
                     )
                 }
-                // 可选步骤的「纳入一键执行」开关单独一行，跳过则统一放卡片最底部右对齐。
-                if (step.optIn) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        MiuixCheckbox(
-                            state = if (optedIn) ToggleableState.On else ToggleableState.Off,
-                            onClick = onToggleOptIn,
-                            enabled = !busy,
-                        )
-                        MiuixText(
-                            text = stringResource(R.string.column_wizard_opt_in),
-                            color = colorScheme.onSurfaceVariantSummary,
-                            fontSize = 12.sp,
-                        )
-                    }
-                }
-                if (canSkip) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        MiuixTextButton(
-                            text = stringResource(R.string.column_wizard_skip),
-                            onClick = onSkip,
-                            enabled = !busy,
-                            minWidth = 0.dp,
-                            minHeight = 0.dp,
-                            insideMargin = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                            colors = MiuixButtonDefaults.textButtonColors(
-                                color = Color.Transparent,
-                                textColor = colorScheme.onSurfaceVariantSummary,
-                            ),
-                        )
-                    }
-                }
             }
             if (step.note.isNotEmpty() && noteCanExpand) {
                 // 展开/收起入口挪到标题行最右侧：不再和正文抢宽度，箭头随状态旋转。
@@ -1543,11 +1512,19 @@ private fun WizardStepCardMiuix(
  * 以前一律画空心圆，和可选步骤的 Checkbox 并排就成了「两个圆圈」，看不出哪个是序号。
  */
 @Composable
-private fun StepBadgeMiuix(index: Int, status: ColumnStepStatus) {
+private fun StepBadgeMiuix(index: Int, status: ColumnStepStatus, installed: Boolean = false) {
     val colorScheme = MiuixTheme.colorScheme
     Box(modifier = Modifier.size(52.dp), contentAlignment = Alignment.Center) {
         when (status) {
-            ColumnStepStatus.PENDING -> Box(
+            // 已经装好的步骤不用再点执行，直接把序号换成对勾。
+            ColumnStepStatus.PENDING -> if (installed) {
+                MiuixIcon(
+                    imageVector = Icons.Rounded.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.size(32.dp),
+                    tint = successGreenMiuix(),
+                )
+            } else Box(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape)
@@ -2256,7 +2233,16 @@ private fun WizardStepCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                StepBadge(index = index, status = uiState.status)
+                if (step.optIn && uiState.status == ColumnStepStatus.PENDING) {
+                    // 可选步骤用左侧勾选框决定是否纳入一键执行，勾上才跑。
+                    Checkbox(
+                        checked = optedIn,
+                        onCheckedChange = { onToggleOptIn() },
+                        enabled = !busy,
+                        modifier = Modifier.scale(0.85f),
+                    )
+                }
+                StepBadge(index = index, status = uiState.status, installed = installed)
                 Text(
                     text = step.title,
                     style = MaterialTheme.typography.bodyLarge,
@@ -2323,7 +2309,7 @@ private fun WizardStepCard(
             }
             if (installed && uiState.status == ColumnStepStatus.PENDING) {
                 Text(
-                    text = stringResource(R.string.column_wizard_installed_skip),
+                    text = stringResource(R.string.column_wizard_installed_skip, step.title.trim().removePrefix("装").removePrefix("安装").trim()),
                     style = MaterialTheme.typography.labelSmall,
                     color = successGreen(),
                 )
@@ -2414,49 +2400,6 @@ private fun WizardStepCard(
             if (step.kind == STEP_KIND_RUN_COMMAND && step.command.isNotEmpty()) {
                 CommandBlock(command = step.command)
             }
-            // 可选步骤的「纳入一键执行」开关单独一行，跳过统一放卡片最底部右对齐。
-            if (step.optIn) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(MaterialTheme.shapes.small)
-                        .clickable(enabled = !busy) { onToggleOptIn() }
-                        .padding(vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Checkbox(
-                        checked = optedIn,
-                        onCheckedChange = { onToggleOptIn() },
-                        enabled = !busy,
-                        modifier = Modifier.scale(0.8f),
-                    )
-                    Text(
-                        text = stringResource(R.string.column_wizard_opt_in),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            if (canSkip) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    TextButton(
-                        onClick = onSkip,
-                        enabled = !busy,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.column_wizard_skip),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
         }
     }
 }
@@ -2468,10 +2411,18 @@ private fun WizardStepCard(
  * 以前一律画空心圆，和可选步骤的 Checkbox 并排就成了「两个圆圈」，看不出哪个是序号。
  */
 @Composable
-private fun StepBadge(index: Int, status: ColumnStepStatus) {
+private fun StepBadge(index: Int, status: ColumnStepStatus, installed: Boolean = false) {
     Box(modifier = Modifier.size(52.dp), contentAlignment = Alignment.Center) {
         when (status) {
-            ColumnStepStatus.PENDING -> Box(
+            // 已经装好的步骤不用再点执行，直接把序号换成对勾。
+            ColumnStepStatus.PENDING -> if (installed) {
+                Icon(
+                    imageVector = Icons.Rounded.CheckCircle,
+                    contentDescription = null,
+                    tint = successGreen(),
+                    modifier = Modifier.size(32.dp),
+                )
+            } else Box(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape)
