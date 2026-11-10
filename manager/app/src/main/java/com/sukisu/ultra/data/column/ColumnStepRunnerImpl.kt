@@ -34,9 +34,11 @@ private const val KEYBOX_PLACEHOLDER = "\${keybox}"
 /**
  * HMA-OSS 的配置目录通配。
  *
- * 服务端每次生成目录都带随机后缀（`/data/misc/hide_my_applist_<随机串>`），所以只能按前缀找。
+ * 真机上 HMA 可能把配置放在 `/data/misc/<随机串>/hide_my_applist_*`（多一层随机父目录），
+ * 所以必须同时探两层，和 ColumnSelfCheckRunnerImpl.checkHmaConfig 的探测命令保持一致；
+ * 只探顶层会在真机上永远找不到目录，导致 configure-hma 必失败。
  */
-private const val HMA_DIR_GLOB = "/data/misc/hide_my_applist_*"
+private const val HMA_DIR_GLOB = "/data/misc/*hide_my_applist* /data/misc/*/*hide_my_applist*"
 
 /**
  * 专栏命令的安全边界。
@@ -539,17 +541,11 @@ class ColumnStepRunnerImpl(
             return failed("写入失败：步骤内容为空（$path）", log)
         }
 
-        val content = if (step.fileContent.contains(KEYBOX_PLACEHOLDER)) {
-            val keybox = ctx.keyboxContent?.takeIf { it.isNotBlank() }
-                ?: return failed("需要密钥材料，但本次没有校验通过的密钥", log)
-            step.fileContent.replace(KEYBOX_PLACEHOLDER, keybox)
-        } else {
-            step.fileContent
-        }
-
         // 硬规则：目标位置已经有一份看起来合法的 keybox 时，默认不覆盖它。
         // keybox 是「用户自己找来的身份证」，一键执行顺手换掉等于把他手里的东西悄悄作废；
         // 要换新的，走这一步的「升级/重做」（ctx.force）。
+        // 这一步必须放在解析 ${keybox} 之前：设备上已经有合法 keybox 时，即使本次自动获取失败、
+        // 内存里没有密钥材料，也应该按「已有可用的就不覆盖」直接跳过，而不是先报「没有密钥」。
         if (step.fileContent.contains(KEYBOX_PLACEHOLDER) && !ctx.force) {
             val existing = runCatching { ColumnRootIo.readText(path) }.getOrNull()
             if (existing != null && looksLikeKeybox(existing)) {
@@ -558,6 +554,17 @@ class ColumnStepRunnerImpl(
                     message = "$path 已经有一份可用的 keybox，按约定不覆盖（要换新的请点这一步的「升级」，或先回滚）",
                 )
             }
+        }
+
+        val content = if (step.fileContent.contains(KEYBOX_PLACEHOLDER)) {
+            val keybox = ctx.keyboxContent?.takeIf { it.isNotBlank() }
+                ?: return ColumnStepResult(
+                    status = ColumnStepStatus.NEEDS_USER,
+                    message = "需要密钥材料，但本次没有可用的密钥。请在向导里手动选择 keybox 文件后再执行这一步",
+                )
+            step.fileContent.replace(KEYBOX_PLACEHOLDER, keybox)
+        } else {
+            step.fileContent
         }
 
         log.line("准备写入 $path（${content.toByteArray(Charsets.UTF_8).size} 字节）")

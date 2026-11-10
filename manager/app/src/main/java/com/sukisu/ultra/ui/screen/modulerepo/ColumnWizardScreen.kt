@@ -72,6 +72,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
@@ -315,17 +316,21 @@ fun ColumnWizardScreen(
             enter = fadeIn() + slideInVertically { it / 2 },
             exit = fadeOut() + slideOutVertically { it / 2 },
         ) {
-            Surface(
-                color = MaterialTheme.colorScheme.inverseSurface,
-                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
-                shape = RoundedCornerShape(24.dp),
-                shadowElevation = 6.dp,
-            ) {
-                Text(
-                    text = stringResource(R.string.column_self_check_done),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
-                )
+            // Miuix 模式下整棵树里没有 MaterialTheme，这里直接写 Material 组件会落回框架默认色板
+            // （就是那个紫底），所以和预检框一样套一层 AiAssistantMaterialTheme：Material 下直通，Miuix 下生成同源色板。
+            AiAssistantMaterialTheme {
+                Surface(
+                    color = MaterialTheme.colorScheme.inverseSurface,
+                    contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                    shape = RoundedCornerShape(24.dp),
+                    shadowElevation = 6.dp,
+                ) {
+                    Text(
+                        text = stringResource(R.string.column_self_check_done),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                    )
+                }
             }
         }
     }
@@ -1291,8 +1296,10 @@ private fun WizardStepCardMiuix(
     val statusColor = wizardStatusColorMiuix(uiState.status)
     // note 常是整段说明，全展开会把卡片撑得很高：默认只看 3 行，超出时才给「展开 / 收起」。
     var noteExpanded by rememberSaveable(step.id) { mutableStateOf(false) }
-    // Miuix 没有 onTextLayout 的溢出回调，这里按字符数近似判断：超过折叠阈值才需要展开入口。
-    val noteCanExpand = step.note.length > NOTE_COLLAPSED_CHARS
+    // 按真实排版判断是否被截断：MiuixText 不透出 onTextLayout，这里改用 BasicText 拿 hasVisualOverflow，
+    // 否则「字符数没超阈值、但排版超过 3 行」的 note 会被永久截断且没有展开入口。
+    var noteOverflowsMiuix by rememberSaveable(step.id) { mutableStateOf(false) }
+    val noteCanExpand = noteExpanded || noteOverflowsMiuix
     val noteArrowRotation by animateFloatAsState(
         targetValue = if (noteExpanded) 180f else 0f,
         animationSpec = tween(durationMillis = 180),
@@ -1394,13 +1401,16 @@ private fun WizardStepCardMiuix(
                     )
                 }
                 if (step.note.isNotEmpty()) {
-                    MiuixText(
+                    BasicText(
                         text = step.note,
-                        color = colorScheme.onSurfaceVariantSummary,
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp,
+                        style = MiuixTheme.textStyles.body2.copy(
+                            color = colorScheme.onSurfaceVariantSummary,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                        ),
                         maxLines = if (noteExpanded) Int.MAX_VALUE else NOTE_COLLAPSED_LINES,
                         overflow = TextOverflow.Ellipsis,
+                        onTextLayout = { if (!noteExpanded) noteOverflowsMiuix = it.hasVisualOverflow },
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable(enabled = noteCanExpand) { noteExpanded = !noteExpanded },

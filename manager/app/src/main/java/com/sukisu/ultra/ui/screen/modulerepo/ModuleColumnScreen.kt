@@ -495,7 +495,7 @@ private fun ModuleColumnScreenMaterial(
             ?: column.topics.firstOrNull { it.tier == tier && it.steps.isNotEmpty() }
         if (topic != null) {
             scope.launch {
-                listState.animateScrollToItem(columnTopicsStartIndex(column) + column.topics.indexOf(topic))
+                listState.animateScrollToItem(columnTopicsStartIndexMaterial(column) + column.topics.indexOf(topic))
                 highlightedTopicId = topic.id
                 delay(1500)
                 highlightedTopicId = ""
@@ -1065,6 +1065,10 @@ private fun evidenceMonth(verifiedAt: String): String {
  */
 private fun columnTopicsStartIndex(column: RepoColumn): Int =
     1 + (if (column.guide.isNotEmpty()) 2 else 0) + (if (column.topics.isNotEmpty()) 1 else 0)
+
+/** Material 版专题卡在列表里的起始下标：header + 至多一张引导卡，没有分组标题。 */
+private fun columnTopicsStartIndexMaterial(column: RepoColumn): Int =
+    1 + (if (column.guide.isNotEmpty()) 1 else 0)
 
 @Composable
 private fun ModuleColumnScreenMiuix(

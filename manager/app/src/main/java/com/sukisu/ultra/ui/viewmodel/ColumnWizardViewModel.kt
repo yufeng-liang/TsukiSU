@@ -158,7 +158,8 @@ class ColumnWizardViewModel(
         val pending = ColumnProgressStore.peekPendingResume(ksuApp) ?: return
         if (pending.columnId != columnId || pending.topicId != topic?.id) return
         if (_uiState.value.done) {
-            ColumnProgressStore.clearPendingResume(ksuApp)
+            // 只清当前专题自己的续跑标记，避免误删其他专题尚未消费的重启标记。
+            ColumnProgressStore.clearPendingResume(ksuApp, pending.columnId, pending.topicId)
             return
         }
         // 重启前最后执行的那一步（通常就是 reboot 自己）已经随这次重启完成：补记为 SUCCESS。
@@ -228,34 +229,49 @@ class ColumnWizardViewModel(
     }
 
     /**
-     * 读设备上现有 keybox.xml 的年龄（天），读不到返回 -1。
+     * 设备上现有 keybox 的状态。
+     *
+     * [exists] 为 null 表示无法确认（root 不可用、命令失败）；true/false 是明确探到的结果。
+     * [ageDays] 为 -1 表示未知（文件不存在或 stat 失败），不能当作「0 天」。
+     */
+    private data class KeyboxFileState(val exists: Boolean?, val ageDays: Int)
+
+    /**
+     * 读设备上现有 keybox.xml 的存在性与年龄（天）。
      *
      * teesim 和 tricky_store 读同一份密钥材料，但两个模块的落盘路径不同：谁先存在就看谁。
-     * 这里只读时间戳，不解密、不校验内容，失败也静默收敛成 -1。
+     * 这里只读时间戳，不解密、不校验内容；用显式的 MISSING 标记区分「确实没有文件」和
+     * 「root 命令失败/stat 失败」，避免把未知状态当成过期而自动覆盖用户文件。
      */
-    private suspend fun keyboxFileAgeDays(): Int = withContext(Dispatchers.IO) {
+    private suspend fun keyboxFileState(): KeyboxFileState = withContext(Dispatchers.IO) {
         val command = "for f in /data/adb/teesim/keybox.xml /data/adb/tricky_store/keybox.xml; do " +
-            "if [ -f \"\$f\" ]; then stat -c %Y \"\$f\"; break; fi; done"
+            "if [ -f \"\$f\" ]; then stat -c %Y \"\$f\"; exit 0; fi; done; echo MISSING"
         val outcome = ColumnRootIo.exec(command)
-        if (!outcome.isSuccess) return@withContext -1
-        val timestamp = outcome.out.firstNotNullOfOrNull { it.trim().toLongOrNull() } ?: return@withContext -1
+        if (!outcome.isSuccess) return@withContext KeyboxFileState(null, -1)
+        val lines = outcome.out.map { it.trim() }.filter { it.isNotEmpty() }
+        if (lines.any { it == "MISSING" }) return@withContext KeyboxFileState(false, -1)
+        val timestamp = lines.firstNotNullOfOrNull { it.toLongOrNull() }
+            ?: return@withContext KeyboxFileState(true, -1)
         val nowSeconds = System.currentTimeMillis() / 1000
-        ((nowSeconds - timestamp) / 86_400L).toInt().coerceAtLeast(0)
+        KeyboxFileState(true, ((nowSeconds - timestamp) / 86_400L).toInt().coerceAtLeast(0))
     }
 
     /**
      * 刷新「密钥材料多久没更新了」。
      *
      * [autoUpdate] 为 true 时顺带判断要不要自动更新：只对需要 keybox 的专题生效，
-     * 且只在文件超过 7 天或根本不存在时动手，避免每次进专题都联网。
+     * 且只在文件确实不存在或超过 7 天时动手；root 不可用/stat 失败这类「无法确认」
+     * 不自动覆盖用户文件，避免每次进专题都联网写盘。
      */
     fun refreshKeyboxAge(autoUpdate: Boolean = false) {
         val currentTopic = topic ?: return
         val needsKeybox = topicNeedsKeybox(currentTopic)
         viewModelScope.launch {
-            val age = keyboxFileAgeDays()
-            _uiState.update { it.copy(keyboxAgeDays = age) }
-            if (autoUpdate && needsKeybox && (age > KEYBOX_AUTO_UPDATE_DAYS || age < 0)) {
+            val fileState = keyboxFileState()
+            _uiState.update { it.copy(keyboxAgeDays = fileState.ageDays) }
+            val shouldAutoUpdate = fileState.exists == false ||
+                (fileState.exists == true && fileState.ageDays > KEYBOX_AUTO_UPDATE_DAYS)
+            if (autoUpdate && needsKeybox && shouldAutoUpdate) {
                 updateKeybox(auto = true)
             }
         }
@@ -272,9 +288,11 @@ class ColumnWizardViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(keyboxUpdating = true) }
             try {
-                // 自动更新等预取任务结束，复用它已经拉到的内容，不再重复下载；手动更新则强制拉最新。
+                // 自动更新等预取任务结束，复用它已经拉到的内容，不再重复下载。
                 if (auto) keyboxJob?.join()
-                val content = if (auto) keyboxContent else null
+                // 用户手动选过 keybox 时优先写入用户选的内容；没有才去拉自动源。
+                // 这样「更新密钥」不会悄悄用镜像源覆盖用户自己的文件。
+                val content = keyboxContent?.takeIf { it.isNotBlank() }
                 val fetched = content ?: keyboxFetcher.fetchAuto().getOrElse { error ->
                     appendLog("更新密钥材料失败：${error.message ?: "未知错误"}")
                     return@launch
@@ -299,13 +317,31 @@ class ColumnWizardViewModel(
     }
 
     /** 按模块目录是否存在决定写哪份 keybox.xml；返回实际写入的模块名。 */
-    private fun writeKeyboxToDevice(content: String): List<String> {
+    private suspend fun writeKeyboxToDevice(content: String): List<String> {
         val targets = listOf(
             Triple("/data/adb/modules/teesim", "/data/adb/teesim/keybox.xml", "teesim"),
             Triple("/data/adb/modules/tricky_store", "/data/adb/tricky_store/keybox.xml", "tricky_store"),
         )
         return targets.mapNotNull { (moduleDir, path, label) ->
             if (!ColumnRootIo.isDirectory(moduleDir)) return@mapNotNull null
+            // 覆盖前先备份：自动更新可能发生在用户不知情的时候，至少保留上一份可恢复的副本。
+            val oldContent = runCatching { ColumnRootIo.readText(path) }.getOrNull()
+            if (!oldContent.isNullOrBlank()) {
+                val backup = java.io.File(
+                    ksuApp.cacheDir,
+                    "keybox-backup-${System.currentTimeMillis()}-$label.xml",
+                )
+                runCatching { backup.writeText(oldContent) }
+                    .onSuccess { appendLog("原 ${path} 已备份到 ${backup.absolutePath}") }
+                    .onFailure { appendLog("备份原 keybox 到应用缓存失败：${it.message ?: "未知错误"}") }
+                // 同步写回滚账本：用户回滚整个专题时，自动更新写入的 keybox 也能恢复。
+                try {
+                    rollbackStore.recordWrittenFile(path)
+                    appendLog("已记录 keybox 回滚点：$path")
+                } catch (error: Exception) {
+                    appendLog("记录 keybox 回滚点失败：${error.message ?: "未知错误"}")
+                }
+            }
             ColumnRootIo.writeText(path, content)
             // keybox 会被模块进程以非 root 身份读取，600 权限（writeText 的默认）不够。
             if (!ColumnRootIo.exec("chmod 644 ${ColumnRootIo.shellQuote(path)}").isSuccess) {
@@ -406,8 +442,12 @@ class ColumnWizardViewModel(
                         }
                     }
                     "writehmaconfig" -> {
+                        // 与 ColumnSelfCheckRunnerImpl.checkHmaConfig / ColumnStepRunnerImpl.writeHmaConfig
+                        // 使用同一套两层 glob：HMA 真机配置可能在 /data/misc/<随机串>/hide_my_applist_* 下。
                         val hasConfig = runCatching {
-                            ColumnRootIo.exec("ls -d /data/misc/hide_my_applist_* 2>/dev/null").isSuccess
+                            ColumnRootIo.exec(
+                                "ls -d /data/misc/*hide_my_applist* /data/misc/*/*hide_my_applist* 2>/dev/null",
+                            ).out.any { it.trim().startsWith("/") }
                         }.getOrDefault(false)
                         if (hasConfig) {
                             ColumnPreflightAction.OVERWRITE to "会在现有 HMA 配置上合并（保留你已有的模板与目标）"
@@ -811,8 +851,11 @@ class ColumnWizardViewModel(
                 val topicId = _uiState.value.topicId
                 runCatching { progressPrefs().edit().remove(progressKey(topicId)).apply() }
                 runCatching { ColumnProgressStore.clear(ksuApp, columnId.orEmpty(), topicId) }
-                // 回滚之后不该再自动续跑，否则重启回来会把刚撤掉的步骤又跑一遍
-                runCatching { ColumnProgressStore.clearPendingResume(ksuApp) }
+                // 回滚之后不该再自动续跑，否则重启回来会把刚撤掉的步骤又跑一遍；
+                // 但只能清当前专题自己的标记，不能把其他专题的重启续跑标记一并删掉。
+                runCatching {
+                    ColumnProgressStore.clearPendingResume(ksuApp, columnId.orEmpty(), topicId)
+                }
                 prefetchedTopicId = null
                 _uiState.update { state ->
                     state.copy(
@@ -857,8 +900,9 @@ class ColumnWizardViewModel(
         }
         if (!allSettled) return
         if (state.checks.isEmpty()) runSelfCheck()
-        // 走到这里说明这个专题已经没有待办：重启续跑标记可以清掉了。
-        ColumnProgressStore.clearPendingResume(ksuApp)
+        // 走到这里说明这个专题已经没有待办：只清当前专题自己的重启续跑标记，
+        // 不能顺手把其他专题还没消费的标记清掉。
+        ColumnProgressStore.clearPendingResume(ksuApp, columnId.orEmpty(), topic?.id.orEmpty())
         // 两个条件才庆祝：①这个专题真的会改设备（索引里 celebrate 不是 false，环境自检是 false）；
         // ②这个专题还没庆祝过——重装、重跑一遍不该反复被同一个动画打断。
         val celebrate = allowCelebrate &&
@@ -870,6 +914,9 @@ class ColumnWizardViewModel(
         // 不庆祝的专题（环境自检）也要让用户知道结束了：给一条两三秒就消失的轻提示。
         val showSelfCheckHint = allowCelebrate && !celebrate
         _uiState.update { it.copy(done = true, celebrate = celebrate, selfCheckHint = showSelfCheckHint) }
+        // 完成态必须立即落盘：之前只改了内存里的 done=true，最后一条持久化记录仍是 done=false，
+        // 导致主页的「刚完成」反馈（recentDone）永远查不到，卡片还会直接消失。
+        saveProgress()
         if (showSelfCheckHint) {
             viewModelScope.launch {
                 kotlinx.coroutines.delay(3_000)
