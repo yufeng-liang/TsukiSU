@@ -1,5 +1,6 @@
 package com.sukisu.ultra.data.repository
 
+import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.os.Environment
 import android.provider.MediaStore
@@ -22,6 +23,7 @@ import com.sukisu.ultra.data.proxy.ProxyUrl
 import com.sukisu.ultra.ksuApp
 import com.sukisu.ultra.ui.util.module.LatestVersionInfo
 import com.sukisu.ultra.ui.util.getRootShell
+import com.sukisu.ultra.ui.util.shellQuote
 import com.sukisu.ultra.ui.util.withNewRootShell
 import kotlinx.coroutines.runBlocking
 import okhttp3.Request
@@ -328,6 +330,7 @@ class CiManagerUpdater(private val context: Context) {
         }
     }
 
+    @SuppressLint("RequestInstallPackagesPolicy")
     private fun submitInstall(apk: File) {
         val installer = context.packageManager.packageInstaller
         val sessionId = installer.createSession(
@@ -363,8 +366,6 @@ class CiManagerUpdater(private val context: Context) {
             if (!committed) installer.abandonSession(sessionId)
         }
     }
-
-    private fun String.shellQuote(): String = "'" + replace("'", "'\\''") + "'"
 
     companion object {
         /**
