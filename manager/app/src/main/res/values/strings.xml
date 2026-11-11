@@ -1318,6 +1318,7 @@
     <string name="module_upload_progress_retry">Check again</string>
     <string name="module_upload_progress_open_store">Open in store</string>
     <string name="module_upload_progress_version">%1$s · v%2$d</string>
+    <string name="module_upload_progress_session_expired">Your session has expired. Verify again to check progress.</string>
     <string name="module_upload_history_versions">%1$d version(s)</string>
     <string name="module_upload_history_update_summary">Pick the newer zip for this module; uploading it replaces the version shown here</string>
     <string name="module_upload_tag_upload_update">Upload update</string>
@@ -1659,6 +1660,7 @@
     <string name="module_upload_identity_verified">Verified. You will not need to do this again.</string>
 <string name="module_upload_identity_missing">%1$d step(s) left</string>
 <string name="module_upload_identity_ready">All set — verify to continue.</string>
+<string name="identity_verify_failed">Couldn\'t verify your identity. Check your network and try again.</string>
     <!-- 商店专栏 -->
     <string name="module_column_section_title">Columns</string>
     <string name="module_column_load_failed">Column list failed to load</string>

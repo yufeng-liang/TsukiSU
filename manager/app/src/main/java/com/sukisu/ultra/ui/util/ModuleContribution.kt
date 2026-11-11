@@ -621,17 +621,32 @@ object ModuleContribution {
                 val json = runCatching { JSONObject(text) }.getOrNull() ?: return emptyMap()
                 val results = json.optJSONArray("results") ?: return emptyMap()
                 val out = LinkedHashMap<String, CheckAnswer>()
+                // 防御：应答按 id 建 Map，同一 id 出现多条时「后写」会静默覆盖「前写」。
+                // 当前调用方保证同一 chunk 内 id 唯一（startCheck 的 chunked），不会触发；
+                // 仍按「与本次请求该 id 的 versionCode 匹配者优先」收口：请求侧记下
+                // (id → versionCode)，应答行带 versionCode 且与请求一致的那条最后落位，
+                // 一条都匹配不上才维持旧行为（保留最后一条）。将来请求侧若放宽 id 约束，
+                // 也不会把两个版本的答案搅在一起。
+                val requested = LinkedHashMap<String, Int>()
+                for ((id, versionCode) in modules) requested.putIfAbsent(id, versionCode)
+                val matched = LinkedHashMap<String, CheckAnswer>()
                 for (i in 0 until results.length()) {
                     val row = results.optJSONObject(i) ?: continue
                     val id = row.optString("id").trim()
                     if (id.isEmpty()) continue
                     val name = row.optString("status").trim().lowercase(Locale.ROOT)
-                    out[id] = CheckAnswer(
+                    val answer = CheckAnswer(
                         status = STATUS_BY_NAME[name] ?: CheckStatus.UNKNOWN,
                         eligibility = CheckAnswer.parseEligibility(row),
                         reason = row.optString("reason").trim(),
                     )
+                    out[id] = answer
+                    // 应答行没带 versionCode 时无法匹配，保持旧行为（保留最后一条）。
+                    if (requested[id] != null && row.optString("versionCode").trim().toIntOrNull() == requested[id]) {
+                        matched[id] = answer
+                    }
                 }
+                matched.forEach { (id, answer) -> out[id] = answer }
                 out
             }
         } catch (e: CancellationException) {
@@ -943,6 +958,9 @@ object ModuleContribution {
             )
         }
 
+        // 令牌只在形状对时才发出去：形状不对的一串服务端会当没带（回落签名路）。
+        // 与 submitBatch 的 safeSession 同一条判据；空串也要照发（见下面的 session part）。
+        val safeSession = sessionToken.trim().takeIf { SESSION_TOKEN_RE.matches(it) }.orEmpty()
         val body = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("id", resolved.id)
@@ -957,6 +975,10 @@ object ModuleContribution {
             .addFormDataPart("sha256", sha256)
             .addFormDataPart("pledge", PLEDGE_VERSION)
             .addFormDataPart("nonce", nonce)
+            // 令牌恒发一个 part（空串也要发）：与 buildBatchBody 同一条契约——服务端读
+            // `fields.session`，「字段不在」与「字段是空串」在它那里是同一件事；
+            // 会话路（verifyOwnership）认这个字段，不在这里发就永远走签名路。
+            .addFormDataPart("session", safeSession)
             .addFormDataPart(
                 "zip",
                 zip.name.ifBlank { "${resolved.id}-${resolved.versionCode}.zip" },

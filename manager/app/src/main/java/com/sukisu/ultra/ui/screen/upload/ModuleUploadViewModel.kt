@@ -2,6 +2,7 @@ package com.sukisu.ultra.ui.screen.upload
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -30,6 +31,7 @@ import com.sukisu.ultra.ui.util.IssueOutcome
 import com.sukisu.ultra.ui.util.MineModule
 import com.sukisu.ultra.ui.util.MineResult
 import com.sukisu.ultra.ui.util.ModuleContribution
+import com.sukisu.ultra.ui.util.PROGRESS_SESSION_EXPIRED
 import com.sukisu.ultra.ui.util.ProgressOutcome
 import com.sukisu.ultra.ui.util.ProofItem
 import com.sukisu.ultra.ui.util.SessionCheck
@@ -375,12 +377,19 @@ class ModuleUploadViewModel(
 
                 val chunkSize = ModuleUploadRules.checkChunkSize(limits)
                 val gate = Semaphore(ModuleUploadRules.CHECK_CONCURRENCY)
-                coroutineScope {
+                // queryChunk 返回「这一块问成了没」：失败的块把 id 从 checkedIds 撤下来，
+                // 让下一轮候选（status == null 且没问过）自然重问；UNKNOWN 有意不落缓存，
+                // 不撤的话这一块就固化成「查不了」，只有手动刷新才问得到。按块撤，
+                // 成功的块缓存照常生效。
+                val failedChunks = coroutineScope {
                     pending.chunked(chunkSize).map { chunk ->
                         async {
-                            gate.withPermit { queryChunk(chunk, uid) }
+                            gate.withPermit { chunk to queryChunk(chunk, uid) }
                         }
                     }.awaitAll()
+                }.filter { !it.second }
+                if (failedChunks.isNotEmpty()) {
+                    checkedIds -= failedChunks.flatMap { (chunk, _) -> chunk.map { it.id } }.toSet()
                 }
             } finally {
                 // 被 refresh() 取消时不要在这里写状态：新的一轮已经把 checking 打开了，
@@ -452,11 +461,16 @@ class ModuleUploadViewModel(
         return limits
     }
 
-    private suspend fun queryChunk(chunk: List<UploadRow>, uid: String) {
+    private suspend fun queryChunk(chunk: List<UploadRow>, uid: String): Boolean {
         // 版本号超出 Int 的直接算「查不了」：截断会让两个不同版本查到同一个结果。
         val query = chunk.mapNotNull { row ->
             ModuleContributionEntry.checkableVersionCode(row.versionCode)?.let { row.id to it }
         }
+        // 这一趟是不是「没问出来」：网络失败，或整块没拿到任何答案。调用方据此把这批
+        // id 从 checkedIds 撤下来，让下一轮候选自然重问；UNKNOWN 有意不落缓存（见下），
+        // 不撤的话这一块就固化成「查不了」，只有手动刷新才问得到。query 为空不算失败：
+        // 版本号溢出的行重问也不会有结果。
+        var chunkFailed = false
         val result = if (query.isEmpty()) {
             emptyMap()
         } else {
@@ -468,9 +482,13 @@ class ModuleUploadViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
+                chunkFailed = true
                 emptyMap()
             }
         }
+        // checkBatch 内部把网络/HTTP 失败收成空 Map 不抛（见 checkBatchChunk）：
+        // 请求非空而 result 全空，同样是「没问出来」。
+        if (query.isNotEmpty() && result.isEmpty()) chunkFailed = true
         // 缓存只记服务端**真的回了**的那几格：整批失败 / 漏回的那一格是「没问出来」，
         // 把它当结论存下去，接下来半小时都会拿着一个「查不了」不再去问。
         val at = System.currentTimeMillis()
@@ -517,6 +535,7 @@ class ModuleUploadViewModel(
                 }
             )
         }
+        return !chunkFailed
     }
 
     /**
@@ -1637,7 +1656,10 @@ class ModuleUploadViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                IssueOutcome(message = e.message?.takeIf { it.isNotBlank() } ?: "")
+                // 原文（"timeout"、"Unable to resolve host" 之类）不进界面：只留稳定错误码，
+                // 界面按码映射成 string 资源文案；原始异常进日志，便于排查。
+                Log.w(TAG, "verifyIdentity failed", e)
+                IssueOutcome(message = VERIFY_NETWORK_ERROR_CODE, code = VERIFY_NETWORK_ERROR_CODE)
             }
             _formState.update { it.copy(verifying = false) }
             if (!outcome.ok) {
@@ -1819,10 +1841,21 @@ class ModuleUploadViewModel(
                         },
                     )
 
-                    is ProgressOutcome.Failed -> state.copy(
-                        progressLoading = false,
-                        progressError = res.getString(R.string.module_upload_progress_unavailable),
-                    )
+                    is ProgressOutcome.Failed ->
+                        if (outcome.message == PROGRESS_SESSION_EXPIRED) {
+                            // 令牌失效（worker 401）：轮询就地熄火，弹层留着把「请重新验证」
+                            // 说清楚——这是登录问题，不是「暂时查不到」的网络抖动。
+                            progressPollJob?.cancel()
+                            state.copy(
+                                progressLoading = false,
+                                progressError = res.getString(R.string.module_upload_progress_session_expired),
+                            )
+                        } else {
+                            state.copy(
+                                progressLoading = false,
+                                progressError = res.getString(R.string.module_upload_progress_unavailable),
+                            )
+                        }
                 }
             }
         }
@@ -2193,12 +2226,12 @@ class ModuleUploadViewModel(
         const val SESSION_TICK_MS = 30_000L
 
         /**
-         * 进度弹层开着时的轮询间隔：30 秒。
+         * 进度弹层开着时的轮询间隔：60 秒。
          *
-         * 进度变化的最小粒度是「维护者开关一次 PR」，秒级刷新没有信息增量；
-         * 30 秒一次是「用户盯着看时能感觉到在更新」与「不白烧流量」之间的折中。
+         * 与服务端 `/progress` 的 60 秒缓存对齐：30 秒一次有一半请求命中的是同一份
+         * 缓存，纯白打；60 秒正好是缓存过期后能拿到新读数的节奏。
          */
-        const val PROGRESS_POLL_INTERVAL_MS = 30_000L
+        const val PROGRESS_POLL_INTERVAL_MS = 60_000L
 
         /** Worker used-nonce 分支的机器可读码（与旧入口同一条约定）。 */
         const val PROOF_USED_CODE = "proof_used"
@@ -2223,6 +2256,14 @@ class ModuleUploadViewModel(
         var limitsMemoAt = 0L
     }
 }
+
+/**
+ * verifyIdentity 网络层失败的稳定错误码：catch 兜底不再把 e.message 原文（"timeout"、
+ * "Unable to resolve host" 之类）塞进界面，只发这个码，界面按码映射成 string 资源文案。
+ */
+const val VERIFY_NETWORK_ERROR_CODE = "identity_verify_failed"
+
+private const val TAG = "ModuleUploadViewModel"
 
 /** 把 `ksud module list` 的一行变成上传列表的一行，尽量保留上一次查到的状态。 */
 private fun Module.toRow(previous: List<UploadRow>, archived: Set<String>): UploadRow {

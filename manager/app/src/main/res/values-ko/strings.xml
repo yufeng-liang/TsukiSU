@@ -227,4 +227,6 @@
     <string name="module_repo_homepage">홈페이지</string>
     <string name="module_repo_support">지원</string>
     <string name="module_repo_integrity">무결성</string>
+    <string name="identity_verify_failed">신원 확인에 실패했습니다. 네트워크를 확인한 후 다시 시도해 주세요.</string>
+    <string name="module_upload_progress_session_expired">세션이 만료되었습니다. 다시 인증한 후 확인해 주세요.</string>
 </resources>

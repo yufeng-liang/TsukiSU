@@ -92,6 +92,13 @@ private const val PROGRESS_TIMEOUT_MS = 8_000L
 private const val UNAVAILABLE = "progress_unavailable"
 
 /**
+ * 令牌失效（HTTP 401）时给界面的稳定码：`Failed.message` 携带它回去，VM 据此停掉
+ * 轮询并把提示换成「登录状态已过期」。session_missing / session_invalid 两种 401
+ * 对用户是同一句话，都映射到这一个码。
+ */
+internal const val PROGRESS_SESSION_EXPIRED = "progress_session_expired"
+
+/**
  * 按 `id@versionCode` 建进度索引。
  *
  * 同一个模块投过多版时每一版各有自己的进度，只按 id 建索引会让「上一版已收录」
@@ -284,6 +291,9 @@ suspend fun fetchProgress(token: String): ProgressOutcome = withContext(Dispatch
         ?: return@withContext ProgressOutcome.Failed(UNAVAILABLE)
     try {
         withTimeout(PROGRESS_TIMEOUT_MS) { execute(call) }.use { response ->
+            // 401 是「令牌失效/没带」：单独给码，别和「暂时查不到」混在一句里——
+            // 轮询要靠它熄火，用户要靠它知道该去重新验证。
+            if (response.code == 401) return@withContext ProgressOutcome.Failed(PROGRESS_SESSION_EXPIRED)
             if (!response.isSuccessful) return@withContext ProgressOutcome.Failed(UNAVAILABLE)
             val body = runCatching { response.body.string() }.getOrNull()
             parseProgressBody(body)

@@ -424,7 +424,7 @@ private fun IdentityBarMaterial(
             if (error != null) {
                 Text(
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp),
-                    text = error,
+                    text = if (error == VERIFY_NETWORK_ERROR_CODE) stringResource(R.string.identity_verify_failed) else error,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                     // 不截断：失败原因里带着承诺串与「去哪改签名」，截掉尾巴等于把
