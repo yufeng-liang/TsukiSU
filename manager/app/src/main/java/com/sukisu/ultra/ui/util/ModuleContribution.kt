@@ -378,7 +378,7 @@ object ModuleContribution {
      */
     private const val BATCH_SUBMIT_TIMEOUT_MS = 180_000L
 
-    /** `/check` 的批大小兜底。服务端当前上限也是 8；调用方应按 `maxModules` 切。 */
+    /** `/check` 的批大小上界（worker 当前也是 8，proof.ts:182）；实际分批大小取服务端自报的 `maxModules`，它拿不到时的兜底见 [com.sukisu.ultra.ui.screen.upload.ModuleUploadRules.FALLBACK_CHUNK_SIZE]。 */
     private const val CHECK_BATCH_MAX = 8
 
     private const val TURNSTILE_HEADER = "cf-turnstile-response"

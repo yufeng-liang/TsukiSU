@@ -40,8 +40,13 @@ object ModuleUploadRules {
     /** 一次收录查询最多覆盖多少个模块；超出的部分靠「继续查」按钮接着查。 */
     const val CHECK_CAP = 200
 
-    /** 服务端没给 maxModules 时的分批大小（与契约里的兜底值一致）。 */
-    const val FALLBACK_CHUNK_SIZE = 8
+    /**
+     * 服务端没给 maxModules 时的分批大小。**刻意低于** worker 的 MAX_MODULES_PER_SUBMIT
+     * （8，contrib/worker/src/proof.ts:182）：worker 的 /check 与 /submit 用同一条常量封顶，
+     * 服务端哪天调小它而 `/` 端点又恰好拿不到时，兜底若与它齐平就会整批 400。
+     * 降级模式宁可多跑两趟；拿到 limits.maxModules 时永远用服务端自报值。
+     */
+    const val FALLBACK_CHUNK_SIZE = 4
 
     /** 同时最多跑几批 `checkBatch`。 */
     const val CHECK_CONCURRENCY = 2

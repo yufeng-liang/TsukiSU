@@ -2,6 +2,8 @@ package com.sukisu.ultra.ui.screen.upload
 
 import android.content.Context
 import androidx.core.content.edit
+import com.sukisu.ultra.data.backup.CredentialCipher
+import com.sukisu.ultra.data.backup.KeystoreKeyProvider
 import com.sukisu.ultra.data.backup.sha256Hex
 import com.sukisu.ultra.ksuApp
 import com.sukisu.ultra.ui.util.UploadSession
@@ -27,9 +29,14 @@ import java.security.SecureRandom
  * 要么整份 `settings.xml` 不备份 —— 后者会把 WebDAV 配置、主题、各种开关一起丢掉。
  * 前者的代价写在下面 [PREFS_NAME] 的注释里。
  *
- * 没有选「加密后仍存原 prefs」（复用 `data/backup/CredentialCipher.kt`）：那需要一个
- * 密钥管理的故事（密钥存哪、丢了怎么办、Keystore 不可用时怎么降级），而这条链的收益
- * 只是「备份里那一串不可读」—— 排除整份文件是更小、更可验证的改动。
+ * 落盘内容现为 **Keystore AES/GCM 信封加密**（`data/backup/CredentialCipher.kt` +
+ * `KeystoreKeyProvider`，独立别名见 [KEY_ALIAS]）：盘上不再是明文，文件本身仍整份
+ * 排除备份 —— 加密解决「盘上明文」，排除解决「凭据离开设备」，两条独立的防线，都要。
+ *
+ * 降级：Keystore 不可用（个别 ROM 砍了 AndroidKeyStore）时明文落盘，功能不因加密失败
+ * 而不可用 —— 备份排除仍然兜着云备份那条路。旧版本写下的明文在读到时顺手迁成信封
+ * （见 [readSession]）；信封在而密钥没了（系统清了 Keystore）当没存过，界面回到
+ * 「要改签名」，不会拿坏信封去撞服务端。
  */
 object ModuleUploadPrefs {
 
@@ -62,6 +69,16 @@ object ModuleUploadPrefs {
     // 与令牌放在同一份 prefs 文件里：它同样是「这台设备已验证过」这件事的依据，
     // 被云备份拷走等于换台机器也能直接换令牌（见文件头那段取舍）。
     const val KEY_IDENTITY_SECRET = "module_upload_identity_secret"
+
+    // ---- 落盘加密 ----
+    //
+    // 令牌与身份验证串写盘前过一层 Keystore 信封（[CredentialCipher]，格式 `v1:iv:ct`）。
+    // 判定「是不是信封」只认前缀 `v1:`：旧版明文没有前缀，原样读回后顺手迁移。
+    // 别名独立于 WebDAV 那把（"sukisu_backup_webdav"）：一把被清不连坐另一把。
+    private const val KEY_ALIAS = "sukisu_upload_session"
+
+    /** [CredentialCipher] 信封的版本前缀；区分「加密落盘」与「旧版明文/降级明文」。 */
+    private const val ENVELOPE_PREFIX = "v1:"
 
     /** 身份验证串的字节数：16 字节 → 32 位小写十六进制，与契约的 `^[0-9a-f]{32}$` 一致。 */
     private const val SECRET_BYTES = 16
@@ -99,14 +116,21 @@ object ModuleUploadPrefs {
      */
     fun readSession(now: Long = System.currentTimeMillis()): UploadSession? = runCatching {
         val p = sessionPrefs() ?: return null
+        val rawToken = p.getString(KEY_SESSION_TOKEN, null).orEmpty()
         val session = UploadSession(
-            token = p.getString(KEY_SESSION_TOKEN, null).orEmpty(),
+            token = unseal(rawToken),
             uid = p.getString(KEY_SESSION_UID, null).orEmpty(),
             nickname = p.getString(KEY_SESSION_NICK, null).orEmpty(),
             avatar = p.getString(KEY_SESSION_AVATAR, null).orEmpty(),
             expiresAt = p.getLong(KEY_SESSION_EXPIRES_AT, 0L),
         )
-        session.takeIf { it.validAt(now) }
+        val valid = session.validAt(now)
+        // 旧版本写下的明文：读到（且这份令牌还活着）就顺手迁成信封 —— 读路径上唯一一次
+        // 写，幂等；迁移失败不影响本次返回，下次读会再试。
+        if (valid && rawToken.isNotEmpty() && !rawToken.startsWith(ENVELOPE_PREFIX)) {
+            runCatching { p.edit { putString(KEY_SESSION_TOKEN, seal(rawToken)) } }
+        }
+        session.takeIf { valid }
     }.getOrNull()
 
     /** 存下一张令牌。形状不对的一律不存（脏数据不许落到盘上）。 */
@@ -114,7 +138,7 @@ object ModuleUploadPrefs {
         if (!session.wellFormed) return
         runCatching {
             sessionPrefs()?.edit {
-                putString(KEY_SESSION_TOKEN, session.token)
+                putString(KEY_SESSION_TOKEN, seal(session.token))
                 putString(KEY_SESSION_UID, session.uid)
                 putString(KEY_SESSION_NICK, session.nickname)
                 putString(KEY_SESSION_AVATAR, session.avatar)
@@ -143,7 +167,7 @@ object ModuleUploadPrefs {
      * `identity_invalid`，不如当它不存在、由界面重新生成一串。
      */
     fun identitySecret(): String = runCatching {
-        val secret = sessionPrefs()?.getString(KEY_IDENTITY_SECRET, null).orEmpty()
+        val secret = unseal(sessionPrefs()?.getString(KEY_IDENTITY_SECRET, null).orEmpty())
         secret.takeIf { SECRET_HEX_RE.matches(it) }.orEmpty()
     }.getOrDefault("")
 
@@ -157,7 +181,7 @@ object ModuleUploadPrefs {
         val bytes = ByteArray(SECRET_BYTES)
         SECRET_RANDOM.nextBytes(bytes)
         val secret = bytes.joinToString("") { "%02x".format(it) }
-        runCatching { sessionPrefs()?.edit { putString(KEY_IDENTITY_SECRET, secret) } }
+        runCatching { sessionPrefs()?.edit { putString(KEY_IDENTITY_SECRET, seal(secret)) } }
         return secret
     }
 
@@ -190,6 +214,27 @@ object ModuleUploadPrefs {
     private fun sessionPrefs() = runCatching {
         ksuApp.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }.getOrNull()
+
+    // ---- 信封读写（见文件头「落盘加密」）----
+    //
+    // 两条失败路径都是「降级到明文」或「当没存过」，不抛、不重试：
+    // 加密是纵深防御，不能反过来把投稿功能锁死。
+
+    /** Keystore 密钥；拿不到（个别 ROM 没有 AndroidKeyStore）返回 null。 */
+    private fun cipherKey() = runCatching { KeystoreKeyProvider.key(KEY_ALIAS) }.getOrNull()
+
+    /** 写盘前过信封；拿不到密钥（或加密失败）就明文落盘，备份排除仍兜着云备份。 */
+    private fun seal(plain: String): String {
+        val key = cipherKey() ?: return plain
+        return runCatching { CredentialCipher.encrypt(key, plain) }.getOrDefault(plain)
+    }
+
+    /** 读盘时拆信封；明文（旧版/降级写入）原样返回，信封坏/密钥没了返回空串（当没存过）。 */
+    private fun unseal(stored: String): String {
+        if (!stored.startsWith(ENVELOPE_PREFIX)) return stored
+        val key = cipherKey() ?: return ""
+        return runCatching { CredentialCipher.decrypt(key, stored) }.getOrDefault("")
+    }
 
     /** 身份验证串的形状：与服务端 `IDENTITY_SECRET_RE` 同一条尺子。 */
     private val SECRET_HEX_RE = Regex("^[0-9a-f]{32}$")

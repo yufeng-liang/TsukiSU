@@ -214,11 +214,12 @@ class ModuleUploadRulesTest {
     }
 
     @Test
-    fun `check chunks follow the server limit with a fallback of eight`() {
+    fun `check chunks follow the server limit with a fallback of four`() {
         assertEquals(3, ModuleUploadRules.checkChunkSize(limits))
-        assertEquals(8, ModuleUploadRules.checkChunkSize(null))
+        assertEquals(4, ModuleUploadRules.checkChunkSize(null))
         // 服务端给 0 / 负数属于坏数据：退回兜底值，而不是把待查列表切成 0 条。
-        assertEquals(8, ModuleUploadRules.checkChunkSize(BatchLimits(0, 0, 0)))
+        // 兜底刻意低于 worker 的 MAX_MODULES_PER_SUBMIT（8）：worker 调小它时降级路径仍放得过去。
+        assertEquals(4, ModuleUploadRules.checkChunkSize(BatchLimits(0, 0, 0)))
         assertEquals(200, ModuleUploadRules.CHECK_CAP)
     }
 
