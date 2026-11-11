@@ -160,7 +160,7 @@ fun AiHomeCardMiuix(onOpenChat: () -> Unit) {
                             imageVector = Icons.Rounded.ChevronRight,
                             contentDescription = stringResource(R.string.ai_open_chat),
                             tint = colorScheme.onPrimary,
-                            modifier = Modifier.size(22.dp),
+                            modifier = Modifier.size(28.dp),
                         )
                     }
                 }

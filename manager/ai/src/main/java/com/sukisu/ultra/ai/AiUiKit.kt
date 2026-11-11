@@ -492,7 +492,7 @@ fun AiAvatarImage(
         Icon(
             painter = painterResource(R.drawable.ic_ai_assistant_logo),
             contentDescription = null,
-            modifier = Modifier.fillMaxSize(0.66f),
+            modifier = Modifier.fillMaxSize(0.82f),
             tint = AiBrandStarColor,
         )
     }
