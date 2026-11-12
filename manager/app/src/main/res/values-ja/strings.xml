@@ -211,4 +211,9 @@
     <string name="profile_flags_desc_no_new_privs">この root プロファイルのコンテキスト内で、SukiSU を介したさらなる権限昇格を防止します。</string>
     <string name="install_force_backup">純正イメージとしてバックアップ</string>
     <string name="install_force_backup_summary">選択した boot イメージが純正イメージであることを確認してください</string>
+    <string name="identity_verify_failed">本人確認に失敗しました。ネットワークを確認して、もう一度お試しください。</string>
+    <string name="module_upload_progress_session_expired">セッションの有効期限が切れました。再度認証してからご確認ください。</string>
+    <string name="module_upload_preparing_submit">デバイスを確認しています…</string>
+    <string name="module_upload_submit_cancel">このアップロードをキャンセル</string>
+    <string name="module_upload_submit_cancelled">キャンセルしました。サーバー側で既に受理されている可能性があるため、投稿記録で確認してください。アップロードコードが消費済みの可能性もあります。</string>
 </resources>

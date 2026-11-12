@@ -129,17 +129,7 @@ fun AiHomeCardMiuix(onOpenChat: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    AiAvatarImage(
-                        size = 30.dp,
-                    )
-                }
+                AiAvatarImage(size = 42.dp)
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = stringResource(R.string.ai_assistant_title),
@@ -170,7 +160,7 @@ fun AiHomeCardMiuix(onOpenChat: () -> Unit) {
                             imageVector = Icons.Rounded.ChevronRight,
                             contentDescription = stringResource(R.string.ai_open_chat),
                             tint = colorScheme.onPrimary,
-                            modifier = Modifier.size(22.dp),
+                            modifier = Modifier.size(28.dp),
                         )
                     }
                 }

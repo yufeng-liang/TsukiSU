@@ -11,11 +11,13 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -45,7 +47,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -466,17 +470,40 @@ internal fun rememberAiConfirmDialog(
     return handle
 }
 
+/**
+ * AI 助手品牌标识：固定蓝紫渐变圆底 + 白色四角星。
+ *
+ * 品牌色刻意不读取 MaterialTheme / MiuixTheme —— AI 入口是独立品牌，
+ * 跟随主题蓝/绿/红变化会让它和宿主应用混在一起，也常在深色主题下失去辨识度。
+ * 渐变在浅色、深色主题下都能保持足够对比度，白色星标压在渐变上始终清晰。
+ */
 @Composable
 fun AiAvatarImage(
     modifier: Modifier = Modifier,
     size: Dp = 24.dp,
 ) {
-    // 助手用独立品牌标识，不再复用宿主应用图标（否则入口看起来像「另一个 App」）。
-    // 用 Icon 而不是 Image：星标是单色矢量，tint 成主题色后与头像容器同色系。
-    Icon(
-        painter = painterResource(R.drawable.ic_ai_assistant_logo),
-        contentDescription = null,
-        modifier = modifier.size(size),
-        tint = MaterialTheme.colorScheme.primary,
-    )
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(Brush.linearGradient(AiBrandGradient)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_ai_assistant_logo),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(0.82f),
+            tint = AiBrandStarColor,
+        )
+    }
 }
+
+/** 品牌渐变：亮蓝 → 靛蓝 → 紫，固定色值，不参与动态取色。 */
+private val AiBrandGradient = listOf(
+    Color(0xFF4C6FFF),
+    Color(0xFF6C5CE7),
+    Color(0xFF9B5CFF),
+)
+
+/** 星标颜色：与渐变中段拉开明度差，保证小尺寸下也能看清轮廓。 */
+private val AiBrandStarColor = Color(0xFFFFFFFF)

@@ -172,8 +172,6 @@ data class ModuleUploadListState(
      */
     val searchStatus: SearchStatus = SearchStatus(""),
     val limits: BatchLimits? = null,
-    /** 还有多少条没查过（>0 时显示「继续查」）。 */
-    val remaining: Int = 0,
     /**
      * 这一屏的收录结论全部来自缓存（[ModuleUploadCheckCache]）——这一次一条请求都没发。
      *
@@ -322,6 +320,14 @@ data class ModuleUploadFormState(
      * 第一下（或这个状态是测试里手搓的）时判据必须照常工作。
      */
     val nowTick: Long = 0L,
+    /**
+     * 已经按下提交、正在拿人机校验令牌（TurnstileTokenProvider）。
+     *
+     * 与 [submitting] 分开是为了不撒谎：这段时间请求还没发出去，而取令牌的超时是两分钟级的，
+     * 界面上写「正在上传 x 个包」会让用户对着一个还没发生的事等满两分钟。两个状态都算
+     * 「按钮不能点」，见 [canSubmit] / [blockers]。
+     */
+    val preparingSubmit: Boolean = false,
     val submitting: Boolean = false,
     /** 本次要上传的总字节数，提交中显示（契约没有字节回调，见 ViewModel 注释）。 */
     val totalBytes: Long = 0L,
@@ -423,7 +429,8 @@ data class ModuleUploadFormState(
             uidVerified = uidVerified,
             consent = consent,
             signatureValid = signatureValid,
-            submitting = submitting,
+            // 取令牌的准备阶段与上传本身都算「已经在提交了」：两态都要让按钮变灰。
+            submitting = submitting || preparingSubmit,
             limitProblem = ModuleUploadRules.limitProblem(items.size, items.map { it.sizeBytes }, limits),
             sessionActive = sessionMatchesUid,
             submitted = outcome is UploadOutcome.Success,
@@ -436,7 +443,7 @@ data class ModuleUploadFormState(
             uidVerified = uidVerified,
             consent = consent,
             signatureValid = signatureValid,
-            submitting = submitting,
+            submitting = submitting || preparingSubmit,
             limitProblem = ModuleUploadRules.limitProblem(items.size, items.map { it.sizeBytes }, limits),
             sessionActive = sessionMatchesUid,
             submitted = outcome is UploadOutcome.Success,

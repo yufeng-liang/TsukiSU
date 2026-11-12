@@ -488,7 +488,7 @@ private fun IdentityBarMiuix(
             if (error != null) {
                 Text(
                     modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp),
-                    text = error,
+                    text = if (error == VERIFY_NETWORK_ERROR_CODE) stringResource(R.string.identity_verify_failed) else error,
                     fontSize = 12.sp,
                     color = colorScheme.error,
                     // 不截断：失败原因里带着承诺串与「去哪改签名」，截掉尾巴等于把

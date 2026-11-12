@@ -11,6 +11,9 @@ import com.sukisu.ultra.data.model.AccountFollowChangeResponse
 import com.sukisu.ultra.data.model.AccountFollowRequest
 import com.sukisu.ultra.data.model.AccountFollowsResponse
 import com.sukisu.ultra.data.model.AccountForgotPasswordRequest
+import com.sukisu.ultra.data.model.AccountHistoryItem
+import com.sukisu.ultra.data.model.AccountHistoryRequest
+import com.sukisu.ultra.data.model.AccountHistoryResponse
 import com.sukisu.ultra.data.model.AccountLoginRequest
 import com.sukisu.ultra.data.model.AccountLoginResponse
 import com.sukisu.ultra.data.model.AccountMessagesResponse
@@ -45,6 +48,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.File
 import java.io.IOException
 
 class AccountRepository(
@@ -58,6 +62,8 @@ class AccountRepository(
         const val CSRF_HEADER = "X-Requested-With"
         const val CSRF_VALUE = "SukiSUThemeAdmin"
         const val CLIENT_HEADER = "X-Client"
+        const val HISTORY_KIND_VIEW = "view"
+        const val HISTORY_KIND_DOWNLOAD = "download"
         val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
         val json = Json { ignoreUnknownKeys = true; isLenient = true }
         val SESSIONS_SERIALIZER = MapSerializer(String.serializer(), AccountSession.serializer())
@@ -128,8 +134,18 @@ class AccountRepository(
         val base = resolvedBase(baseUrl) ?: return
         synchronized(SESSION_WRITE_LOCK) {
             val current = loadSessions()
-            if (current.containsKey(base)) {
-                persistSessions(current - base)
+            val targets = if (ThemeStoreDefaults.isBuiltInBaseUrl(base)) {
+                // The built-in mirrors are automatically interchangeable; sign out
+                // from all of them so a fallback session cannot reappear.
+                ThemeStoreDefaults.BASE_URLS
+                    .mapNotNull { ThemeStoreRepository.normalizeBaseUrl(it) }
+                    .toSet() + base
+            } else {
+                setOf(base)
+            }
+            val remaining = current - targets
+            if (remaining.size != current.size) {
+                persistSessions(remaining)
             }
         }
     }
@@ -140,8 +156,22 @@ class AccountRepository(
 
     fun sessionFor(baseUrl: String): AccountSession? {
         val normalized = resolvedBase(baseUrl) ?: return null
-        val current = _sessions.value[normalized] ?: return null
-        return current.takeIf { it.token.isNotBlank() }
+        val current = _sessions.value[normalized]
+            ?: if (ThemeStoreDefaults.isBuiltInBaseUrl(normalized)) {
+                // Auto-selection may point at another mirror than the one used to
+                // sign in. Reuse that session and route requests to the current
+                // (fastest) mirror.
+                ThemeStoreDefaults.BASE_URLS
+                    .asSequence()
+                    .mapNotNull { ThemeStoreRepository.normalizeBaseUrl(it) }
+                    .filter { it != normalized }
+                    .mapNotNull { _sessions.value[it] }
+                    .firstOrNull()
+                    ?.copy(baseUrl = normalized)
+            } else {
+                null
+            }
+        return current?.takeIf { it.token.isNotBlank() }
     }
 
     private fun requireSession(baseUrl: String): AccountSession =
@@ -151,7 +181,7 @@ class AccountRepository(
         resolvedBase(baseUrl)?.let { it + "account/" }
 
     private fun resolvedBase(baseUrl: String): String? {
-        val value = baseUrl.trim().ifBlank { ThemeStoreDefaults.BASE_URL }
+        val value = baseUrl.trim().ifBlank { ThemeStoreDefaults.preferredBaseUrl() }
         return ThemeStoreRepository.normalizeBaseUrl(value)
     }
 
@@ -243,6 +273,7 @@ class AccountRepository(
                 val user = parsed.user ?: throw IOException(parsed.error ?: appContext.getString(R.string.account_profile_unavailable))
                 val updated = current.copy(
                     user = user,
+                    authors = parsed.authors,
                     activeAuthor = parsed.activeAuthor ?: current.activeAuthor,
                     followers = parsed.followers,
                     following = parsed.following,
@@ -714,6 +745,164 @@ class AccountRepository(
                 }
             }
         }
+
+    suspend fun themeHistory(
+        baseUrl: String,
+        kind: String,
+        limit: Int = 100,
+    ): Result<List<AccountHistoryItem>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val current = requireSession(baseUrl)
+            val api = apiBase(current.baseUrl)
+                ?: throw IOException(appContext.getString(R.string.theme_store_invalid_url))
+            val request = Request.Builder()
+                .url(api + "history?kind=" + kind + "&limit=" + limit)
+                .header("Authorization", "Bearer ${current.token}")
+                .header(CSRF_HEADER, CSRF_VALUE)
+                .get()
+                .build()
+            client.newCall(request).execute().use { response ->
+                val raw = response.body.string()
+                if (response.code == 401) {
+                    removeSession(current.baseUrl)
+                    throw IOException(appContext.getString(R.string.account_session_expired))
+                }
+                if (!response.isSuccessful) throw IOException(parseError(raw, response.code))
+                json.decodeFromString(AccountHistoryResponse.serializer(), raw).items
+            }
+        }
+    }
+
+    suspend fun recordThemeHistory(
+        baseUrl: String,
+        kind: String,
+        themeId: String,
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val current = requireSession(baseUrl)
+            val api = apiBase(current.baseUrl)
+                ?: throw IOException(appContext.getString(R.string.theme_store_invalid_url))
+            val body = json.encodeToString(
+                AccountHistoryRequest.serializer(),
+                AccountHistoryRequest(themeId = themeId, kind = kind),
+            ).toRequestBody(JSON_MEDIA)
+            val path = if (kind == HISTORY_KIND_VIEW) "history/view" else "history/download"
+            val request = Request.Builder()
+                .url(api + path)
+                .header("Authorization", "Bearer ${current.token}")
+                .header(CSRF_HEADER, CSRF_VALUE)
+                .post(body)
+                .build()
+            client.newCall(request).execute().use { response ->
+                val raw = response.body.string()
+                if (response.code == 401) {
+                    removeSession(current.baseUrl)
+                    throw IOException(appContext.getString(R.string.account_session_expired))
+                }
+                if (!response.isSuccessful) throw IOException(parseError(raw, response.code))
+                Unit
+            }
+        }
+    }
+
+    suspend fun deleteThemeHistory(
+        baseUrl: String,
+        kind: String,
+        ids: List<Long> = emptyList(),
+        all: Boolean = false,
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val current = requireSession(baseUrl)
+            val api = apiBase(current.baseUrl)
+                ?: throw IOException(appContext.getString(R.string.theme_store_invalid_url))
+            val payload = kotlinx.serialization.json.buildJsonObject {
+                put("kind", kotlinx.serialization.json.JsonPrimitive(kind))
+                put("all", kotlinx.serialization.json.JsonPrimitive(all))
+                put(
+                    "ids",
+                    kotlinx.serialization.json.JsonArray(
+                        ids.map { kotlinx.serialization.json.JsonPrimitive(it) },
+                    ),
+                )
+            }
+            val request = Request.Builder()
+                .url(api + "history/delete")
+                .header("Authorization", "Bearer ${current.token}")
+                .header(CSRF_HEADER, CSRF_VALUE)
+                .post(payload.toString().toRequestBody(JSON_MEDIA))
+                .build()
+            client.newCall(request).execute().use { response ->
+                val raw = response.body.string()
+                if (response.code == 401) {
+                    removeSession(current.baseUrl)
+                    throw IOException(appContext.getString(R.string.account_session_expired))
+                }
+                if (!response.isSuccessful) throw IOException(parseError(raw, response.code))
+                Unit
+            }
+        }
+    }
+
+    /** Fetches the current package of an owned theme for the edit form. */
+    suspend fun downloadMyThemePackage(baseUrl: String, id: String): Result<File> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val current = requireSession(baseUrl)
+                val api = apiBase(current.baseUrl)
+                    ?: throw IOException(appContext.getString(R.string.theme_store_invalid_url))
+                val url = api + "my-themes/" + id + "/download?history=0"
+                downloadToFile(current, url, editDir(id), "package.sukisu")
+            }
+        }
+
+    /** Fetches a store image (preview, avatar, screenshot) with the account session. */
+    suspend fun downloadAccountAsset(
+        baseUrl: String,
+        path: String,
+        filename: String,
+        cacheKey: String,
+    ): Result<File> = withContext(Dispatchers.IO) {
+        runCatching {
+            val current = requireSession(baseUrl)
+            val api = apiBase(current.baseUrl)
+                ?: throw IOException(appContext.getString(R.string.theme_store_invalid_url))
+            val url = api + "preview?path=" + java.net.URLEncoder.encode(path, "UTF-8")
+            downloadToFile(current, url, editDir(cacheKey), filename)
+        }
+    }
+
+    private fun editDir(key: String): File {
+        val safe = key.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "theme" }
+        return File(appContext.cacheDir, "theme_store/edit/$safe").apply { mkdirs() }
+    }
+
+    private fun downloadToFile(
+        session: AccountSession,
+        url: String,
+        directory: File,
+        filename: String,
+    ): File {
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer ${session.token}")
+            .header(CSRF_HEADER, CSRF_VALUE)
+            .get()
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (response.code == 401) {
+                removeSession(session.baseUrl)
+                throw IOException(appContext.getString(R.string.account_session_expired))
+            }
+            if (!response.isSuccessful) {
+                throw IOException(parseError(response.body.string(), response.code))
+            }
+            val file = File(directory, filename)
+            response.body.byteStream().use { input ->
+                file.outputStream().use { output -> input.copyTo(output) }
+            }
+            return file
+        }
+    }
 
     suspend fun logout(baseUrl: String): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {

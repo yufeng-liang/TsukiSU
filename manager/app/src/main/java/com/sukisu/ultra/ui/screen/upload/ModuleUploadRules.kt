@@ -37,11 +37,21 @@ object ModuleUploadRules {
         UNKNOWN,
     }
 
-    /** 一次收录查询最多覆盖多少个模块；超出的部分靠「继续查」按钮接着查。 */
+    /**
+     * 一轮收录查询最多覆盖多少个模块。
+     *
+     * 超出的部分不需要用户做任何事：ViewModel 的 [startCheck] 会一批一批续查下去，
+     * 直到没有候选为止（轮与轮之间串行）。
+     */
     const val CHECK_CAP = 200
 
-    /** 服务端没给 maxModules 时的分批大小（与契约里的兜底值一致）。 */
-    const val FALLBACK_CHUNK_SIZE = 8
+    /**
+     * 服务端没给 maxModules 时的分批大小。**刻意低于** worker 的 MAX_MODULES_PER_SUBMIT
+     * （8，contrib/worker/src/proof.ts:182）：worker 的 /check 与 /submit 用同一条常量封顶，
+     * 服务端哪天调小它而 `/` 端点又恰好拿不到时，兜底若与它齐平就会整批 400。
+     * 降级模式宁可多跑两趟；拿到 limits.maxModules 时永远用服务端自报值。
+     */
+    const val FALLBACK_CHUNK_SIZE = 4
 
     /** 同时最多跑几批 `checkBatch`。 */
     const val CHECK_CONCURRENCY = 2
@@ -62,8 +72,8 @@ object ModuleUploadRules {
     /**
      * 状态文案。
      *
-     * `null` 是「还没查」（被 200 条上限截住或刚进页面），与 [CheckStatus.UNKNOWN]
-     * 的「查了但没问出来」分开说：前者用户点一下「继续查」就好，后者只能等网络恢复。
+     * `null` 是「还没查」（刚进页面，或这一趟还没轮到它），与 [CheckStatus.UNKNOWN]
+     * 的「查了但没问出来」分开说：前者下一趟查询自然会把它捞回来，后者只能等网络恢复。
      */
     fun statusCopy(status: CheckStatus?): StatusCopy = when (status) {
         CheckStatus.RECORDED -> StatusCopy(
@@ -131,9 +141,42 @@ object ModuleUploadRules {
     private fun RowView.matches(text: String): Boolean =
         id.contains(text, ignoreCase = true) || name.contains(text, ignoreCase = true)
 
-    /** 分批大小：服务端给了正数就用它，否则退回 8。 */
+    /**
+     * 分批大小：服务端给了正数就用它，否则退回 [FALLBACK_CHUNK_SIZE]（4）。
+     *
+     * 兜底值刻意低于 worker 的 MAX_MODULES_PER_SUBMIT，理由见上面那条常量的注释：
+     * 服务端调小上限而 `/` 又拿不到时，退到 4 只是多跑一趟，不会整批 400。
+     */
     fun checkChunkSize(limits: BatchLimits?): Int =
         limits?.maxModules?.takeIf { it > 0 } ?: FALLBACK_CHUNK_SIZE
+
+    /**
+     * 这一趟该送去服务端的行（[CHECK_CAP] 之前的那批候选）。
+     *
+     * 判据只有两句：**本趟已经碰过的行不再入候选**（[askedThisRun]），以及没有 [force] 时
+     * 「还没有结论（[UploadRow.status] == null）且没被问过（不在 [checkedIds]）」。失败的行会从
+     * [checkedIds] 撤下来，所以下一趟还会被捞回去重问。
+     *
+     * 这两句合起来就是终止性的来源：行数有限、[askedThisRun] 只增不减，所以 ViewModel 那个
+     * 「一直续查到没有候选」的循环必然停下来；`force`（手动刷新）无视已有结论，但同样绕不过
+     * [askedThisRun]。
+     *
+     * 抽成纯函数是为了让 JVM 单测能直接钉住它：这里歪一点点，症状就是「排在后面的行永远轮不到」
+     * ——界面上看不出来，只有去数「已查询 N/M」才发现少了尾巴。
+     */
+    fun nextBatch(
+        rows: List<UploadRow>,
+        askedThisRun: Set<String>,
+        checkedIds: Set<String>,
+        force: Boolean,
+        cap: Int = CHECK_CAP,
+    ): List<UploadRow> = rows.asSequence()
+        .filter { row ->
+            row.id !in askedThisRun &&
+                (force || (row.status == null && row.id !in checkedIds))
+        }
+        .take(cap)
+        .toList()
 
     // ── 上传记录（GET /mine）────────────────────────────────────────────────
 

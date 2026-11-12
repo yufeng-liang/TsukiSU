@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  AI 助手品牌标识：四角星。白色仅作占位，运行时由 AiAvatarImage 用主题色 tint，
-  因此图标颜色会跟随 App 主题；外圈由头像容器的 primaryContainer 提供，两者同一色系。
+  AI 助手品牌标识：四角星。白色为固定品牌色，由 AiAvatarImage 叠在蓝紫渐变圆底上；
+  不读取 MaterialTheme / MiuixTheme 的主题色，保证入口在所有主题下保持同一品牌形象。
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="48dp"

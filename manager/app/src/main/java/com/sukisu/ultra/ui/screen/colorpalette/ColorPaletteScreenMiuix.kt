@@ -3,6 +3,7 @@ package com.sukisu.ultra.ui.screen.colorpalette
 import com.sukisu.ultra.ui.component.miuix.MiuixTextButtonAffectedByBackground
 import com.sukisu.ultra.ai.api.R as AiR
 import com.sukisu.ultra.ai.api.AiFeatureBridge
+import android.annotation.SuppressLint
 import android.net.Uri
 import java.io.File
 import android.os.Build
@@ -13,11 +14,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,7 +35,7 @@ import androidx.compose.foundation.layout.add
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.captionBar
 import androidx.compose.foundation.layout.displayCutout
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
@@ -43,6 +45,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -64,6 +68,7 @@ import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Pin
 import androidx.compose.material.icons.rounded.Palette
+import com.sukisu.ultra.ui.component.Storefront
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Style
@@ -89,11 +94,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -103,6 +113,9 @@ import com.sukisu.ultra.R
 import com.sukisu.ultra.ui.component.miuix.AppCard
 import com.sukisu.ultra.ui.component.miuix.AppScaffold
 import com.sukisu.ultra.ui.component.miuix.ScaleDialog
+import com.sukisu.ultra.ui.component.bottombar.BottomBarDestination
+import com.sukisu.ultra.ui.util.BottomBarIconSlot
+import coil.compose.AsyncImage
 import com.sukisu.ultra.ui.component.HomeCardStickerStage
 import com.sukisu.ultra.ui.component.HomeCardStickerThumbnail
 import com.sukisu.ultra.ui.component.themeimport.ThemeExportDialog
@@ -116,6 +129,10 @@ import com.sukisu.ultra.ui.util.BlurredBar
 import com.sukisu.ultra.ui.util.BuiltinAppIcons
 import com.sukisu.ultra.ui.util.HomeCardSticker
 import com.sukisu.ultra.ui.util.HomeCardStickerTransform
+import com.sukisu.ultra.ui.util.HomeCardImageStyle
+import com.sukisu.ultra.ui.util.HomeLayout
+import com.sukisu.ultra.ui.util.HomeStatusAlignment
+import com.sukisu.ultra.ui.util.HomeStatusStyle
 import com.sukisu.ultra.ui.util.ImageStorage
 import com.sukisu.ultra.ui.util.ThemePackageStorage
 import com.sukisu.ultra.ui.util.rememberBlurBackdrop
@@ -146,10 +163,11 @@ import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
+import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
-import kotlin.time.Duration.Companion.milliseconds
 
+@SuppressLint("ConfigurationScreenWidthHeight")
 @Composable
 fun ColorPaletteScreenMiuix(
     state: ColorPaletteUiState,
@@ -161,21 +179,6 @@ fun ColorPaletteScreenMiuix(
     fun sectionRequester(anchor: String): BringIntoViewRequester =
         sectionRequesters.getOrPut(anchor) { BringIntoViewRequester() }
 
-    LaunchedEffect(section) {
-        val anchor = section?.trim()?.lowercase()?.replace('-', '_')?.takeIf { it.isNotEmpty() }
-            ?: return@LaunchedEffect
-        kotlinx.coroutines.delay(120.milliseconds)
-        val target = sectionRequesters[anchor]
-            ?: sectionRequesters[when (anchor) {
-                "color_mode", "theme_mode", "palette" -> "colors"
-                "sticker" -> "home_card"
-                "gestures", "predictive_back", "scale" -> "behavior"
-                else -> anchor
-            }]
-            ?: sectionRequesters["appearance"]
-            ?: return@LaunchedEffect
-        target.bringIntoView()
-    }
     val enableBlurState = LocalEnableBlur.current
     val backdrop = rememberBlurBackdrop(enableBlurState)
     val blurActive = backdrop != null
@@ -192,6 +195,9 @@ fun ColorPaletteScreenMiuix(
     var cardAlphaDraft by remember { mutableFloatStateOf(state.cardBackgroundAlphaPercent.toFloat()) }
     var blurDraft by remember { mutableFloatStateOf(state.customBackgroundBlurPercent.toFloat()) }
     var scrimDraft by remember { mutableFloatStateOf(state.customBackgroundScrimPercent.toFloat()) }
+    var homeStatusScaleDraft by remember { mutableFloatStateOf(state.homeStatusScale) }
+    var homePillScaleDraft by remember { mutableFloatStateOf(state.homePillScale) }
+    var homeStatusWidthDraft by remember { mutableFloatStateOf(state.homeStatusWidthFraction) }
     val sliderCommitted = remember { mutableIntStateOf(0) }
     // Values changed outside the sliders (import, reset, AI bridge) replace the drafts. Reads the
     // counter so finishing a drag does not re-run this and yank the thumbs.
@@ -199,6 +205,9 @@ fun ColorPaletteScreenMiuix(
         state.cardBackgroundAlphaPercent,
         state.customBackgroundBlurPercent,
         state.customBackgroundScrimPercent,
+        state.homeStatusScale,
+        state.homePillScale,
+        state.homeStatusWidthFraction,
         sliderCommitted.intValue,
     ) {
         if (cardAlphaDraft.roundToInt() != state.cardBackgroundAlphaPercent) {
@@ -209,6 +218,15 @@ fun ColorPaletteScreenMiuix(
         }
         if (scrimDraft.roundToInt() != state.customBackgroundScrimPercent) {
             scrimDraft = state.customBackgroundScrimPercent.toFloat()
+        }
+        if (homeStatusScaleDraft != state.homeStatusScale) {
+            homeStatusScaleDraft = state.homeStatusScale
+        }
+        if (homePillScaleDraft != state.homePillScale) {
+            homePillScaleDraft = state.homePillScale
+        }
+        if (homeStatusWidthDraft != state.homeStatusWidthFraction) {
+            homeStatusWidthDraft = state.homeStatusWidthFraction
         }
     }
     // Same trap as the drafts: a remembered value computed once would freeze the preview at the
@@ -234,6 +252,13 @@ fun ColorPaletteScreenMiuix(
         state.hideHomeCardStatusText,
         state.hideHomeCardDecoration,
         state.homeCardStickers,
+        state.homeLayout,
+        state.homeStatusAlignment,
+        homeStatusScaleDraft,
+        homePillScaleDraft,
+        homeStatusWidthDraft,
+        state.homeCardImageStyle,
+        state.showHomeCardImageWithoutBackground,
         state.appearance,
     ) {
         ThemePreviewSpec(
@@ -256,10 +281,49 @@ fun ColorPaletteScreenMiuix(
             hideHomeCardText = state.hideHomeCardStatusText,
             hideHomeCardDecoration = state.hideHomeCardDecoration,
             homeCardStickers = state.homeCardStickers,
+            homeLayout = state.homeLayout,
+            homeStatusAlignment = state.homeStatusAlignment,
+            homeStatusScale = homeStatusScaleDraft,
+            homePillScale = homePillScaleDraft,
+            homeStatusWidthFraction = homeStatusWidthDraft,
+            homeCardImageStyle = state.homeCardImageStyle,
+            showHomeCardImageWithoutBackground = state.showHomeCardImageWithoutBackground,
             appearance = state.appearance,
         )
     }
+    // The category box replaces the old accordion list: only one category is composed at a time.
+    var selectedCategoryKey by rememberSaveable {
+        mutableStateOf(
+            (ThemeSettingsCategory.fromSection(section) ?: ThemeSettingsCategory.COLORS).name
+        )
+    }
+    val selectedCategory = ThemeSettingsCategory.entries
+        .firstOrNull { it.name == selectedCategoryKey }
+        ?: ThemeSettingsCategory.COLORS
+    LaunchedEffect(section) {
+        ThemeSettingsCategory.fromSection(section)?.let { selectedCategoryKey = it.name }
+    }
+    val contentListState = rememberLazyListState()
+    val pinnedHeader = LocalConfiguration.current.screenHeightDp >= 600
+    var categorySelectionSeen by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(selectedCategory) {
+        if (categorySelectionSeen) {
+            // Short screens keep the preview and the category box inside the list.
+            contentListState.scrollToItem(if (pinnedHeader) 0 else 1)
+        } else {
+            categorySelectionSeen = true
+        }
+    }
+    val compactModeLabel = stringResource(
+        when {
+            state.currentColorMode.isSystem -> R.string.settings_theme_mode_system
+            state.currentColorMode.isAmoled -> R.string.theme_mode_amoled
+            state.currentColorMode.isDark -> R.string.settings_theme_mode_dark
+            else -> R.string.settings_theme_mode_light
+        }
+    ) + " · " + state.currentPaletteStyle.name
     var showExportDialog by rememberSaveable { mutableStateOf(false) }
+    var showFullPreview by rememberSaveable { mutableStateOf(false) }
     var pendingExportOptions by rememberSaveable(stateSaver = ThemePackageOptionsSaver) {
         mutableStateOf(ThemePackageOptions())
     }
@@ -287,6 +351,16 @@ fun ColorPaletteScreenMiuix(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         uri?.let { actions.onPickHomeCardSticker(context, it) }
+    }
+    var pendingBottomBarIconSlot by rememberSaveable { mutableStateOf<String?>(null) }
+    val bottomBarIconLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        val slot = pendingBottomBarIconSlot?.let(BottomBarIconSlot::fromKey)
+        if (uri != null && slot != null) {
+            actions.onPickBottomBarIcon(context, slot, uri)
+        }
+        pendingBottomBarIconSlot = null
     }
 
     AppScaffold(
@@ -348,40 +422,72 @@ fun ColorPaletteScreenMiuix(
         }
 
         Box(modifier = if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier) {
-            LazyColumn(
+            Column(
                 modifier = Modifier
-                    .fillMaxHeight()
-                    .scrollEndHaptic()
-                    .overScrollVertical()
-                    .nestedScroll(scrollBehavior.nestedScrollConnection)
-                    .padding(horizontal = 12.dp),
-                contentPadding = innerPadding,
-                overscrollEffect = null,
+                    .fillMaxSize()
+                    .padding(innerPadding),
             ) {
-                item {
-                    Spacer(modifier = Modifier.height(20.dp))
-                    ThemePreviewMiuix(
+                if (pinnedHeader) {
+                    MiuixCompactPreviewCard(
                         spec = previewSpec,
-                        modifier = Modifier.bringIntoViewRequester(sectionRequester("preview")),
+                        modeLabel = compactModeLabel,
+                        onClick = { showFullPreview = true },
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp)
+                            .padding(top = 8.dp),
                     )
-                    Spacer(modifier = Modifier.height(28.dp))
-
-                    val pickImageLauncher = rememberLauncherForActivityResult(
-                        contract = ActivityResultContracts.PickVisualMedia()
-                    ) { uri: Uri? ->
-                        uri?.let { actions.onPickCustomBackground(context, it) }
+                    MiuixCategoryGrid(
+                        selected = selectedCategory,
+                        onSelect = { selectedCategoryKey = it.name },
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp)
+                            .padding(top = 8.dp),
+                    )
+                }
+                LazyColumn(
+                    state = contentListState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .scrollEndHaptic()
+                        .overScrollVertical()
+                        .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        .padding(horizontal = 12.dp),
+                    contentPadding = PaddingValues(top = 12.dp),
+                    overscrollEffect = null,
+                ) {
+                    if (!pinnedHeader) {
+                        item {
+                            MiuixCompactPreviewCard(
+                                spec = previewSpec,
+                                modeLabel = compactModeLabel,
+                                onClick = { showFullPreview = true },
+                            )
+                            MiuixCategoryGrid(
+                                selected = selectedCategory,
+                                onSelect = { selectedCategoryKey = it.name },
+                                modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
+                            )
+                        }
                     }
-                    val hasCustomBg = state.customBackgroundUri.isNotEmpty()
-                    val usingSystemWallpaper = state.useSystemWallpaper
+                    item {
+                        val pickImageLauncher = rememberLauncherForActivityResult(
+                            contract = ActivityResultContracts.PickVisualMedia()
+                        ) { uri: Uri? ->
+                            uri?.let { actions.onPickCustomBackground(context, it) }
+                        }
+                        val hasCustomBg = state.customBackgroundUri.isNotEmpty()
+                        val usingSystemWallpaper = state.useSystemWallpaper
 
+                    if (selectedCategory == ThemeSettingsCategory.COLORS) {
                     AppCard(
                         modifier = Modifier
                             .bringIntoViewRequester(sectionRequester("colors"))
                             .fillMaxWidth(),
                     ) {
-                        MiuixSectionHeader(
-                            title = stringResource(R.string.settings_section_colors),
-                            summary = stringResource(R.string.settings_section_colors_summary),
+                        MiuixCategoryHeader(
+                            title = stringResource(selectedCategory.titleRes),
+                            summary = stringResource(selectedCategory.summaryRes),
                             icon = Icons.Rounded.Colorize,
                             expanded = colorsSectionExpanded,
                             onClick = {
@@ -389,7 +495,7 @@ fun ColorPaletteScreenMiuix(
                             },
                         )
                         AnimatedVisibility(
-                            visible = colorsSectionExpanded,
+                            visible = true,
                             enter = expandVertically() + fadeIn(),
                             exit = shrinkVertically() + fadeOut(),
                         ) {
@@ -543,17 +649,18 @@ fun ColorPaletteScreenMiuix(
                             }
                         }
                     }
+                    }
 
+                    if (selectedCategory == ThemeSettingsCategory.BACKGROUND) {
                     AppCard(
                         modifier = Modifier
                             .bringIntoViewRequester(sectionRequester("background"))
-                            .padding(top = 12.dp)
                             .fillMaxWidth(),
                         colors = backgroundAwareCardColors(),
                     ) {
-                        MiuixSectionHeader(
-                            title = stringResource(R.string.settings_section_background),
-                            summary = stringResource(R.string.settings_section_background_summary),
+                        MiuixCategoryHeader(
+                            title = stringResource(selectedCategory.titleRes),
+                            summary = stringResource(selectedCategory.summaryRes),
                             icon = Icons.Rounded.Wallpaper,
                             expanded = backgroundSectionExpanded,
                             onClick = {
@@ -561,12 +668,31 @@ fun ColorPaletteScreenMiuix(
                             },
                         )
                         AnimatedVisibility(
-                            visible = backgroundSectionExpanded,
+                            visible = true,
                             enter = expandVertically() + fadeIn(),
                             exit = shrinkVertically() + fadeOut(),
                         ) {
                             Column {
                                 HorizontalDivider()
+                                // A bar treatment, not a wallpaper property: keep it available with
+                                // and without a custom background image.
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    SwitchPreference(
+                                        title = stringResource(id = R.string.settings_progressive_blur),
+                                        summary = stringResource(id = R.string.settings_progressive_blur_summary),
+                                        startAction = {
+                                            Icon(
+                                                imageVector = Icons.Rounded.BlurOn,
+                                                modifier = Modifier.padding(end = 6.dp),
+                                                contentDescription = stringResource(id = R.string.settings_progressive_blur),
+                                                tint = colorScheme.onBackground
+                                            )
+                                        },
+                                        checked = state.enableProgressiveBlur,
+                                        onCheckedChange = actions.onSetEnableProgressiveBlur,
+                                    )
+                                    HorizontalDivider()
+                                }
                                 SwitchPreference(
                                     title = stringResource(id = R.string.settings_use_system_wallpaper),
                                     summary = stringResource(
@@ -780,16 +906,17 @@ fun ColorPaletteScreenMiuix(
                             }
                         }
                     }
+                    }
 
+                    if (selectedCategory == ThemeSettingsCategory.ICON_TEXT) {
                     AppCard(
                         modifier = Modifier
                             .bringIntoViewRequester(sectionRequester("appearance"))
-                            .padding(top = 12.dp)
                             .fillMaxWidth(),
                     ) {
-                        MiuixSectionHeader(
-                            title = stringResource(R.string.settings_section_appearance),
-                            summary = stringResource(R.string.settings_section_appearance_summary),
+                        MiuixCategoryHeader(
+                            title = stringResource(selectedCategory.titleRes),
+                            summary = stringResource(selectedCategory.summaryRes),
                             icon = Icons.Rounded.Home,
                             expanded = appearanceSectionExpanded,
                             onClick = {
@@ -797,7 +924,7 @@ fun ColorPaletteScreenMiuix(
                             },
                         )
                         AnimatedVisibility(
-                            visible = appearanceSectionExpanded,
+                            visible = true,
                             enter = expandVertically() + fadeIn(),
                             exit = shrinkVertically() + fadeOut(),
                         ) {
@@ -889,15 +1016,16 @@ fun ColorPaletteScreenMiuix(
                             }
                         }
                     }
+                    }
+                    if (selectedCategory == ThemeSettingsCategory.HOME_CARD) {
                     AppCard(
                         modifier = Modifier
                             .bringIntoViewRequester(sectionRequester("home_card"))
-                            .padding(top = 12.dp)
                             .fillMaxWidth(),
                     ) {
-                        MiuixSectionHeader(
-                            title = stringResource(R.string.settings_section_home_card),
-                            summary = stringResource(R.string.settings_section_home_card_summary),
+                        MiuixCategoryHeader(
+                            title = stringResource(selectedCategory.titleRes),
+                            summary = stringResource(selectedCategory.summaryRes),
                             icon = Icons.Rounded.Home,
                             expanded = homeCardSectionExpanded,
                             onClick = {
@@ -905,11 +1033,29 @@ fun ColorPaletteScreenMiuix(
                             },
                         )
                         AnimatedVisibility(
-                            visible = homeCardSectionExpanded,
+                            visible = true,
                             enter = expandVertically() + fadeIn(),
                             exit = shrinkVertically() + fadeOut(),
                         ) {
                             Column {
+                                HorizontalDivider()
+                                TabRowWithContour(
+                                    tabs = listOf(
+                                        stringResource(R.string.home_layout_classic),
+                                        stringResource(R.string.home_layout_immersive),
+                                    ),
+                                    selectedTabIndex = if (state.homeLayout == HomeLayout.IMMERSIVE) 1 else 0,
+                                    onTabSelected = { index ->
+                                        actions.onSetHomeLayout(
+                                            if (index == 1) HomeLayout.IMMERSIVE else HomeLayout.CLASSIC
+                                        )
+                                    },
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                    colors = TabRowDefaults.tabRowColors(
+                                        backgroundColor = backgroundAwareColor(colorScheme.surfaceContainerHighest),
+                                        selectedBackgroundColor = backgroundAwareColor(colorScheme.surfaceContainer),
+                                    ),
+                                )
                                 HorizontalDivider()
                                 ArrowPreference(
                                     title = stringResource(id = R.string.settings_home_card_image),
@@ -932,7 +1078,7 @@ fun ColorPaletteScreenMiuix(
                                         )
                                     },
                                 )
-                                if (state.homeCardImagePath.isNotBlank()) {
+                                if (state.homeLayout == HomeLayout.CLASSIC && state.homeCardImagePath.isNotBlank()) {
                                     SwitchPreference(
                                         title = stringResource(id = R.string.settings_hide_home_card_decoration),
                                         summary = stringResource(R.string.settings_hide_home_card_decoration_summary),
@@ -962,6 +1108,144 @@ fun ColorPaletteScreenMiuix(
                                         onCheckedChange = actions.onSetHideHomeCardStatusText,
                                     )
                                 }
+                                if (state.homeLayout == HomeLayout.IMMERSIVE) {
+                                    if (state.homeCardImagePath.isNotBlank()) {
+                                        OverlayDropdownPreference(
+                                            title = stringResource(R.string.settings_home_card_image_position),
+                                            items = listOf(
+                                                stringResource(R.string.home_card_image_position_banner),
+                                                stringResource(R.string.home_card_image_position_off),
+                                            ),
+                                            startAction = {
+                                                Icon(
+                                                    Icons.Rounded.AspectRatio,
+                                                    modifier = Modifier.padding(end = 8.dp),
+                                                    contentDescription = stringResource(R.string.settings_home_card_image_position),
+                                                    tint = colorScheme.onBackground,
+                                                )
+                                            },
+                                            selectedIndex = when (state.homeCardImageStyle) {
+                                                HomeCardImageStyle.BANNER -> 0
+                                                HomeCardImageStyle.OFF -> 1
+                                            },
+                                            onSelectedIndexChange = { index ->
+                                                actions.onSetHomeCardImageStyle(
+                                                    if (index == 0) {
+                                                        HomeCardImageStyle.BANNER
+                                                    } else {
+                                                        HomeCardImageStyle.OFF
+                                                    }
+                                                )
+                                            },
+                                        )
+                                        if (state.homeCardImageStyle == HomeCardImageStyle.BANNER) {
+                                        SwitchPreference(
+                                            title = stringResource(R.string.settings_show_home_card_image_without_background),
+                                            summary = stringResource(R.string.settings_show_home_card_image_without_background_summary),
+                                            startAction = {
+                                                Icon(
+                                                    Icons.Rounded.Wallpaper,
+                                                    modifier = Modifier.padding(end = 8.dp),
+                                                    contentDescription = stringResource(R.string.settings_show_home_card_image_without_background),
+                                                    tint = colorScheme.onBackground,
+                                                )
+                                            },
+                                            checked = state.showHomeCardImageWithoutBackground,
+                                            onCheckedChange = actions.onSetShowHomeCardImageWithoutBackground,
+                                        )
+                                        }
+                                    }
+                                    OverlayDropdownPreference(
+                                        title = stringResource(R.string.settings_home_status_alignment),
+                                        items = listOf(
+                                            stringResource(R.string.home_status_alignment_start),
+                                            stringResource(R.string.home_status_alignment_end),
+                                        ),
+                                        startAction = {
+                                            Icon(
+                                                Icons.Rounded.AspectRatio,
+                                                modifier = Modifier.padding(end = 8.dp),
+                                                contentDescription = stringResource(R.string.settings_home_status_alignment),
+                                                tint = colorScheme.onBackground,
+                                            )
+                                        },
+                                        selectedIndex = if (
+                                            state.homeStatusAlignment == HomeStatusAlignment.END
+                                        ) {
+                                            1
+                                        } else {
+                                            0
+                                        },
+                                        onSelectedIndexChange = { index ->
+                                            actions.onSetHomeStatusAlignment(
+                                                if (index == 1) {
+                                                    HomeStatusAlignment.END
+                                                } else {
+                                                    HomeStatusAlignment.START
+                                                }
+                                            )
+                                        },
+                                    )
+                                    MiuixBackgroundSliderSection(
+                                        title = stringResource(R.string.settings_home_pill_scale),
+                                        summary = stringResource(
+                                            R.string.settings_home_pill_scale_summary,
+                                            (homePillScaleDraft * 100).roundToInt(),
+                                        ),
+                                        value = homePillScaleDraft,
+                                        valueRange = HomeStatusStyle.PILL_SCALE_MIN..HomeStatusStyle.PILL_SCALE_MAX,
+                                        onValueChange = { homePillScaleDraft = it },
+                                        onValueChangeFinished = {
+                                            actions.onSetHomePillScale(homePillScaleDraft)
+                                        },
+                                        startLabel = "50%",
+                                        endLabel = "150%",
+                                    )
+                                    if (state.homeCardImageStyle == HomeCardImageStyle.BANNER) {
+                                    MiuixBackgroundSliderSection(
+                                        title = stringResource(R.string.settings_home_status_scale),
+                                        summary = stringResource(
+                                            R.string.settings_home_status_scale_summary,
+                                            (homeStatusScaleDraft * 100).roundToInt(),
+                                        ),
+                                        value = homeStatusScaleDraft,
+                                        valueRange = HomeStatusStyle.SCALE_MIN..HomeStatusStyle.SCALE_MAX,
+                                        onValueChange = { homeStatusScaleDraft = it },
+                                        onValueChangeFinished = {
+                                            actions.onSetHomeStatusScale(homeStatusScaleDraft)
+                                        },
+                                        startLabel = "50%",
+                                        endLabel = "300%",
+                                    )
+                                    MiuixBackgroundSliderSection(
+                                        title = stringResource(R.string.settings_home_status_width),
+                                        summary = stringResource(
+                                            R.string.settings_home_status_width_summary,
+                                            (homeStatusWidthDraft * 100).roundToInt(),
+                                        ),
+                                        value = homeStatusWidthDraft,
+                                        valueRange = HomeStatusStyle.WIDTH_MIN..HomeStatusStyle.WIDTH_MAX,
+                                        onValueChange = { homeStatusWidthDraft = it },
+                                        onValueChangeFinished = {
+                                            actions.onSetHomeStatusWidthFraction(homeStatusWidthDraft)
+                                        },
+                                        startLabel = "45%",
+                                        endLabel = "100%",
+                                    )
+                                    }
+                                }
+                                val canUseStickers = state.homeLayout == HomeLayout.CLASSIC || (
+                                    state.homeCardImageStyle == HomeCardImageStyle.BANNER &&
+                                        state.homeCardImagePath.isNotBlank() &&
+                                        (state.backgroundPath.isNotBlank() ||
+                                            state.showHomeCardImageWithoutBackground)
+                                    )
+                                val stickerBlockedByBackground =
+                                    state.homeCardImageStyle == HomeCardImageStyle.BANNER &&
+                                        state.homeCardImagePath.isNotBlank() &&
+                                        state.backgroundPath.isBlank() &&
+                                        !state.showHomeCardImageWithoutBackground
+                                if (canUseStickers) {
                                 BasicComponent(
                                     title = stringResource(R.string.settings_home_card_sticker),
                                     summary = (if (state.homeCardStickers.isEmpty()) {
@@ -1018,10 +1302,24 @@ fun ColorPaletteScreenMiuix(
                                                 onTransformCommit = { index, transform ->
                                                     actions.onUpdateHomeCardStickerTransform(index, transform)
                                                 },
-                                                containerColor = colorScheme.secondaryContainer,
-                                                contentColor = colorScheme.onSecondaryContainer,
+                                                containerColor = if (state.homeLayout == HomeLayout.IMMERSIVE) {
+                                                    colorScheme.surfaceContainer
+                                                } else {
+                                                    colorScheme.secondaryContainer
+                                                },
+                                                contentColor = if (state.homeLayout == HomeLayout.IMMERSIVE) {
+                                                    colorScheme.onSurface
+                                                } else {
+                                                    colorScheme.onSecondaryContainer
+                                                },
                                                 accentColor = colorScheme.primary,
                                                 accentContentColor = colorScheme.onPrimary,
+                                                layout = state.homeLayout,
+                                                imageStyle = state.homeCardImageStyle,
+                                                statusScale = state.homeStatusScale,
+                                                statusWidthFraction = state.homeStatusWidthFraction,
+                                                pillScale = state.homePillScale,
+                                                statusAlignment = state.homeStatusAlignment,
                                             )
                                             Row(
                                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1080,6 +1378,15 @@ fun ColorPaletteScreenMiuix(
                                         if (stickerDraft.isNotEmpty()) {
                                             val editIndex = selectedSticker.coerceIn(0, stickerDraft.lastIndex)
                                             val editTransform = stickerDraft[editIndex].transform
+                                            val stickerSizeMax = if (state.homeLayout == HomeLayout.IMMERSIVE) {
+                                                minOf(
+                                                    HomeCardStickerTransform.SIZE_MAX,
+                                                    0.9f * HomeStatusStyle.BannerHeight.value *
+                                                        state.homeStatusScale / 360f,
+                                                )
+                                            } else {
+                                                HomeCardStickerTransform.SIZE_MAX
+                                            }
                                             MiuixBackgroundSliderSection(
                                                 title = stringResource(R.string.settings_home_card_sticker_rotation),
                                                 summary = "${editTransform.rotation.roundToInt()}°",
@@ -1110,8 +1417,11 @@ fun ColorPaletteScreenMiuix(
                                             MiuixBackgroundSliderSection(
                                                 title = stringResource(R.string.settings_home_card_sticker_size),
                                                 summary = "${(editTransform.size * 100).roundToInt()}%",
-                                                value = editTransform.size,
-                                                valueRange = HomeCardStickerTransform.SIZE_MIN..HomeCardStickerTransform.SIZE_MAX,
+                                                value = editTransform.size.coerceIn(
+                                                    HomeCardStickerTransform.SIZE_MIN,
+                                                    stickerSizeMax,
+                                                ),
+                                                valueRange = HomeCardStickerTransform.SIZE_MIN..stickerSizeMax,
                                                 onValueChange = { value ->
                                                     stickerDraft = stickerDraft.mapIndexed { i, sticker ->
                                                         if (i == editIndex) {
@@ -1129,6 +1439,26 @@ fun ColorPaletteScreenMiuix(
                                             )
                                         }
                                     }
+                                }
+                                } else if (state.homeCardImageStyle == HomeCardImageStyle.BANNER) {
+                                    BasicComponent(
+                                        title = stringResource(R.string.settings_home_card_sticker),
+                                        summary = stringResource(
+                                            if (stickerBlockedByBackground) {
+                                                R.string.settings_home_card_sticker_hidden
+                                            } else {
+                                                R.string.settings_home_card_sticker_banner_only
+                                            }
+                                        ),
+                                        startAction = {
+                                            Icon(
+                                                Icons.Rounded.Star,
+                                                modifier = Modifier.padding(end = 8.dp),
+                                                contentDescription = stringResource(R.string.settings_home_card_sticker),
+                                                tint = colorScheme.onBackground,
+                                            )
+                                        },
+                                    )
                                 }
                                 if (state.homeCardImagePath.isNotBlank()) {
                                     ArrowPreference(
@@ -1148,152 +1478,89 @@ fun ColorPaletteScreenMiuix(
                             }
                         }
                     }
+                    }
 
+                    if (selectedCategory == ThemeSettingsCategory.BOTTOM_BAR) {
                     AppCard(
                         modifier = Modifier
-                            .bringIntoViewRequester(sectionRequester("theme_package"))
-                            .padding(top = 12.dp)
+                            .bringIntoViewRequester(sectionRequester("bottom_bar"))
                             .fillMaxWidth(),
                     ) {
-                        MiuixSectionHeader(
-                            title = stringResource(R.string.settings_section_theme_package),
-                            summary = when {
-                                state.adaptiveDraftComplete ->
-                                    stringResource(R.string.theme_adaptive_draft_ready)
-
-                                state.adaptiveThemeActive && !state.currentColorMode.isSystem ->
-                                    stringResource(
-                                        R.string.theme_adaptive_active_forced,
-                                        stringResource(
-                                            if (state.currentColorMode.isDark) {
-                                                R.string.theme_adaptive_mode_dark
-                                            } else {
-                                                R.string.theme_adaptive_mode_light
-                                            },
-                                        ),
-                                    )
-
-                                state.adaptiveThemeActive ->
-                                    stringResource(R.string.theme_adaptive_active)
-
-                                else ->
-                                    stringResource(R.string.settings_section_theme_package_summary)
-                            },
-                            icon = Icons.Rounded.Palette,
-                            expanded = themePackageSectionExpanded,
+                        MiuixCategoryHeader(
+                            title = stringResource(selectedCategory.titleRes),
+                            summary = stringResource(selectedCategory.summaryRes),
+                            icon = Icons.Rounded.CallToAction,
+                            expanded = state.bottomBarSectionExpanded,
                             onClick = {
-                                actions.onSetThemePackageSectionExpanded(!themePackageSectionExpanded)
+                                actions.onSetBottomBarSectionExpanded(
+                                    !state.bottomBarSectionExpanded,
+                                )
                             },
                         )
                         AnimatedVisibility(
-                            visible = themePackageSectionExpanded,
+                            visible = true,
                             enter = expandVertically() + fadeIn(),
                             exit = shrinkVertically() + fadeOut(),
                         ) {
                             Column {
                                 HorizontalDivider()
-                                BasicComponent(
-                                    title = customText(CustomTextKey.PAGE_THEME_STORE),
-                                    summary = stringResource(id = R.string.theme_store_summary),
-                                    startAction = {
-                                        Icon(
-                                            Icons.Rounded.Palette,
-                                            modifier = Modifier.padding(end = 6.dp),
-                                            contentDescription = customText(CustomTextKey.PAGE_THEME_STORE),
-                                            tint = colorScheme.onBackground
+                        val bottomBarIconPaths = uiState.bottomBarIcons
+                        val bottomBarSlots = listOf(
+                            BottomBarIconSlot.Home to R.string.settings_bottom_bar_icon_home,
+                            BottomBarIconSlot.SuperUser to R.string.settings_bottom_bar_icon_superuser,
+                            BottomBarIconSlot.Module to R.string.settings_bottom_bar_icon_module,
+                            BottomBarIconSlot.Setting to R.string.settings_bottom_bar_icon_setting,
+                        )
+                        bottomBarSlots.forEach { (slot, labelRes) ->
+                            val path = bottomBarIconPaths[slot.key]
+                            val destination = BottomBarDestination.entries
+                                .firstOrNull { it.key == slot.key }
+                            ArrowPreference(
+                                title = stringResource(labelRes),
+                                summary = stringResource(
+                                    if (path != null) {
+                                        R.string.settings_bottom_bar_icon_custom_summary
+                                    } else {
+                                        R.string.settings_bottom_bar_icon_default_summary
+                                    },
+                                ),
+                                startAction = {
+                                    if (path != null) {
+                                        AsyncImage(
+                                            model = File(path),
+                                            contentDescription = null,
+                                            modifier = Modifier
+                                                .padding(end = 6.dp)
+                                                .size(24.dp),
                                         )
-                                    },
-                                    onClick = actions.onOpenThemeStore,
-                                )
-                                BasicComponent(
-                                    title = stringResource(id = R.string.theme_import),
-                                    summary = stringResource(id = R.string.theme_import_summary),
-                                    startAction = {
+                                    } else if (destination != null) {
                                         Icon(
-                                            Icons.Rounded.FileDownload,
+                                            imageVector = destination.icon,
+                                            contentDescription = null,
                                             modifier = Modifier.padding(end = 6.dp),
-                                            contentDescription = stringResource(id = R.string.theme_import),
-                                            tint = colorScheme.onBackground
+                                            tint = colorScheme.onBackground,
                                         )
-                                    },
-                                    onClick = {
-                                        importThemeLauncher.launch(
-                                                arrayOf(
-                                                    ThemePackageStorage.THEME_MIME_TYPE,
-                                                    "application/octet-stream",
-                                                    "application/zip",
-                                                    "application/x-zip-compressed",
-                                                    "*/*"
-                                                )
-                                            )
-                                    },
-                                )
-                                BasicComponent(
-                                    title = stringResource(id = R.string.theme_export),
-                                    summary = stringResource(id = R.string.theme_export_summary),
-                                    startAction = {
-                                        Icon(
-                                            Icons.Rounded.FileUpload,
-                                            modifier = Modifier.padding(end = 6.dp),
-                                            contentDescription = stringResource(id = R.string.theme_export),
-                                            tint = colorScheme.onBackground
+                                    }
+                                },
+                                endActions = {
+                                    if (path != null) {
+                                        MiuixTextButtonAffectedByBackground(
+                                            text = stringResource(R.string.settings_clear),
+                                            onClick = { actions.onClearBottomBarIcon(context, slot) },
                                         )
-                                    },
-                                    onClick = {
-                                        showExportDialog = true
-                                    },
-                                )
-                                BasicComponent(
-                                    title = stringResource(id = R.string.theme_adaptive_builder_title),
-                                    summary = stringResource(id = R.string.theme_adaptive_builder_summary),
-                                    startAction = {
-                                        Icon(
-                                            Icons.Rounded.AutoAwesome,
-                                            modifier = Modifier.padding(end = 6.dp),
-                                            contentDescription = stringResource(
-                                                id = R.string.theme_adaptive_builder_title,
-                                            ),
-                                            tint = colorScheme.onBackground
-                                        )
-                                    },
-                                    onClick = actions.onOpenAdaptiveThemeBuilder,
-                                )
-                                BasicComponent(
-                                    title = stringResource(id = R.string.theme_reset),
-                                    summary = stringResource(id = R.string.theme_reset_summary),
-                                    startAction = {
-                                        Icon(
-                                            Icons.Rounded.Restore,
-                                            modifier = Modifier.padding(end = 6.dp),
-                                            contentDescription = stringResource(id = R.string.theme_reset),
-                                            tint = colorScheme.onBackground
-                                        )
-                                    },
-                                    onClick = { showResetThemeDialog.value = true },
-                                )
-                                BasicComponent(
-                                    title = stringResource(id = R.string.theme_clear_all),
-                                    summary = stringResource(id = R.string.theme_clear_all_summary),
-                                    startAction = {
-                                        Icon(
-                                            Icons.Rounded.Delete,
-                                            modifier = Modifier.padding(end = 6.dp),
-                                            contentDescription = stringResource(id = R.string.theme_clear_all),
-                                            tint = colorScheme.onBackground
-                                        )
-                                    },
-                                    onClick = { showClearAllDialog.value = true },
-                                )
-                            }
+                                    }
+                                },
+                                onClick = {
+                                    pendingBottomBarIconSlot = slot.key
+                                    bottomBarIconLauncher.launch(
+                                        PickVisualMediaRequest(
+                                            ActivityResultContracts.PickVisualMedia.ImageOnly,
+                                        ),
+                                    )
+                                },
+                            )
                         }
-                    }
-
-                    AppCard(
-                        modifier = Modifier
-                            .padding(top = 12.dp)
-                            .bringIntoViewRequester(sectionRequester("chrome"))
-                            .fillMaxWidth(),
-                    ) {
+                        HorizontalDivider()
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                             SwitchPreference(
                                 title = stringResource(id = R.string.settings_enable_blur),
@@ -1362,14 +1629,35 @@ fun ColorPaletteScreenMiuix(
                                 actions.onSetEnableNavigationBadge(it)
                             }
                         )
+                            }
+                        }
+                    }
                     }
 
+                    if (selectedCategory == ThemeSettingsCategory.INTERACTION) {
                     AppCard(
                         modifier = Modifier
-                            .padding(top = 12.dp)
                             .bringIntoViewRequester(sectionRequester("behavior"))
                             .fillMaxWidth(),
                     ) {
+                        MiuixCategoryHeader(
+                            title = stringResource(selectedCategory.titleRes),
+                            summary = stringResource(selectedCategory.summaryRes),
+                            icon = Icons.Rounded.Swipe,
+                            expanded = state.interactionSectionExpanded,
+                            onClick = {
+                                actions.onSetInteractionSectionExpanded(
+                                    !state.interactionSectionExpanded,
+                                )
+                            },
+                        )
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut(),
+                        ) {
+                            Column {
+                                HorizontalDivider()
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                             SwitchPreference(
                                 title = stringResource(id = R.string.settings_enable_predictive_back),
@@ -1467,14 +1755,35 @@ fun ColorPaletteScreenMiuix(
                                 actions.onSetPageScale(it)
                             }
                         )
+                            }
+                        }
+                    }
                     }
 
+                    if (selectedCategory == ThemeSettingsCategory.DETAILS) {
                     AppCard(
                         modifier = Modifier
-                            .padding(top = 12.dp)
                             .bringIntoViewRequester(sectionRequester("module_description"))
                             .fillMaxWidth(),
                     ) {
+                        MiuixCategoryHeader(
+                            title = stringResource(selectedCategory.titleRes),
+                            summary = stringResource(selectedCategory.summaryRes),
+                            icon = Icons.Rounded.Description,
+                            expanded = state.detailsSectionExpanded,
+                            onClick = {
+                                actions.onSetDetailsSectionExpanded(
+                                    !state.detailsSectionExpanded,
+                                )
+                            },
+                        )
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut(),
+                        ) {
+                            Column {
+                                HorizontalDivider()
                         var linesValue by remember(state.moduleDescriptionMaxLines) { mutableIntStateOf(state.moduleDescriptionMaxLines) }
                         BasicComponent(
                             title = stringResource(id = R.string.settings_module_description_max_lines),
@@ -1510,6 +1819,149 @@ fun ColorPaletteScreenMiuix(
                                 )
                             },
                         )
+                            }
+                        }
+                    }
+                    }
+
+                    if (selectedCategory == ThemeSettingsCategory.THEME_PACKAGE) {
+                    AppCard(
+                        modifier = Modifier
+                            .bringIntoViewRequester(sectionRequester("theme_package"))
+                            .fillMaxWidth(),
+                    ) {
+                        MiuixCategoryHeader(
+                            title = stringResource(selectedCategory.titleRes),
+                            summary = when {
+                                state.adaptiveDraftComplete ->
+                                    stringResource(R.string.theme_adaptive_draft_ready)
+
+                                state.adaptiveThemeActive && !state.currentColorMode.isSystem ->
+                                    stringResource(
+                                        R.string.theme_adaptive_active_forced,
+                                        stringResource(
+                                            if (state.currentColorMode.isDark) {
+                                                R.string.theme_adaptive_mode_dark
+                                            } else {
+                                                R.string.theme_adaptive_mode_light
+                                            },
+                                        ),
+                                    )
+
+                                state.adaptiveThemeActive ->
+                                    stringResource(R.string.theme_adaptive_active)
+
+                                else ->
+                                    stringResource(selectedCategory.summaryRes)
+                            },
+                            icon = Icons.Rounded.Palette,
+                            expanded = themePackageSectionExpanded,
+                            onClick = {
+                                actions.onSetThemePackageSectionExpanded(!themePackageSectionExpanded)
+                            },
+                        )
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut(),
+                        ) {
+                            Column {
+                                HorizontalDivider()
+                                BasicComponent(
+                                    title = customText(CustomTextKey.PAGE_THEME_STORE),
+                                    summary = stringResource(id = R.string.theme_store_summary),
+                                    startAction = {
+                                        Icon(
+                                            Icons.Rounded.Storefront,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            contentDescription = customText(CustomTextKey.PAGE_THEME_STORE),
+                                            tint = colorScheme.onBackground
+                                        )
+                                    },
+                                    onClick = actions.onOpenThemeStore,
+                                )
+                                BasicComponent(
+                                    title = stringResource(id = R.string.theme_import),
+                                    summary = stringResource(id = R.string.theme_import_summary),
+                                    startAction = {
+                                        Icon(
+                                            Icons.Rounded.FileDownload,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            contentDescription = stringResource(id = R.string.theme_import),
+                                            tint = colorScheme.onBackground
+                                        )
+                                    },
+                                    onClick = {
+                                        importThemeLauncher.launch(
+                                                arrayOf(
+                                                    ThemePackageStorage.THEME_MIME_TYPE,
+                                                    "application/octet-stream",
+                                                    "application/zip",
+                                                    "application/x-zip-compressed",
+                                                    "*/*"
+                                                )
+                                            )
+                                    },
+                                )
+                                BasicComponent(
+                                    title = stringResource(id = R.string.theme_export),
+                                    summary = stringResource(id = R.string.theme_export_summary),
+                                    startAction = {
+                                        Icon(
+                                            Icons.Rounded.FileUpload,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            contentDescription = stringResource(id = R.string.theme_export),
+                                            tint = colorScheme.onBackground
+                                        )
+                                    },
+                                    onClick = {
+                                        showExportDialog = true
+                                    },
+                                )
+                                BasicComponent(
+                                    title = stringResource(id = R.string.theme_adaptive_builder_title),
+                                    summary = stringResource(id = R.string.theme_adaptive_builder_summary),
+                                    startAction = {
+                                        Icon(
+                                            Icons.Rounded.AutoAwesome,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            contentDescription = stringResource(
+                                                id = R.string.theme_adaptive_builder_title,
+                                            ),
+                                            tint = colorScheme.onBackground
+                                        )
+                                    },
+                                    onClick = actions.onOpenAdaptiveThemeBuilder,
+                                )
+                                BasicComponent(
+                                    title = stringResource(id = R.string.theme_reset),
+                                    summary = stringResource(id = R.string.theme_reset_summary),
+                                    startAction = {
+                                        Icon(
+                                            Icons.Rounded.Restore,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            contentDescription = stringResource(id = R.string.theme_reset),
+                                            tint = colorScheme.onBackground
+                                        )
+                                    },
+                                    onClick = { showResetThemeDialog.value = true },
+                                )
+                                BasicComponent(
+                                    title = stringResource(id = R.string.theme_clear_all),
+                                    summary = stringResource(id = R.string.theme_clear_all_summary),
+                                    startAction = {
+                                        Icon(
+                                            Icons.Rounded.Delete,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            contentDescription = stringResource(id = R.string.theme_clear_all),
+                                            tint = colorScheme.onBackground
+                                        )
+                                    },
+                                    onClick = { showClearAllDialog.value = true },
+                                )
+                            }
+                        }
+                    }
                     }
 
                 }
@@ -1522,6 +1974,7 @@ fun ColorPaletteScreenMiuix(
                         )
                     )
                 }
+            }
             }
         }
 
@@ -1635,21 +2088,179 @@ fun ColorPaletteScreenMiuix(
         adaptive = state.adaptiveThemeActive || state.adaptiveDraftComplete,
         hasCustomColors = state.customColorsPresent,
         hasImageEffects = state.imageEffectsPresent,
+        immersiveHome = state.homeLayout == HomeLayout.IMMERSIVE,
+        hasBottomBarIcons = uiState.bottomBarIcons.isNotEmpty(),
+        onUpload = { options ->
+            showExportDialog = false
+            actions.onUploadTheme(context, options)
+        },
     )
+
+    ThemeFullscreenPreviewDialog(
+        show = showFullPreview,
+        onDismiss = { showFullPreview = false },
+    ) { previewModifier, page ->
+        if (page == 0) {
+            ThemePreviewMiuix(
+                spec = previewSpec,
+                modifier = previewModifier,
+                expanded = true,
+            )
+        } else {
+            ThemePreviewMaterial(
+                spec = previewSpec,
+                modifier = previewModifier,
+                expanded = true,
+            )
+        }
+    }
 }
 
 @Composable
-private fun MiuixSectionHeader(
+private fun MiuixCompactPreviewCard(
+    spec: ThemePreviewSpec,
+    modeLabel: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    AppCard(
+        modifier = modifier.fillMaxWidth(),
+        insideMargin = PaddingValues(0.dp),
+        onClick = onClick,
+        pressFeedbackType = PressFeedbackType.Sink,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ThemePreviewMiuix(
+                spec = spec,
+                modifier = Modifier.width(88.dp),
+                compact = true,
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.theme_preview_caption_miuix),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colorScheme.onSurface,
+                )
+                Text(
+                    text = modeLabel,
+                    fontSize = 12.sp,
+                    color = colorScheme.onSurfaceVariantSummary,
+                )
+                ThemePaletteSwatches(
+                    colors = listOf(
+                        colorScheme.primary,
+                        colorScheme.secondaryContainer,
+                        colorScheme.tertiaryContainer,
+                        colorScheme.surfaceContainerHighest,
+                    ),
+                )
+                Text(
+                    text = stringResource(R.string.theme_preview_compact_summary),
+                    fontSize = 11.sp,
+                    color = colorScheme.onSurfaceVariantSummary,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiuixCategoryGrid(
+    selected: ThemeSettingsCategory,
+    onSelect: (ThemeSettingsCategory) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    AppCard(
+        modifier = modifier.fillMaxWidth(),
+        insideMargin = PaddingValues(8.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            ThemeSettingsCategory.entries.chunked(4).forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    row.forEach { category ->
+                        MiuixCategoryTile(
+                            category = category,
+                            selected = category == selected,
+                            onClick = { onSelect(category) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiuixCategoryTile(
+    category: ThemeSettingsCategory,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val background by animateColorAsState(
+        targetValue = backgroundAwareColor(
+            if (selected) colorScheme.primary else colorScheme.surfaceContainerHighest
+        ),
+        label = "ThemeCategoryBackground",
+    )
+    val contentColor = if (selected) colorScheme.onPrimary else colorScheme.onSurface
+    val haptic = LocalHapticFeedback.current
+    Column(
+        modifier = modifier
+            .height(48.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(background)
+            .selectable(
+                selected = selected,
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    onClick()
+                },
+                role = Role.Tab,
+            )
+            .padding(horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            imageVector = category.icon,
+            contentDescription = null,
+            tint = contentColor,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = stringResource(category.labelRes),
+            fontSize = 11.sp,
+            color = contentColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun MiuixCategoryHeader(
     title: String,
     summary: String,
     icon: ImageVector,
-    expanded: Boolean,
-    onClick: () -> Unit,
+    @Suppress("UNUSED_PARAMETER") expanded: Boolean,
+    @Suppress("UNUSED_PARAMETER") onClick: () -> Unit,
 ) {
-    val rotation by animateFloatAsState(
-        targetValue = if (expanded) 180f else 0f,
-        label = "MiuixSectionChevron",
-    )
     BasicComponent(
         title = title,
         summary = summary,
@@ -1661,15 +2272,6 @@ private fun MiuixSectionHeader(
                 tint = colorScheme.onBackground,
             )
         },
-        endActions = {
-            Icon(
-                imageVector = Icons.Rounded.KeyboardArrowDown,
-                contentDescription = null,
-                modifier = Modifier.graphicsLayer { rotationZ = rotation },
-                tint = colorScheme.onBackground,
-            )
-        },
-        onClick = onClick,
     )
 }
 

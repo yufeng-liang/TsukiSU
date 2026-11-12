@@ -94,6 +94,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -119,6 +120,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sukisu.ultra.R
 import com.sukisu.ultra.data.repository.ThemeStoreRepository
+import com.sukisu.ultra.data.repository.ThemeStorePreviewLoader
 import com.sukisu.ultra.ui.component.material.ExpressiveScaffold
 import com.sukisu.ultra.ui.component.material.TopBarBackButton
 import com.sukisu.ultra.ui.component.material.expressiveTopAppBarColors
@@ -181,6 +183,9 @@ internal fun formatStoreCount(value: Long): String {
 fun ThemeStoreScreen(
     viewModel: ThemeStoreViewModel = viewModel(),
     startAdaptiveUpload: Boolean = false,
+    startCurrentUpload: Boolean = false,
+    initialThemeId: String? = null,
+    initialSourceBaseUrl: String? = null,
 ) {
     val context = LocalContext.current
     val navigator = LocalNavigator.current
@@ -190,12 +195,16 @@ fun ThemeStoreScreen(
     var showUpload by rememberSaveable { mutableStateOf(false) }
     var showSubmissions by rememberSaveable { mutableStateOf(false) }
     var showMessages by rememberSaveable { mutableStateOf(false) }
+    var showHistory by rememberSaveable { mutableStateOf(false) }
     var showPreferences by rememberSaveable { mutableStateOf(false) }
     var showConsentDialog by rememberSaveable { mutableStateOf(false) }
     var showAccountPicker by rememberSaveable { mutableStateOf(false) }
     var pendingAdaptiveTheme by rememberSaveable { mutableStateOf(false) }
+    var pendingCurrentTheme by rememberSaveable { mutableStateOf(false) }
     var adaptiveUploadHandled by rememberSaveable(startAdaptiveUpload) { mutableStateOf(false) }
     var adaptiveAccountRedirected by rememberSaveable(startAdaptiveUpload) { mutableStateOf(false) }
+    var currentUploadHandled by rememberSaveable(startCurrentUpload) { mutableStateOf(false) }
+    var currentAccountRedirected by rememberSaveable(startCurrentUpload) { mutableStateOf(false) }
     var selectedUploadBaseUrl by rememberSaveable { mutableStateOf<String?>(null) }
     var editingThemeId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingThemeBaseUrl by rememberSaveable { mutableStateOf<String?>(null) }
@@ -203,6 +212,7 @@ fun ThemeStoreScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var sortMode by rememberSaveable { mutableStateOf(ThemeStoreSort.DEFAULT) }
     var selectedItemKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val themeGridState = rememberLazyGridState()
     var selectedAuthor by rememberSaveable { mutableStateOf<String?>(null) }
     var authorReturnItemKey by rememberSaveable { mutableStateOf<String?>(null) }
     var detailReturnAuthor by rememberSaveable { mutableStateOf<String?>(null) }
@@ -215,6 +225,20 @@ fun ThemeStoreScreen(
     // Adult themes are hidden from search, tags and author pages until the user opts in.
     val catalogItems = remember(state.items, state.showR18) {
         if (state.showR18) state.items else state.items.filterNot { it.isR18Theme() }
+    }
+    var deepLinkHandled by rememberSaveable(initialThemeId, initialSourceBaseUrl) { mutableStateOf(false) }
+    LaunchedEffect(initialThemeId, initialSourceBaseUrl, catalogItems, state.loaded, state.loading) {
+        if (initialThemeId.isNullOrBlank() || deepLinkHandled || !state.loaded || state.loading) return@LaunchedEffect
+        searchQuery = initialThemeId
+        val item = catalogItems.firstOrNull { candidate ->
+            candidate.entry.id == initialThemeId &&
+                (initialSourceBaseUrl == null || candidate.source.baseUrl.trimEnd('/') == initialSourceBaseUrl.trimEnd('/'))
+        }
+        if (item != null) {
+            viewModel.recordView(item)
+            selectedItemKey = item.key
+        }
+        deepLinkHandled = true
     }
     val allTags = remember(catalogItems) { catalogItems.popularThemeTags(Int.MAX_VALUE) }
     // Hoisted above the store/author switch so orientation survives detail navigation instead
@@ -275,6 +299,7 @@ fun ThemeStoreScreen(
         selectedUploadBaseUrl = account.source.baseUrl
         returnToSubmissions = false
         viewModel.clearUploadState()
+        viewModel.clearEditPrefill()
         showUpload = true
     }
 
@@ -296,6 +321,30 @@ fun ThemeStoreScreen(
         pendingAdaptiveTheme = true
         adaptiveUploadHandled = true
         // Returning from the account page after login should land directly on the upload form.
+        if (navigator.current() is Route.ThemeAccount) navigator.pop()
+        if (accounts.size == 1) {
+            openUpload(accounts.single())
+        } else {
+            showAccountPicker = true
+        }
+    }
+
+    // Entered from the theme settings export dialog: open the upload form straight away and let
+    // the form generate a package from the options the user just picked.
+    LaunchedEffect(startCurrentUpload, state.loaded, state.accounts) {
+        if (!startCurrentUpload || currentUploadHandled) return@LaunchedEffect
+        if (!state.loaded) return@LaunchedEffect
+        if (state.needsConfig) return@LaunchedEffect
+        val accounts = state.accounts
+        if (accounts.isEmpty()) {
+            if (!currentAccountRedirected) {
+                currentAccountRedirected = true
+                navigator.navigateTo(Route.ThemeAccount())
+            }
+            return@LaunchedEffect
+        }
+        pendingCurrentTheme = true
+        currentUploadHandled = true
         if (navigator.current() is Route.ThemeAccount) navigator.pop()
         if (accounts.size == 1) {
             openUpload(accounts.single())
@@ -335,6 +384,10 @@ fun ThemeStoreScreen(
         if (showUpload && baseUrl != null) viewModel.loadUploadOptions(baseUrl)
     }
 
+    LaunchedEffect(showUpload) {
+        if (!showUpload) viewModel.clearEditPrefill()
+    }
+
     // The account page can log in, log out or switch the active author while the store entry
     // stays alive in the back stack, so re-read its sessions whenever the store is resumed.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
@@ -343,6 +396,10 @@ fun ThemeStoreScreen(
 
     LaunchedEffect(showSubmissions) {
         if (showSubmissions) viewModel.loadUserContent()
+    }
+
+    LaunchedEffect(showHistory) {
+        if (showHistory) viewModel.refreshHistory()
     }
 
     LaunchedEffect(state.uploadSubmitted) {
@@ -506,6 +563,10 @@ fun ThemeStoreScreen(
         showMessages = false
     }
 
+    BackHandler(enabled = showHistory && detailItem == null && currentAuthor == null) {
+        showHistory = false
+    }
+
     when {
         showPreferences -> ThemeStorePreferencesScreen(
             consentAccepted = !state.needsConsent,
@@ -557,6 +618,7 @@ fun ThemeStoreScreen(
             onBack = ::closeAuthorPage,
             onSelect = { item ->
                 detailReturnAuthor = currentAuthor
+                viewModel.recordView(item)
                 selectedItemKey = item.key
             },
             onDownload = viewModel::download,
@@ -579,6 +641,8 @@ fun ThemeStoreScreen(
             onDone = {
                 showUpload = false
                 pendingAdaptiveTheme = false
+                pendingCurrentTheme = false
+                settingsViewModel.clearPendingThemeUploadOptions()
                 editingThemeId = null
                 editingThemeBaseUrl = null
                 showSubmissions = returnToSubmissions
@@ -592,7 +656,9 @@ fun ThemeStoreScreen(
             accountSession = uploadAccount.session,
             autoThemeId = state.uploadThemeId,
             editingTheme = editingTheme,
+            editPrefill = state.editPrefill,
             initialAdaptiveTheme = pendingAdaptiveTheme,
+            initialCurrentTheme = pendingCurrentTheme,
             optionsLoading = state.uploadOptionsLoading,
             optionsError = state.uploadOptionsError,
             uploadPhase = state.uploadPhase,
@@ -607,6 +673,8 @@ fun ThemeStoreScreen(
                 if (!state.submitting) {
                     showUpload = false
                     pendingAdaptiveTheme = false
+                    pendingCurrentTheme = false
+                    settingsViewModel.clearPendingThemeUploadOptions()
                     editingThemeId = null
                     editingThemeBaseUrl = null
                     showSubmissions = returnToSubmissions
@@ -625,6 +693,44 @@ fun ThemeStoreScreen(
             onSubmit = { input -> viewModel.submit(input, uploadSource) },
             onExportCurrentPreset = { settingsViewModel.createCurrentThemePackage(context).getOrNull() },
             onLoadAdaptiveTheme = { settingsViewModel.createAdaptiveThemePackage(context).getOrNull() },
+        )
+
+        showHistory -> ThemeStoreHistoryScreen(
+            viewedHistory = if (state.showR18) state.viewedHistory
+                else state.viewedHistory.filterNot { it.r18 },
+            downloadedHistory = if (state.showR18) state.downloadedHistory
+                else state.downloadedHistory.filterNot { it.r18 },
+            sources = state.sources,
+            loading = state.historyLoading,
+            error = state.historyError,
+            loginRequired = state.historyLoginRequired,
+            onBack = { showHistory = false },
+            onOpen = { entry ->
+                val item = state.items.firstOrNull { it.key == entry.key }
+                    ?: state.items.firstOrNull {
+                        it.entry.id == entry.themeId && it.source.baseUrl == entry.baseUrl
+                    }
+                if (item != null) {
+                    viewModel.recordView(item)
+                    selectedAuthor = null
+                    detailReturnAuthor = null
+                    authorReturnItemKey = null
+                    selectedItemKey = item.key
+                } else {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.theme_store_history_missing),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            },
+            onClear = viewModel::clearHistory,
+            onDelete = viewModel::removeHistory,
+            onLogin = {
+                showHistory = false
+                navigator.navigateTo(Route.ThemeAccount())
+            },
+            onRefresh = viewModel::refreshHistory,
         )
 
         showMessages -> ThemeStoreMessagesScreen(
@@ -662,6 +768,7 @@ fun ThemeStoreScreen(
             onRefresh = { viewModel.loadUserContent(force = true) },
             onEditTheme = { theme ->
                 viewModel.clearUploadState()
+                viewModel.loadEditPrefill(theme.theme, theme.account.source.baseUrl)
                 showSubmissions = false
                 selectedUploadBaseUrl = theme.account.source.baseUrl
                 editingThemeId = theme.theme.id
@@ -685,6 +792,7 @@ fun ThemeStoreScreen(
 
         else -> ThemeStoreMaterial(
             state = state,
+            listState = themeGridState,
             visibleItems = visibleItems,
             searchQuery = searchQuery,
             onSearchQueryChange = { searchQuery = it },
@@ -721,6 +829,17 @@ fun ThemeStoreScreen(
                 viewModel.clearUploadState()
                 showMessages = true
             },
+            onOpenHistory = {
+                viewModel.refreshHistory()
+                showUpload = false
+                showSubmissions = false
+                showMessages = false
+                editingThemeId = null
+                editingThemeBaseUrl = null
+                returnToSubmissions = false
+                viewModel.clearUploadState()
+                showHistory = true
+            },
             onOpenUpload = {
                 val preferred = viewModel.preferredUploadAccount()
                 val accounts = viewModel.uiState.value.accounts
@@ -750,6 +869,7 @@ fun ThemeStoreScreen(
                 selectedAuthor = null
                 detailReturnAuthor = null
                 authorReturnItemKey = null
+                viewModel.recordView(item)
                 selectedItemKey = item.key
             },
             onAuthorClick = ::openAuthor,
@@ -1072,6 +1192,7 @@ private fun ThemeStoreSearchEmptyMaterial() {
 @Composable
 private fun ThemeStoreMaterial(
     state: ThemeStoreUiState,
+    listState: androidx.compose.foundation.lazy.grid.LazyGridState,
     visibleItems: List<ThemeStoreItem>,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
@@ -1090,6 +1211,7 @@ private fun ThemeStoreMaterial(
     onOpenAccount: () -> Unit,
     onOpenSubmissions: () -> Unit,
     onOpenMessages: () -> Unit,
+    onOpenHistory: () -> Unit,
     onOpenUpload: () -> Unit,
     onInstallLocal: () -> Unit,
     onSelect: (ThemeStoreItem) -> Unit,
@@ -1102,7 +1224,31 @@ private fun ThemeStoreMaterial(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val pullToRefreshState = rememberPullToRefreshState()
     val refreshing = state.refreshing || (state.loading && state.loaded)
-    val listState = rememberLazyGridState()
+    // Render the catalogue in pages so a fast scroll does not fan out hundreds of
+    // preview-image requests at once. Coil still loads only composed cards, but
+    // bounding the list keeps its prefetch window small.
+    var loadedThemeCount by remember(visibleItems) {
+        mutableStateOf(STORE_PAGE_SIZE)
+    }
+    val pagedItems = remember(visibleItems, loadedThemeCount) {
+        visibleItems.take(loadedThemeCount)
+    }
+    // Infinite scroll: reaching the last few cards appends the next page, so the
+    // grid keeps loading while the user drags instead of asking for a button tap.
+    // snapshotFlow emits once per real layout change, which avoids appending
+    // several pages from a single bottom-edge trigger.
+    LaunchedEffect(listState, visibleItems) {
+        snapshotFlow {
+            val info = listState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+            info.totalItemsCount > 0 && last >= info.totalItemsCount - 6
+        }.collect { nearEnd ->
+            if (nearEnd && loadedThemeCount < visibleItems.size) {
+                loadedThemeCount =
+                    (loadedThemeCount + STORE_PAGE_SIZE).coerceAtMost(visibleItems.size)
+            }
+        }
+    }
     var menuExpanded by remember { mutableStateOf(false) }
     val fabThreshold = with(LocalDensity.current) { 100.dp.toPx() }
     val fabExpanded by remember {
@@ -1138,6 +1284,7 @@ private fun ThemeStoreMaterial(
     }
 
     ExpressiveScaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             LargeFlexibleTopAppBar(
                 navigationIcon = { TopBarBackButton(onClick = onBack) },
@@ -1194,7 +1341,7 @@ private fun ThemeStoreMaterial(
                                 text = { MaterialText(stringResource(R.string.theme_store_my_content_title)) },
                                 leadingIcon = {
                                     MaterialIcon(
-                                        imageVector = Icons.Rounded.History,
+                                        imageVector = Icons.Rounded.Palette,
                                         contentDescription = null,
                                     )
                                 },
@@ -1202,6 +1349,20 @@ private fun ThemeStoreMaterial(
                                 onClick = {
                                     menuExpanded = false
                                     onOpenSubmissions()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { MaterialText(stringResource(R.string.theme_store_history_title)) },
+                                leadingIcon = {
+                                    MaterialIcon(
+                                        imageVector = Icons.Rounded.History,
+                                        contentDescription = null,
+                                    )
+                                },
+                                enabled = !state.maintenance,
+                                onClick = {
+                                    menuExpanded = false
+                                    onOpenHistory()
                                 },
                             )
                             DropdownMenuItem(
@@ -1342,9 +1503,7 @@ private fun ThemeStoreMaterial(
             ) {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(if (gridLayout) 2 else 1),
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection),
+                    modifier = Modifier.fillMaxSize(),
                     state = listState,
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 13.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1394,7 +1553,7 @@ private fun ThemeStoreMaterial(
                         }
                     } else {
                         items(
-                            items = visibleItems,
+                            items = pagedItems,
                             key = { it.key },
                             span = { item ->
                                 if (gridLayout && landscapePreviewKeys[item.key] == true) {
@@ -1430,6 +1589,27 @@ private fun ThemeStoreMaterial(
                                     onAuthorClick = onAuthorClick,
                                     onDownload = onDownload,
                                     modifier = cardModifier,
+                                )
+                            }
+                        }
+                    }
+                    if (pagedItems.size < visibleItems.size) {
+                        item(key = "load-more", span = { GridItemSpan(maxLineSpan) }) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 14.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                CircularWavyProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                )
+                                Spacer(Modifier.size(10.dp))
+                                MaterialText(
+                                    stringResource(R.string.theme_store_loading_more),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
@@ -1655,6 +1835,7 @@ internal fun ThemeGridCardMaterial(
 ) {
     val entry = item.entry
     val context = LocalContext.current
+    val previewImageLoader = remember(context) { ThemeStorePreviewLoader.get(context) }
     val downloading = state.downloadingKey == item.key
     val date = entry.updatedAt.substringBefore('T').replace('-', '/')
     val primaryLabel = sourceLabel ?: entry.author
@@ -1668,7 +1849,13 @@ internal fun ThemeGridCardMaterial(
         ThemeStoreRepository.assetUrl(item.source.baseUrl, path)
     }
     val painter = previewUrl?.let { url ->
-        rememberAsyncImagePainter(themeImageRequest(context, url, item.source.token))
+        rememberAsyncImagePainter(
+            model = themeImageRequest(context, url, item.source.token),
+            imageLoader = previewImageLoader,
+            // Disambiguates the placeholder overload (Coil also exposes a
+            // transform/onState overload with the same leading parameters).
+            placeholder = null,
+        )
     }
     val intrinsic = painter?.intrinsicSize
     val rawAspectRatio = if (intrinsic != null && intrinsic.width > 0f && intrinsic.height > 0f) {

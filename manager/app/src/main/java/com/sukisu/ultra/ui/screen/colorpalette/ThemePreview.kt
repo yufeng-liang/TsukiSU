@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -67,13 +68,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -95,6 +96,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import coil.size.Precision
 import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamiccolor.ColorSpec
 import com.sukisu.ultra.BuildConfig
@@ -121,6 +123,11 @@ import com.sukisu.ultra.ui.theme.rememberKernelSUColorScheme
 import com.sukisu.ultra.ui.theme.withAppearance
 import com.sukisu.ultra.ui.util.ImageStorage
 import com.sukisu.ultra.ui.util.HomeCardSticker
+import com.sukisu.ultra.ui.util.HomeCardImageStyle
+import com.sukisu.ultra.ui.util.HomeLayout
+import com.sukisu.ultra.ui.util.HomeStatusAlignment
+import com.sukisu.ultra.ui.util.HomeStatusStyle
+import com.sukisu.ultra.ui.util.shouldShowHomeCardImage
 import com.sukisu.ultra.ui.util.ResolvedAppearance
 import com.sukisu.ultra.ui.util.drawPainterCover
 import top.yukonga.miuix.kmp.basic.Badge as MiuixBadge
@@ -166,6 +173,13 @@ internal data class ThemePreviewSpec(
     val hideHomeCardText: Boolean = false,
     val hideHomeCardDecoration: Boolean = false,
     val homeCardStickers: List<HomeCardSticker> = emptyList(),
+    val homeLayout: HomeLayout = HomeLayout.CLASSIC,
+    val homeStatusAlignment: HomeStatusAlignment = HomeStatusAlignment.START,
+    val homeStatusScale: Float = 1f,
+    val homeStatusWidthFraction: Float = 1f,
+    val homePillScale: Float = 1f,
+    val homeCardImageStyle: HomeCardImageStyle = HomeCardImageStyle.BANNER,
+    val showHomeCardImageWithoutBackground: Boolean = false,
     val appearance: ResolvedAppearance? = null,
 )
 
@@ -212,6 +226,8 @@ private val MaterialPreviewDestinations = listOf(
 internal fun ThemePreviewMiuix(
     spec: ThemePreviewSpec,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
+    expanded: Boolean = false,
 ) {
     val ambientColors = MiuixTheme.colorScheme
     val paletteStyle = remember(spec.paletteStyle) {
@@ -240,6 +256,8 @@ internal fun ThemePreviewMiuix(
 
     ThemePreviewLayout(
         modifier = modifier,
+        compact = compact,
+        expanded = expanded,
         caption = {
             PreviewCaption(
                 text = stringResource(R.string.theme_preview_caption_miuix),
@@ -262,6 +280,7 @@ internal fun ThemePreviewMiuix(
                         spec = spec,
                         screenColor = colors.surface,
                         contentColor = colors.onBackground,
+                        compact = compact,
                     ) { screenModifier ->
                         MiuixPreviewScreen(spec, screenModifier)
                     }
@@ -278,6 +297,8 @@ internal fun ThemePreviewMiuix(
 internal fun ThemePreviewMaterial(
     spec: ThemePreviewSpec,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
+    expanded: Boolean = false,
 ) {
     val ambientColors = MaterialTheme.colorScheme
     val colorScheme = rememberKernelSUColorScheme(
@@ -318,6 +339,8 @@ internal fun ThemePreviewMaterial(
         ) {
             ThemePreviewLayout(
                 modifier = modifier,
+                compact = compact,
+                expanded = expanded,
                 caption = {
                     PreviewCaption(
                         text = stringResource(R.string.theme_preview_caption_material),
@@ -331,6 +354,7 @@ internal fun ThemePreviewMaterial(
                     spec = spec,
                     screenColor = colors.surfaceContainer,
                     contentColor = colors.onSurface,
+                    compact = compact,
                 ) { screenModifier ->
                     MaterialPreviewScreen(spec, screenModifier)
                 }
@@ -343,6 +367,8 @@ internal fun ThemePreviewMaterial(
 @Composable
 private fun ThemePreviewLayout(
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
+    expanded: Boolean = false,
     caption: @Composable () -> Unit,
     device: @Composable () -> Unit,
 ) {
@@ -357,28 +383,41 @@ private fun ThemePreviewLayout(
         modifier = modifier.fillMaxWidth(),
         contentAlignment = Alignment.TopCenter,
     ) {
-        val frameWidth = minOf(maxWidth * 0.52f, 248.dp)
+        val frameWidth = when {
+            compact -> minOf(maxWidth * 0.92f, 80.dp)
+            expanded -> minOf(maxWidth * 0.82f, 300.dp)
+            else -> minOf(maxWidth * 0.52f, 248.dp)
+        }
         val frameHeight = frameWidth / screenRatio
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
                 modifier = Modifier
                     .width(frameWidth)
                     .height(frameHeight)
-                    .shadow(22.dp, PreviewBezelShape, clip = false)
+                    .shadow(if (compact) 12.dp else 22.dp, PreviewBezelShape, clip = false)
                     .background(
                         Brush.linearGradient(listOf(Color(0xFF242428), PreviewBezelColor)),
                         PreviewBezelShape,
                     )
                     .border(1.dp, Color.White.copy(alpha = 0.12f), PreviewBezelShape)
-                    .padding(5.dp)
+                    .padding(if (compact) 3.dp else 5.dp)
                     .clip(PreviewScreenShape)
-                    .pointerInput(Unit) { detectTapGestures { } }
+                    // Compact cards and the full-screen viewer handle taps themselves.
+                    .then(
+                        if (compact || expanded) {
+                            Modifier
+                        } else {
+                            Modifier.pointerInput(Unit) { detectTapGestures { } }
+                        }
+                    )
                     .clearAndSetSemantics { contentDescription = description },
             ) {
                 device()
             }
-            Spacer(Modifier.height(10.dp))
-            caption()
+            if (!compact) {
+                Spacer(Modifier.height(10.dp))
+                caption()
+            }
         }
     }
 }
@@ -393,12 +432,15 @@ private fun PreviewDevice(
     spec: ThemePreviewSpec,
     screenColor: Color,
     contentColor: Color,
+    compact: Boolean = false,
     content: @Composable (Modifier) -> Unit,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val baseDensity = LocalDensity.current
-        val scale = ((maxWidth.value / PreviewDesignWidthDp).coerceIn(0.4f, 1f) * spec.pageScale)
-            .coerceIn(0.3f, 1.15f)
+        // The compact card is a small thumbnail; the regular floor would crop its content.
+        val minScale = if (compact) 0.18f else 0.4f
+        val scale = ((maxWidth.value / PreviewDesignWidthDp).coerceIn(minScale, 1f) * spec.pageScale)
+            .coerceIn(if (compact) minScale - 0.03f else 0.3f, 1.15f)
         CompositionLocalProvider(
             // Font scale is pinned so an extreme system setting cannot distort this mock.
             LocalDensity provides Density(baseDensity.density * scale, fontScale = 1f),
@@ -570,7 +612,11 @@ private fun MiuixPreviewScreen(spec: ThemePreviewSpec, modifier: Modifier = Modi
                 .padding(top = 4.dp, start = 10.dp, end = 10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            MiuixPreviewHeroCard(spec)
+            if (spec.homeLayout == HomeLayout.IMMERSIVE) {
+                MiuixPreviewImmersiveStatus(spec)
+            } else {
+                MiuixPreviewHeroCard(spec)
+            }
             MiuixPreviewStatsRow()
             MiuixPreviewNoticeCard()
             MiuixPreviewLinksCard()
@@ -700,6 +746,122 @@ private fun MiuixPreviewHeroCard(spec: ThemePreviewSpec) {
                 stickers = spec.homeCardStickers,
                 cardWidth = maxWidth,
             )
+        }
+    }
+}
+
+@Composable
+private fun MiuixPreviewImmersiveStatus(spec: ThemePreviewSpec) {
+    val colors = MiuixTheme.colorScheme
+    val scale = HomeStatusStyle.coerceScale(spec.homeStatusScale)
+    val widthFraction = HomeStatusStyle.coerceWidth(spec.homeStatusWidthFraction)
+    val pillScale = HomeStatusStyle.coercePillScale(spec.homePillScale)
+    val showImage = shouldShowHomeCardImage(
+        path = spec.homeCardImagePath,
+        hasCustomBackground = spec.backgroundPath.isNotEmpty(),
+        showWithoutBackground = spec.showHomeCardImageWithoutBackground,
+    )
+    val accent = if (spec.miuixMonet) colors.primary else Color(0xFF36D167)
+    val bannerShape = RoundedCornerShape(HomeStatusStyle.BannerCorner)
+    val banner = spec.homeCardImageStyle == HomeCardImageStyle.BANNER && showImage
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = if (spec.homeStatusAlignment == HomeStatusAlignment.END) {
+            Alignment.End
+        } else {
+            Alignment.Start
+        },
+        verticalArrangement = Arrangement.spacedBy(HomeStatusStyle.ClusterGap),
+    ) {
+        AppCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = HomeStatusStyle.PillTouchTarget)
+                    .border(
+                        1.dp,
+                        colors.onSurface.copy(alpha = 0.12f),
+                        RoundedCornerShape(50),
+                    ),
+                cornerRadius = HomeStatusStyle.PillTouchTarget,
+                insideMargin = PaddingValues(0.dp),
+                colors = CardDefaults.defaultColors(
+                    color = backgroundAwareColor(colors.surfaceContainer, backgroundAlpha = 0.9f),
+                    contentColor = colors.onSurface,
+                ),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .heightIn(
+                            min = maxOf(
+                                HomeStatusStyle.PillTouchTarget,
+                                HomeStatusStyle.pillDp(HomeStatusStyle.PillMinHeight, pillScale),
+                            )
+                        )
+                        .padding(
+                            horizontal = HomeStatusStyle.pillDp(
+                                HomeStatusStyle.PillHorizontalPadding,
+                                pillScale,
+                            )
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(
+                        HomeStatusStyle.pillDp(HomeStatusStyle.PillContentGap, pillScale)
+                    ),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(HomeStatusStyle.pillDp(HomeStatusStyle.DotSize, pillScale))
+                            .clip(CircleShape)
+                            .background(accent)
+                    )
+                    MiuixText(
+                        text = stringResource(R.string.home_working),
+                        fontSize = HomeStatusStyle.pillSp(HomeStatusStyle.LabelSizeSp, pillScale),
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.onSurface,
+                    )
+                    Box(
+                        modifier = Modifier
+                            .width(HomeStatusStyle.pillDp(HomeStatusStyle.DividerWidth, pillScale))
+                            .height(HomeStatusStyle.pillDp(HomeStatusStyle.DividerHeight, pillScale))
+                            .background(colors.onSurface.copy(alpha = 0.18f))
+                    )
+                    MiuixText(
+                        text = "LKM · ${BuildConfig.VERSION_NAME}",
+                        fontSize = HomeStatusStyle.pillSp(HomeStatusStyle.MetaSizeSp, pillScale),
+                        fontFamily = FontFamily.Monospace,
+                        color = colors.onSurfaceVariantSummary,
+                    )
+                }
+            }
+        if (banner) {
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxWidth(widthFraction)
+                    .height(HomeStatusStyle.scaledDp(HomeStatusStyle.BannerHeight, scale))
+                    .clip(bannerShape)
+                    .background(colors.surfaceContainer)
+                    .border(1.dp, colors.onSurface.copy(alpha = 0.2f), bannerShape)
+            ) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(File(spec.homeCardImagePath))
+                        .crossfade(true)
+                        .precision(Precision.EXACT)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    filterQuality = FilterQuality.High,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                HomeCardStickerOverlays(
+                    stickers = spec.homeCardStickers,
+                    cardWidth = maxWidth,
+                    cardHeight = maxHeight,
+                    heightNormalized = true,
+                )
+            }
         }
     }
 }
@@ -977,7 +1139,11 @@ private fun MaterialPreviewScreen(spec: ThemePreviewSpec, modifier: Modifier = M
                 .padding(top = 4.dp, start = 14.dp, end = 14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            MaterialPreviewHeroCard(spec)
+            if (spec.homeLayout == HomeLayout.IMMERSIVE) {
+                MaterialPreviewImmersiveStatus(spec)
+            } else {
+                MaterialPreviewHeroCard(spec)
+            }
             MaterialPreviewStatsRow()
             MaterialPreviewNoticeCard()
             MaterialPreviewLinksCard()
@@ -1088,6 +1254,113 @@ private fun MaterialPreviewHeroCard(spec: ThemePreviewSpec) {
                 stickers = spec.homeCardStickers,
                 cardWidth = maxWidth,
             )
+        }
+    }
+}
+
+@Composable
+private fun MaterialPreviewImmersiveStatus(spec: ThemePreviewSpec) {
+    val colors = MaterialTheme.colorScheme
+    val scale = HomeStatusStyle.coerceScale(spec.homeStatusScale)
+    val widthFraction = HomeStatusStyle.coerceWidth(spec.homeStatusWidthFraction)
+    val pillScale = HomeStatusStyle.coercePillScale(spec.homePillScale)
+    val showImage = shouldShowHomeCardImage(
+        path = spec.homeCardImagePath,
+        hasCustomBackground = spec.backgroundPath.isNotEmpty(),
+        showWithoutBackground = spec.showHomeCardImageWithoutBackground,
+    )
+    val bannerShape = RoundedCornerShape(HomeStatusStyle.BannerCorner)
+    val banner = spec.homeCardImageStyle == HomeCardImageStyle.BANNER && showImage
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = if (spec.homeStatusAlignment == HomeStatusAlignment.END) {
+            Alignment.End
+        } else {
+            Alignment.Start
+        },
+        verticalArrangement = Arrangement.spacedBy(HomeStatusStyle.ClusterGap),
+    ) {
+        MaterialSurface(
+                modifier = Modifier
+                    .heightIn(min = HomeStatusStyle.PillTouchTarget),
+                shape = CircleShape,
+                color = backgroundAwareColor(colors.surfaceContainer, backgroundAlpha = 0.9f),
+                contentColor = colors.onSurface,
+                border = BorderStroke(1.dp, colors.outline.copy(alpha = 0.18f)),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .heightIn(
+                            min = maxOf(
+                                HomeStatusStyle.PillTouchTarget,
+                                HomeStatusStyle.pillDp(HomeStatusStyle.PillMinHeight, pillScale),
+                            )
+                        )
+                        .padding(
+                            horizontal = HomeStatusStyle.pillDp(
+                                HomeStatusStyle.PillHorizontalPadding,
+                                pillScale,
+                            )
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(
+                        HomeStatusStyle.pillDp(HomeStatusStyle.PillContentGap, pillScale)
+                    ),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(HomeStatusStyle.pillDp(HomeStatusStyle.DotSize, pillScale))
+                            .clip(CircleShape)
+                            .background(colors.primary)
+                    )
+                    MaterialText(
+                        text = stringResource(R.string.home_working),
+                        fontSize = HomeStatusStyle.pillSp(HomeStatusStyle.LabelSizeSp, pillScale),
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.onSurface,
+                    )
+                    Box(
+                        modifier = Modifier
+                            .width(HomeStatusStyle.pillDp(HomeStatusStyle.DividerWidth, pillScale))
+                            .height(HomeStatusStyle.pillDp(HomeStatusStyle.DividerHeight, pillScale))
+                            .background(colors.onSurface.copy(alpha = 0.18f))
+                    )
+                    MaterialText(
+                        text = "LKM · ${BuildConfig.VERSION_NAME}",
+                        fontSize = HomeStatusStyle.pillSp(HomeStatusStyle.MetaSizeSp, pillScale),
+                        fontFamily = FontFamily.Monospace,
+                        color = colors.onSurfaceVariant,
+                    )
+                }
+            }
+        if (banner) {
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxWidth(widthFraction)
+                    .height(HomeStatusStyle.scaledDp(HomeStatusStyle.BannerHeight, scale))
+                    .clip(bannerShape)
+                    .background(colors.surfaceContainer)
+                    .border(1.dp, colors.outline.copy(alpha = 0.24f), bannerShape)
+            ) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(File(spec.homeCardImagePath))
+                        .crossfade(true)
+                        .precision(Precision.EXACT)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    filterQuality = FilterQuality.High,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                HomeCardStickerOverlays(
+                    stickers = spec.homeCardStickers,
+                    cardWidth = maxWidth,
+                    cardHeight = maxHeight,
+                    heightNormalized = true,
+                )
+            }
         }
     }
 }

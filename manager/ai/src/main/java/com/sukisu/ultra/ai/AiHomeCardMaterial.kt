@@ -161,16 +161,7 @@ fun AiHomeCardMaterial(onOpenChat: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                ) {
-                    AiAvatarImage(
-                        modifier = Modifier.padding(7.dp),
-                        size = 30.dp,
-                    )
-                }
+                AiAvatarImage(size = 42.dp)
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = stringResource(R.string.ai_assistant_title),
@@ -202,8 +193,8 @@ fun AiHomeCardMaterial(onOpenChat: () -> Unit) {
                             imageVector = Icons.Rounded.ChevronRight,
                             contentDescription = stringResource(R.string.ai_open_chat),
                             modifier = Modifier
-                                .padding(8.dp)
-                                .size(22.dp),
+                                .padding(5.dp)
+                                .size(28.dp),
                         )
                     }
                 }

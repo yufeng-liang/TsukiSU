@@ -1,5 +1,6 @@
 package com.sukisu.ultra.data.repository
 
+import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.os.Environment
 import android.provider.MediaStore
@@ -22,6 +23,7 @@ import com.sukisu.ultra.data.proxy.ProxyUrl
 import com.sukisu.ultra.ksuApp
 import com.sukisu.ultra.ui.util.module.LatestVersionInfo
 import com.sukisu.ultra.ui.util.getRootShell
+import com.sukisu.ultra.ui.util.shellQuote
 import com.sukisu.ultra.ui.util.withNewRootShell
 import kotlinx.coroutines.runBlocking
 import okhttp3.Request
@@ -33,7 +35,11 @@ import java.util.zip.ZipFile
 
 
 class CiManagerUpdater(private val context: Context) {
-    fun updateAndInstall(update: LatestVersionInfo): Boolean {
+    /**
+     * [keepApk] false installs straight from the private cache copy and never
+     * writes the APK to Downloads, so nothing is left behind after the update.
+     */
+    fun updateAndInstall(update: LatestVersionInfo, keepApk: Boolean = true): Boolean {
         // 传进来的地址可能已经被上一跳套了代理前缀（下载链路会做候选展开）。前缀校验必须针对
         // 还原后的原始 GitHub 地址，否则被代理包过的地址永远通不过 startsWith，更新直接判成「地址无效」。
         // 还原不出来（代理列表加载失败/不是已知代理）时保留原样，交给下面的校验去拒绝。
@@ -49,8 +55,10 @@ class CiManagerUpdater(private val context: Context) {
             // 候选通道都基于原始地址展开，所以把归一化后的地址连同 sha256 一起往下传。
             download(update.copy(downloadUrl = originalUrl), apk, entries)
             verifyApk(apk, abi, update.versionCode)
-            // 文件名从原始地址取：别把代理域名带进 Downloads。
-            saveToDownloads(apk, originalUrl)
+            if (keepApk) {
+                // 文件名从原始地址取：别把代理域名带进 Downloads。
+                saveToDownloads(apk, originalUrl)
+            }
             if (getRootShell().isRoot) {
                 val result = withNewRootShell {
                     if (!isRoot) throw IOException(context.getString(R.string.ci_update_install_failed))
@@ -322,6 +330,7 @@ class CiManagerUpdater(private val context: Context) {
         }
     }
 
+    @SuppressLint("RequestInstallPackagesPolicy")
     private fun submitInstall(apk: File) {
         val installer = context.packageManager.packageInstaller
         val sessionId = installer.createSession(
@@ -357,8 +366,6 @@ class CiManagerUpdater(private val context: Context) {
             if (!committed) installer.abandonSession(sessionId)
         }
     }
-
-    private fun String.shellQuote(): String = "'" + replace("'", "'\\''") + "'"
 
     companion object {
         /**

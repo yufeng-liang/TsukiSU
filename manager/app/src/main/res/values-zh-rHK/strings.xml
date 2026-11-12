@@ -276,6 +276,8 @@
     <string name="current_device_kmi">此裝置 KMI</string>
     <string name="settings_enable_blur">模糊</string>
     <string name="settings_enable_blur_summary">啟用頂部及底部欄的模糊效果</string>
+    <string name="settings_progressive_blur">漸進式背景模糊</string>
+    <string name="settings_progressive_blur_summary">讓頂部及底部欄背後的內容從螢幕邊緣開始逐漸模糊並過渡到清晰。</string>
     <string name="settings_floating_bottom_bar">懸浮底部欄</string>
     <string name="settings_floating_bottom_bar_summary">使用 Apple 風格懸浮底部欄</string>
     <string name="settings_enable_glass">液態玻璃</string>
@@ -474,6 +476,9 @@
     <string name="module_upload_limit_unknown">暫時拿不到伺服器上限，先不能提交</string>
     <string name="module_upload_turnstile_title">人機驗證</string>
     <string name="module_upload_turnstile_failed">人機驗證沒完成，本次沒有提交</string>
+    <string name="module_upload_preparing_submit">正在驗證裝置…</string>
+    <string name="module_upload_submit_cancel">取消本次上傳</string>
+    <string name="module_upload_submit_cancelled">已取消。伺服器可能已受理本次投稿，請在投稿記錄裡核對；上傳口令可能已被消耗。</string>
     <string name="settings_hide_home_warnings">隱藏首頁警告</string>
     <string name="settings_hide_home_warnings_summary">隱藏首頁的警告卡片（PR 建置、核心/管理器更新、LKM 更新、預覽模式）</string>
 

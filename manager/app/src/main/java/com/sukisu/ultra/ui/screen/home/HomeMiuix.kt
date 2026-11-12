@@ -84,6 +84,7 @@ import com.sukisu.ultra.ui.theme.backgroundAwareCardColors
 import com.sukisu.ultra.ui.theme.backgroundAwareColor
 import com.sukisu.ultra.ui.util.customText
 import com.sukisu.ultra.ui.util.CustomTextKey
+import com.sukisu.ultra.ui.util.HomeLayout
 import com.sukisu.ultra.ui.theme.isInDarkTheme
 import com.sukisu.ultra.ui.util.BlurredBar
 import com.sukisu.ultra.ui.util.drawPainterCover
@@ -95,7 +96,9 @@ import com.sukisu.ultra.ui.util.aiSharedElement
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
+import com.sukisu.ultra.ui.component.Storefront
 import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.Text
@@ -132,6 +135,7 @@ fun HomePagerMiuix(
                 scrollBehavior = scrollBehavior,
                 backdrop = backdrop,
                 barColor = barColor,
+                onOpenThemeStore = actions.onOpenThemeStore,
             )
         },
         popupHost = { },
@@ -276,11 +280,21 @@ private fun TopBar(
     scrollBehavior: ScrollBehavior,
     backdrop: LayerBackdrop?,
     barColor: Color,
+    onOpenThemeStore: () -> Unit = {},
 ) {
     BlurredBar(backdrop = backdrop, scrollBehavior = scrollBehavior) {
         TopAppBar(
             color = Color.Transparent,
             title = customText(CustomTextKey.HOME_TITLE),
+            navigationIcon = {
+                IconButton(onClick = onOpenThemeStore) {
+                    Icon(
+                        imageVector = Icons.Rounded.Storefront,
+                        contentDescription = customText(CustomTextKey.PAGE_THEME_STORE),
+                        tint = colorScheme.onBackground
+                    )
+                }
+            },
             actions = {
                 RebootListPopupMiuix()
             },
@@ -338,6 +352,11 @@ private fun StatusCard(
         }
     }
     when {
+        state.ksuVersion != null && state.homeLayout == HomeLayout.IMMERSIVE -> ImmersiveStatusCardMiuix(
+            state = state,
+            onClick = onClick,
+        )
+
         state.ksuVersion != null -> ActiveStatusCard(state = state, onClick = onClick)
         else -> InactiveStatusCard(
             state = state,
@@ -348,7 +367,6 @@ private fun StatusCard(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ActiveStatusCard(
     state: HomeUiState,
@@ -560,7 +578,7 @@ private fun StatsRow(
     state: HomeUiState,
     actions: HomeActions,
 ) {
-    val tiles = buildList<Triple<Int, Int, (() -> Unit)?>> {
+    val tiles = buildList {
         state.superuserCount?.let { add(Triple(it, R.string.superuser, actions.onSuperuserClick)) }
         state.moduleCount?.let { add(Triple(it, R.string.module, actions.onModuleClick)) }
         state.kpmCount?.let { add(Triple(it, R.string.kpm_title, null)) }

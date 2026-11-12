@@ -308,6 +308,7 @@ fun ModuleUploadScreen() {
                 onPickMore = pickMany,
                 onSignOut = viewModel::signOut,
                 onSubmit = { viewModel.submit(turnstile) },
+                onCancelSubmit = { viewModel.cancelSubmit() },
                 onOpenStore = { navigator.push(Route.ModuleRepo(COOLAPK_COMMUNITY_SOURCE_ID)) },
             )
 
@@ -328,6 +329,7 @@ fun ModuleUploadScreen() {
                 onPickMore = pickMany,
                 onSignOut = viewModel::signOut,
                 onSubmit = { viewModel.submit(turnstile) },
+                onCancelSubmit = { viewModel.cancelSubmit() },
                 onOpenStore = { navigator.push(Route.ModuleRepo(COOLAPK_COMMUNITY_SOURCE_ID)) },
             )
         }

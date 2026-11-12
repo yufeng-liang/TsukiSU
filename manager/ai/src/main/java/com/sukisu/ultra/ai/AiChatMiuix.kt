@@ -659,18 +659,10 @@ private fun AiMessageBubbleMiuix(
                 horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.Top,
             ) {
-                Box(
-                    modifier = Modifier
-                        .padding(end = 8.dp)
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    AiAvatarImage(
-                        size = 24.dp,
-                    )
-                }
+                AiAvatarImage(
+                    modifier = Modifier.padding(end = 8.dp),
+                    size = 34.dp,
+                )
                 Box(
                     modifier = Modifier
                         .weight(1f, fill = false)
@@ -987,17 +979,7 @@ private fun AiWelcomeMiuix(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .size(64.dp)
-                .clip(CircleShape)
-                .background(colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center,
-        ) {
-            AiAvatarImage(
-                size = 46.dp,
-            )
-        }
+        AiAvatarImage(size = 64.dp)
         Text(
             text = stringResource(R.string.ai_welcome_title),
             style = MiuixTheme.textStyles.title2,

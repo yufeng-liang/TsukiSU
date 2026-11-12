@@ -352,8 +352,10 @@ object ModuleContribution {
      * 认的是服务端明说「用过」）—— 用户接下来必然吃一次「这个口令已经用过」，
      * 为一次他没造成的失败白跑一个来回。
      *
-     * 为什么不更大：Cloudflare Worker 单次请求的挂钟就在 30 秒量级，客户端等更久只会
-     * 更久地盯着一个不会再有结果的进度条。
+     * 为什么不更大：客户端等更久没有额外收益。上面这条最坏路径（单个 8 MiB 包在正常移动
+     * 网络下上传 + 所有权闸最坏 8 秒 + 解析与开 PR 数秒）就是这 20 秒覆盖的全部；再往上加，
+     * 只会在服务端已经不再回话时更久地盯着一个不会再有结果的进度条。整批 8 枚的预算另见
+     * [BATCH_SUBMIT_TIMEOUT_MS]——那一档的长度由上传时间决定，不是因为 Worker 有挂钟上限。
      */
     private const val SUBMIT_TIMEOUT_MS = 20_000L
 
@@ -378,7 +380,7 @@ object ModuleContribution {
      */
     private const val BATCH_SUBMIT_TIMEOUT_MS = 180_000L
 
-    /** `/check` 的批大小兜底。服务端当前上限也是 8；调用方应按 `maxModules` 切。 */
+    /** `/check` 的批大小上界（worker 当前也是 8，proof.ts:182）；实际分批大小取服务端自报的 `maxModules`，它拿不到时的兜底见 [com.sukisu.ultra.ui.screen.upload.ModuleUploadRules.FALLBACK_CHUNK_SIZE]。 */
     private const val CHECK_BATCH_MAX = 8
 
     private const val TURNSTILE_HEADER = "cf-turnstile-response"
@@ -621,17 +623,32 @@ object ModuleContribution {
                 val json = runCatching { JSONObject(text) }.getOrNull() ?: return emptyMap()
                 val results = json.optJSONArray("results") ?: return emptyMap()
                 val out = LinkedHashMap<String, CheckAnswer>()
+                // 防御：应答按 id 建 Map，同一 id 出现多条时「后写」会静默覆盖「前写」。
+                // 当前调用方保证同一 chunk 内 id 唯一（startCheck 的 chunked），不会触发；
+                // 仍按「与本次请求该 id 的 versionCode 匹配者优先」收口：请求侧记下
+                // (id → versionCode)，应答行带 versionCode 且与请求一致的那条最后落位，
+                // 一条都匹配不上才维持旧行为（保留最后一条）。将来请求侧若放宽 id 约束，
+                // 也不会把两个版本的答案搅在一起。
+                val requested = LinkedHashMap<String, Int>()
+                for ((id, versionCode) in modules) requested.putIfAbsent(id, versionCode)
+                val matched = LinkedHashMap<String, CheckAnswer>()
                 for (i in 0 until results.length()) {
                     val row = results.optJSONObject(i) ?: continue
                     val id = row.optString("id").trim()
                     if (id.isEmpty()) continue
                     val name = row.optString("status").trim().lowercase(Locale.ROOT)
-                    out[id] = CheckAnswer(
+                    val answer = CheckAnswer(
                         status = STATUS_BY_NAME[name] ?: CheckStatus.UNKNOWN,
                         eligibility = CheckAnswer.parseEligibility(row),
                         reason = row.optString("reason").trim(),
                     )
+                    out[id] = answer
+                    // 应答行没带 versionCode 时无法匹配，保持旧行为（保留最后一条）。
+                    if (requested[id] != null && row.optString("versionCode").trim().toIntOrNull() == requested[id]) {
+                        matched[id] = answer
+                    }
                 }
+                matched.forEach { (id, answer) -> out[id] = answer }
                 out
             }
         } catch (e: CancellationException) {
@@ -943,6 +960,9 @@ object ModuleContribution {
             )
         }
 
+        // 令牌只在形状对时才发出去：形状不对的一串服务端会当没带（回落签名路）。
+        // 与 submitBatch 的 safeSession 同一条判据；空串也要照发（见下面的 session part）。
+        val safeSession = sessionToken.trim().takeIf { SESSION_TOKEN_RE.matches(it) }.orEmpty()
         val body = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("id", resolved.id)
@@ -957,6 +977,10 @@ object ModuleContribution {
             .addFormDataPart("sha256", sha256)
             .addFormDataPart("pledge", PLEDGE_VERSION)
             .addFormDataPart("nonce", nonce)
+            // 令牌恒发一个 part（空串也要发）：与 buildBatchBody 同一条契约——服务端读
+            // `fields.session`，「字段不在」与「字段是空串」在它那里是同一件事；
+            // 会话路（verifyOwnership）认这个字段，不在这里发就永远走签名路。
+            .addFormDataPart("session", safeSession)
             .addFormDataPart(
                 "zip",
                 zip.name.ifBlank { "${resolved.id}-${resolved.versionCode}.zip" },

@@ -111,6 +111,8 @@ fun ModuleUploadFormMaterial(
     onPickMore: () -> Unit,
     onSignOut: () -> Unit,
     onSubmit: () -> Unit,
+    /** 「取消本次上传」：取消还在飞的那一次提交（见 ViewModel.cancelSubmit）。 */
+    onCancelSubmit: () -> Unit,
     /** 收录进度里「去商店看看」的去处；由路由层给，表单自己不拼路由。 */
     onOpenStore: () -> Unit = {},
 ) {
@@ -146,6 +148,7 @@ fun ModuleUploadFormMaterial(
             SubmitBarMaterial(
                 canSubmit = canSubmit,
                 submitting = state.submitting,
+                preparing = state.preparingSubmit,
                 blockers = blockers,
                 ownershipBlock = ownershipBlock,
                 onSubmit = onSubmit,
@@ -267,8 +270,9 @@ fun ModuleUploadFormMaterial(
                 }
             }
 
-            if (state.submitting || state.outcome != null) {
-                item { OutcomeMaterial(state, onOpenStore) }
+            // 取人机校验令牌那一段也算「已经在提交」：那一段同样要给出进度和取消入口。
+            if (state.preparingSubmit || state.submitting || state.outcome != null) {
+                item { OutcomeMaterial(state, onOpenStore, onCancelSubmit) }
             }
 
             item { Spacer(Modifier.height(24.dp)) }
@@ -342,6 +346,7 @@ private fun BatchSummaryMaterial(
 private fun SubmitBarMaterial(
     canSubmit: Boolean,
     submitting: Boolean,
+    preparing: Boolean,
     blockers: List<ModuleUploadRules.SubmitBlocker>,
     ownershipBlock: String,
     onSubmit: () -> Unit,
@@ -370,7 +375,7 @@ private fun SubmitBarMaterial(
         ) {
             Text(
                 modifier = Modifier.weight(1f),
-                text = submitHint(canSubmit, blockers, ownershipBlock),
+                text = submitHint(canSubmit, blockers, ownershipBlock, preparing = preparing),
                 style = MaterialTheme.typography.bodySmall,
                 color = when {
                     ownershipBlock.isNotEmpty() -> MaterialTheme.colorScheme.error
@@ -390,11 +395,17 @@ private fun SubmitBarMaterial(
                 onClick = onSubmit,
                 enabled = canSubmit,
             ) {
-                if (submitting) {
+                if (submitting || preparing) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(18.dp),
                         strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary,
+                        // 准备阶段按钮本来就是灰的（提交判据没过），onPrimary 在灰底上
+                        // 几乎看不见，所以那一段换中性色。
+                        color = if (submitting) {
+                            MaterialTheme.colorScheme.onPrimary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                     )
                 } else {
                     Icon(
@@ -413,12 +424,16 @@ private fun SubmitBarMaterial(
 
 /** 提交中 / 出结果后的那一段。契约没有字节回调：只报总数，不编百分比。 */
 @Composable
-private fun OutcomeMaterial(state: ModuleUploadFormState, onOpenStore: () -> Unit) {
+private fun OutcomeMaterial(
+    state: ModuleUploadFormState,
+    onOpenStore: () -> Unit,
+    onCancelSubmit: () -> Unit,
+) {
     Column(
         modifier = Modifier.padding(top = 20.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        if (state.submitting) {
+        if (state.preparingSubmit || state.submitting) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -426,19 +441,37 @@ private fun OutcomeMaterial(state: ModuleUploadFormState, onOpenStore: () -> Uni
                 CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                 Column {
                     Text(
-                        text = stringResource(R.string.module_upload_submitting),
+                        text = stringResource(
+                            if (state.preparingSubmit) {
+                                R.string.module_upload_preparing_submit
+                            } else {
+                                R.string.module_upload_submitting
+                            },
+                        ),
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    Text(
-                        text = stringResource(
-                            R.string.module_upload_submitting_bytes,
-                            state.items.size,
-                            ModuleUploadRules.formatBytes(state.totalBytes),
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    // 字节数是「正在上传」那一句的补充：准备阶段请求都还没发，只报个数就够，
+                    // 两行都显示只会让人以为已经传起来了。
+                    if (state.submitting) {
+                        Text(
+                            text = stringResource(
+                                R.string.module_upload_submitting_bytes,
+                                state.items.size,
+                                ModuleUploadRules.formatBytes(state.totalBytes),
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
+            }
+            // 取消入口：提交在飞时 VM 会挡住「返回」（backToList），没有这个按钮用户只剩等。
+            // 红字次要按钮，不做红底块——这是「停下」，不是危险操作。
+            TextButton(onClick = onCancelSubmit) {
+                Text(
+                    text = stringResource(R.string.module_upload_submit_cancel),
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
         }
 

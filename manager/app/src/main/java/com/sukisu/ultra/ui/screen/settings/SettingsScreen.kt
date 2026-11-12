@@ -65,7 +65,9 @@ fun SettingPager(
         onSetCheckUpdate = viewModel::setCheckUpdate,
         onSetCheckModuleUpdate = viewModel::setCheckModuleUpdate,
         onSetAutoDeleteModuleZip = viewModel::setAutoDeleteModuleZip,
+        onSetAutoDeleteUpdateApk = viewModel::setAutoDeleteUpdateApk,
         onOpenTheme = { navigator.push(Route.ColorPalette()) },
+        onOpenThemeStore = { navigator.push(Route.ThemeStore()) },
         onSetUiModeIndex = { index ->
             viewModel.setUiMode(if (index == 0) UiMode.Miuix.value else UiMode.Material.value)
         },

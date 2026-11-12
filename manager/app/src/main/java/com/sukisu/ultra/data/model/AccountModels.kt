@@ -60,6 +60,40 @@ data class AccountThemeSummary(
     val updatedAt: String? = null,
     val withdrawnAt: String? = null,
     val expiresAt: String? = null,
+    val previewPath: String = "",
+    val avatarPath: String? = null,
+    val screenshotPaths: List<String> = emptyList(),
+    /** False when the author license was revoked: the theme can only be downloaded. */
+    val editable: Boolean = true,
+)
+
+@Serializable
+data class AccountHistoryItem(
+    val id: Long = 0,
+    val themeId: String = "",
+    val kind: String = "",
+    val createdAt: String = "",
+    val themeName: String = "",
+    val themeAuthor: String = "",
+    val themeAuthorHash: String = "",
+    val themeVersion: Long = 1,
+    val themePreviewPath: String = "",
+    val themeAdaptive: Boolean = false,
+    val r18: Boolean = false,
+)
+
+@Serializable
+data class AccountHistoryResponse(
+    val ok: Boolean = false,
+    val kind: String = "",
+    val items: List<AccountHistoryItem> = emptyList(),
+    val error: String? = null,
+)
+
+@Serializable
+data class AccountHistoryRequest(
+    val themeId: String,
+    val kind: String? = null,
 )
 
 @Serializable
@@ -314,6 +348,7 @@ data class AccountSession(
     val baseUrl: String = "",
     val token: String = "",
     val user: AccountUser = AccountUser(),
+    val authors: List<AccountAuthor> = emptyList(),
     val activeAuthor: AccountAuthor? = null,
     val followers: Long = 0L,
     val following: Long = 0L,

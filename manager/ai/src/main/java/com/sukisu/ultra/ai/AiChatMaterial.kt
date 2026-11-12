@@ -578,17 +578,10 @@ private fun AiMessageBubbleMaterial(
                 horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.Top,
             ) {
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                AiAvatarImage(
                     modifier = Modifier.padding(end = 8.dp),
-                ) {
-                    AiAvatarImage(
-                        modifier = Modifier.padding(6.dp),
-                        size = 22.dp,
-                    )
-                }
+                    size = 34.dp,
+                )
                 Surface(
                     shape = RoundedCornerShape(topStart = 8.dp, topEnd = 24.dp, bottomStart = 24.dp, bottomEnd = 24.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -962,16 +955,7 @@ private fun AiWelcomeMaterial(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            ) {
-                AiAvatarImage(
-                    modifier = Modifier.padding(4.dp),
-                    size = 32.dp,
-                )
-            }
+            AiAvatarImage(size = 40.dp)
             Text(
                 text = stringResource(R.string.ai_welcome_title),
                 style = MaterialTheme.typography.titleMedium,

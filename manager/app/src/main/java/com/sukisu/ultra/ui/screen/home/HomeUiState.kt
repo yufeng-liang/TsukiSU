@@ -4,6 +4,9 @@ import androidx.compose.runtime.Immutable
 import com.sukisu.ultra.KernelVersion
 import com.sukisu.ultra.data.column.ColumnProgressEntry
 import com.sukisu.ultra.ui.util.HomeCardSticker
+import com.sukisu.ultra.ui.util.HomeCardImageStyle
+import com.sukisu.ultra.ui.util.HomeLayout
+import com.sukisu.ultra.ui.util.HomeStatusAlignment
 import com.sukisu.ultra.ui.util.module.LatestVersionInfo
 
 @Immutable
@@ -66,6 +69,13 @@ data class HomeUiState(
     val hideHomeCardStatusText: Boolean = false,
     val hideHomeCardDecoration: Boolean = false,
     val homeCardStickers: List<HomeCardSticker> = emptyList(),
+    val homeLayout: HomeLayout = HomeLayout.CLASSIC,
+    val homeStatusAlignment: HomeStatusAlignment = HomeStatusAlignment.START,
+    val homeStatusScale: Float = 1f,
+    val homePillScale: Float = 1f,
+    val homeStatusWidthFraction: Float = 1f,
+    val homeCardImageStyle: HomeCardImageStyle = HomeCardImageStyle.BANNER,
+    val showHomeCardImageWithoutBackground: Boolean = false,
 ) {
     val isSELinuxPermissive: Boolean
         get() = systemInfo.selinuxStatus == "Permissive"
@@ -130,6 +140,7 @@ data class HomeActions(
     val onOpenVersionSpoof: () -> Unit = {},
     val onOpenAi: () -> Unit = {},
     val onOpenHideEnv: () -> Unit = {},
+    val onOpenThemeStore: () -> Unit = {},
 )
 
 private val LKM_REV_SUFFIX = Regex("""\+lkm\.([0-9a-fA-F]{6,40})\s*$""")

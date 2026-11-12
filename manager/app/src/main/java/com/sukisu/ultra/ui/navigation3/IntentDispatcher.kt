@@ -33,6 +33,8 @@ private const val HOST_ACTION = "action"
 private const val HOST_WEBUI = "webui"
 private const val PARAM_ID = "id"
 private const val PARAM_TOKEN = "token"
+private const val THEME_SCHEME = "sukisu-theme"
+private val THEME_ID_PATTERN = Regex("^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 
 /**
  * Resolved intent action to execute after validation.
@@ -92,6 +94,18 @@ private fun resolveIntent(intent: Intent): PendingAction? {
         is KsuDeepLink.WebUi -> PendingAction.OpenWebUI(deepLink.moduleId)
         null -> null
     }
+}
+
+private fun parseThemeStoreLink(intent: Intent): Route.ThemeStore? {
+    if (intent.action != Intent.ACTION_VIEW) return null
+    val uri = intent.data ?: return null
+    if (uri.scheme != THEME_SCHEME || uri.host != "open") return null
+    val id = uri.getQueryParameter("id")?.takeIf { THEME_ID_PATTERN.matches(it) } ?: return null
+    // This URL only selects an already-configured source; it never installs a token or adds a server.
+    val source = uri.getQueryParameter("source")?.takeIf { it.length <= 256 }
+        ?.takeIf { Uri.parse(it).scheme in setOf("http", "https") }
+        ?.trimEnd('/')
+    return Route.ThemeStore(themeId = id, sourceBaseUrl = source)
 }
 
 private fun parseValidatedDeepLink(uri: Uri?): KsuDeepLink? {
@@ -211,6 +225,11 @@ fun IntentDispatcher(intentChannel: ReceiveChannel<Intent>) {
         if (!isManager) return@CollectIntentChannel
 
         // 文件管理器 / 分享进来的 ZIP：模块、AnyKernel3 内核都从这条路径处理。
+        parseThemeStoreLink(intent)?.let { destination ->
+            navigator.push(destination)
+            return@CollectIntentChannel
+        }
+
         val themeUri = extractThemePackageUri(context, intent)
         if (themeUri != null) {
             // Forward the URI through the route. The appearance destination owns a per-entry

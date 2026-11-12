@@ -112,9 +112,8 @@ class WebViewTurnstileProvider : TurnstileTokenProvider {
         pending?.complete(token.takeIf { it.isNotBlank() })
     }
 
-    /** 页面报错（网络、脚本异常）。 */
-    @Suppress("UNUSED_PARAMETER")
-    fun deliverError(reason: String) {
+    /** 页面报错（网络、脚本异常）：一律按「这一趟拿不到 token」收尾，原因文案由上层统一渲染。 */
+    fun deliverError() {
         pending?.complete(null)
     }
 
@@ -139,7 +138,9 @@ private class TurnstileBridge(private val provider: WebViewTurnstileProvider) {
 
     @JavascriptInterface
     fun onError(reason: String) {
-        provider.deliverError(reason)
+        // reason 是页面 JS 的固定调用签名（JavascriptInterface 契约），参数必须保留；
+        // 内容不再外传——展示文案由 VM 层统一渲染，这里只负责「这一趟失败」。
+        provider.deliverError()
     }
 }
 
@@ -254,7 +255,7 @@ fun TurnstileDialog(provider: WebViewTurnstileProvider) {
                                     val trusted = (url.scheme == "https" && url.host == TURNSTILE_HOST) ||
                                         url.scheme == "about"
                                     if (trusted) return false
-                                    provider.deliverError("校验页试图离开受信任站点")
+                                    provider.deliverError()
                                     return true
                                 }
 
@@ -270,7 +271,7 @@ fun TurnstileDialog(provider: WebViewTurnstileProvider) {
                                     // 只有主文档失败才算「校验页打不开」。favicon / 子资源失败
                                     // 不该把一次可能成功的挑战提前收掉。
                                     if (request?.isForMainFrame == true) {
-                                        provider.deliverError(error?.description?.toString().orEmpty())
+                                        provider.deliverError()
                                     }
                                 }
 
@@ -282,7 +283,7 @@ fun TurnstileDialog(provider: WebViewTurnstileProvider) {
                                     if (request?.isForMainFrame == true &&
                                         (errorResponse?.statusCode ?: 0) >= 400
                                     ) {
-                                        provider.deliverError("HTTP ${errorResponse?.statusCode}")
+                                        provider.deliverError()
                                     }
                                 }
 
@@ -292,7 +293,7 @@ fun TurnstileDialog(provider: WebViewTurnstileProvider) {
                                 ): Boolean {
                                     // 渲染进程被杀（低内存等）：收尾并让系统回收这个 WebView，
                                     // 否则要么卡到 120 秒，要么整个 App 被带走。
-                                    provider.deliverError("校验组件崩溃")
+                                    provider.deliverError()
                                     view?.destroy()
                                     return true
                                 }
