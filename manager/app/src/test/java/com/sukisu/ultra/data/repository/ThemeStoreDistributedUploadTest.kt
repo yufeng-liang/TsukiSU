@@ -161,9 +161,39 @@ class ThemeStoreDistributedUploadTest {
         }
     }
 
-    @Test fun edge401403429AndFailuresFallBackWithoutInvalidatingAccount() = runBlocking {
+    @Test fun terminalEdgeFailuresDoNotInvalidateTheAccountAndRetryableOnesFallBack() = runBlocking {
         val file = file(chunk + 7)
-        for (status in listOf(401, 403, 404, 409, 429, 503)) {
+        // 4xx 是服务端在说「这个请求本身是错的」：换入口只会重复同一个失败，所以记成
+        // 终止失败（不再换路重试），但绝不能被当成账号凭据失效。
+        for (status in listOf(401, 403, 404, 409)) {
+            val edgeCalls = AtomicInteger()
+            Server { exchange ->
+                edgeCalls.incrementAndGet(); exchange.requestBody.readBytes(); exchange.reply("{}", status)
+            }.use { edge ->
+                Server { exchange ->
+                    when {
+                        exchange.requestURI.path.endsWith("/init") -> exchange.reply(session(file, edge.url))
+                        exchange.requestURI.path.endsWith("/complete") -> exchange.reply("{\"ok\":true,\"complete\":true}")
+                        else -> { exchange.requestBody.readBytes(); exchange.reply("{\"ok\":true}") }
+                    }
+                }.use { primary ->
+                    val thrown = runCatching {
+                        withTimeout(10_000) { ThemeStoreResumableUploader(OkHttpClient(), primary.url + "/", "account")
+                            .upload(file) { _, _ -> } }
+                    }.exceptionOrNull()
+                    assertTrue("a terminal edge failure must abort the upload ($status): $thrown",
+                        thrown is ThemeUploadHttpException)
+                    assertEquals("the reported status must be the edge's ($status)", status,
+                        (thrown as ThemeUploadHttpException).status)
+                    // 终止失败只报这一枚包失败：既不换路重试，也不是账号凭据失效
+                    //（凭据失效是另一种异常类型，上面那条类型断言已经把它排除）。
+                    assertTrue("edge was tried ($status)", edgeCalls.get() > 0)
+                    assertEquals("a terminal edge failure must not be retried ($status)", 1, edgeCalls.get())
+                }
+            }
+        }
+        // 429 / 5xx 是「稍后再试」：换一个入口重试，账号依然有效。
+        for (status in listOf(429, 503)) {
             val local = ConcurrentHashMap.newKeySet<Int>()
             val edgeCalls = AtomicInteger()
             Server { exchange ->
@@ -298,7 +328,16 @@ class ThemeStoreDistributedUploadTest {
                         exchange.requestURI.path.endsWith("/complete") -> exchange.reply("{\"ok\":true,\"complete\":true}")
                         else -> { exchange.requestBody.readBytes(); exchange.reply("{\"ok\":true}") }
                     }
-                }.use { primary -> ThemeStoreResumableUploader(OkHttpClient(), primary.url + "/", "account").upload(file) { _, _ -> } }
+                }.use { primary ->
+                    val thrown = runCatching {
+                        ThemeStoreResumableUploader(OkHttpClient(), primary.url + "/", "account").upload(file) { _, _ -> }
+                    }.exceptionOrNull()
+                    // 307 既不是「稍后再试」也不是账号问题，按终止失败回报（不换入口）；
+                    // 关键安全性质是那个重定向目标一次请求都没收到，凭据没有被转发出去。
+                    assertTrue("a redirect must be reported as a terminal upload failure: $thrown",
+                        thrown is ThemeUploadHttpException)
+                    assertEquals(307, (thrown as ThemeUploadHttpException).status)
+                }
             }
             assertEquals(0, redirected.get())
         }
@@ -343,9 +382,9 @@ class ThemeStoreDistributedUploadTest {
                     else -> { exchange.requestBody.readBytes(); Thread.sleep(35_000); exchange.reply("{\"ok\":true}") }
                 }
             }.use { primary ->
-                withTimeout(25_000) {
-                    // Longer than the watchdog, so this exercises adaptive route
-                    // cancellation rather than OkHttp's default 10-second timeout.
+                withTimeout(60_000) {
+                    // 必须比看门狗的 25 秒下限更宽（1 秒轮询 + elapsed > 25s 才动手），
+                    // 这样考验的才是自适应换入口，而不是 OkHttp 默认的 10 秒超时。
                     val client = OkHttpClient.Builder().readTimeout(60, TimeUnit.SECONDS).build()
                     ThemeStoreResumableUploader(client, primary.url + "/", "account").upload(file) { _, _ -> }
                 }
