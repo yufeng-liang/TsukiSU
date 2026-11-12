@@ -334,7 +334,8 @@ class ModuleUploadViewModel(
      * [force] = true 时无视缓存、把所有行重问一遍（手动刷新那条路）；否则先拿
      * [ModuleUploadCheckCache] 里没过期的结论垫上，只把剩下的送去服务端。
      *
-     * 分批大小取服务端的 `maxModules`（拿不到就 8），同时最多两批在飞：
+     * 分批大小取服务端的 `maxModules`（拿不到就退到 [ModuleUploadRules.FALLBACK_CHUNK_SIZE]，即 4），
+     * 同时最多两批在飞：
      * 单批由服务端定大小，客户端只负责别把整张表一次性压上去。
      * 任何一批失败都不改已知状态——没问到的仍留在「查不了」，绝不猜成「未收录」。
      */
@@ -1884,7 +1885,7 @@ class ModuleUploadViewModel(
     }
 
     /**
-     * 弹层开着时每 30 秒再问一次。
+     * 弹层开着时每 60 秒再问一次（[PROGRESS_POLL_INTERVAL_MS]）。
      *
      * 只在 [ModuleUploadListState.progressDialogIds] 非 null 时转：这是一条**人正在看**的
      * 信息，关掉之后继续请求既烧流量也烧服务端配额，而且没有第二条路能让用户看到结果。

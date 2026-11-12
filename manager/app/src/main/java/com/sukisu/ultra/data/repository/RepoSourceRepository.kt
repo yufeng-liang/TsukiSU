@@ -7,6 +7,7 @@ import com.sukisu.ultra.ksuApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import okhttp3.CacheControl
 import okhttp3.Request
 import okhttp3.Response
 import org.json.JSONArray
@@ -441,9 +442,48 @@ internal const val COOLAPK_COMMUNITY_SOURCE_ID = "coolapk-community-modules"
  * 走 jsDelivr 而不是 `raw.githubusercontent.com`：后者在国内常见网络下连不上，而这份索引
  * 恰恰是面向酷安用户的。内容是 `SukiSU-Community/modules-repo` 仓的 `json/modules.json`，
  * 每次发布由 `publish-from-main.mjs` 重建。
+ *
+ * 它现在是**兜底**而不是首选，见 [COOLAPK_COMMUNITY_INDEX_MIRROR_URL]。
  */
 internal const val COOLAPK_COMMUNITY_INDEX_URL =
     "https://cdn.jsdelivr.net/gh/SukiSU-Community/modules-repo@main/json/modules.json"
+
+/**
+ * 同一份索引的服务端镜像（worker 的 `GET /index.json` 路由，见 contrib/worker/src/index.ts 的
+ * MIRROR_FILES），正文与 [COOLAPK_COMMUNITY_INDEX_URL] 逐字同源，自带 60 秒缓存。
+ *
+ * 排在最前面，理由是国内可达性：真机实测 jsDelivr 在移动网络下连接直接失败
+ * （`Connection reset`，curl 退出码 000），酷安源一个模块都拉不出来；而 pages.dev 走
+ * Cloudflare，国内直连可用（实测 HTTP 200）。jsDelivr 留作兜底：镜像挂掉或换域名时它还在，
+ * 两者互为兜底，不会一起失效。
+ */
+internal const val COOLAPK_COMMUNITY_INDEX_MIRROR_URL =
+    "https://sukisu-module-api.pages.dev/index.json"
+
+/**
+ * 酷安源索引的候选地址，按尝试顺序排列：镜像在前，jsDelivr 在后。
+ *
+ * 谁排在前面就等于谁说「这次抓取能不能成」——下拉一次列表只等第一个候选的失败。
+ */
+internal fun coolapkCommunityIndexCandidates(): List<String> = listOf(
+    COOLAPK_COMMUNITY_INDEX_MIRROR_URL,
+    COOLAPK_COMMUNITY_INDEX_URL,
+)
+
+/**
+ * 把已知的酷安源索引地址统一换算成上面的候选链。
+ *
+ * 两个入口都只拿得到「源里存的那一个 URL」——[coolapkCommunitySource] 存的是 jsDelivr，
+ * 用户自己粘贴的多半也是它；换算放在这里，两条路就都走同一份顺序，不用各自记住一套。
+ * 其它源的地址原样返回：内置注册表源和第三方源的抓取行为不受影响。
+ */
+internal fun indexUrlCandidates(indexUrl: String): List<String> {
+    val normalized = indexUrl.trim()
+    return when (normalized) {
+        COOLAPK_COMMUNITY_INDEX_URL -> coolapkCommunityIndexCandidates()
+        else -> listOf(indexUrl)
+    }
+}
 
 /**
  * 「酷安社区模块」源：默认关闭，由用户读完免责说明后自己开启。
@@ -476,12 +516,35 @@ internal fun Response.readIndexBody(limitBytes: Long = MAX_INDEX_RESPONSE_BYTES)
  * the file holding the modules; the modules themselves are never in the document a user pastes.
  * Throws on a non-2xx response, an unreadable document or an unparseable format, which is how
  * `addSource` tells a usable address from an unusable one.
+ *
+ * [indexUrl] 之外的候选来自 [indexUrlCandidates]：酷安源带镜像与 jsDelivr 两条地址，按顺序
+ * 逐个试，第一个读通的就算数（一次解析失败就试下一个，不把镜像的坏响应当最终判决）。
+ * 最后一个候选的异常原样抛出，调用方看到的失败原因和只有一条地址时一致。
  */
 internal fun fetchIndexModules(
     client: OkHttpClient,
     indexUrl: String,
     sourceId: String = "",
     sourceName: String = "",
+): List<RepoModule> {
+    val candidates = indexUrlCandidates(indexUrl)
+    var lastError: Exception? = null
+    for (candidate in candidates) {
+        try {
+            return fetchIndexModulesAt(client, candidate, sourceId, sourceName)
+        } catch (e: Exception) {
+            lastError = e
+        }
+    }
+    throw lastError ?: IllegalStateException("no index address to try: $indexUrl")
+}
+
+/** 真正抓一个地址：优先项读通就返回，读不通由 [fetchIndexModules] 换下一个候选。 */
+private fun fetchIndexModulesAt(
+    client: OkHttpClient,
+    indexUrl: String,
+    sourceId: String,
+    sourceName: String,
 ): List<RepoModule> {
     val body = readIndexDocument(client, indexUrl)
     val pointer = RepoModuleParser.registryIndexPointer(body) ?: return RepoModuleParser.parse(
@@ -506,7 +569,22 @@ internal fun fetchIndexModules(
 }
 
 private fun readIndexDocument(client: OkHttpClient, url: String): String {
-    val request = Request.Builder().url(url).build()
+    // 不读 okhttp 磁盘缓存：共享客户端（KernelSUApplication.kt:114-115）装了一块 10 MiB 磁盘
+    // 缓存，而 jsDelivr 对 @main 回 max-age=604800，走缓存会让设备最长 7 天看不到新收录的模块
+    // ——索引更新了、商店里却还是旧清单。noCache 只禁「读缓存」，请求照常发，内容没变时服务端
+    // 回 304，代价很小（同一写法见 RepoColumnRepositoryImpl.kt:175-189）。
+    // jsDelivr 对 @main 别名的 CDN 缓存也可能滞后，所以给它再挂一个按分钟变化的参数强制回源。
+    // 这一条只作用于索引读取；下载 zip 走的是另一条路，不加。
+    val target = if (url.contains("jsdelivr.net")) {
+        val separator = if (url.contains('?')) '&' else '?'
+        url + separator + "t=" + (System.currentTimeMillis() / 60_000)
+    } else {
+        url
+    }
+    val request = Request.Builder()
+        .url(target)
+        .cacheControl(CacheControl.Builder().noCache().build())
+        .build()
     return client.newCall(request).execute().use { response ->
         if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
         response.readIndexBody()

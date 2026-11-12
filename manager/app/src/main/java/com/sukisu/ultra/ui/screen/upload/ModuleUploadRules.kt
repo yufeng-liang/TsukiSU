@@ -136,7 +136,12 @@ object ModuleUploadRules {
     private fun RowView.matches(text: String): Boolean =
         id.contains(text, ignoreCase = true) || name.contains(text, ignoreCase = true)
 
-    /** 分批大小：服务端给了正数就用它，否则退回 8。 */
+    /**
+     * 分批大小：服务端给了正数就用它，否则退回 [FALLBACK_CHUNK_SIZE]（4）。
+     *
+     * 兜底值刻意低于 worker 的 MAX_MODULES_PER_SUBMIT，理由见上面那条常量的注释：
+     * 服务端调小上限而 `/` 又拿不到时，退到 4 只是多跑一趟，不会整批 400。
+     */
     fun checkChunkSize(limits: BatchLimits?): Int =
         limits?.maxModules?.takeIf { it > 0 } ?: FALLBACK_CHUNK_SIZE
 
