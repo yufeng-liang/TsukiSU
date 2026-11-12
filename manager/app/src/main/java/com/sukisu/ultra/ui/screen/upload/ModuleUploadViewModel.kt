@@ -302,7 +302,6 @@ class ModuleUploadViewModel(
                     refreshing = false,
                     scanFailed = false,
                     rows = rows,
-                    remaining = rows.count { row -> row.status == null },
                     keepZip = settings.keepModuleZip,
                     archivedCount = usage.entries,
                     archivedBytes = usage.totalBytes,
@@ -314,29 +313,21 @@ class ModuleUploadViewModel(
     }
 
     /**
-     * 把还没查过的模块送去查，一次最多 [ModuleUploadRules.CHECK_CAP] 条。
-     *
-     * 「还没查过」现在有两种：缓存里没有（或已过期），以及这一趟还没问过。所以进页面
-     * 与手动刷新走的是同一条路——先把缓存垫上，剩下的才发请求。
-     *
-     * **UI 目前没有调用它**：列表页那个「继续查」按钮已经删掉（它随 `remaining` 出现/
-     * 消失，让整块高度跳变，见 CheckProgressMaterial）。留在这里是因为 `CHECK_CAP` 的
-     * 分页上限还在——模块数超过 200 时仍然只有前 200 个有结论，将来若要给这种极端情况
-     * 一个入口，接这里就行，不必重新写一遍调度。
-     */
-    fun checkPending() {
-        startCheck(force = false)
-    }
-
-    /**
      * 查询主体。
      *
      * [force] = true 时无视缓存、把所有行重问一遍（手动刷新那条路）；否则先拿
      * [ModuleUploadCheckCache] 里没过期的结论垫上，只把剩下的送去服务端。
      *
      * 分批大小取服务端的 `maxModules`（拿不到就退到 [ModuleUploadRules.FALLBACK_CHUNK_SIZE]，即 4），
-     * 同时最多两批在飞：
-     * 单批由服务端定大小，客户端只负责别把整张表一次性压上去。
+     * 单批由服务端定大小，客户端只负责别把整张表一次性压上去；同时最多
+     * [ModuleUploadRules.CHECK_CONCURRENCY] 批在飞。
+     *
+     * **一次调用会一直续查到没有候选为止**：每轮最多 [ModuleUploadRules.CHECK_CAP] 条，
+     * 轮与轮之间串行，所以模块数超过上限时也不再只剩前一批有结论——全部调度都在这里，
+     * 没有「继续查」这种要用户点的入口（那个按钮早就删了）。收敛性由 `askedThisRun`
+     * 保证：本趟碰过的 id 一律排除在候选之外，于是同一趟不会对同一行问第二遍，循环必然
+     * 终止（`force` 那条路也一样）。
+     *
      * 任何一批失败都不改已知状态——没问到的仍留在「查不了」，绝不猜成「未收录」。
      */
     private fun startCheck(force: Boolean) {
@@ -344,65 +335,88 @@ class ModuleUploadViewModel(
         checkJob = viewModelScope.launch {
             // 这一趟的结论是不是全部来自缓存：只在「一条请求都没发」时成立。
             var servedFromCache = false
+            // 本趟已经碰过的行（不论成败）。候选里必须排除它们：失败的行会从 checkedIds
+            // 撤下来，不排除的话它立刻又变成候选，循环原地打转（`force` 那条路也一样）。
+            val askedThisRun = mutableSetOf<String>()
+            var sentAny = false
             try {
                 val uid = listQueryUid()
                 syncEligibilityUid(uid)
                 // 缓存先垫：标签在这一刻就定下来，用户不必盯着空标签等网络。
-                // 全中的话下面直接返回，`checking` 连亮都不亮——那才是「没在查」。
+                // 全中的话下面直接跳出，`checking` 连亮都不亮——那才是「没在查」。
                 val filled = if (force) 0 else applyCached(uid, System.currentTimeMillis())
-                // 手动刷新是「全部重问」，判据不能还是「没有结论的那些」：那时候每一行
-                // 都还挂着上一趟的旧标签，按 status == null 筛出来会是空集，一次请求都发不出去。
-                val rowsNow = _listState.value.rows
-                val candidates = if (force) {
-                    rowsNow
-                } else {
-                    rowsNow.filter { it.status == null && it.id !in checkedIds }
-                }
-                val pending = candidates.take(ModuleUploadRules.CHECK_CAP)
-                if (pending.isNotEmpty()) {
-                    // 真要发请求了：这批读数不再「全部来自缓存」。
-                    _listState.update { it.copy(checking = true, fromCache = false) }
-                }
                 // 上限即使这一趟一条都不查也得取：表单要靠它做提交前的本地预检，
                 // 拿不到就是 LIMITS_UNKNOWN（见 ModuleUploadRules.limitProblem）。
                 val limits = _listState.value.limits ?: fetchLimits()
-                if (pending.isEmpty()) {
-                    servedFromCache = filled > 0
-                    return@launch
-                }
-
-                pending.forEach { row ->
-                    checkedIds += row.id
-                }
-                markChecking(pending.map { it.id }, checking = true)
-
                 val chunkSize = ModuleUploadRules.checkChunkSize(limits)
                 val gate = Semaphore(ModuleUploadRules.CHECK_CONCURRENCY)
-                // queryChunk 返回「这一块问成了没」：失败的块把 id 从 checkedIds 撤下来，
-                // 让下一轮候选（status == null 且没问过）自然重问；UNKNOWN 有意不落缓存，
-                // 不撤的话这一块就固化成「查不了」，只有手动刷新才问得到。按块撤，
-                // 成功的块缓存照常生效。
-                val failedChunks = coroutineScope {
-                    pending.chunked(chunkSize).map { chunk ->
-                        async {
-                            gate.withPermit { chunk to queryChunk(chunk, uid) }
+                while (true) {
+                    // 手动刷新是「全部重问」，判据不能还是「没有结论的那些」：那时候每一行
+                    // 都还挂着上一趟的旧标签，按 status == null 筛出来会是空集，一次请求都发不出去。
+                    val rowsNow = _listState.value.rows
+                    // 候选判据挪进了 [ModuleUploadRules.nextBatch]：那边有 JVM 单测盯着，
+                    // 「排在后面的行永远轮不到」这类错不会再躲过回归。
+                    val pending = ModuleUploadRules.nextBatch(
+                        rows = rowsNow,
+                        askedThisRun = askedThisRun,
+                        checkedIds = checkedIds,
+                        force = force,
+                    )
+                    if (pending.isEmpty()) break
+                    // 真要发请求了：这批读数不再「全部来自缓存」，而且「已经问过」要当场记下来
+                    // —— 记晚了的话下面撤 checkedIds 的那一步会让它退回候选。
+                    sentAny = true
+                    _listState.update { it.copy(checking = true, fromCache = false) }
+                    pending.forEach { row ->
+                        askedThisRun += row.id
+                        checkedIds += row.id
+                    }
+                    markChecking(pending.map { it.id }, checking = true)
+
+                    // queryChunk 返回「这一块问成了没」：失败的块把 id 从 checkedIds 撤下来，
+                    // 让下一趟候选（status == null 且没问过）自然重问；UNKNOWN 有意不落缓存，
+                    // 不撤的话这一块就固化成「查不了」，只有手动刷新才问得到。按块撤，
+                    // 成功的块缓存照常生效。
+                    val failedChunks = coroutineScope {
+                        pending.chunked(chunkSize).map { chunk ->
+                            async {
+                                gate.withPermit { chunk to queryChunk(chunk, uid) }
+                            }
+                        }.awaitAll()
+                    }.filter { !it.second }
+
+                    if (failedChunks.isNotEmpty()) {
+                        // 有限重试：整块失败多半是网络抖了一下，或服务端索引正在降级，当场用
+                        // 更小的批再问一遍（[ModuleUploadRules.FALLBACK_CHUNK_SIZE]），一趟里
+                        // 只给这一次。为什么是「有限」：网络全断时每一批都会失败，重试预算不能
+                        // 跟着列表长度一起涨，否则一次进页面就是几百个请求。再失败就不管了——
+                        // id 已在上面撤出 checkedIds，留给下一次 startCheck。
+                        val failedRows = failedChunks.flatMap { (chunk, _) -> chunk }
+                        failedRows.forEach { row -> checkedIds -= row.id }
+                        markChecking(failedRows.map { it.id }, checking = true)
+                        val stillFailed = coroutineScope {
+                            failedRows.chunked(ModuleUploadRules.FALLBACK_CHUNK_SIZE).map { chunk ->
+                                async {
+                                    gate.withPermit { chunk to queryChunk(chunk, uid) }
+                                }
+                            }.awaitAll()
+                        }.filter { !it.second }
+                        if (stillFailed.isNotEmpty()) {
+                            // 重试也没成：这一格退回「还没查」。状态照旧不写（上面写过为什么），
+                            // 行上的转圈也得收掉——markChecking(true) 是给重试期间用的，留着的话
+                            // 列表里会一直挂着「查询中」。id 已撤出 checkedIds，下一趟自然会问。
+                            val stillFailedRows = stillFailed.flatMap { (chunk, _) -> chunk }
+                            checkedIds -= stillFailedRows.map { it.id }.toSet()
+                            markChecking(stillFailedRows.map { it.id }, checking = false)
                         }
-                    }.awaitAll()
-                }.filter { !it.second }
-                if (failedChunks.isNotEmpty()) {
-                    checkedIds -= failedChunks.flatMap { (chunk, _) -> chunk.map { it.id } }.toSet()
+                    }
                 }
+                if (!sentAny) servedFromCache = filled > 0
             } finally {
                 // 被 refresh() 取消时不要在这里写状态：新的一轮已经把 checking 打开了，
                 // 旧协程再关一次会让界面显示「没在查」而实际还在查。
                 if (isActive) {
-                    _listState.update {
-                        it.copy(
-                            checking = false,
-                            fromCache = servedFromCache,
-                            remaining = it.rows.count { row -> row.status == null },
-                        )
-                    }
+                    _listState.update { it.copy(checking = false, fromCache = servedFromCache) }
                 }
             }
         }
@@ -519,13 +533,16 @@ class ModuleUploadViewModel(
                 rows = state.rows.map { row ->
                     val asked = queried[row.id]
                     if (asked != null && asked.versionCode == row.versionCode) {
-                        // 服务端漏了这一格（整批失败 / 没回这个 id）：保留这一行已知的
-                        // 结论，没有才算「不知道为什么」。以前这里一律写 UNKNOWN，
-                        // 于是一次超时就把刚查到的、或者缓存里的答案抹成「查不了」。
-                        // 归属同理：缺失不等于「不是你的」——UNKNOWN 不会让归属闸拦任何东西。
+                        // 服务端漏了这一格（整批失败 / 没回这个 id）：没结论就不写结论。
+                        // status 保持原值（可能仍是 null，也就是「还没查过」），下一趟
+                        // startCheck 的候选（status == null 且没问过）自然会把它捞回来重问；
+                        // 写成 UNKNOWN 的话这一行就固化成「查不了」，只有手动刷新才问得到，
+                        // 而且列表上「已查询 N/M」的计数（读的就是 status != null）会被一次
+                        // 超时污染。归属同理：缺失不等于「不是你的」——UNKNOWN 不会让
+                        // 归属闸拦任何东西。
                         val answer = result[row.id]
                         row.copy(
-                            status = answer?.status ?: row.status ?: CheckStatus.UNKNOWN,
+                            status = answer?.status ?: row.status,
                             eligibility = answer?.eligibility ?: row.eligibility,
                             eligibilityReason = answer?.reason ?: row.eligibilityReason,
                             checking = false,
@@ -1975,11 +1992,15 @@ class ModuleUploadViewModel(
     /** 心跳协程（见 [startSessionTicker]）。 */
     private var tickerJob: Job? = null
 
+    /** 正在跑的那一次提交（见 [submit] 与 [cancelSubmit]）。 */
+    private var submitJob: Job? = null
+
     /**
      * 回到列表；表单内容保留，用户再挑一个包时接着上一批。
      *
      * 提交在飞时不放行：回列表后挑新包会让「这一批」在用户不知情时换掉，
-     * 而写入结果的那一侧还以为屏幕上仍是刚提交的那一套。
+     * 而写入结果的那一侧还以为屏幕上仍是刚提交的那一套。真要退出就先点表单上的
+     * 「取消本次上传」（[cancelSubmit]）——那才是说得清的做法。
      */
     fun backToList() {
         // 只有表单那一屏要挡：上传在飞时退出去，屏幕上的状态就没人接了。
@@ -2024,13 +2045,17 @@ class ModuleUploadViewModel(
             }
             return
         }
-        if (!snapshot.canSubmit(limits) || snapshot.submitting) return
+        if (!snapshot.canSubmit(limits) || snapshot.submitting || snapshot.preparingSubmit) return
         // 每次提交领一个号：结果回来时如果这一批已经不是当时那一批，就不许写进界面。
         val generation = ++submitGeneration
-        viewModelScope.launch {
+        submitJob = viewModelScope.launch {
+            // 取 token 不等于「在上传」：那个请求还没发出去，而 [TurnstileTokenProvider] 的
+            // 超时是两分钟级的。这时候就写「正在上传 x 个包」，用户会对着一个根本没发生的
+            // 事等满两分钟。所以先亮 preparingSubmit（「正在校验设备」），token 到手才切成 submitting。
             _formState.update {
                 it.copy(
-                    submitting = true,
+                    preparingSubmit = true,
+                    submitting = false,
                     outcome = null,
                     notice = null,
                     totalBytes = snapshot.items.sumOf { item -> item.sizeBytes },
@@ -2048,13 +2073,16 @@ class ModuleUploadViewModel(
                 if (token.isNullOrBlank()) {
                     _formState.update {
                         it.copy(
-                            submitting = false,
+                            preparingSubmit = false,
                             notice = res.getString(R.string.module_upload_turnstile_failed),
                         )
                     }
                     settled = true
                     return@launch
                 }
+
+                // token 到手、马上要发请求了：从这一刻起才是真的「正在上传」。
+                _formState.update { it.copy(preparingSubmit = false, submitting = true) }
 
                 val batch = snapshot.items.map { item ->
                     BatchZip(
@@ -2085,13 +2113,40 @@ class ModuleUploadViewModel(
                 applySubmitResult(result, snapshot.nonce, generation, snapshot.uid)
                 settled = true
             } finally {
-                // 协程被取消（离开路由）时不会有结果回来：submitting 停在 true 会让
-                // backToList 永远被挡、按钮永远灰着。取消也要把界面还原成一个可用状态。
+                // 协程被取消（离开路由，或用户点了「取消本次上传」）时不会有结果回来：两个
+                // 标志停在 true 会让 backToList 永远被挡、按钮永远灰着。取消也要把界面还原成
+                // 一个可用状态（notice 不动：取消那句提示由 [cancelSubmit] 落下，这里别覆盖）。
                 if (!settled) {
-                    _formState.update { it.copy(submitting = false) }
+                    _formState.update { it.copy(preparingSubmit = false, submitting = false) }
                 }
             }
         }
+    }
+
+    /**
+     * 取消这一次提交（表单上的「取消本次上传」）。
+     *
+     * 状态在这里改，不在被取消的协程里改：`cancel()` 之后那个 finally 虽然还会跑，但
+     * 它只把两个标志放平、不写 `notice`——提示语得由一个没被取消的上下文来落。
+     *
+     * 领新号（`++submitGeneration`）是取消与「迟到的结果」之间的护栏：已经在飞的那一批回来
+     * 时号对不上，[applySubmitResult] 会整个丢弃，不会把一次已取消的提交画成成功或失败。
+     *
+     * 文案说的是实话里最要紧的那部分：取消只保证客户端不再等，服务端可能已经受理，上传
+     * 口令也可能已经消耗——所以要让用户去投稿记录里核对。
+     */
+    fun cancelSubmit() {
+        val current = _formState.value
+        if (submitJob?.isActive != true && !current.preparingSubmit && !current.submitting) return
+        ++submitGeneration
+        _formState.update {
+            it.copy(
+                preparingSubmit = false,
+                submitting = false,
+                notice = res.getString(R.string.module_upload_submit_cancelled),
+            )
+        }
+        submitJob?.cancel()
     }
 
     private fun applySubmitResult(

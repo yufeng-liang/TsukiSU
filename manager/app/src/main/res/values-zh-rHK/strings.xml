@@ -476,6 +476,9 @@
     <string name="module_upload_limit_unknown">暫時拿不到伺服器上限，先不能提交</string>
     <string name="module_upload_turnstile_title">人機驗證</string>
     <string name="module_upload_turnstile_failed">人機驗證沒完成，本次沒有提交</string>
+    <string name="module_upload_preparing_submit">正在驗證裝置…</string>
+    <string name="module_upload_submit_cancel">取消本次上傳</string>
+    <string name="module_upload_submit_cancelled">已取消。伺服器可能已受理本次投稿，請在投稿記錄裡核對；上傳口令可能已被消耗。</string>
     <string name="settings_hide_home_warnings">隱藏首頁警告</string>
     <string name="settings_hide_home_warnings_summary">隱藏首頁的警告卡片（PR 建置、核心/管理器更新、LKM 更新、預覽模式）</string>
 

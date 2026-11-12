@@ -2356,4 +2356,7 @@
     <string name="theme_store_comments_format_link">Insert link</string>
     <string name="theme_store_comments_login_to_reply">Sign in to reply</string>
     <string name="theme_store_device_reauthorize">Reset device authorization (request again on next connection)</string>
+    <string name="module_upload_preparing_submit">Checking your device…</string>
+    <string name="module_upload_submit_cancel">Cancel this upload</string>
+    <string name="module_upload_submit_cancelled">Cancelled. The server may already have accepted this submission — check the submission records; the upload code may already be used.</string>
 </resources>

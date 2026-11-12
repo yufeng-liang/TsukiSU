@@ -120,6 +120,8 @@ fun ModuleUploadFormMiuix(
     onPickMore: () -> Unit,
     onSignOut: () -> Unit,
     onSubmit: () -> Unit,
+    /** 「取消本次上传」：取消还在飞的那一次提交（见 ViewModel.cancelSubmit）。 */
+    onCancelSubmit: () -> Unit,
     /** 收录进度里「去商店看看」的去处；由路由层给，表单自己不拼路由。 */
     onOpenStore: () -> Unit = {},
 ) {
@@ -163,6 +165,7 @@ fun ModuleUploadFormMiuix(
             SubmitBarMiuix(
                 canSubmit = canSubmit,
                 submitting = state.submitting,
+                preparing = state.preparingSubmit,
                 blockers = blockers,
                 ownershipBlock = ownershipBlock,
                 onSubmit = onSubmit,
@@ -275,8 +278,9 @@ fun ModuleUploadFormMiuix(
                 }
             }
 
-            if (state.submitting || state.outcome != null) {
-                item { OutcomeMiuix(state, onOpenStore) }
+            // 取人机校验令牌那一段也算「已经在提交」：那一段同样要给出进度和取消入口。
+            if (state.preparingSubmit || state.submitting || state.outcome != null) {
+                item { OutcomeMiuix(state, onOpenStore, onCancelSubmit) }
             }
 
             item { Spacer(Modifier.height(24.dp)) }
@@ -343,6 +347,7 @@ private fun BatchSummaryMiuix(
 private fun SubmitBarMiuix(
     canSubmit: Boolean,
     submitting: Boolean,
+    preparing: Boolean,
     blockers: List<ModuleUploadRules.SubmitBlocker>,
     ownershipBlock: String,
     onSubmit: () -> Unit,
@@ -370,7 +375,7 @@ private fun SubmitBarMiuix(
         ) {
             Text(
                 modifier = Modifier.weight(1f),
-                text = submitHint(canSubmit, blockers, ownershipBlock),
+                text = submitHint(canSubmit, blockers, ownershipBlock, preparing = preparing),
                 fontSize = 12.sp,
                 // 两道闸都算「现在不能传」，都用 error 色把原因顶出来：差 N 项与归属判决
                 // 对用户是同一件事——按钮是灰的。但不给底色，这两句本来就够长。
@@ -393,7 +398,7 @@ private fun SubmitBarMiuix(
                 enabled = canSubmit,
                 cornerRadius = 12.dp,
             ) {
-                if (submitting) {
+                if (submitting || preparing) {
                     CircularProgressIndicator(progress = null, size = 18.dp, strokeWidth = 2.dp)
                 } else {
                     Icon(
@@ -410,13 +415,17 @@ private fun SubmitBarMiuix(
 
 /** 提交中 / 出结果后的那一段。契约没有字节回调：只报总数，不编百分比。 */
 @Composable
-private fun OutcomeMiuix(state: ModuleUploadFormState, onOpenStore: () -> Unit) {
+private fun OutcomeMiuix(
+    state: ModuleUploadFormState,
+    onOpenStore: () -> Unit,
+    onCancelSubmit: () -> Unit,
+) {
     val uriHandler = LocalUriHandler.current
     Column(
         modifier = Modifier.padding(top = 12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        if (state.submitting) {
+        if (state.preparingSubmit || state.submitting) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -424,20 +433,39 @@ private fun OutcomeMiuix(state: ModuleUploadFormState, onOpenStore: () -> Unit) 
                 CircularProgressIndicator(progress = null, size = 20.dp, strokeWidth = 2.dp)
                 Column {
                     Text(
-                        text = stringResource(R.string.module_upload_submitting),
+                        text = stringResource(
+                            if (state.preparingSubmit) {
+                                R.string.module_upload_preparing_submit
+                            } else {
+                                R.string.module_upload_submitting
+                            },
+                        ),
                         fontSize = 14.sp,
                     )
-                    Text(
-                        text = stringResource(
-                            R.string.module_upload_submitting_bytes,
-                            state.items.size,
-                            ModuleUploadRules.formatBytes(state.totalBytes),
-                        ),
-                        fontSize = 12.sp,
-                        color = colorScheme.onSurfaceVariantSummary,
-                    )
+                    // 字节数是「正在上传」那一句的补充：准备阶段请求都还没发，只报个数就够。
+                    if (state.submitting) {
+                        Text(
+                            text = stringResource(
+                                R.string.module_upload_submitting_bytes,
+                                state.items.size,
+                                ModuleUploadRules.formatBytes(state.totalBytes),
+                            ),
+                            fontSize = 12.sp,
+                            color = colorScheme.onSurfaceVariantSummary,
+                        )
+                    }
                 }
             }
+            // 取消入口：提交在飞时 VM 会挡住「返回」（backToList），没有这个按钮用户只剩等。
+            // 与「退出验证」同一个写法：透明底 + error 色文字，不做红底块。
+            TextButton(
+                text = stringResource(R.string.module_upload_submit_cancel),
+                onClick = onCancelSubmit,
+                colors = ButtonDefaults.textButtonColors(
+                    color = Color.Transparent,
+                    textColor = colorScheme.error,
+                ),
+            )
         }
 
         when (val outcome = state.outcome) {

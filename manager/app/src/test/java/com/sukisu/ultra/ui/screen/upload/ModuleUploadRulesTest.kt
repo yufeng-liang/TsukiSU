@@ -866,4 +866,90 @@ class ModuleUploadRulesTest {
             submitting = false,
             limitProblem = ModuleUploadRules.LimitProblem.NONE,
         )
+
+    // ── 候选批（nextBatch）：钉住「排在后面的行永远轮不到」这个回归 ─────────────
+
+    @Test
+    fun `a batch takes the first cap rows and the tail lands in the next batch`() {
+        val rows = (0 until 250).map { uploadRow("m" + it.toString().padStart(3, '0')) }
+
+        val first = ModuleUploadRules.nextBatch(rows, emptySet(), emptySet(), force = false)
+        assertEquals(ModuleUploadRules.CHECK_CAP, first.size)
+        assertEquals("m000", first.first().id)
+        assertEquals("m199", first.last().id)
+
+        val asked = first.map { it.id }.toSet()
+        val second = ModuleUploadRules.nextBatch(rows, asked, emptySet(), force = false)
+        assertEquals(50, second.size)
+        assertEquals("m200", second.first().id)
+        // 钉子：尾部那行必须在第二批里，否则就是「超出一批的行永远查不到」那个 bug。
+        assertEquals("m249", second.last().id)
+
+        val third = ModuleUploadRules.nextBatch(rows, asked + second.map { it.id }, emptySet(), force = false)
+        assertTrue(third.isEmpty())
+    }
+
+    @Test
+    fun `the tail is still reached when the earlier rows keep failing`() {
+        val rows = (0 until 250).map { uploadRow("m" + it.toString().padStart(3, '0')) }
+        // 第一批整批失败：它们已从 checkedIds 撤下，但本趟记在 askedThisRun 里，
+        // 所以下一批必须是尾巴，而不是原地重问前 200 行。
+        val asked = rows.take(200).map { it.id }.toSet()
+
+        val next = ModuleUploadRules.nextBatch(rows, asked, emptySet(), force = false)
+        assertEquals(50, next.size)
+        assertEquals("m249", next.last().id)
+    }
+
+    @Test
+    fun `rows already asked in this run never come back as candidates`() {
+        val rows = listOf(uploadRow("a"), uploadRow("b"), uploadRow("c"))
+        val asked = setOf("a", "b", "c")
+
+        assertTrue(ModuleUploadRules.nextBatch(rows, asked, emptySet(), force = false).isEmpty())
+        // force（手动刷新）也绕不过：否则同一趟里会对同一行反复发请求，循环就不收敛了。
+        assertTrue(ModuleUploadRules.nextBatch(rows, asked, emptySet(), force = true).isEmpty())
+    }
+
+    @Test
+    fun `a failed row is retried in the next run but not again in this one`() {
+        val rows = listOf(uploadRow("a", CheckStatus.RECORDED), uploadRow("b"))
+
+        // checkedIds 里躺着的 id 不再入候选。
+        assertTrue(ModuleUploadRules.nextBatch(rows, setOf("b"), setOf("a", "b"), force = false).isEmpty())
+
+        // 失败行被撤出 checkedIds，但本趟已经碰过它：本趟仍不得重回候选（终止性）。
+        assertTrue(ModuleUploadRules.nextBatch(rows, setOf("b"), setOf("a"), force = false).isEmpty())
+
+        // 下一趟 startCheck 带着新的空 askedThisRun 来，它就能被捞回去重问。
+        assertEquals(
+            listOf("b"),
+            ModuleUploadRules.nextBatch(rows, emptySet(), setOf("a"), force = false).map { it.id },
+        )
+    }
+
+    @Test
+    fun `force ignores conclusions and checked ids but not this run asked set`() {
+        val rows = listOf(uploadRow("a", CheckStatus.RECORDED), uploadRow("b", CheckStatus.NEW), uploadRow("c"))
+        val checked = setOf("a", "b", "c")
+
+        assertTrue(ModuleUploadRules.nextBatch(rows, emptySet(), checked, force = false).isEmpty())
+        assertEquals(
+            listOf("a", "b", "c"),
+            ModuleUploadRules.nextBatch(rows, emptySet(), checked, force = true).map { it.id },
+        )
+    }
+
+    private fun uploadRow(id: String, status: CheckStatus? = null) = UploadRow(
+        id = id,
+        name = id,
+        author = "author",
+        version = "1.0",
+        versionCode = 1L,
+        description = "",
+        enabled = true,
+        remove = false,
+        metamodule = false,
+        status = status,
+    )
 }
