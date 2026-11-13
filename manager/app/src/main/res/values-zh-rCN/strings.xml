@@ -2351,4 +2351,7 @@
     <string name="module_upload_preparing_submit">正在校验设备…</string>
     <string name="module_upload_submit_cancel">取消本次上传</string>
     <string name="module_upload_submit_cancelled">已取消。服务端可能已受理本次投稿，请在投稿记录里核对；上传口令可能已被消耗。</string>
+    <!-- 模块页悬浮按钮扇形菜单的两枚动作 -->
+    <string name="module_fab_install">模块刷入</string>
+    <string name="module_fab_upload">投稿模块</string>
 </resources>

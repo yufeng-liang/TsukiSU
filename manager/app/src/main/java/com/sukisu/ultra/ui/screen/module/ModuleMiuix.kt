@@ -63,6 +63,9 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Storefront
+import androidx.compose.ui.draw.rotate
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -286,12 +289,59 @@ fun ModulePagerMiuix(
 
     val listState = rememberLazyListState()
     val refreshTick = remember { mutableIntStateOf(0) }
+    var fanOpen by remember { mutableStateOf(false) }
+    // 悬浮按钮的 ZIP 选择器：一个直接刷入，多个先弹确认（与原来的行为一致）
+    val fanConfirmTitle = stringResource(R.string.module)
+    var fanZipUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    val fanConfirmDialog = rememberConfirmDialog(
+        onConfirm = {
+            actions.onOpenFlash(fanZipUris)
+        }
+    )
+    val selectZipLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { activityResult ->
+        val uris = mutableListOf<Uri>()
+        if (activityResult.resultCode != RESULT_OK) {
+            return@rememberLauncherForActivityResult
+        }
+        val data = activityResult.data ?: return@rememberLauncherForActivityResult
+        val clipData = data.clipData
+        if (clipData != null) {
+            for (i in 0 until clipData.itemCount) {
+                clipData.getItemAt(i)?.uri?.let { uris.add(it) }
+            }
+        } else {
+            data.data?.let { uris.add(it) }
+        }
+        if (uris.size == 1) {
+            actions.onOpenFlash(listOf(uris.first()))
+        } else if (uris.size > 1) {
+            fanZipUris = uris
+            val moduleNames = uris.mapIndexed { index, uri -> "\n${index + 1}. ${uri.getFileName(context)}" }.joinToString("")
+            fanConfirmDialog.showConfirm(
+                title = fanConfirmTitle,
+                content = installPromptWithName.format(moduleNames)
+            )
+        }
+    }
+    val pickZipForInstall: () -> Unit = {
+        // 写权限：装完之后管理器要能删掉被选中的 ZIP
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/zip"
+            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        }
+        selectZipLauncher.launch(intent)
+    }
 
     val backdrop = rememberBlurBackdrop(enableBlur)
     val blurActive = backdrop != null
     val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
     val barColor = if (blurActive || hasCustomBackground) Color.Transparent else colorScheme.surface
 
+    Box(modifier = Modifier.fillMaxSize()) {
     AppScaffold(
         containerColor = if (hasCustomBackground) Color.Transparent else colorScheme.surface,
         topBar = {
@@ -448,73 +498,7 @@ fun ModulePagerMiuix(
                 }
             }
         },
-        floatingActionButton = {
-            if (uiState.installButtonVisible) {
-                val moduleInstall = stringResource(id = R.string.module_install)
-                val confirmTitle = stringResource(R.string.module)
-                var zipUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
-                val confirmDialog = rememberConfirmDialog(
-                    onConfirm = {
-                        actions.onOpenFlash(zipUris)
-                    }
-                )
-                val selectZipLauncher = rememberLauncherForActivityResult(
-                    contract = ActivityResultContracts.StartActivityForResult()
-                ) { activityResult ->
-                    val uris = mutableListOf<Uri>()
-                    if (activityResult.resultCode != RESULT_OK) {
-                        return@rememberLauncherForActivityResult
-                    }
-                    val data = activityResult.data ?: return@rememberLauncherForActivityResult
-                    val clipData = data.clipData
-
-                    if (clipData != null) {
-                        for (i in 0 until clipData.itemCount) {
-                            clipData.getItemAt(i)?.uri?.let { uris.add(it) }
-                        }
-                    } else {
-                        data.data?.let { uris.add(it) }
-                    }
-
-                    if (uris.size == 1) {
-                        actions.onOpenFlash(listOf(uris.first()))
-                    } else if (uris.size > 1) {
-                        // multiple files selected
-                        zipUris = uris
-                        val moduleNames = uris.mapIndexed { index, uri -> "\n${index + 1}. ${uri.getFileName(context)}" }.joinToString("")
-                        val confirmContent = installPromptWithName.format(moduleNames)
-                        confirmDialog.showConfirm(
-                            title = confirmTitle,
-                            content = confirmContent
-                        )
-                    }
-                }
-                FloatingActionButton(
-                    modifier = Modifier
-                        .padding(bottom = bottomInnerPadding + 20.dp, end = 20.dp)
-                        .border(0.05.dp, colorScheme.outline.copy(alpha = 0.5f), CircleShape),
-                    shadowElevation = 0.dp,
-                    onClick = {
-                        // Write access lets the manager delete the picked ZIP after a successful install
-                        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                            addCategory(Intent.CATEGORY_OPENABLE)
-                            type = "application/zip"
-                            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-                        }
-                        selectZipLauncher.launch(intent)
-                    },
-                    content = {
-                        Icon(
-                            Icons.Rounded.Add,
-                            moduleInstall,
-                            modifier = Modifier.size(40.dp),
-                            tint = colorScheme.onPrimary
-                        )
-                    },
-                )
-            }
-        },
+        floatingActionButton = {},
         popupHost = {
             searchStatus.SearchPager(
                 onSearchStatusChange = actions.onSearchStatusChange,
@@ -554,6 +538,7 @@ fun ModulePagerMiuix(
         },
         contentWindowInsets = WindowInsets.systemBars.add(WindowInsets.displayCutout).only(WindowInsetsSides.Horizontal)
     ) { innerPadding ->
+        Box(modifier = Modifier.fillMaxSize()) {
         if (uiState.magiskInstalled) {
             Box(
                 modifier = Modifier
@@ -657,6 +642,32 @@ fun ModulePagerMiuix(
                     }
                 }
             }
+        }
+        }
+    }
+        if (uiState.installButtonVisible) {
+            ModuleFanFabHost(
+                expanded = fanOpen,
+                installLabel = stringResource(R.string.module_fab_install),
+                uploadLabel = stringResource(R.string.module_fab_upload),
+                installAngle = 117f,
+                uploadAngle = 168f,
+                radius = 114.dp,
+                onToggle = { fanOpen = !fanOpen },
+                onDismiss = { fanOpen = false },
+                onInstall = pickZipForInstall,
+                onUpload = { actions.onOpenUpload() },
+                bottomPadding = bottomInnerPadding + 20.dp,
+                endPadding = 20.dp,
+                itemContainerColor = colorScheme.surface,
+                itemContentColor = colorScheme.onSurface,
+                iconTint = colorScheme.primary,
+                fabContainerColor = colorScheme.primary,
+                fabContentColor = colorScheme.onPrimary,
+                fabIcon = Icons.Rounded.Add,
+                installIcon = Icons.Outlined.Download,
+                uploadIcon = Icons.Outlined.Storefront,
+            )
         }
     }
     ModuleShortcutDialog(
