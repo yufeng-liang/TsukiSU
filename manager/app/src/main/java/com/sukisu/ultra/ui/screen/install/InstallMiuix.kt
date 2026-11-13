@@ -165,7 +165,7 @@ internal fun InstallScreenMiuix(
                         )
                     }
                     AnimatedVisibility(
-                        visible = uiState.canSelectPartition,
+                        visible = isGkiDevice && uiState.canSelectPartition,
                         enter = expandVertically(),
                         exit = shrinkVertically()
                     ) {
