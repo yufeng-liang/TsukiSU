@@ -731,4 +731,7 @@
     <string name="reboot_countdown_now">立即重啟</string>
     <string name="reboot_countdown_later">稍後我自己重啟</string>
     <string name="module_column_tier_recommended" translatable="true">最常用</string>
+    <!-- 模块页悬浮按钮扇形菜单的两枚动作 -->
+    <string name="module_fab_install">模組刷入</string>
+    <string name="module_fab_upload">投稿模組</string>
 </resources>

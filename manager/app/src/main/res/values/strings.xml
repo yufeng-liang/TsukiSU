@@ -2359,4 +2359,7 @@
     <string name="module_upload_preparing_submit">Checking your device…</string>
     <string name="module_upload_submit_cancel">Cancel this upload</string>
     <string name="module_upload_submit_cancelled">Cancelled. The server may already have accepted this submission — check the submission records; the upload code may already be used.</string>
+    <!-- 模块页悬浮按钮扇形菜单的两枚动作 -->
+    <string name="module_fab_install">Install module</string>
+    <string name="module_fab_upload">Submit module</string>
 </resources>

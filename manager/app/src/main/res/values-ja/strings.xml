@@ -216,4 +216,7 @@
     <string name="module_upload_preparing_submit">デバイスを確認しています…</string>
     <string name="module_upload_submit_cancel">このアップロードをキャンセル</string>
     <string name="module_upload_submit_cancelled">キャンセルしました。サーバー側で既に受理されている可能性があるため、投稿記録で確認してください。アップロードコードが消費済みの可能性もあります。</string>
+    <!-- 模块页悬浮按钮扇形菜单的两枚动作 -->
+    <string name="module_fab_install">モジュールをインストール</string>
+    <string name="module_fab_upload">モジュールを投稿</string>
 </resources>
