@@ -1208,7 +1208,7 @@
     <string name="susfs_android_data_path_label">Android Data 路径</string>
     <string name="susfs_sdcard_path_label">SDCard 路径</string>
     <string name="module_upload_title">模块上传</string>
-    <string name="module_upload_entry_title">模块上传分享</string>
+    <string name="module_upload_entry_title">模块投稿</string>
     <string name="module_upload_entry_summary">将好模块上传，共建模块生态</string>
     <string name="module_upload_after_install_title">安装后提示分享</string>
     <string name="module_upload_after_install_summary">安装本地模块后，提示分享尚未收录的模块</string>
@@ -1347,7 +1347,7 @@
     <string name="module_upload_uid_verified">已验证：%1$s</string>
     <string name="module_upload_session_checking">正在确认上次的验证…</string>
     <string name="module_upload_session_hint">90 天内再投稿不用改签名。换账号请点右边。</string>
-    <string name="module_upload_session_signout">退出验证</string>
+    <string name="module_upload_session_signout">登出</string>
     <string name="module_upload_uid_not_found">酷安查无此人，请核对 UID</string>
     <string name="module_upload_uid_invalid">需要 4~12 位数字</string>
     <string name="module_upload_uid_unavailable">暂时无法核实（酷安不可达）</string>
@@ -1627,12 +1627,14 @@
     <string name="module_upload_identity_commit_pending">正在准备验证串…</string>
     <string name="module_upload_identity_commit_copy">复制</string>
     <string name="module_upload_identity_commit_copied">已复制</string>
-    <string name="module_upload_identity_commit_hint">打开酷安（我 &gt; 编辑资料 &gt; 个性签名），把这串粘进去保存。这一步是为了证明 UID 确实是你在用，通过验证之后你可以随时换回你原来的酷安签名。</string>
+    <string name="module_upload_identity_commit_hint">打开酷安（个人主页 &gt; 编辑资料 &gt; 个性签名），把这串粘进去保存。这一步是为了证明 UID 确实是你在用，通过验证之后你可以随时换回你原来的酷安签名。</string>
     <string name="module_upload_identity_title">验证身份</string>
     <string name="module_upload_identity_uid_found">已找到</string>
     <string name="module_upload_identity_why_title">为什么要填这些？</string>
     <string name="module_upload_identity_why_body">上传是公开的，而你上传的每个模块都会在装机者的设备上以 root 权限运行。所以我们需要知道每个模块是谁上传的：记录酷安 UID，是为了日后随时能把模块回溯到上传者；同时要求酷安等级 Lv2 及以上，防止随意滥用上传（酷安签名验证是为了证明你填的 UID 确实是你在用）。</string>
-    <string name="module_upload_identity_level">需要酷安等级 Lv2 及以上</string>
+    <string name="module_upload_identity_level">确保酷安等级 Lv2 及以上</string>
+    <string name="module_upload_signout_confirm_title">登出</string>
+    <string name="module_upload_signout_confirm_body">登出后需要重新完成酷安签名验证才能继续上传。确定要登出吗？</string>
     <string name="module_upload_identity_cooldown">请 %1$d 秒后再试</string>
     <string name="module_upload_identity_level_blocked">先去酷安把等级提升到 Lv2 及以上，再回来验证</string>
     <string name="module_upload_identity_level_recheck">我已升级，重新验证</string>

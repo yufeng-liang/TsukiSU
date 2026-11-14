@@ -189,6 +189,28 @@ fun ModuleUploadScreen() {
         }
     }
 
+    // 登出会清掉本机已验证的身份，下次上传要重新走一遍酷安签名验证；
+    // 误触代价不小，所以和清理留存包一样先弹一次确认。
+    val signingOut = remember { mutableStateOf(false) }
+    val signOut: () -> Unit = {
+        if (!signingOut.value) {
+            signingOut.value = true
+            scope.launch {
+                try {
+                    val result = confirmDialog.awaitConfirm(
+                        title = context.getString(R.string.module_upload_signout_confirm_title),
+                        content = context.getString(R.string.module_upload_signout_confirm_body),
+                        confirm = context.getString(R.string.module_upload_signout_confirm_title),
+                        dismiss = context.getString(R.string.cancel),
+                    )
+                    if (result == ConfirmResult.Confirmed) viewModel.signOut()
+                } finally {
+                    signingOut.value = false
+                }
+            }
+        }
+    }
+
     when (step) {
         UploadStep.IDENTITY -> when (uiMode) {
             UiMode.Miuix -> ModuleUploadIdentityMiuix(
@@ -261,7 +283,7 @@ fun ModuleUploadScreen() {
                 onBack = viewModel::backToList,
                 onRefresh = viewModel::refreshMine,
                 onPickForMine = pickForMine,
-                onSignOut = viewModel::signOut,
+                onSignOut = signOut,
                 progress = listState.progress,
                 progressLoading = listState.progressLoading,
                 progressError = listState.progressError,
@@ -278,7 +300,7 @@ fun ModuleUploadScreen() {
                 onBack = viewModel::backToList,
                 onRefresh = viewModel::refreshMine,
                 onPickForMine = pickForMine,
-                onSignOut = viewModel::signOut,
+                onSignOut = signOut,
                 progress = listState.progress,
                 progressLoading = listState.progressLoading,
                 progressError = listState.progressError,
@@ -306,7 +328,7 @@ fun ModuleUploadScreen() {
                 onRetryUid = viewModel::retryUidLookup,
                 onSelectItem = viewModel::selectItem,
                 onPickMore = pickMany,
-                onSignOut = viewModel::signOut,
+                onSignOut = signOut,
                 onSubmit = { viewModel.submit(turnstile) },
                 onCancelSubmit = { viewModel.cancelSubmit() },
                 onOpenStore = { navigator.push(Route.ModuleRepo(COOLAPK_COMMUNITY_SOURCE_ID)) },
@@ -327,7 +349,7 @@ fun ModuleUploadScreen() {
                 onRetryUid = viewModel::retryUidLookup,
                 onSelectItem = viewModel::selectItem,
                 onPickMore = pickMany,
-                onSignOut = viewModel::signOut,
+                onSignOut = signOut,
                 onSubmit = { viewModel.submit(turnstile) },
                 onCancelSubmit = { viewModel.cancelSubmit() },
                 onOpenStore = { navigator.push(Route.ModuleRepo(COOLAPK_COMMUNITY_SOURCE_ID)) },

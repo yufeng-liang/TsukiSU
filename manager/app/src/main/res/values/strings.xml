@@ -1224,7 +1224,7 @@
     <string name="susfs_android_data_path_label">Android Data Path</string>
     <string name="susfs_sdcard_path_label">SD Card Path</string>
     <string name="module_upload_title">Module upload</string>
-    <string name="module_upload_entry_title">Module upload &amp; share</string>
+    <string name="module_upload_entry_title">Module submissions</string>
     <string name="module_upload_entry_summary">Upload good modules to help build the module ecosystem</string>
     <string name="module_upload_after_install_title">Prompt to share after install</string>
     <string name="module_upload_after_install_summary">After installing a local module, offer to share modules that are not listed yet</string>
@@ -1639,12 +1639,14 @@
     <string name="module_upload_identity_commit_pending">Preparing your verification string…</string>
     <string name="module_upload_identity_commit_copy">Copy</string>
     <string name="module_upload_identity_commit_copied">Copied</string>
-    <string name="module_upload_identity_commit_hint">Open Coolapk (Me &gt; Edit profile &gt; Signature), paste this string there and save. This step proves the UID really is yours; once verified you can switch back to your own signature at any time.</string>
+    <string name="module_upload_identity_commit_hint">Open Coolapk (Profile &gt; Edit profile &gt; Signature), paste this string there and save. This step proves the UID really is yours; once verified you can switch back to your own signature at any time.</string>
     <string name="module_upload_identity_title">Verify your identity</string>
     <string name="module_upload_identity_uid_found">Found</string>
     <string name="module_upload_identity_why_title">Why we ask for these?</string>
     <string name="module_upload_identity_why_body">Uploads are public, and every module you upload runs with root privileges on the devices of everyone who installs it. That is why we need to know who uploaded each one: your Coolapk UID is recorded so a module can always be traced back to its uploader, and we require a Coolapk account of level Lv2 or above to deter casual abuse (the signature check only proves that the UID you entered is really yours).</string>
-    <string name="module_upload_identity_level">Coolapk level Lv2 or above required.</string>
+    <string name="module_upload_identity_level">Make sure your Coolapk level is Lv2 or above.</string>
+    <string name="module_upload_signout_confirm_title">Sign out</string>
+    <string name="module_upload_signout_confirm_body">After signing out you will need to complete the Coolapk signature verification again before uploading.</string>
     <string name="module_upload_identity_cooldown">Try again in %1$ds.</string>
     <string name="module_upload_identity_level_blocked">Raise your Coolapk level to Lv2 or above, then verify again.</string>
     <string name="module_upload_identity_level_recheck">I\'ve upgraded — verify again</string>

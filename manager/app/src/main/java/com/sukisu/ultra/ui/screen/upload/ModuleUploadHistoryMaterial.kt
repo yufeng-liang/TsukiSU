@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -138,7 +139,13 @@ fun ModuleUploadHistoryMaterial(
                 navigationIcon = { TopBarBackButton(onClick = onBack) },
                 actions = {
                     // 换账号只能在这里：身份页核验过就不出现了，退出是唯一回头路。
-                    TextButton(onClick = onSignOut) {
+                    // 登出清身份、代价不小：红字警示，别让它看起来像普通操作。
+                    TextButton(
+                        onClick = onSignOut,
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) {
                         Text(stringResource(R.string.module_upload_session_signout))
                     }
                 },

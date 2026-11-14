@@ -192,7 +192,7 @@ fun ModuleUploadIdentityMaterial(
                                     .padding(start = 8.dp),
                             )
                         }
-                        // 头像贴在输入框右侧、勾和「已找到」压在头像下面：验证成功
+                        // 头像贴在输入框右侧、「✓ 已找到」悬在头像上方：验证成功
                         // 不再往下多长一行，下面几张卡不会因为这一行冒出来而整体上跳。
                         val verified = state.uidState as? CoolapkUidState.Verified
                         Row(
@@ -213,6 +213,7 @@ fun ModuleUploadIdentityMaterial(
                                 UidFoundBadgeMaterial(
                                     avatarUrl = verified.avatar
                                         .ifBlank { state.session?.avatar.orEmpty() },
+                                    nickname = verified.nickname,
                                 )
                             }
                         }
@@ -536,19 +537,10 @@ private fun PledgeLine(text: String) {
  * 不再画成输入框下面的一整行 —— 那一行一出现就把下面几张卡整体往下推。
  */
 @Composable
-private fun UidFoundBadgeMaterial(avatarUrl: String) {
+private fun UidFoundBadgeMaterial(avatarUrl: String, nickname: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        VerifiedAvatar(
-            avatarUrl = avatarUrl,
-            tint = MaterialTheme.colorScheme.primary,
-            placeholder = MaterialTheme.colorScheme.surfaceContainerHighest,
-            avatarSize = 36.dp,
-            showMark = false,
-        )
-        Row(
-            modifier = Modifier.padding(top = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        // 「✓ 已找到」放头像上方先报状态，头像+昵称压轴：视线从确认到看人是自上而下。
+        Row(verticalAlignment = Alignment.CenterVertically) {
             VerifiedMark(tint = MaterialTheme.colorScheme.primary, size = 12.dp)
             Text(
                 modifier = Modifier.padding(start = 3.dp),
@@ -557,6 +549,23 @@ private fun UidFoundBadgeMaterial(avatarUrl: String) {
                 color = MaterialTheme.colorScheme.primary,
             )
         }
+        VerifiedAvatar(
+            modifier = Modifier.padding(top = 2.dp),
+            avatarUrl = avatarUrl,
+            tint = MaterialTheme.colorScheme.primary,
+            placeholder = MaterialTheme.colorScheme.surfaceContainerHighest,
+            avatarSize = 36.dp,
+            showMark = false,
+        )
+        Text(
+            modifier = Modifier.padding(top = 2.dp),
+            text = nickname,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

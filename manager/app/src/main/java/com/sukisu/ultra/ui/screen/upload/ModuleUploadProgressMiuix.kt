@@ -46,9 +46,13 @@ import com.sukisu.ultra.ui.util.ProgressNodeState
 import com.sukisu.ultra.ui.util.ProgressStage
 import com.sukisu.ultra.ui.util.ProgressVersion
 import com.sukisu.ultra.ui.util.allowsStoreLink
+import com.sukisu.ultra.ui.util.formatProgressTime
+import com.sukisu.ultra.ui.util.nodeTimeAt
 import com.sukisu.ultra.ui.util.nodeStateOf
+import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.ButtonDefaults as MiuixButtonDefaults
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 
@@ -134,6 +138,17 @@ internal fun UploadProgressStepsMiuix(
                     color = contentColor,
                     modifier = Modifier.padding(top = 1.dp, bottom = if (isLast) 0.dp else 10.dp),
                 )
+                // 节点时间靠右：worker 没给的格子不画，宁缺勿凑。
+                val timeText = formatProgressTime(item.nodeTimeAt(index) ?: 0L)
+                if (timeText != null) {
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        text = timeText,
+                        fontSize = 12.sp,
+                        color = contentColor,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
             }
         }
 
@@ -171,19 +186,22 @@ internal fun UploadProgressActionsMiuix(
 ) {
     val prUrl = item?.prUrl
     if (prUrl == null && !item.allowsStoreLink()) return
+    // 两个动作同一行并排、等宽铺满：一行读完「去哪看」，比竖排两行省一半高度。
     Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (prUrl != null) {
             TextButton(
+                modifier = Modifier.weight(1f),
                 text = stringResource(R.string.module_upload_open_pr),
                 onClick = { onOpenPr(prUrl) },
             )
         }
         if (item.allowsStoreLink()) {
             TextButton(
+                modifier = Modifier.weight(1f),
                 text = stringResource(R.string.module_upload_progress_open_store),
                 onClick = onOpenStore,
             )
@@ -247,29 +265,66 @@ internal fun UploadProgressDialogMiuix(
                     )
                 }
                 versions.forEach { version ->
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = stringResource(
-                                R.string.module_upload_progress_version,
-                                version.id,
-                                version.versionCode.toInt(),
-                            ),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight(550),
-                            color = colorScheme.onSurfaceVariantSummary,
-                        )
-                        UploadProgressStepsMiuix(item = version.progress)
-                        UploadProgressActionsMiuix(
-                            item = version.progress,
-                            onOpenPr = onOpenPr,
-                            onOpenStore = onOpenStore,
-                        )
+                    // 每版一张卡：版本标题带圆点强调，进度与动作收进同一块，几版并排也不糊。
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                // 圆点加 4dp 首缩：中心落在步骤条圆点列的中轴（列宽 14dp 的中点）上。
+                                Box(
+                                    modifier = Modifier
+                                        .padding(start = 4.dp)
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(colorScheme.primary),
+                                )
+                                Text(
+                                    modifier = Modifier.padding(start = 7.dp),
+                                    text = stringResource(
+                                        R.string.module_upload_progress_version,
+                                        version.id,
+                                        version.versionCode.toInt(),
+                                    ),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight(550),
+                                    color = colorScheme.onSurface,
+                                )
+                            }
+                            UploadProgressStepsMiuix(item = version.progress)
+                        }
                     }
                 }
-                TextButton(
-                    text = stringResource(R.string.close),
-                    onClick = onDismiss,
-                )
+                // 收录动作与关闭同一行：PR / 商店按钮取最近一版（onOpenStore 本来就不带版本）。
+                val actions = versions.firstOrNull()?.progress
+                val prUrl = actions?.prUrl
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (prUrl != null) {
+                        TextButton(
+                            modifier = Modifier.weight(1f),
+                            text = stringResource(R.string.module_upload_open_pr),
+                            onClick = { onOpenPr(prUrl) },
+                        )
+                    }
+                    if (actions.allowsStoreLink()) {
+                        TextButton(
+                            modifier = Modifier.weight(1f),
+                            text = stringResource(R.string.module_upload_progress_open_store),
+                            onClick = onOpenStore,
+                        )
+                    }
+                    TextButton(
+                        modifier = Modifier.weight(1f),
+                        colors = MiuixButtonDefaults.textButtonColorsPrimary(),
+                        text = stringResource(R.string.close),
+                        onClick = onDismiss,
+                    )
+                }
             }
         },
     )

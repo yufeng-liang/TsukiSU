@@ -27,6 +27,9 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
@@ -58,6 +61,23 @@ enum class ProgressStage {
 }
 
 /**
+ * 进度各节点的达成时间（毫秒时间戳）；worker 拿不到的阶段就是 null —— 界面对 null
+ * 一律不画时间，而不是拿别的字段凑数。
+ */
+data class ProgressTimeline(
+    /** 提交进台账的时间（必有；0 = 老台账没记，当「未知」）。 */
+    val submittedAt: Long,
+    /** 进入审核（PR 创建）时间。 */
+    val reviewedAt: Long?,
+    /** PR 合并时间。 */
+    val mergedAt: Long?,
+    /** 被拒时间。 */
+    val rejectedAt: Long?,
+    /** 上架（索引发布）时间。 */
+    val publishedAt: Long?,
+)
+
+/**
  * 一条投稿的进度。
  *
  * [versionCode] 是 **Int**（与 worker 契约一致），与索引/投稿记录里的 `Long` 比较时
@@ -76,6 +96,8 @@ data class ProgressItem(
      * 此时**不许**给 PR 链接（那一条根本不是这次查出来的结论），也不许说「已收录」。
      */
     val unverified: Boolean = false,
+    /** 各节点达成时间；旧 worker 应答没有这个字段时为 null，界面不画时间。 */
+    val timeline: ProgressTimeline? = null,
 )
 
 /** 拉进度这一趟的结果；失败只带一句话，不区分网络/协议 —— 界面对用户的说法是同一个。 */
@@ -172,6 +194,31 @@ fun ProgressItem?.nodeStateOf(index: Int): ProgressNodeState {
 }
 
 /**
+ * 第 [index] 格的达成时间；worker 没给（旧应答/没查到/还没走到）就是 null，界面不画。
+ *
+ * 被拒时「待审核」那格显示的是被拒时间（rejectedAt），其余照各阶段自己的时间。
+ */
+fun ProgressItem?.nodeTimeAt(index: Int): Long? {
+    val timeline = this?.timeline ?: return null
+    return when (index) {
+        0 -> timeline.submittedAt
+        1 -> if (stage == ProgressStage.REJECTED) timeline.rejectedAt else timeline.reviewedAt
+        2 -> timeline.mergedAt
+        3 -> timeline.publishedAt
+        else -> null
+    }?.takeIf { it > 0L }
+}
+
+/** 节点时间的显示格式：年内同屏不会跨年，MM-dd HH:mm 足够定位，也不挤步骤条。 */
+private val ProgressTimeFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+
+/** 把毫秒时间戳格式化成步骤条行尾的短时间；非正数返回 null（调用方不画）。 */
+fun formatProgressTime(ms: Long): String? {
+    if (ms <= 0L) return null
+    return ProgressTimeFormat.format(Date(ms))
+}
+
+/**
  * 进度弹层里的一行：某一版投稿 + 它此刻的进度（null = 这一次没查到）。
  *
  * 版本号与模块名来自 `/mine`（投稿记录），stage 来自 `/progress` —— 两个端点各答一半，
@@ -253,6 +300,16 @@ internal fun parseProgressBody(body: String?): ProgressOutcome {
         if (id.isEmpty()) continue
         val unverified = row.optBoolean("unverified", false)
         val prUrl = row.optString("prUrl").trim()
+        // timeline 是可选字段（旧 worker 应答没有）：缺了就整体为 null，界面不画时间。
+        val timeline = row.optJSONObject("timeline")?.let { t ->
+            ProgressTimeline(
+                submittedAt = t.optLong("submittedAt", 0L),
+                reviewedAt = t.optLong("reviewedAt", 0L).takeIf { it > 0L },
+                mergedAt = t.optLong("mergedAt", 0L).takeIf { it > 0L },
+                rejectedAt = t.optLong("rejectedAt", 0L).takeIf { it > 0L },
+                publishedAt = t.optLong("publishedAt", 0L).takeIf { it > 0L },
+            )
+        }
         items.add(
             ProgressItem(
                 id = id,
@@ -264,6 +321,7 @@ internal fun parseProgressBody(body: String?): ProgressOutcome {
                 reason = row.optString("reason").trim().takeIf { it.isNotEmpty() },
                 updatedAt = row.optLong("updatedAt", 0L),
                 unverified = unverified,
+                timeline = timeline,
             )
         )
     }

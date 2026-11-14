@@ -52,6 +52,7 @@ import com.sukisu.ultra.ui.util.ProgressItem
 import com.sukisu.ultra.ui.util.formatEpochTime
 import com.sukisu.ultra.ui.util.progressVersions
 import com.sukisu.ultra.ui.util.rememberBlurBackdrop
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Icon
@@ -142,9 +143,11 @@ fun ModuleUploadHistoryMiuix(
                     scrollBehavior = scrollBehavior,
                     actions = {
                         // 换账号只能在这里：身份页核验过就不出现了，退出是唯一回头路。
+                        // 登出清身份、代价不小：红字警示，别让它看起来像普通操作。
                         TextButton(
                             text = stringResource(R.string.module_upload_session_signout),
                             onClick = onSignOut,
+                            colors = ButtonDefaults.textButtonColors(textColor = colorScheme.error),
                         )
                     },
                     navigationIcon = {

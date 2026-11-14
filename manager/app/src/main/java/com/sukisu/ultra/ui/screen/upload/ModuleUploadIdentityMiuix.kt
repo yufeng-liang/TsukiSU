@@ -222,7 +222,7 @@ fun ModuleUploadIdentityMiuix(
                                     .padding(start = 8.dp),
                             )
                         }
-                        // 头像贴在输入框右侧、勾和「已找到」压在头像下面：验证成功
+                        // 头像贴在输入框右侧、「✓ 已找到」悬在头像上方：验证成功
                         // 不再往下多长一行，下面几张卡不会因为这一行冒出来而整体上跳。
                         val verified = state.uidState as? CoolapkUidState.Verified
                         Row(
@@ -244,6 +244,7 @@ fun ModuleUploadIdentityMiuix(
                                 UidFoundBadgeMiuix(
                                     avatarUrl = verified.avatar
                                         .ifBlank { state.session?.avatar.orEmpty() },
+                                    nickname = verified.nickname,
                                 )
                             }
                         }
@@ -594,19 +595,10 @@ private fun PledgeLineMiuix(text: String) {
  * 用户正在看「签名」那一行时页面会自己跳一下。
  */
 @Composable
-private fun UidFoundBadgeMiuix(avatarUrl: String) {
+private fun UidFoundBadgeMiuix(avatarUrl: String, nickname: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        VerifiedAvatar(
-            avatarUrl = avatarUrl,
-            tint = colorScheme.primary,
-            placeholder = colorScheme.surfaceContainer,
-            avatarSize = 36.dp,
-            showMark = false,
-        )
-        Row(
-            modifier = Modifier.padding(top = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        // 「✓ 已找到」放头像上方先报状态，头像+昵称压轴：视线从确认到看人是自上而下。
+        Row(verticalAlignment = Alignment.CenterVertically) {
             VerifiedMark(tint = colorScheme.primary, size = 12.dp)
             Text(
                 modifier = Modifier.padding(start = 3.dp),
@@ -615,6 +607,23 @@ private fun UidFoundBadgeMiuix(avatarUrl: String) {
                 color = colorScheme.primary,
             )
         }
+        VerifiedAvatar(
+            modifier = Modifier.padding(top = 2.dp),
+            avatarUrl = avatarUrl,
+            tint = colorScheme.primary,
+            placeholder = colorScheme.surfaceContainer,
+            avatarSize = 36.dp,
+            showMark = false,
+        )
+        Text(
+            modifier = Modifier.padding(top = 2.dp),
+            text = nickname,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = colorScheme.primary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

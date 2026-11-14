@@ -45,11 +45,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sukisu.ultra.R
+import com.sukisu.ultra.ui.component.material.TonalCard
 import com.sukisu.ultra.ui.util.ProgressItem
 import com.sukisu.ultra.ui.util.ProgressNodeState
 import com.sukisu.ultra.ui.util.ProgressStage
 import com.sukisu.ultra.ui.util.ProgressVersion
 import com.sukisu.ultra.ui.util.allowsStoreLink
+import com.sukisu.ultra.ui.util.formatProgressTime
+import com.sukisu.ultra.ui.util.nodeTimeAt
 import com.sukisu.ultra.ui.util.nodeStateOf
 
 /** 进度弹层的高度上限：四步 × 几版之后就该滚了，再高会把标题挤出屏幕。 */
@@ -138,6 +141,17 @@ internal fun UploadProgressStepsMaterial(
                     color = contentColor,
                     modifier = Modifier.padding(top = 1.dp, bottom = if (isLast) 0.dp else 10.dp),
                 )
+                // 节点时间靠右：worker 没给的格子不画，宁缺勿凑。
+                val timeText = formatProgressTime(item.nodeTimeAt(index) ?: 0L)
+                if (timeText != null) {
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        text = timeText,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = contentColor,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
             }
         }
 
@@ -180,18 +194,25 @@ internal fun UploadProgressActionsMaterial(
 ) {
     val prUrl = item?.prUrl
     if (prUrl == null && !item.allowsStoreLink()) return
+    // 两个动作同一行并排、等宽铺满：一行读完「去哪看」，比竖排两行省一半高度。
     Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (prUrl != null) {
-            TextButton(onClick = { onOpenPr(prUrl) }) {
+            TextButton(
+                modifier = Modifier.weight(1f),
+                onClick = { onOpenPr(prUrl) },
+            ) {
                 Text(stringResource(R.string.module_upload_open_pr))
             }
         }
         if (item.allowsStoreLink()) {
-            TextButton(onClick = onOpenStore) {
+            TextButton(
+                modifier = Modifier.weight(1f),
+                onClick = onOpenStore,
+            ) {
                 Text(stringResource(R.string.module_upload_progress_open_store))
             }
         }
@@ -218,59 +239,92 @@ internal fun UploadProgressDialogMaterial(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.module_upload_progress_title)) },
+        confirmButton = {},
+        // 关闭与「去商店看看」/「查看 PR」同一行：Actions 没按钮时关闭自动独占全宽。
         text = {
-            Column(
-                modifier = Modifier
-                    .heightIn(max = MaxProgressDialogHeight)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                if (loading) {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                }
-                if (error != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+            Column {
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = MaxProgressDialogHeight)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    if (loading) {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+                    if (error != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = error,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = onRetry) {
+                                Text(stringResource(R.string.module_upload_progress_retry))
+                            }
+                        }
+                    }
+                    if (versions.isEmpty() && !loading) {
                         Text(
-                            text = error,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.weight(1f),
+                            text = stringResource(R.string.module_upload_progress_unavailable),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        TextButton(onClick = onRetry) {
-                            Text(stringResource(R.string.module_upload_progress_retry))
+                    }
+                    versions.forEach { version ->
+                        // 每版一张卡：版本标题带圆点强调，进度收进同一块；动作统一挪到底部与关闭同行。
+                        TonalCard(modifier = Modifier.fillMaxWidth()) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    // 圆点加 4dp 首缩：中心落在步骤条圆点列的中轴（列宽 14dp 的中点）上。
+                                    Box(
+                                        modifier = Modifier
+                                            .padding(start = 4.dp)
+                                            .size(6.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.primary),
+                                    )
+                                    Text(
+                                        modifier = Modifier.padding(start = 7.dp),
+                                        text = stringResource(
+                                            R.string.module_upload_progress_version,
+                                            version.id,
+                                            version.versionCode.toInt(),
+                                        ),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                }
+                                UploadProgressStepsMaterial(item = version.progress)
+                            }
                         }
                     }
                 }
-                if (versions.isEmpty() && !loading) {
-                    Text(
-                        text = stringResource(R.string.module_upload_progress_unavailable),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                versions.forEach { version ->
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = stringResource(
-                                R.string.module_upload_progress_version,
-                                version.id,
-                                version.versionCode.toInt(),
-                            ),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        UploadProgressStepsMaterial(item = version.progress)
-                        UploadProgressActionsMaterial(
-                            item = version.progress,
-                            onOpenPr = onOpenPr,
-                            onOpenStore = onOpenStore,
-                        )
+                // 收录动作与关闭同一行：PR / 商店按钮取最近一版（onOpenStore 本来就不带版本）。
+                val actions = versions.firstOrNull()?.progress
+                val prUrl = actions?.prUrl
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (prUrl != null) {
+                        TextButton(onClick = { onOpenPr(prUrl) }) {
+                            Text(stringResource(R.string.module_upload_open_pr))
+                        }
                     }
+                    if (actions.allowsStoreLink()) {
+                        TextButton(onClick = onOpenStore) {
+                            Text(stringResource(R.string.module_upload_progress_open_store))
+                        }
+                    }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
         },
     )
 }
