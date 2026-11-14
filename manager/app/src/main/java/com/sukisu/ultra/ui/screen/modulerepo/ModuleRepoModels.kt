@@ -64,6 +64,8 @@ data class RepoModuleArg(
     val source: String = "",
     val uploader: String = "",
     val coolapkUid: String = "",
+    /** 社区热度：索引给的点赞数；0 表示索引没带这个键，或还没人点过。 */
+    val likes: Int = 0,
     val submittedAt: Long = 0L,
     /**
      * 作者本人主页（由上传者填写，未验证）；空表示没填或填得不合法。

@@ -79,6 +79,7 @@ fun ModuleRepoScreen(selectedSourceId: String? = null) {
                 source = module.source,
                 uploader = module.uploader,
                 coolapkUid = module.coolapkUid,
+                likes = module.likes,
                 submittedAt = module.submittedAt,
                 authorCoolapkUrl = module.authorCoolapkUrl,
                 authorGithubUrl = module.authorGithubUrl,

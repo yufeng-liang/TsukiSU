@@ -35,6 +35,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
@@ -131,6 +132,8 @@ fun ModuleUploadListMiuix(
     onOpenHistory: () -> Unit,
     /** 打开模块商店，并直接把筛选落到酷安社区模块。 */
     onOpenStore: () -> Unit,
+    /** 打开「我的评论」列表。 */
+    onOpenMyComments: () -> Unit = {},
 ) {
     val searchStatus = state.searchStatus
     val scrollBehavior = MiuixScrollBehavior()
@@ -225,6 +228,14 @@ fun ModuleUploadListMiuix(
                                 Icon(
                                     imageVector = MiuixIcons.Store,
                                     contentDescription = stringResource(R.string.module_upload_store_open),
+                                    tint = colorScheme.onSurface,
+                                )
+                            }
+                            // 「我的评论」入口：与商店并排，回答「我在商店里说过什么」。
+                            IconButton(onClick = onOpenMyComments) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Email,
+                                    contentDescription = stringResource(R.string.module_my_comments_open),
                                     tint = colorScheme.onSurface,
                                 )
                             }

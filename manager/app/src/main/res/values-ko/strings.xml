@@ -235,4 +235,39 @@
     <!-- 模块页悬浮按钮扇形菜单的两枚动作 -->
     <string name="module_fab_install">모듈 설치</string>
     <string name="module_fab_upload">모듈 투고</string>
+
+    <!-- 模块商店评论区 -->
+    <string name="module_comments_tab">댓글</string>
+    <string name="module_comments_title">댓글</string>
+    <string name="module_comments_empty">아직 댓글이 없습니다. 첫 댓글을 남겨보세요.</string>
+    <string name="module_comments_load_failed">댓글을 불러오지 못했습니다</string>
+    <string name="module_comments_load_more">더 보기</string>
+    <string name="module_comments_loading">불러오는 중…</string>
+    <string name="module_comments_hint">댓글을 입력하세요…</string>
+    <string name="module_comments_reply_hint">@%1$s에게 답글</string>
+    <string name="module_comments_send">보내기</string>
+    <string name="module_comments_reply">답글</string>
+    <string name="module_comments_delete">삭제</string>
+    <string name="module_comments_delete_confirm_title">이 댓글을 삭제할까요?</string>
+    <string name="module_comments_delete_confirm_body">아래 답글은 유지됩니다.</string>
+    <string name="module_comments_deleted">삭제됨</string>
+    <string name="module_comments_like">좋아요</string>
+    <string name="module_comments_unlike">좋아요 취소</string>
+    <string name="module_comments_error_sensitive">커뮤니티 규칙을 위반한 내용입니다</string>
+    <string name="module_comments_error_rate_limited">작업이 너무 잦습니다. 잠시 후 다시 시도해 주세요.</string>
+    <string name="module_comments_error_network">네트워크 오류입니다. 잠시 후 다시 시도해 주세요.</string>
+    <string name="module_comments_login_required">댓글과 좋아요는 업로드 페이지에서 본인 인증 후 사용할 수 있습니다.</string>
+    <string name="module_comments_go_verify">인증하러 가기</string>
+    <string name="module_comments_char_count">%1$d/%2$d</string>
+
+    <!-- 我的评论 -->
+    <string name="module_my_comments_open">내 댓글</string>
+    <string name="module_my_comments_title">내 댓글</string>
+    <string name="module_my_comments_empty">아직 모듈에 댓글을 남기지 않았습니다.</string>
+    <string name="module_my_comments_deleted">삭제됨</string>
+    <string name="module_my_comments_load_failed">댓글을 불러오지 못했습니다</string>
+    <string name="module_my_comments_need_verify">세션이 만료되었습니다. 내 댓글을 보려면 다시 인증해 주세요.</string>
+    <string name="module_my_comments_go_verify">인증하러 가기</string>
+    <string name="module_my_comments_load_more">더 보기</string>
+    <string name="module_my_comments_loading">불러오는 중…</string>
 </resources>

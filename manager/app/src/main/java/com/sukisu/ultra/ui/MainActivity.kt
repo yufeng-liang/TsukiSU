@@ -141,6 +141,7 @@ import com.sukisu.ultra.ui.screen.template.AppProfileTemplateScreen
 import com.sukisu.ultra.ui.screen.templateeditor.TemplateEditorScreen
 import com.sukisu.ultra.ui.screen.umountmanager.UmountManagerScreen
 import com.sukisu.ultra.ui.screen.upload.ModuleUploadScreen
+import com.sukisu.ultra.ui.screen.upload.MyCommentsScreen
 import com.sukisu.ultra.ui.theme.AiAssistantMaterialTheme
 import com.sukisu.ultra.ui.theme.KernelSUTheme
 import com.sukisu.ultra.ui.theme.LocalColorMode
@@ -547,6 +548,7 @@ class MainActivity : ComponentActivity() {
                                 entry<Route.Tool>(swipeDismiss = swipeDismiss)  { ToolsScreen() }
                                 entry<Route.Backup>(swipeDismiss = swipeDismiss)  { BackupScreen() }
                                 entry<Route.ModuleUpload>(swipeDismiss = swipeDismiss) { ModuleUploadScreen() }
+                                entry<Route.MyComments>(swipeDismiss = swipeDismiss) { MyCommentsScreen() }
                                 entry<Route.UmountManager>(swipeDismiss = swipeDismiss)  { UmountManagerScreen() }
                                 entry<Route.KernelModules>(swipeDismiss = swipeDismiss)  { KernelModulesScreen() }
                                 entry<Route.DynamicManagers>(swipeDismiss = swipeDismiss) { DynamicManagersScreen() }

@@ -219,4 +219,39 @@
     <!-- 模块页悬浮按钮扇形菜单的两枚动作 -->
     <string name="module_fab_install">モジュールをインストール</string>
     <string name="module_fab_upload">モジュールを投稿</string>
+
+    <!-- 模块商店评论区 -->
+    <string name="module_comments_tab">コメント</string>
+    <string name="module_comments_title">コメント</string>
+    <string name="module_comments_empty">まだコメントはありません。最初のコメントを書きましょう。</string>
+    <string name="module_comments_load_failed">コメントの読み込みに失敗しました</string>
+    <string name="module_comments_load_more">もっと見る</string>
+    <string name="module_comments_loading">読み込み中…</string>
+    <string name="module_comments_hint">何か書いてみよう…</string>
+    <string name="module_comments_reply_hint">@%1$s に返信</string>
+    <string name="module_comments_send">送信</string>
+    <string name="module_comments_reply">返信</string>
+    <string name="module_comments_delete">削除</string>
+    <string name="module_comments_delete_confirm_title">このコメントを削除しますか？</string>
+    <string name="module_comments_delete_confirm_body">下の返信は残ります。</string>
+    <string name="module_comments_deleted">削除済み</string>
+    <string name="module_comments_like">いいね</string>
+    <string name="module_comments_unlike">いいねを取り消す</string>
+    <string name="module_comments_error_sensitive">内容がコミュニティルールに違反しています</string>
+    <string name="module_comments_error_rate_limited">操作が多すぎます。しばらくしてからもう一度お試しください。</string>
+    <string name="module_comments_error_network">ネットワークエラーです。しばらくしてからもう一度お試しください。</string>
+    <string name="module_comments_login_required">コメントやいいねにはアップロードページで本人確認が必要です。</string>
+    <string name="module_comments_go_verify">本人確認へ</string>
+    <string name="module_comments_char_count">%1$d/%2$d</string>
+
+    <!-- 我的评论 -->
+    <string name="module_my_comments_open">自分のコメント</string>
+    <string name="module_my_comments_title">自分のコメント</string>
+    <string name="module_my_comments_empty">まだコメントしていません。</string>
+    <string name="module_my_comments_deleted">削除済み</string>
+    <string name="module_my_comments_load_failed">コメントの読み込みに失敗しました</string>
+    <string name="module_my_comments_need_verify">セッションが期限切れです。自分のコメントを見るには再度本人確認してください。</string>
+    <string name="module_my_comments_go_verify">本人確認へ</string>
+    <string name="module_my_comments_load_more">もっと見る</string>
+    <string name="module_my_comments_loading">読み込み中…</string>
 </resources>

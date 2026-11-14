@@ -79,6 +79,8 @@ data class RepoModule(
     val metamodule: Boolean,
     val zygisk: Boolean = false,
     val stargazerCount: Int,
+    /** 社区热度：索引给的点赞数；0 表示索引没带这个键，或还没人点过。 */
+    val likes: Int = 0,
     val updatedAt: String,
     val createdAt: String,
     val latestRelease: String,

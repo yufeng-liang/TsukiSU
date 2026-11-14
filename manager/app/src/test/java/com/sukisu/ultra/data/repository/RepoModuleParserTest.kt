@@ -20,6 +20,7 @@ class RepoModuleParserTest {
             "metamodule": false,
             "zygisk": true,
             "stargazerCount": 42,
+            "likes": 7,
             "updatedAt": "2025-06-01T00:00:00Z",
             "createdAt": "2024-01-01T00:00:00Z",
             "latestRelease": {
@@ -42,6 +43,7 @@ class RepoModuleParserTest {
               "name": "CustomPinyinDictionary for Gboard",
               "version": "v20260101",
               "versionCode": 20260101,
+              "likes": 3,
               "author": "wuhgit",
               "description": "Gboard custom pinyin dictionary",
               "support": "https://github.com/wuhgit/CustomPinyinDictionary/issues",
@@ -108,6 +110,7 @@ class RepoModuleParserTest {
         assertEquals("jijingg", module.authors)
         assertTrue(module.zygisk)
         assertEquals(42, module.stargazerCount)
+        assertEquals(7, module.likes)
         assertEquals("v2.2", module.latestRelease)
         assertEquals(202L, module.latestVersionCode)
         assertEquals("src1", module.sourceId)
@@ -149,6 +152,8 @@ class RepoModuleParserTest {
         // epoch seconds -> ISO-8601 UTC
         assertEquals("2025-12-31T23:19:52Z", dict.latestReleaseTime)
         assertEquals(dict.latestReleaseTime, mmrl.versions[0].time)
+        // 索引里的社区热度：酷安/MMRL 源没有 stars，likes 是唯一的热度键
+        assertEquals(3, dict.likes)
     }
 
     @Test
@@ -254,6 +259,7 @@ class RepoModuleParserTest {
                 "publishedAt": "2026-10-11T16:18:27Z"
               },
               "stars": 26,
+              "likes": 3,
               "starsRepository": "Eikeitsu/CertBridge",
               "detail": "api/v1/modules/CertBridge.json",
               "updatedAt": "2026-10-11T17:51:03.255Z"
@@ -299,6 +305,7 @@ class RepoModuleParserTest {
         assertEquals(50107L, cert.latestVersionCode)
         assertEquals("2026-10-11T16:18:27Z", cert.latestReleaseTime)
         assertEquals(26, cert.stargazerCount)
+        assertEquals(3, cert.likes)
         assertEquals("src1", cert.sourceId)
 
         // The index carries no download address: it is read per module, when one is opened.

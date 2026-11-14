@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.SearchOff
@@ -107,6 +108,8 @@ fun ModuleUploadListMaterial(
     onOpenHistory: () -> Unit,
     /** 打开模块商店，并直接把筛选落到酷安社区模块。 */
     onOpenStore: () -> Unit,
+    /** 打开「我的评论」列表。 */
+    onOpenMyComments: () -> Unit = {},
 ) {
     // 与模块页/仓库页同一套表达：标题随列表上滑收起，不再是钉住不动的小标题。
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -173,6 +176,13 @@ fun ModuleUploadListMaterial(
                         Icon(
                             imageVector = Icons.Outlined.Storefront,
                             contentDescription = stringResource(R.string.module_upload_store_open),
+                        )
+                    }
+                    // 「我的评论」入口：我在商店里发过什么、有没有被删，与上传记录分开。
+                    IconButton(onClick = onOpenMyComments) {
+                        Icon(
+                            imageVector = Icons.Outlined.Email,
+                            contentDescription = stringResource(R.string.module_my_comments_open),
                         )
                     }
                     // 刷新不再占顶栏位置：顶栏按钮要「点一下就走」，而刷新是「等一下再看」，

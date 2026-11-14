@@ -211,6 +211,11 @@ sealed interface Route : NavKey, Parcelable {
     @Serializable
     data object ModuleUpload : Route
 
+    /** 我的评论：跨模块列出我在模块商店发过的评论（含已删除占位）。 */
+    @Parcelize
+    @Serializable
+    data object MyComments : Route
+
     @Parcelize
     @Serializable
     data object UmountManager: Route

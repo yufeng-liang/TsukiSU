@@ -133,6 +133,31 @@ import com.sukisu.ultra.ui.util.formatFileSize
 import com.sukisu.ultra.ui.util.formatRepoTime
 import com.sukisu.ultra.ui.util.isDownloadAvailable
 import com.sukisu.ultra.ui.util.rememberContentReady
+import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sukisu.ultra.ui.screen.upload.VerifiedAvatar
+import com.sukisu.ultra.ui.component.dialog.ConfirmResult
+import com.sukisu.ultra.ui.navigation3.LocalNavigator
+import com.sukisu.ultra.ui.navigation3.Route
+import com.sukisu.ultra.ui.util.ModuleComments.CommentItem
+import com.sukisu.ultra.ui.util.ModuleComments
+import com.sukisu.ultra.ui.viewmodel.ModuleCommentsViewModel
 
 @SuppressLint("LocalContextGetResourceValueCall")
 @Composable
@@ -569,6 +594,24 @@ private fun RepoModuleList(
                                 )
                             }
                         }
+                        // 点赞数与星标并排：酷安社区条目没有星标，这颗爱心是它唯一的热度表达；
+                        // 0 时整块不画，与星标「索引没带就不显示」同一规则。
+                        if (module.likes > 0) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp)) {
+                                Icon(
+                                    imageVector = Icons.Rounded.FavoriteBorder,
+                                    contentDescription = "likes",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = module.likes.toString(),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(start = 2.dp)
+                                )
+                            }
+                        }
                         Spacer(Modifier.weight(1f))
                         if (latestReleaseTime.isNotEmpty()) {
                             Text(
@@ -898,20 +941,24 @@ fun ModuleRepoDetailScreenMaterial(
             isCoolapkModule && (coolapkMeta != null || module.repoEvidence.repoUrl.isNotEmpty()) -> listOf(
                 RepoDetailPageKind.RELEASES,
                 RepoDetailPageKind.INFO,
+                RepoDetailPageKind.COMMENTS,
             )
 
-            isCoolapkModule -> listOf(RepoDetailPageKind.RELEASES)
+            isCoolapkModule -> listOf(RepoDetailPageKind.RELEASES, RepoDetailPageKind.COMMENTS)
             else -> listOf(
                 RepoDetailPageKind.README,
                 RepoDetailPageKind.RELEASES,
                 RepoDetailPageKind.INFO,
+                RepoDetailPageKind.COMMENTS,
             )
         }
+        val tabComments = stringResource(R.string.module_comments_tab)
         val tabs = pages.map { kind ->
             when (kind) {
                 RepoDetailPageKind.README -> tabReadme
                 RepoDetailPageKind.RELEASES -> tabReleases
                 RepoDetailPageKind.INFO -> tabInfo
+                RepoDetailPageKind.COMMENTS -> tabComments
             }
         }
         val pagerState = rememberPagerState(initialPage = 0, pageCount = { tabs.size })
@@ -984,6 +1031,13 @@ fun ModuleRepoDetailScreenMaterial(
                             sourceUrl = state.sourceUrl
                         )
                     }
+
+                    RepoDetailPageKind.COMMENTS -> CommentsPage(
+                        moduleId = module.moduleId,
+                        initialLikeCount = module.likes,
+                        innerPadding = paddedInnerPadding,
+                        scrollBehavior = scrollBehavior,
+                    )
                 }
             }
             ExpressiveTabRow(
@@ -1002,7 +1056,7 @@ fun ModuleRepoDetailScreenMaterial(
 }
 
 /** 详情页的一页。酷安条目没有 README 页，页数与顺序都跟着来源变。 */
-private enum class RepoDetailPageKind { README, RELEASES, INFO }
+private enum class RepoDetailPageKind { README, RELEASES, INFO, COMMENTS }
 
 /**
  * 酷安条目的「信息」页：出处（帖子链接）、上传者（昵称，有 UID 时挂主页入口）、提交时间，
@@ -1664,5 +1718,385 @@ fun InfoPage(
             includeRepoUrl = module.repoEvidence.repoUrl != sourceUrl,
             onOpenUrl = { uriHandler.openUri(it) },
         )
+    }
+}
+
+/**
+ * 详情页的评论区（Material 皮肤）：列表 + 发布框，一页一个 [ModuleCommentsViewModel]。
+ *
+ * 数据面：顶级评论 newest first，翻页用游标；楼中楼直接挂在顶级项下面（B 站模式，
+ * 回复不再有回复，只有「@谁」）。回复目标只改占位文案，发送内容不带「@」——
+ * 服务端按 parent_id / reply_to_uid 归位。
+ *
+ * 未登录（没有有效会话）输入区换成引导卡：去上传页验证后回来才能发言与点赞。
+ * 401 同样落在这张卡上，验证完点「重试」即可，不用退出详情页。
+ */
+@Composable
+internal fun CommentsPage(
+    moduleId: String,
+    /** 索引带来的初始点赞数；进页面后以 VM 的状态为准。 */
+    initialLikeCount: Int,
+    innerPadding: PaddingValues,
+    scrollBehavior: TopAppBarScrollBehavior,
+) {
+    val viewModel: ModuleCommentsViewModel = viewModel(
+        key = moduleId,
+        initializer = { ModuleCommentsViewModel(moduleId, initialLikeCount) },
+    )
+    val state by viewModel.uiState.collectAsState()
+    val layoutDirection = LocalLayoutDirection.current
+    val navigator = LocalNavigator.current
+
+    var draft by remember { mutableStateOf("") }
+    var replyTarget by remember { mutableStateOf<CommentItem?>(null) }
+    var deleteTarget by remember { mutableStateOf<CommentItem?>(null) }
+    val confirmTitle = stringResource(R.string.module_comments_delete_confirm_title)
+    val confirmBody = stringResource(R.string.module_comments_delete_confirm_body)
+    val confirmDialog = rememberConfirmDialog()
+
+    // 删除走异步确认框：awaitConfirm 挂起等用户表态，确认后才真正调 VM。
+    LaunchedEffect(deleteTarget) {
+        if (deleteTarget != null) {
+            when (confirmDialog.awaitConfirm(confirmTitle, confirmBody)) {
+                ConfirmResult.Confirmed -> deleteTarget?.let { viewModel.delete(it.id) }
+                ConfirmResult.Canceled -> Unit
+            }
+            deleteTarget = null
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(scrollBehavior.nestedScrollConnection),
+    ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                top = innerPadding.calculateTopPadding() + 8.dp,
+                start = innerPadding.calculateStartPadding(layoutDirection) + 16.dp,
+                end = innerPadding.calculateEndPadding(layoutDirection) + 16.dp,
+                // 底部多留出发送条的高度：最后一条评论不能被输入框压住。
+                bottom = innerPadding.calculateBottomPadding() + 120.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            // 点赞行：进页面就能点，不用等评论加载完。
+            item(key = "like_row") {
+                TextButton(
+                    onClick = { viewModel.toggleLike(moduleId, !state.likedModuleIds.contains(moduleId)) },
+                    enabled = state.canInteract && !state.submitting,
+                ) {
+                    Icon(
+                        imageVector = if (state.likedModuleIds.contains(moduleId)) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                        contentDescription = stringResource(
+                            if (state.likedModuleIds.contains(moduleId)) R.string.module_comments_unlike
+                            else R.string.module_comments_like
+                        ),
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(text = state.likeCount.toString(), style = MaterialTheme.typography.labelLarge)
+                }
+            }
+
+            when {
+                state.loading && state.comments.isEmpty() -> {
+                    item(key = "loading") {
+                        Text(
+                            text = stringResource(R.string.module_comments_loading),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 24.dp),
+                        )
+                    }
+                }
+
+                state.loadFailed && state.comments.isEmpty() -> {
+                    item(key = "load_failed") {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = stringResource(R.string.module_comments_load_failed),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            TextButton(onClick = viewModel::refresh) {
+                                Text(stringResource(R.string.module_comments_load_more))
+                            }
+                        }
+                    }
+                }
+
+                state.needVerify -> {
+                    item(key = "need_verify") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 24.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.module_comments_login_required),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            TextButton(onClick = { navigator.push(Route.ModuleUpload) }) {
+                                Text(stringResource(R.string.module_comments_go_verify))
+                            }
+                        }
+                    }
+                }
+
+                else -> {
+                    if (state.comments.isEmpty()) {
+                        item(key = "empty") {
+                            Text(
+                                text = stringResource(R.string.module_comments_empty),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 24.dp),
+                            )
+                        }
+                    }
+                    itemsIndexed(
+                        items = state.comments,
+                        key = { _, c -> "comment_" + c.id },
+                        contentType = { _, _ -> "comment" },
+                    ) { _, comment ->
+                        CommentRowMaterial(
+                            comment = comment,
+                            isReply = false,
+                            isMine = comment.uid.isNotEmpty() && comment.uid == state.myUid,
+                            onReply = { target -> replyTarget = target },
+                            onDelete = { deleteTarget = it },
+                        )
+                        comment.replies.forEach { reply ->
+                            Box(modifier = Modifier.padding(start = 30.dp)) {
+                                CommentRowMaterial(
+                                    comment = reply,
+                                    isReply = true,
+                                    isMine = reply.uid.isNotEmpty() && reply.uid == state.myUid,
+                                    onReply = { target -> replyTarget = target },
+                                    onDelete = { deleteTarget = it },
+                                )
+                            }
+                        }
+                    }
+                    if (state.nextCursor.isNotEmpty()) {
+                        item(key = "load_more") {
+                            TextButton(onClick = viewModel::loadMore, enabled = !state.paging) {
+                                Text(
+                                    stringResource(
+                                        if (state.paging) R.string.module_comments_loading
+                                        else R.string.module_comments_load_more
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 发布条：钉在底部，回复目标变化时占位文案跟着换。
+        CommentsComposerMaterial(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth(),
+            draft = draft,
+            onDraftChange = { draft = it },
+            replyTarget = replyTarget,
+            onCancelReply = { replyTarget = null },
+            charLimit = ModuleComments.MAX_COMMENT_LENGTH,
+            submitting = state.submitting,
+            submitError = state.submitError,
+            canInteract = state.canInteract,
+            onSend = {
+                val target = replyTarget
+                viewModel.submit(
+                    content = draft,
+                    // 回复顶级评论：parent_id = 顶级 id；回复楼中楼：parent_id = 所属顶级 id（B 站模式）。
+                    parentId = target?.let { t ->
+                        state.comments.firstOrNull { it.id == t.id }?.id
+                            ?: state.comments.firstOrNull { top -> top.replies.any { it.id == t.id } }?.id
+                    },
+                    replyToUid = target?.uid,
+                ) { ok ->
+                    if (ok) {
+                        draft = ""
+                        replyTarget = null
+                    }
+                }
+            },
+            onGoVerify = { navigator.push(Route.ModuleUpload) },
+        )
+    }
+}
+
+/**
+ * 一条评论（或楼中楼里的一条回复）。
+ *
+ * 已删除的顶级评论（content 为空串）：正文换成「已删除」占位，回复保留——
+ * 服务端删顶级留回复的约定画在这里。
+ */
+@Composable
+private fun CommentRowMaterial(
+    comment: CommentItem,
+    isReply: Boolean,
+    isMine: Boolean,
+    onReply: (CommentItem) -> Unit,
+    onDelete: (CommentItem) -> Unit,
+) {
+    val deleted = comment.content.isEmpty()
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            VerifiedAvatar(
+                avatarUrl = comment.avatar,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                placeholder = MaterialTheme.colorScheme.surfaceContainerHighest,
+                avatarSize = if (isReply) 22.dp else 32.dp,
+                showMark = false,
+            )
+            Column {
+                Text(
+                    text = comment.nickname.ifBlank { comment.uid },
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = formatRepoTime(comment.createdAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = { onReply(comment) }) {
+                Text(stringResource(R.string.module_comments_reply))
+            }
+            if (isMine && !deleted) {
+                TextButton(onClick = { onDelete(comment) }) {
+                    Text(stringResource(R.string.module_comments_delete), color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+        if (deleted) {
+            Text(
+                text = stringResource(R.string.module_comments_deleted),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            val replyPrefix = if (isReply && comment.replyToNickname.isNotBlank()) {
+                "@" + comment.replyToNickname + " "
+            } else ""
+            Text(
+                text = replyPrefix + comment.content,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+/** 底部发布条（Material）：输入框 + 字数 + 发送；未登录时整条换成引导卡。 */
+@Composable
+private fun CommentsComposerMaterial(
+    modifier: Modifier = Modifier,
+    draft: String,
+    onDraftChange: (String) -> Unit,
+    replyTarget: CommentItem?,
+    onCancelReply: () -> Unit,
+    charLimit: Int,
+    submitting: Boolean,
+    submitError: String,
+    canInteract: Boolean,
+    onSend: () -> Unit,
+    onGoVerify: () -> Unit,
+) {
+    Surface(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 3.dp,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .imePadding()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            if (!canInteract) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = stringResource(R.string.module_comments_login_required),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = onGoVerify) {
+                        Text(stringResource(R.string.module_comments_go_verify))
+                    }
+                }
+                return@Column
+            }
+            replyTarget?.let { target ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(
+                            R.string.module_comments_reply_hint,
+                            target.nickname.ifBlank { target.uid },
+                        ),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = onCancelReply) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { value -> if (value.length <= charLimit) onDraftChange(value) },
+                    modifier = Modifier.weight(1f),
+                    label = {
+                        Text(
+                            text = replyTarget?.let {
+                                stringResource(R.string.module_comments_reply_hint, it.nickname.ifBlank { it.uid })
+                            } ?: stringResource(R.string.module_comments_hint),
+                        )
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { if (draft.isNotBlank() && !submitting) onSend() }),
+                )
+                TextButton(onClick = onSend, enabled = draft.isNotBlank() && !submitting) {
+                    Text(stringResource(R.string.module_comments_send))
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (submitError.isNotBlank()) {
+                    Text(
+                        text = submitError,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.weight(1f),
+                    )
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+                Text(
+                    text = stringResource(R.string.module_comments_char_count, draft.length, charLimit),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }

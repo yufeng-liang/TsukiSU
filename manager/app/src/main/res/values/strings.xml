@@ -2364,4 +2364,39 @@
     <!-- 模块页悬浮按钮扇形菜单的两枚动作 -->
     <string name="module_fab_install">Install module</string>
     <string name="module_fab_upload">Submit module</string>
+
+    <!-- 模块商店评论区 -->
+    <string name="module_comments_tab">Comments</string>
+    <string name="module_comments_title">Comments</string>
+    <string name="module_comments_empty">No comments yet. Say something first.</string>
+    <string name="module_comments_load_failed">Failed to load comments</string>
+    <string name="module_comments_load_more">Load more</string>
+    <string name="module_comments_loading">Loading…</string>
+    <string name="module_comments_hint">Say something…</string>
+    <string name="module_comments_reply_hint">Reply to @%1$s</string>
+    <string name="module_comments_send">Send</string>
+    <string name="module_comments_reply">Reply</string>
+    <string name="module_comments_delete">Delete</string>
+    <string name="module_comments_delete_confirm_title">Delete this comment?</string>
+    <string name="module_comments_delete_confirm_body">Replies under it will be kept.</string>
+    <string name="module_comments_deleted">Deleted</string>
+    <string name="module_comments_like">Like</string>
+    <string name="module_comments_unlike">Unlike</string>
+    <string name="module_comments_error_sensitive">Content violates the community rules</string>
+    <string name="module_comments_error_rate_limited">Too many comments. Try again later.</string>
+    <string name="module_comments_error_network">Network error. Try again later.</string>
+    <string name="module_comments_login_required">Verify your identity in the upload page to comment or like.</string>
+    <string name="module_comments_go_verify">Go verify</string>
+    <string name="module_comments_char_count">%1$d/%2$d</string>
+
+    <!-- 我的评论 -->
+    <string name="module_my_comments_open">My comments</string>
+    <string name="module_my_comments_title">My comments</string>
+    <string name="module_my_comments_empty">You have not commented on any module yet.</string>
+    <string name="module_my_comments_deleted">Deleted</string>
+    <string name="module_my_comments_load_failed">Failed to load comments</string>
+    <string name="module_my_comments_need_verify">Session expired. Verify your identity again to see your comments.</string>
+    <string name="module_my_comments_go_verify">Go verify</string>
+    <string name="module_my_comments_load_more">Load more</string>
+    <string name="module_my_comments_loading">Loading…</string>
 </resources>
