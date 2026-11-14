@@ -1444,8 +1444,16 @@ class ModuleUploadViewModel(
                 is SessionCheck.Valid -> {
                     // 服务端换了身份（同一张令牌绑的 uid 变了，理论上不会发生）：以服务端为准。
                     ModuleUploadPrefs.writeSession(result.session)
+                    // 头像/昵称同步进 uidState：顶栏「上传记录」按钮画的是 uidState 里的
+                    // 头像（见 ModuleUploadScreen 的 avatarUrl 推导），只写 session 的话，
+                    // 用户没进过表单时列表顶栏永远是历史图标，「我是谁」答不出来。
                     _formState.update {
-                        it.copy(session = result.session, sessionChecking = false)
+                        it.copy(
+                            session = result.session,
+                            sessionChecking = false,
+                            uid = result.session.uid,
+                            uidState = CoolapkUidState.Verified(result.session.nickname, result.session.avatar),
+                        )
                     }
                     // 令牌已经确认可用：身份页不该再挡在前面（进页面时若落在身份页，回列表）。
                     if (_step.value == UploadStep.IDENTITY) _step.value = UploadStep.LIST

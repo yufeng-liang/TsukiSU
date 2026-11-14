@@ -580,7 +580,9 @@ private fun CheckProgressMiuix(
         modifier = Modifier
             .fillMaxWidth()
             // 顶部节奏统一 12dp：与筛选行、挑包入口卡同一口径。
-            .padding(top = 12.dp),
+            // 左缘与分组标题（SectionHeader/SmallTitle 的 16dp 首缩）对齐：同一页两个
+            // 「小字说明」落同一条竖线，不再一边贴卡边、一边缩进。
+            .padding(top = 12.dp, start = 16.dp),
         text = when {
             checking -> stringResource(R.string.module_upload_checking)
             fromCache -> stringResource(

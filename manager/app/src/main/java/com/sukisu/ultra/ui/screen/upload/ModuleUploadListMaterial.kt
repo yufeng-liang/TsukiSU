@@ -760,7 +760,7 @@ private fun CheckProgressMaterial(
     Text(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 12.dp),
+            .padding(top = 12.dp, start = 16.dp),
         text = when {
             checking -> stringResource(R.string.module_upload_checking)
             fromCache -> stringResource(
