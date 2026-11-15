@@ -243,6 +243,7 @@
     <string name="module_comments_login_required">コメントやいいねにはアップロードページで本人確認が必要です。</string>
     <string name="module_comments_go_verify">本人確認へ</string>
     <string name="module_comments_char_count">%1$d/%2$d</string>
+    <string name="module_comments_count">コメント %1$d件</string>
 
     <!-- 我的评论 -->
     <string name="module_my_comments_open">自分のコメント</string>

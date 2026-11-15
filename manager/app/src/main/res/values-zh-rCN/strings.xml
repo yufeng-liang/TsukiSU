@@ -2380,6 +2380,7 @@
     <string name="module_comments_login_required">到上传页完成身份验证后才能评论与点赞。</string>
     <string name="module_comments_go_verify">去验证</string>
     <string name="module_comments_char_count">%1$d/%2$d</string>
+    <string name="module_comments_count">%1$d 条评论</string>
 
     <!-- 我的评论 -->
     <string name="module_my_comments_open">我的评论</string>

@@ -135,6 +135,13 @@ import com.sukisu.ultra.ui.screen.upload.VerifiedAvatar
 import com.sukisu.ultra.ui.util.ModuleComments.CommentItem
 import com.sukisu.ultra.ui.util.ModuleComments
 import com.sukisu.ultra.ui.viewmodel.ModuleCommentsViewModel
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Send
+import androidx.compose.ui.graphics.vector.ImageVector
+import top.yukonga.miuix.kmp.basic.TextField
 import androidx.compose.ui.text.input.ImeAction
 import top.yukonga.miuix.kmp.basic.Button as MiuixButton
 import top.yukonga.miuix.kmp.basic.ButtonDefaults as MiuixButtonDefaults
@@ -2221,81 +2228,85 @@ private fun CommentsPageMiuix(
             ),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            // 点赞行：进页面就能点，不用等评论加载完。
-            item(key = "like_row") {
-                TextButton(
-                    onClick = { viewModel.toggleLike(moduleId, !state.likedModuleIds.contains(moduleId)) },
-                    enabled = state.canInteract && !state.submitting,
-                ) {
-                    Icon(
-                        imageVector = if (state.likedModuleIds.contains(moduleId)) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                        contentDescription = stringResource(
-                            if (state.likedModuleIds.contains(moduleId)) R.string.module_comments_unlike
-                            else R.string.module_comments_like
-                        ),
-                        modifier = Modifier.size(16.dp),
-                        tint = colorScheme.primary,
+            // 头部汇总条：左侧「N 条评论」，右侧点赞胶囊——点赞不再是孤零零一行。
+            item(key = "header") {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = stringResource(R.string.module_comments_count, state.comments.size),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
                     )
-                    Spacer(Modifier.width(6.dp))
-                    Text(text = state.likeCount.toString(), fontSize = 14.sp)
+                    val liked = state.likedModuleIds.contains(moduleId)
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(if (liked) colorScheme.primary else colorScheme.surfaceContainerHigh)
+                            .clickable(enabled = state.canInteract && !state.submitting) {
+                                viewModel.toggleLike(moduleId, !liked)
+                            }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(
+                                imageVector = if (liked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                                contentDescription = stringResource(
+                                    if (liked) R.string.module_comments_unlike else R.string.module_comments_like
+                                ),
+                                modifier = Modifier.size(16.dp),
+                                tint = if (liked) Color.White else colorScheme.onSurfaceVariantSummary,
+                            )
+                            Text(
+                                text = state.likeCount.toString(),
+                                fontSize = 13.sp,
+                                color = if (liked) Color.White else colorScheme.onSurface,
+                            )
+                        }
+                    }
                 }
             }
 
             when {
                 state.loading && state.comments.isEmpty() -> {
                     item(key = "loading") {
-                        Text(
-                            text = stringResource(R.string.module_comments_loading),
-                            fontSize = 14.sp,
-                            color = colorScheme.onSurfaceVariantSummary,
-                            modifier = Modifier.padding(vertical = 24.dp),
-                        )
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            CircularProgressIndicator(progress = null, size = 24.dp, strokeWidth = 3.dp)
+                        }
                     }
                 }
 
                 state.loadFailed && state.comments.isEmpty() -> {
                     item(key = "load_failed") {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(
-                                text = stringResource(R.string.module_comments_load_failed),
-                                fontSize = 14.sp,
-                                color = colorScheme.onSurfaceVariantSummary,
-                            )
-                            TextButton(onClick = viewModel::refresh) {
-                                Text(stringResource(R.string.module_comments_load_more))
-                            }
-                        }
+                        CommentsStateCardMiuix(
+                            icon = Icons.Rounded.ErrorOutline,
+                            message = stringResource(R.string.module_comments_load_failed),
+                            actionText = stringResource(R.string.network_retry),
+                            onAction = viewModel::refresh,
+                        )
                     }
                 }
 
                 state.needVerify -> {
                     item(key = "need_verify") {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 24.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(
-                                text = stringResource(R.string.module_comments_login_required),
-                                fontSize = 14.sp,
-                                color = colorScheme.onSurfaceVariantSummary,
-                            )
-                            TextButton(onClick = { navigator.push(Route.ModuleUpload) }) {
-                                Text(stringResource(R.string.module_comments_go_verify))
-                            }
-                        }
+                        CommentsStateCardMiuix(
+                            icon = Icons.Rounded.Info,
+                            message = stringResource(R.string.module_comments_login_required),
+                            actionText = stringResource(R.string.module_comments_go_verify),
+                            onAction = { navigator.push(Route.ModuleUpload) },
+                        )
                     }
                 }
 
                 else -> {
                     if (state.comments.isEmpty()) {
                         item(key = "empty") {
-                            Text(
-                                text = stringResource(R.string.module_comments_empty),
-                                fontSize = 14.sp,
-                                color = colorScheme.onSurfaceVariantSummary,
-                                modifier = Modifier.padding(vertical = 24.dp),
+                            CommentsStateCardMiuix(
+                                icon = Icons.AutoMirrored.Outlined.Chat,
+                                message = stringResource(R.string.module_comments_empty),
                             )
                         }
                     }
@@ -2304,6 +2315,7 @@ private fun CommentsPageMiuix(
                         key = { _, c -> "comment_" + c.id },
                         contentType = { _, _ -> "comment" },
                     ) { _, comment ->
+                        // 楼中楼用左侧引导线挂在同一张卡里，缩进关系一眼可见。
                         AppCard(modifier = Modifier.fillMaxWidth()) {
                             CommentRowMiuix(
                                 comment = comment,
@@ -2312,28 +2324,47 @@ private fun CommentsPageMiuix(
                                 onReply = { target -> replyTarget = target },
                                 onDelete = { deleteTarget = it },
                             )
-                            comment.replies.forEach { reply ->
-                                Box(modifier = Modifier.padding(start = 30.dp, top = 8.dp)) {
-                                    CommentRowMiuix(
-                                        comment = reply,
-                                        isReply = true,
-                                        isMine = reply.uid.isNotEmpty() && reply.uid == state.myUid,
-                                        onReply = { target -> replyTarget = target },
-                                        onDelete = { deleteTarget = it },
+                            if (comment.replies.isNotEmpty()) {
+                                Row(modifier = Modifier.padding(top = 10.dp).height(IntrinsicSize.Min)) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(2.dp)
+                                            .fillMaxHeight()
+                                            .background(colorScheme.outline, RoundedCornerShape(1.dp)),
                                     )
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                    ) {
+                                        comment.replies.forEach { reply ->
+                                            CommentRowMiuix(
+                                                comment = reply,
+                                                isReply = true,
+                                                isMine = reply.uid.isNotEmpty() && reply.uid == state.myUid,
+                                                onReply = { target -> replyTarget = target },
+                                                onDelete = { deleteTarget = it },
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                     if (state.nextCursor.isNotEmpty()) {
                         item(key = "load_more") {
-                            TextButton(onClick = viewModel::loadMore, enabled = !state.paging) {
-                                Text(
-                                    stringResource(
-                                        if (state.paging) R.string.module_comments_loading
-                                        else R.string.module_comments_load_more
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (state.paging) {
+                                    CircularProgressIndicator(progress = null, size = 22.dp, strokeWidth = 2.dp)
+                                } else {
+                                    TextButton(
+                                        text = stringResource(R.string.module_comments_load_more),
+                                        onClick = viewModel::loadMore,
                                     )
-                                )
+                                }
                             }
                         }
                     }
@@ -2403,26 +2434,31 @@ private fun CommentRowMiuix(
                 showMark = false,
             )
             Column {
+                // 昵称次级色、时间更弱，把视觉重量留给正文。
                 Text(
                     text = comment.nickname.ifBlank { comment.uid },
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
-                    color = colorScheme.onSurface,
+                    color = colorScheme.onSurfaceVariantSummary,
                 )
                 Text(
                     text = formatRepoTime(comment.createdAt),
-                    fontSize = 12.sp,
-                    color = colorScheme.onSurfaceVariantSummary,
+                    fontSize = 11.sp,
+                    color = colorScheme.outline,
                 )
             }
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = { onReply(comment) }) {
-                Text(stringResource(R.string.module_comments_reply), fontSize = 13.sp)
-            }
+            CommentActionTextMiuix(
+                text = stringResource(R.string.module_comments_reply),
+                color = colorScheme.primary,
+                onClick = { onReply(comment) },
+            )
             if (isMine && !deleted) {
-                TextButton(onClick = { onDelete(comment) }) {
-                    Text(stringResource(R.string.module_comments_delete), fontSize = 13.sp, color = colorScheme.error)
-                }
+                CommentActionTextMiuix(
+                    text = stringResource(R.string.module_comments_delete),
+                    color = colorScheme.error,
+                    onClick = { onDelete(comment) },
+                )
             }
         }
         if (deleted) {
@@ -2444,7 +2480,7 @@ private fun CommentRowMiuix(
     }
 }
 
-/** 底部发布条（Miuix）：输入框 + 字数 + 发送；未登录时整条换成引导卡。 */
+/** 底部发布条（Miuix）：胶囊输入框 + 主色圆形发送钮 + 右下角字数；未登录时整条换成引导行。 */
 @Composable
 private fun CommentsComposerMiuix(
     modifier: Modifier = Modifier,
@@ -2459,18 +2495,15 @@ private fun CommentsComposerMiuix(
     onSend: () -> Unit,
     onGoVerify: () -> Unit,
 ) {
-    Surface(
-        modifier = modifier,
-        color = colorScheme.surface,
-        tonalElevation = 3.dp,
-    ) {
+    // 全 Miuix 组件与配色：MD3 兜底主题会带出默认紫描边，这里一根都不用。
+    Box(modifier = modifier.background(colorScheme.surfaceContainer)) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .imePadding()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (!canInteract) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2480,46 +2513,62 @@ private fun CommentsComposerMiuix(
                         color = colorScheme.onSurfaceVariantSummary,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = onGoVerify) {
-                        Text(stringResource(R.string.module_comments_go_verify))
-                    }
+                    TextButton(
+                        text = stringResource(R.string.module_comments_go_verify),
+                        onClick = onGoVerify,
+                    )
                 }
                 return@Column
             }
             replyTarget?.let { target ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = stringResource(
                             R.string.module_comments_reply_hint,
                             target.nickname.ifBlank { target.uid },
                         ),
                         fontSize = 12.sp,
-                        color = colorScheme.onSurfaceVariantSummary,
+                        color = colorScheme.primary,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = onCancelReply) {
-                        Text(stringResource(R.string.cancel))
-                    }
+                    CommentActionTextMiuix(
+                        text = stringResource(R.string.cancel),
+                        color = colorScheme.onSurfaceVariantSummary,
+                        onClick = onCancelReply,
+                    )
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
+            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextField(
                     value = draft,
                     onValueChange = { value -> if (value.length <= charLimit) onDraftChange(value) },
                     modifier = Modifier.weight(1f),
-                    label = {
-                        Text(
-                            text = replyTarget?.let {
-                                stringResource(R.string.module_comments_reply_hint, it.nickname.ifBlank { it.uid })
-                            } ?: stringResource(R.string.module_comments_hint),
-                        )
-                    },
+                    label = replyTarget?.let {
+                        stringResource(R.string.module_comments_reply_hint, it.nickname.ifBlank { it.uid })
+                    } ?: stringResource(R.string.module_comments_hint),
+                    useLabelAsPlaceholder = true,
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { if (draft.isNotBlank() && !submitting) onSend() }),
                 )
-                TextButton(onClick = onSend, enabled = draft.isNotBlank() && !submitting) {
-                    Text(stringResource(R.string.module_comments_send))
+                val canSend = draft.isNotBlank() && !submitting
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(if (canSend) colorScheme.primary else colorScheme.surfaceContainerHigh)
+                        .clickable(enabled = canSend) { onSend() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (submitting) {
+                        CircularProgressIndicator(progress = null, size = 18.dp, strokeWidth = 2.dp)
+                    } else {
+                        Icon(
+                            imageVector = Icons.Rounded.Send,
+                            contentDescription = stringResource(R.string.module_comments_send),
+                            tint = if (canSend) Color.White else colorScheme.onSurfaceVariantSummary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2542,3 +2591,60 @@ private fun CommentsComposerMiuix(
         }
     }
 }
+
+/** 状态卡（Miuix）：大图标 + 文案 + 可选文字按钮，居中摆在一张 AppCard 里。 */
+@Composable
+private fun CommentsStateCardMiuix(
+    icon: ImageVector,
+    message: String,
+    actionText: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    AppCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(40.dp),
+                tint = colorScheme.onSurfaceVariantSummary,
+            )
+            Text(
+                text = message,
+                fontSize = 14.sp,
+                color = colorScheme.onSurfaceVariantSummary,
+            )
+            if (actionText != null && onAction != null) {
+                TextButton(
+                    text = actionText,
+                    onClick = onAction,
+                )
+            }
+        }
+    }
+}
+
+/** 紧凑文字操作（Miuix）：替代 TextButton，去掉最小高度让评论卡更紧。 */
+@Composable
+private fun CommentActionTextMiuix(
+    text: String,
+    color: Color,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    ) {
+        Text(
+            text = text,
+            fontSize = 13.sp,
+            color = color,
+        )
+    }
+}
+

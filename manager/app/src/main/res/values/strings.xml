@@ -2388,6 +2388,7 @@
     <string name="module_comments_login_required">Verify your identity in the upload page to comment or like.</string>
     <string name="module_comments_go_verify">Go verify</string>
     <string name="module_comments_char_count">%1$d/%2$d</string>
+    <string name="module_comments_count">%1$d comments</string>
 
     <!-- 我的评论 -->
     <string name="module_my_comments_open">My comments</string>

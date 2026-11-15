@@ -158,6 +158,20 @@ import com.sukisu.ultra.ui.navigation3.Route
 import com.sukisu.ultra.ui.util.ModuleComments.CommentItem
 import com.sukisu.ultra.ui.util.ModuleComments
 import com.sukisu.ultra.ui.viewmodel.ModuleCommentsViewModel
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Send
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 
 @SuppressLint("LocalContextGetResourceValueCall")
 @Composable
@@ -1781,81 +1795,86 @@ internal fun CommentsPage(
             ),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            // 点赞行：进页面就能点，不用等评论加载完。
-            item(key = "like_row") {
-                TextButton(
-                    onClick = { viewModel.toggleLike(moduleId, !state.likedModuleIds.contains(moduleId)) },
-                    enabled = state.canInteract && !state.submitting,
-                ) {
-                    Icon(
-                        imageVector = if (state.likedModuleIds.contains(moduleId)) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                        contentDescription = stringResource(
-                            if (state.likedModuleIds.contains(moduleId)) R.string.module_comments_unlike
-                            else R.string.module_comments_like
-                        ),
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.primary,
+            // 头部汇总条：左侧「N 条评论」，右侧点赞胶囊——点赞不再是孤零零一行。
+            item(key = "header") {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = stringResource(R.string.module_comments_count, state.comments.size),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
                     )
-                    Spacer(Modifier.width(6.dp))
-                    Text(text = state.likeCount.toString(), style = MaterialTheme.typography.labelLarge)
+                    val liked = state.likedModuleIds.contains(moduleId)
+                    Surface(
+                        onClick = { viewModel.toggleLike(moduleId, !liked) },
+                        enabled = state.canInteract && !state.submitting,
+                        shape = CircleShape,
+                        color = if (liked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Icon(
+                                imageVector = if (liked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                                contentDescription = stringResource(
+                                    if (liked) R.string.module_comments_unlike else R.string.module_comments_like
+                                ),
+                                modifier = Modifier.size(16.dp),
+                                tint = if (liked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = state.likeCount.toString(),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (liked) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
                 }
             }
 
             when {
                 state.loading && state.comments.isEmpty() -> {
                     item(key = "loading") {
-                        Text(
-                            text = stringResource(R.string.module_comments_loading),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 24.dp),
-                        )
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            LoadingIndicator()
+                        }
                     }
                 }
 
                 state.loadFailed && state.comments.isEmpty() -> {
                     item(key = "load_failed") {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(
-                                text = stringResource(R.string.module_comments_load_failed),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            TextButton(onClick = viewModel::refresh) {
-                                Text(stringResource(R.string.module_comments_load_more))
-                            }
-                        }
+                        CommentsStateCardMaterial(
+                            icon = Icons.Rounded.ErrorOutline,
+                            message = stringResource(R.string.module_comments_load_failed),
+                            actionText = stringResource(R.string.network_retry),
+                            onAction = viewModel::refresh,
+                        )
                     }
                 }
 
                 state.needVerify -> {
                     item(key = "need_verify") {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 24.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(
-                                text = stringResource(R.string.module_comments_login_required),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            TextButton(onClick = { navigator.push(Route.ModuleUpload) }) {
-                                Text(stringResource(R.string.module_comments_go_verify))
-                            }
-                        }
+                        CommentsStateCardMaterial(
+                            icon = Icons.Rounded.Info,
+                            message = stringResource(R.string.module_comments_login_required),
+                            actionText = stringResource(R.string.module_comments_go_verify),
+                            onAction = { navigator.push(Route.ModuleUpload) },
+                            filledAction = true,
+                        )
                     }
                 }
 
                 else -> {
                     if (state.comments.isEmpty()) {
                         item(key = "empty") {
-                            Text(
-                                text = stringResource(R.string.module_comments_empty),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(vertical = 24.dp),
+                            CommentsStateCardMaterial(
+                                icon = Icons.AutoMirrored.Outlined.Chat,
+                                message = stringResource(R.string.module_comments_empty),
                             )
                         }
                     }
@@ -1864,34 +1883,68 @@ internal fun CommentsPage(
                         key = { _, c -> "comment_" + c.id },
                         contentType = { _, _ -> "comment" },
                     ) { _, comment ->
-                        CommentRowMaterial(
-                            comment = comment,
-                            isReply = false,
-                            isMine = comment.uid.isNotEmpty() && comment.uid == state.myUid,
-                            onReply = { target -> replyTarget = target },
-                            onDelete = { deleteTarget = it },
-                        )
-                        comment.replies.forEach { reply ->
-                            Box(modifier = Modifier.padding(start = 30.dp)) {
+                        // 每条主评论收进一张圆角卡；楼中楼用左侧引导线挂在同一张卡里。
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                            ) {
                                 CommentRowMaterial(
-                                    comment = reply,
-                                    isReply = true,
-                                    isMine = reply.uid.isNotEmpty() && reply.uid == state.myUid,
+                                    comment = comment,
+                                    isReply = false,
+                                    isMine = comment.uid.isNotEmpty() && comment.uid == state.myUid,
                                     onReply = { target -> replyTarget = target },
                                     onDelete = { deleteTarget = it },
                                 )
+                                if (comment.replies.isNotEmpty()) {
+                                    Row(
+                                        modifier = Modifier.padding(top = 10.dp).height(IntrinsicSize.Min),
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .width(2.dp)
+                                                .fillMaxHeight()
+                                                .background(MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(1.dp)),
+                                        )
+                                        Spacer(Modifier.width(10.dp))
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                                        ) {
+                                            comment.replies.forEach { reply ->
+                                                CommentRowMaterial(
+                                                    comment = reply,
+                                                    isReply = true,
+                                                    isMine = reply.uid.isNotEmpty() && reply.uid == state.myUid,
+                                                    onReply = { target -> replyTarget = target },
+                                                    onDelete = { deleteTarget = it },
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                     if (state.nextCursor.isNotEmpty()) {
                         item(key = "load_more") {
-                            TextButton(onClick = viewModel::loadMore, enabled = !state.paging) {
-                                Text(
-                                    stringResource(
-                                        if (state.paging) R.string.module_comments_loading
-                                        else R.string.module_comments_load_more
-                                    )
-                                )
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (state.paging) {
+                                    CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                                } else {
+                                    TextButton(onClick = viewModel::loadMore) {
+                                        Text(
+                                            stringResource(R.string.module_comments_load_more),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -1962,25 +2015,30 @@ private fun CommentRowMaterial(
                 showMark = false,
             )
             Column {
+                // 昵称次级色、时间更弱，把视觉重量留给正文。
                 Text(
                     text = comment.nickname.ifBlank { comment.uid },
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
                     text = formatRepoTime(comment.createdAt),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.outline,
                 )
             }
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = { onReply(comment) }) {
-                Text(stringResource(R.string.module_comments_reply))
-            }
+            CommentActionTextMaterial(
+                text = stringResource(R.string.module_comments_reply),
+                color = MaterialTheme.colorScheme.primary,
+                onClick = { onReply(comment) },
+            )
             if (isMine && !deleted) {
-                TextButton(onClick = { onDelete(comment) }) {
-                    Text(stringResource(R.string.module_comments_delete), color = MaterialTheme.colorScheme.error)
-                }
+                CommentActionTextMaterial(
+                    text = stringResource(R.string.module_comments_delete),
+                    color = MaterialTheme.colorScheme.error,
+                    onClick = { onDelete(comment) },
+                )
             }
         }
         if (deleted) {
@@ -2002,7 +2060,7 @@ private fun CommentRowMaterial(
     }
 }
 
-/** 底部发布条（Material）：输入框 + 字数 + 发送；未登录时整条换成引导卡。 */
+/** 底部发布条（Material）：胶囊输入框 + 主色圆形发送钮 + 右下角字数；未登录时整条换成引导行。 */
 @Composable
 private fun CommentsComposerMaterial(
     modifier: Modifier = Modifier,
@@ -2028,7 +2086,7 @@ private fun CommentsComposerMaterial(
                 .navigationBarsPadding()
                 .imePadding()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (!canInteract) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2045,39 +2103,72 @@ private fun CommentsComposerMaterial(
                 return@Column
             }
             replyTarget?.let { target ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = stringResource(
                             R.string.module_comments_reply_hint,
                             target.nickname.ifBlank { target.uid },
                         ),
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = onCancelReply) {
-                        Text(stringResource(R.string.cancel))
-                    }
+                    CommentActionTextMaterial(
+                        text = stringResource(R.string.cancel),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        onClick = onCancelReply,
+                    )
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // 胶囊输入框：填充容器 + 主题色描边（聚焦时变主色），不再出现默认裸描边。
                 OutlinedTextField(
                     value = draft,
                     onValueChange = { value -> if (value.length <= charLimit) onDraftChange(value) },
                     modifier = Modifier.weight(1f),
-                    label = {
+                    placeholder = {
                         Text(
                             text = replyTarget?.let {
                                 stringResource(R.string.module_comments_reply_hint, it.nickname.ifBlank { it.uid })
                             } ?: stringResource(R.string.module_comments_hint),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     },
+                    shape = RoundedCornerShape(24.dp),
                     singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        cursorColor = MaterialTheme.colorScheme.primary,
+                    ),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = { if (draft.isNotBlank() && !submitting) onSend() }),
                 )
-                TextButton(onClick = onSend, enabled = draft.isNotBlank() && !submitting) {
-                    Text(stringResource(R.string.module_comments_send))
+                // 主色填充圆形发送钮：发送中换成小圈。
+                FilledIconButton(
+                    onClick = onSend,
+                    enabled = draft.isNotBlank() && !submitting,
+                    modifier = Modifier.size(46.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                ) {
+                    if (submitting) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(
+                            imageVector = Icons.Rounded.Send,
+                            contentDescription = stringResource(R.string.module_comments_send),
+                        )
+                    }
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2100,3 +2191,76 @@ private fun CommentsComposerMaterial(
         }
     }
 }
+
+/** 状态卡（Material）：大图标 + 文案 + 可选操作按钮，居中摆在一张圆角卡里。 */
+@Composable
+private fun CommentsStateCardMaterial(
+    icon: ImageVector,
+    message: String,
+    actionText: String? = null,
+    onAction: (() -> Unit)? = null,
+    filledAction: Boolean = false,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 32.dp, vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(40.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (actionText != null && onAction != null) {
+                    if (filledAction) {
+                        Button(onClick = onAction) {
+                            Text(actionText)
+                        }
+                    } else {
+                        FilledTonalButton(onClick = onAction) {
+                            Text(actionText)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 紧凑文字操作（Material）：替代 TextButton，去掉最小高度让评论卡更紧。 */
+@Composable
+private fun CommentActionTextMaterial(
+    text: String,
+    color: Color,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = color,
+        )
+    }
+}
+

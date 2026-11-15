@@ -259,6 +259,7 @@
     <string name="module_comments_login_required">댓글과 좋아요는 업로드 페이지에서 본인 인증 후 사용할 수 있습니다.</string>
     <string name="module_comments_go_verify">인증하러 가기</string>
     <string name="module_comments_char_count">%1$d/%2$d</string>
+    <string name="module_comments_count">댓글 %1$d개</string>
 
     <!-- 我的评论 -->
     <string name="module_my_comments_open">내 댓글</string>
