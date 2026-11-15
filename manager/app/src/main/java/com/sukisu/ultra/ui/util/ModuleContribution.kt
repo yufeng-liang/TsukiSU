@@ -871,7 +871,8 @@ object ModuleContribution {
         val token = json.optString("token").trim()
         val expiresAt = json.optLong("expiresAt", 0L)
         if (!SESSION_TOKEN_RE.matches(token) || expiresAt <= 0L) return null
-        return SessionGrant(token = token, expiresAt = expiresAt)
+        val level = if (json.has("level") && !json.isNull("level")) json.optInt("level", -1) else -1
+        return SessionGrant(token = token, expiresAt = expiresAt, level = level)
     }
 
     private fun describeUpload(error: Throwable): String = when (error) {
@@ -1086,6 +1087,11 @@ object ModuleContribution {
         coolapkUid: String,
         secret: String,
         pledge: String = PLEDGE_VERSION,
+        /**
+         * 签发模式；null 走投稿链路（服务端按承诺串核对签名），"comment" 走评论区
+         * 低门槛链路（不核对签名、等级门槛放宽，签出只够点赞评论的令牌）。
+         */
+        mode: String? = null,
     ): IssueOutcome {
         val uid = coolapkUid.trim()
         val safeSecret = secret.trim()
@@ -1100,6 +1106,8 @@ object ModuleContribution {
             .put("coolapkUid", uid)
             .put("secret", safeSecret)
             .put("pledge", pledge)
+            // 模式是可选项：投稿链路不发送（服务端按默认处理），评论链路才带上。
+            .apply { if (mode != null) put("mode", mode) }
             .toString()
             .toRequestBody(JSON_MEDIA_TYPE)
         val url = BASE_URL.trimEnd('/') + "/session/issue"
@@ -1199,6 +1207,7 @@ object ModuleContribution {
             nickname = nickname,
             avatar = json.optString("avatar").trim(),
             expiresAt = expiresAt,
+            level = if (json.has("level") && !json.isNull("level")) json.optInt("level", -1) else -1,
         )
         return if (session.wellFormed) SessionCheck.Valid(session) else SessionCheck.Unavailable
     }

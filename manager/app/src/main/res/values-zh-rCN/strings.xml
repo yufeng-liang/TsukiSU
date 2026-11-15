@@ -1638,6 +1638,10 @@
     <string name="module_upload_identity_cooldown">请 %1$d 秒后再试</string>
     <string name="module_upload_identity_level_blocked">先去酷安把等级提升到 Lv2 及以上，再回来验证</string>
     <string name="module_upload_identity_level_recheck">我已升级，重新验证</string>
+    <string name="module_verify_title">评论区验证</string>
+    <string name="module_verify_why_title">为什么要验证？</string>
+    <string name="module_verify_why_body">绑定酷安账号即可在模块商店点赞与评论，无需粘贴签名或作出承诺。评论验证只授予评论级会话，上传仍需完成完整验证。</string>
+    <string name="module_verify_level_hint">已验证 Lv%1$d：等级达到 Lv2 并作出承诺后即可上传</string>
     <string name="module_upload_identity_pledge_title">承诺</string>
     <string name="module_upload_identity_pledge_lead">此后以该账号提交的每一份模块，都适用以下三条；本次承诺随账号存档。</string>
     <string name="module_upload_identity_pledge_1">我提交的模块不含恶意代码：不窃取凭据、不静默回传、不破坏系统与数据。</string>

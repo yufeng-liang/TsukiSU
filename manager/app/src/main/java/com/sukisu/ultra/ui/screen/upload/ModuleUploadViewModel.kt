@@ -1427,7 +1427,10 @@ class ModuleUploadViewModel(
         // 磁盘上有令牌就先把人放进列表：核实要出网，慢网下（超时八秒）把人钉在身份页
         // 盯着「为什么要验证」没有道理 —— 他本来就已经验过。核实回 Invalid 会把他退回
         // 身份页，那才是他该看到的地方；回 Unavailable 则留在列表（本地那份照常到期）。
-        if (_step.value == UploadStep.IDENTITY) _step.value = UploadStep.LIST
+        // 例外：评论级令牌（level 0..1，mode=comment 签发的）够点赞评论、不够投稿，
+        // 留在身份页 —— 预填好的身份与「等级不足」的提示卡摆在那里，比把人放进一个
+        // 提交必被 403 拒的列表里说得清楚。
+        if (_step.value == UploadStep.IDENTITY && stored.level !in 0..1) _step.value = UploadStep.LIST
         sessionJob?.cancel()
         // 这一趟的身份：退出/重开之后回来的旧结果一律不许落地（见 [signOut]）。
         val epoch = ++sessionEpoch
@@ -1456,7 +1459,10 @@ class ModuleUploadViewModel(
                         )
                     }
                     // 令牌已经确认可用：身份页不该再挡在前面（进页面时若落在身份页，回列表）。
-                    if (_step.value == UploadStep.IDENTITY) _step.value = UploadStep.LIST
+                    // 评论级令牌例外：它够点赞评论、不够投稿，留在身份页（预填身份 + 等级提示）。
+                    if (_step.value == UploadStep.IDENTITY && result.session.level !in 0..1) {
+                        _step.value = UploadStep.LIST
+                    }
                 }
 
                 // 服务端**明确**说这张失效了（或本地这串形状已坏）：必须抹掉。
@@ -1745,6 +1751,120 @@ class ModuleUploadViewModel(
             }
             _step.value = UploadStep.LIST
             postMessage(res.getString(R.string.module_upload_identity_verified))
+        }
+    }
+
+    /**
+     * 评论区验证页的轻量进页准备：备好验证串、预填上次核实过的 UID、读一遍本地令牌。
+     *
+     * 与 [onEnter] 的差别：那是投稿链路的入口（拉投稿列表、启动进度轮询），评论验证
+     * 用不上；这里只做身份屏自己需要的两件事。幂等 —— 详情页与验证页来回切时只在
+     * 第一次生效，后面的都是空操作。
+     */
+    fun prepareForCommentVerify() {
+        if (commentPrepared) return
+        commentPrepared = true
+        _formState.update { it.copy(identitySecret = ModuleUploadPrefs.ensureIdentitySecret()) }
+        if (_formState.value.uid.isEmpty()) {
+            // 上次核实过的 UID 还记得就替用户填上：防抖反查会把「已找到」挂出来，
+            // 用户进来基本只需要点一次「验证身份」。
+            ModuleUploadPrefs.lastUid().takeIf { it.isNotEmpty() }?.let { updateUid(it) }
+        }
+        refreshSession()
+    }
+
+    private var commentPrepared = false
+
+    /**
+     * 「评论区验证」：与 [verifyIdentity] 同一条 /session/issue，但走评论模式。
+     *
+     * 与投稿验证的三处不同：
+     * - 不要求承诺勾选与验证串（mode=comment 时服务端跳过签名核对，等级门槛也放宽）；
+     * - 成功后**不**切投稿的步骤、不弹 Toast、不动 consent —— 这张令牌只服务评论区；
+     * - 成功走 [onSuccess] 回调，由界面决定去留（评论验证页按它 pop 回详情页）。
+     */
+    fun verifyForComment(onSuccess: () -> Unit) {
+        val state = _formState.value
+        if (state.verifying) return
+        val uid = state.uid.trim()
+        // 评论模式只要求「酷安那边确实有这个号」：验证串与承诺是投稿链路的事。
+        if (state.uidState !is CoolapkUidState.Verified) return
+        if (state.verifyCooldownUntil > System.currentTimeMillis()) return
+        if (state.levelBlockedUid == uid) return
+        _formState.update { it.copy(verifying = true, verifyError = null) }
+        identityJob?.cancel()
+        identityJob = viewModelScope.launch {
+            val outcome = try {
+                ModuleContribution.issueIdentitySession(
+                    coolapkUid = uid,
+                    secret = state.identitySecret,
+                    mode = "comment",
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                Log.w(TAG, "verifyForComment failed", e)
+                IssueOutcome(message = VERIFY_NETWORK_ERROR_CODE, code = VERIFY_NETWORK_ERROR_CODE)
+            }
+            _formState.update { it.copy(verifying = false) }
+            if (!outcome.ok) {
+                _formState.update { fail ->
+                    when {
+                        // 与投稿验证同一套账本：等级不足记住这个号（评论模式下服务端理论上
+                        // 放行所有等级，拦着防旧版服务端），其余按失败次数进冷却。
+                        outcome.code == LEVEL_TOO_LOW_CODE ->
+                            fail.copy(
+                                verifying = false,
+                                verifyError = null,
+                                levelBlockedUid = uid,
+                            )
+                        outcome.code == IDENTITY_REQUIRED_CODE ->
+                            fail.copy(verifying = false, verifyError = outcome.message)
+                        else -> {
+                            val failures = fail.verifyFailures + 1
+                            fail.copy(
+                                verifying = false,
+                                verifyFailures = failures,
+                                verifyCooldownUntil = System.currentTimeMillis() + cooldownMillis(failures),
+                            )
+                        }
+                    }
+                }
+                return@launch
+            }
+            val grant = outcome.session ?: return@launch
+            val identity = outcome.identity
+            if (identity != null) {
+                _formState.update {
+                    it.copy(uidState = CoolapkUidState.Verified(identity.nickname, identity.avatar))
+                }
+            }
+            // 就地拼会话而不走 adoptGrant：那边拿表单上的 nickname 拼，评论页没人填过它
+            // （拼出来是空的，评论区署名会缺名字）；这里昵称/头像用刚核实到的那份，
+            // 等级直接抄 grant 的（评论级令牌 level 0..1，上传页见到它会留在身份页提示）。
+            val verified = _formState.value.uidState as? CoolapkUidState.Verified
+            val session = UploadSession(
+                token = grant.token,
+                uid = uid,
+                nickname = identity?.nickname ?: verified?.nickname.orEmpty(),
+                avatar = verified?.avatar.orEmpty(),
+                expiresAt = grant.expiresAt,
+                level = grant.level,
+            )
+            if (session.wellFormed) {
+                ModuleUploadPrefs.writeSession(session)
+                _formState.update { it.copy(session = session) }
+            }
+            ModuleUploadPrefs.rememberUid(uid)
+            _formState.update {
+                it.copy(
+                    verifyError = null,
+                    verifyFailures = 0,
+                    verifyCooldownUntil = 0L,
+                    levelBlockedUid = "",
+                )
+            }
+            onSuccess()
         }
     }
 

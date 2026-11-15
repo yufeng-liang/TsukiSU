@@ -92,6 +92,8 @@ fun ModuleUploadIdentityMaterial(
     onRenewCommit: () -> Unit,
     onClearLevelBlock: () -> Unit,
     onVerify: () -> Unit,
+    /** 评论区验证模式：文案换到评论区语境，隐藏验证串卡与承诺卡，判据只看 UID。 */
+    commentMode: Boolean = false,
 ) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     val clipboard = LocalClipboard.current
@@ -101,7 +103,14 @@ fun ModuleUploadIdentityMaterial(
     ExpressiveScaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.module_upload_identity_title)) },
+                title = {
+                    Text(
+                        stringResource(
+                            if (commentMode) R.string.module_verify_title
+                            else R.string.module_upload_identity_title,
+                        ),
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onExit) {
                         Icon(
@@ -119,6 +128,7 @@ fun ModuleUploadIdentityMaterial(
                 state = state,
                 onVerify = onVerify,
                 onClearLevelBlock = onClearLevelBlock,
+                commentMode = commentMode,
             )
         },
         contentWindowInsets = WindowInsets.systemBars.add(WindowInsets.displayCutout)
@@ -153,12 +163,18 @@ fun ModuleUploadIdentityMaterial(
                         )
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
-                                text = stringResource(R.string.module_upload_identity_why_title),
+                                text = stringResource(
+                                    if (commentMode) R.string.module_verify_why_title
+                                    else R.string.module_upload_identity_why_title,
+                                ),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(
-                                text = stringResource(R.string.module_upload_identity_why_body),
+                                text = stringResource(
+                                    if (commentMode) R.string.module_verify_why_body
+                                    else R.string.module_upload_identity_why_body,
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -226,16 +242,47 @@ fun ModuleUploadIdentityMaterial(
                                 onSignOut = null,
                             )
                         }
-                        Text(
-                            text = stringResource(R.string.module_upload_identity_level),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        // 评论区验证不涉投稿等级，这句「等级要求」只在上传链路里说。
+                        if (!commentMode) {
+                            Text(
+                                text = stringResource(R.string.module_upload_identity_level),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }
 
-            item {
+            if (!commentMode && state.session?.level in 0..1) {
+                item {
+                    // 评论级令牌（mode=comment 签发的）：够点赞评论、不够投稿。摆在身份页
+                    // 而不是直接放行进列表：提交会被服务端按等级拒，先说清楚比 403 后猜强。
+                    TonalCard(modifier = Modifier.padding(top = 20.dp).fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.padding(16.dp, 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.HelpOutline,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = stringResource(
+                                    R.string.module_verify_level_hint,
+                                    state.session?.level ?: 0,
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (!commentMode) item {
                 // 「你的验证串」：抄进酷安签名的那一行。它由本机随机生成、只算它的哈希，
                 // 所以签名里公开的只是承诺，别人反推不出验证串，也就领不走你的令牌。
                 // 与「要传的包」无关 —— 旧版挑一枚包当锚点那一步正是为了做到这一点，
@@ -335,7 +382,7 @@ fun ModuleUploadIdentityMaterial(
                 }
             }
 
-            item {
+            if (!commentMode) item {
                 TonalCard(modifier = Modifier.padding(top = 20.dp).fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp, 12.dp)) {
                         Text(
@@ -395,14 +442,16 @@ private fun IdentityBarMaterial(
     state: ModuleUploadFormState,
     onVerify: () -> Unit,
     onClearLevelBlock: () -> Unit,
+    commentMode: Boolean,
 ) {
+    // 评论模式只看「UID 形状对 + 酷安查得到」：验证串与承诺是投稿链路的门槛，那里不数。
     val missing = listOf(
         state.uid.trim().length in 4..12,
         // 形状对不算数：还得酷安那边确实有这个号。查无此人时服务端必然也查不到，
         // 放行只是拿一次接口额度换一句已知的结论。
         state.uidVerified,
-        state.identityCommit != null,
-        state.consent,
+        if (commentMode) true else state.identityCommit != null,
+        if (commentMode) true else state.consent,
     ).count { !it }
     val verifying = state.verifying
     val error = state.verifyError
@@ -480,7 +529,8 @@ private fun IdentityBarMaterial(
                 )
                 Button(
                     onClick = onVerify,
-                    enabled = state.canVerify && !blocked,
+                    // 评论模式的门里没有承诺与验证串，canVerify 那套（含 consent）用不上。
+                    enabled = (if (commentMode) state.uidVerified else state.canVerify) && !blocked,
                     modifier = Modifier.height(48.dp),
                 ) {
                     if (verifying) {

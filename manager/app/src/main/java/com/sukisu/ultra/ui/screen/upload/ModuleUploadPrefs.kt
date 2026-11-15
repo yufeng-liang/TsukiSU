@@ -41,7 +41,7 @@ import java.security.SecureRandom
 object ModuleUploadPrefs {
 
     /**
-     * 独立 prefs 文件名。**只放会话令牌那五个键与身份验证串**，不放 UID。
+     * 独立 prefs 文件名。**只放会话令牌那几个键与身份验证串**，不放 UID。
      *
      * 改名（从 `settings` 到这个名字）意味着老用户盘上那一张令牌读不到了 ——
      * 一次性的代价：他们下次投稿要再改一次签名，之后又是九十天。这是刻意的取舍：
@@ -63,6 +63,9 @@ object ModuleUploadPrefs {
     const val KEY_SESSION_NICK = "module_upload_session_nickname"
     const val KEY_SESSION_AVATAR = "module_upload_session_avatar"
     const val KEY_SESSION_EXPIRES_AT = "module_upload_session_expires_at"
+    // 评论级令牌的等级（0..1 = 只够点赞评论，≥2 = 可投稿，-1 = 旧盘没有这个键）。
+    // 独立一个键而不是塞进 token：旧盘没有它，读到 -1 就按旧逻辑走，不做迁移。
+    const val KEY_SESSION_LEVEL = "module_upload_session_level"
 
     // ---- 身份验证串（哈希承诺，九十天内复用）----
     //
@@ -123,6 +126,7 @@ object ModuleUploadPrefs {
             nickname = p.getString(KEY_SESSION_NICK, null).orEmpty(),
             avatar = p.getString(KEY_SESSION_AVATAR, null).orEmpty(),
             expiresAt = p.getLong(KEY_SESSION_EXPIRES_AT, 0L),
+            level = p.getInt(KEY_SESSION_LEVEL, -1),
         )
         val valid = session.validAt(now)
         // 旧版本写下的明文：读到（且这份令牌还活着）就顺手迁成信封 —— 读路径上唯一一次
@@ -143,6 +147,7 @@ object ModuleUploadPrefs {
                 putString(KEY_SESSION_NICK, session.nickname)
                 putString(KEY_SESSION_AVATAR, session.avatar)
                 putLong(KEY_SESSION_EXPIRES_AT, session.expiresAt)
+                putInt(KEY_SESSION_LEVEL, session.level)
             }
         }
     }
@@ -156,6 +161,7 @@ object ModuleUploadPrefs {
                 remove(KEY_SESSION_NICK)
                 remove(KEY_SESSION_AVATAR)
                 remove(KEY_SESSION_EXPIRES_AT)
+                remove(KEY_SESSION_LEVEL)
             }
         }
     }

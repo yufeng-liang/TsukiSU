@@ -211,6 +211,11 @@ sealed interface Route : NavKey, Parcelable {
     @Serializable
     data object ModuleUpload : Route
 
+    /** 评论区验证：为点赞/评论换一张评论级令牌（mode=comment），成功后回详情页。 */
+    @Parcelize
+    @Serializable
+    data object CommentVerify : Route
+
     /** 我的评论：跨模块列出我在模块商店发过的评论（含已删除占位）。 */
     @Parcelize
     @Serializable

@@ -1650,6 +1650,10 @@
     <string name="module_upload_identity_cooldown">Try again in %1$ds.</string>
     <string name="module_upload_identity_level_blocked">Raise your Coolapk level to Lv2 or above, then verify again.</string>
     <string name="module_upload_identity_level_recheck">I\'ve upgraded — verify again</string>
+    <string name="module_verify_title">Verify for comments</string>
+    <string name="module_verify_why_title">Why verify?</string>
+    <string name="module_verify_why_body">Link your Coolapk account once and you can like and comment in the module store — no signature paste, no pledge. Comment verification only grants a comment-level session; uploading still requires the full verification.</string>
+    <string name="module_verify_level_hint">Verified at Lv%1$d — reach Lv2 and accept the pledge to unlock uploads too</string>
     <string name="module_upload_identity_pledge_title">Commitment</string>
     <string name="module_upload_identity_pledge_lead">These three apply to every module I submit with this account from now on, and are recorded with the account.</string>
     <string name="module_upload_identity_pledge_1">The modules I submit contain no malicious code: no credential theft, no silent callbacks, no damage to the system or data.</string>

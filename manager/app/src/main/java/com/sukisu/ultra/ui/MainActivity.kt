@@ -140,6 +140,7 @@ import com.sukisu.ultra.ui.screen.susfs.SuSFSScreen
 import com.sukisu.ultra.ui.screen.template.AppProfileTemplateScreen
 import com.sukisu.ultra.ui.screen.templateeditor.TemplateEditorScreen
 import com.sukisu.ultra.ui.screen.umountmanager.UmountManagerScreen
+import com.sukisu.ultra.ui.screen.upload.CommentVerifyScreen
 import com.sukisu.ultra.ui.screen.upload.ModuleUploadScreen
 import com.sukisu.ultra.ui.screen.upload.MyCommentsScreen
 import com.sukisu.ultra.ui.theme.AiAssistantMaterialTheme
@@ -548,6 +549,7 @@ class MainActivity : ComponentActivity() {
                                 entry<Route.Tool>(swipeDismiss = swipeDismiss)  { ToolsScreen() }
                                 entry<Route.Backup>(swipeDismiss = swipeDismiss)  { BackupScreen() }
                                 entry<Route.ModuleUpload>(swipeDismiss = swipeDismiss) { ModuleUploadScreen() }
+                                entry<Route.CommentVerify>(swipeDismiss = swipeDismiss) { CommentVerifyScreen() }
                                 entry<Route.MyComments>(swipeDismiss = swipeDismiss) { MyCommentsScreen() }
                                 entry<Route.UmountManager>(swipeDismiss = swipeDismiss)  { UmountManagerScreen() }
                                 entry<Route.KernelModules>(swipeDismiss = swipeDismiss)  { KernelModulesScreen() }

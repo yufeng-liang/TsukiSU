@@ -90,6 +90,12 @@ data class SubmittedModule(
 data class SessionGrant(
     val token: String,
     val expiresAt: Long,
+    /**
+     * 签发时的等级（服务端可选回抄；旧版应答没有就落 -1）。
+     * 0..1 = 评论级令牌（mode=comment 签发的，够点赞评论、不够投稿）；
+     * ≥2 = 可投稿；-1 = 未知（旧盘/旧服务端），一切按旧逻辑走。
+     */
+    val level: Int = -1,
 )
 
 /**
@@ -109,6 +115,12 @@ data class UploadSession(
     val nickname: String,
     val avatar: String,
     val expiresAt: Long,
+    /**
+     * 这份令牌的等级：0..1 = 评论级（mode=comment 签发的，够点赞评论、不够投稿）；
+     * ≥2 = 可投稿；-1 = 未知（旧盘/旧服务端没回抄），按「可投稿」的旧逻辑走 ——
+     * 宁可让投稿被服务端拒，也不把一个可能只是等级低的用户挡在评论区外面。
+     */
+    val level: Int = -1,
 ) {
     /** 形状与服务端 `SESSION_TOKEN_RE`（`/^[0-9a-f]{64}$/`）同一条。 */
     val wellFormed: Boolean
@@ -131,6 +143,8 @@ data class UploadSession(
     fun renewed(grant: SessionGrant): UploadSession = copy(
         token = grant.token,
         expiresAt = grant.expiresAt,
+        // 服务端这次带了等级就照它更新（升级/降级都可能）；没带（-1）沿用本地这份的。
+        level = grant.level.takeIf { it >= 0 } ?: level,
     )
 
     private companion object {

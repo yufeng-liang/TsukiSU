@@ -1951,6 +1951,10 @@
     <string name="module_upload_identity_cooldown">請 %1$d 秒後再試</string>
     <string name="module_upload_identity_level_blocked">先去酷安把等級提升到 Lv2 及以上，再回來驗證</string>
     <string name="module_upload_identity_level_recheck">我已升級，重新驗證</string>
+    <string name="module_verify_title">留言區驗證</string>
+    <string name="module_verify_why_title">為什麼要驗證？</string>
+    <string name="module_verify_why_body">綁定酷安帳號即可在模組商店按讚與留言，無需貼上簽名或做出承諾。留言驗證只會授予留言級工作階段，上傳仍需完成完整驗證。</string>
+    <string name="module_verify_level_hint">已驗證 Lv%1$d：等級達到 Lv2 並做出承諾後即可上傳</string>
     <string name="module_upload_identity_pledge_title">承諾</string>
     <string name="module_upload_identity_pledge_lead">此後以該帳號提交的每一份模組，都適用以下三條；本次承諾隨帳號存檔。</string>
     <string name="module_upload_identity_pledge_1">我提交的模組不含惡意程式碼：不竊取憑證、不靜默回傳、不破壞系統與資料。</string>

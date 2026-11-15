@@ -106,6 +106,8 @@ fun ModuleUploadIdentityMiuix(
     onVerify: () -> Unit,
     /** 用户自称已经升级到能验证的酷安等级时，清掉「等级不足」的拦截再试一次。 */
     onClearLevelBlock: () -> Unit,
+    /** 评论区验证模式：文案换到评论区语境，隐藏验证串卡与承诺卡，判据只看 UID。 */
+    commentMode: Boolean = false,
 ) {
     val scrollBehavior = MiuixScrollBehavior()
     val enableBlur = LocalEnableBlur.current
@@ -120,7 +122,10 @@ fun ModuleUploadIdentityMiuix(
             BlurredBar(backdrop) {
                 TopAppBar(
                     color = barColor,
-                    title = stringResource(R.string.module_upload_identity_title),
+                    title = stringResource(
+                        if (commentMode) R.string.module_verify_title
+                        else R.string.module_upload_identity_title,
+                    ),
                     scrollBehavior = scrollBehavior,
                     navigationIcon = {
                         IconButton(onClick = onExit) {
@@ -138,6 +143,7 @@ fun ModuleUploadIdentityMiuix(
                 state = state,
                 onVerify = onVerify,
                 onClearLevelBlock = onClearLevelBlock,
+                commentMode = commentMode,
             )
         },
         popupHost = { },
@@ -182,13 +188,19 @@ fun ModuleUploadIdentityMiuix(
                         }
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
-                                text = stringResource(R.string.module_upload_identity_why_title),
+                                text = stringResource(
+                                    if (commentMode) R.string.module_verify_why_title
+                                    else R.string.module_upload_identity_why_title,
+                                ),
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = colorScheme.onSurface,
                             )
                             Text(
-                                text = stringResource(R.string.module_upload_identity_why_body),
+                                text = stringResource(
+                                    if (commentMode) R.string.module_verify_why_body
+                                    else R.string.module_upload_identity_why_body,
+                                ),
                                 fontSize = 13.sp,
                                 color = colorScheme.onSurfaceVariantSummary,
                             )
@@ -257,16 +269,56 @@ fun ModuleUploadIdentityMiuix(
                                 onSignOut = null,
                             )
                         }
-                        Text(
-                            text = stringResource(R.string.module_upload_identity_level),
-                            fontSize = 12.sp,
-                            color = colorScheme.onSurfaceVariantSummary,
-                        )
+                        // 评论区验证不涉投稿等级，这句「等级要求」只在上传链路里说。
+                        if (!commentMode) {
+                            Text(
+                                text = stringResource(R.string.module_upload_identity_level),
+                                fontSize = 12.sp,
+                                color = colorScheme.onSurfaceVariantSummary,
+                            )
+                        }
                     }
                 }
             }
 
-            item {
+            if (!commentMode && state.session?.level in 0..1) {
+                item {
+                    // 评论级令牌（mode=comment 签发的）：够点赞评论、不够投稿。摆在身份页
+                    // 而不是直接放行进列表：提交会被服务端按等级拒，先说清楚比 403 后猜强。
+                    Card(modifier = Modifier.padding(top = 20.dp).fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(colorScheme.secondaryContainer),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.HelpOutline,
+                                    contentDescription = null,
+                                    tint = colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                            Text(
+                                text = stringResource(
+                                    R.string.module_verify_level_hint,
+                                    state.session?.level ?: 0,
+                                ),
+                                fontSize = 13.sp,
+                                color = colorScheme.onSurfaceVariantSummary,
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (!commentMode) item {
                 // 「你的验证串」：抄进酷安签名的那一行。它由本机随机生成、只算它的哈希，
                 // 所以签名里公开的只是承诺，别人反推不出验证串，也就领不走你的令牌。
                 // 与「要传的包」无关 —— 旧版挑一枚包当锚点那一步正是为了做到这一点，
@@ -368,7 +420,7 @@ fun ModuleUploadIdentityMiuix(
                 }
             }
 
-            item {
+            if (!commentMode) item {
                 Card(modifier = Modifier.padding(top = 20.dp).fillMaxWidth()) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text(
@@ -438,14 +490,16 @@ private fun IdentityBarMiuix(
     state: ModuleUploadFormState,
     onVerify: () -> Unit,
     onClearLevelBlock: () -> Unit,
+    commentMode: Boolean,
 ) {
+    // 评论模式只看「UID 形状对 + 酷安查得到」：验证串与承诺是投稿链路的门槛，那里不数。
     val missing = listOf(
         state.uid.trim().length in 4..12,
         // 形状对不算数：还得酷安那边确实有这个号。查无此人时服务端必然也查不到，
         // 放行只是拿一次接口额度换一句已知的结论。
         state.uidVerified,
-        state.identityCommit != null,
-        state.consent,
+        if (commentMode) true else state.identityCommit != null,
+        if (commentMode) true else state.consent,
     ).count { !it }
     val verifying = state.verifying
     val error = state.verifyError
@@ -523,7 +577,9 @@ private fun IdentityBarMiuix(
                     onClick = onVerify,
                     // 等级不足与冷却期间都点不动：前者要用户先去升等级，后者是服务端
                     // 明确要求「过一会儿再来」，让按钮可点只会再吃一次同样的失败。
-                    enabled = state.canVerify && !levelBlocked && !coolingDown,
+                    // 评论模式的门里没有承诺与验证串，canVerify 那套（含 consent）用不上。
+                    enabled = (if (commentMode) state.uidVerified else state.canVerify) &&
+                        !levelBlocked && !coolingDown,
                     modifier = Modifier.height(48.dp),
                     cornerRadius = 12.dp,
                     colors = ButtonDefaults.buttonColorsPrimary(),

@@ -2192,6 +2192,10 @@ private fun CommentsPageMiuix(
     val layoutDirection = LocalLayoutDirection.current
     val navigator = LocalNavigator.current
 
+    // 从评论区验证页 pop 回来时 NavDisplay 重组本页：重读会话，令牌到手就清
+    // 「去验证」卡并刷新列表；init 那次 readSession 比较不出变化，这里补上。
+    LaunchedEffect(Unit) { viewModel.recheckSession() }
+
     var draft by remember { mutableStateOf("") }
     var replyTarget by remember { mutableStateOf<CommentItem?>(null) }
     var deleteTarget by remember { mutableStateOf<CommentItem?>(null) }
@@ -2296,7 +2300,7 @@ private fun CommentsPageMiuix(
                             icon = Icons.Rounded.Info,
                             message = stringResource(R.string.module_comments_login_required),
                             actionText = stringResource(R.string.module_comments_go_verify),
-                            onAction = { navigator.push(Route.ModuleUpload) },
+                            onAction = { navigator.push(Route.CommentVerify) },
                         )
                     }
                 }
@@ -2402,7 +2406,7 @@ private fun CommentsPageMiuix(
                     }
                 }
             },
-            onGoVerify = { navigator.push(Route.ModuleUpload) },
+            onGoVerify = { navigator.push(Route.CommentVerify) },
         )
     }
 }

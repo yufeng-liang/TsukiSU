@@ -242,6 +242,10 @@
     <string name="module_comments_error_network">ネットワークエラーです。しばらくしてからもう一度お試しください。</string>
     <string name="module_comments_login_required">コメントやいいねにはアップロードページで本人確認が必要です。</string>
     <string name="module_comments_go_verify">本人確認へ</string>
+    <string name="module_verify_title">コメント用の本人確認</string>
+    <string name="module_verify_why_title">なぜ本人確認が必要？</string>
+    <string name="module_verify_why_body">Coolapk アカウントを連携するだけで、モジュールストアでいいねとコメントができるようになります。署名の貼り付けも誓約も不要です。コメント用確認ではコメントレベルのセッションのみ付与され、アップロードには従来どおりの本人確認が必要です。</string>
+    <string name="module_verify_level_hint">Lv%1$d で確認済み：レベルが Lv2 に達して誓約に同意すればアップロードも可能になります</string>
     <string name="module_comments_char_count">%1$d/%2$d</string>
     <string name="module_comments_count">コメント %1$d件</string>
 

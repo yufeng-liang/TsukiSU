@@ -61,8 +61,15 @@ class ModuleCommentsViewModel(
         readSession()
     }
 
-    /** 读投稿链路的会话；过期/不存在就按游客处理，不在这里逼用户去验证。 */
-    private fun readSession() {
+    /**
+     * 读投稿链路的会话；过期/不存在就按游客处理，不在这里逼用户去验证。
+     *
+     * 返回「令牌相比上次发生了变化（从无到有或换了一张新串）」：只有 recheckSession
+     * 用得上 —— 用户刚在评论区验证页换完令牌回来，界面要把「需要验证」的卡片撤下、
+     * 把列表连身份一起重刷。init 里的那一次变化不触发刷新（refresh() 本来就先跑）。
+     */
+    private fun readSession(): Boolean {
+        val previous = sessionToken
         val session = ModuleUploadPrefs.readSession()
         sessionToken = if (session != null && session.validAt(System.currentTimeMillis())) session.token else ""
         _uiState.update {
@@ -72,6 +79,7 @@ class ModuleCommentsViewModel(
                 canInteract = sessionToken.isNotEmpty(),
             )
         }
+        return sessionToken.isNotEmpty() && sessionToken != previous
     }
 
     /** 重新加载第一页（下拉/进页面/发完评论后刷新）。 */
@@ -235,6 +243,17 @@ class ModuleCommentsViewModel(
         }
     }
 
-    /** 会话在别处 renewed（例如用户去上传页重新验证后回来）：重读一次。 */
-    fun recheckSession() = readSession()
+    /**
+     * 会话在别处 renewed（例如用户去评论区验证页换了一张新令牌后回来）：重读一次。
+     *
+     * 令牌真的到手就当场把「需要验证」撤下、把列表连身份一起刷一遍 —— 用户从验证页
+     * pop 回来时详情页重组，LaunchedEffect 调的就是这里；不刷的话卡片会一直挂着，
+     * 直到用户手动下拉才消失。
+     */
+    fun recheckSession() {
+        if (readSession()) {
+            _uiState.update { it.copy(needVerify = false) }
+            refresh()
+        }
+    }
 }
