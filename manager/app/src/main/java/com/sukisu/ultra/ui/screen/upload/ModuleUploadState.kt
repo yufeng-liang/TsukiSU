@@ -226,6 +226,13 @@ data class ModuleUploadListState(
      */
     val progressError: String? = null,
     /**
+     * 最近一次**成功**读到进度的时间（[System.currentTimeMillis]）；0 = 从没读到过。
+     *
+     * 自动查（进记录页时）的节流依据：窗口内再进页面就不重发。失败不写它 ——
+     * 失败的那一趟下次进页面要补一发。
+     */
+    val progressFetchedAt: Long = 0L,
+    /**
      * 正打开着进度弹层的那几个模块 id；null = 弹层没开。
      *
      * 它同时是「要不要继续轮询」的开关：只有它非 null 时 ViewModel 才会每 30 秒再问一次，

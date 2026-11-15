@@ -2398,6 +2398,8 @@
     <string name="module_my_comments_open">My comments</string>
     <string name="module_my_comments_title">My comments</string>
     <string name="module_my_comments_empty">You have not commented on any module yet.</string>
+    <string name="module_my_comments_empty_title">No comments yet</string>
+    <string name="module_my_comments_browse">Browse modules</string>
     <string name="module_my_comments_deleted">Deleted</string>
     <string name="module_my_comments_load_failed">Failed to load comments</string>
     <string name="module_my_comments_need_verify">Session expired. Verify your identity again to see your comments.</string>

@@ -2,7 +2,10 @@ package com.sukisu.ultra.ui.screen.upload
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,9 +23,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,7 +52,10 @@ import com.sukisu.ultra.ui.theme.LocalEnableBlur
 import com.sukisu.ultra.ui.util.BlurredBar
 import com.sukisu.ultra.ui.util.MineModule
 import com.sukisu.ultra.ui.util.ProgressItem
+import com.sukisu.ultra.ui.util.ProgressStage
 import com.sukisu.ultra.ui.util.formatEpochTime
+import com.sukisu.ultra.ui.util.labelRes
+import com.sukisu.ultra.ui.util.progressKey
 import com.sukisu.ultra.ui.util.progressVersions
 import com.sukisu.ultra.ui.util.rememberBlurBackdrop
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -241,6 +247,9 @@ fun ModuleUploadHistoryMiuix(
                         picking = state.pickingFor != null,
                         pickingThis = state.pickingFor == group.id,
                         onPick = { onPickForMine(group.latest) },
+                        // 徽标只认最新一版：收起状态下用户最想知道的是「现在这版到哪了」。
+                        latestProgress = state.progress[progressKey(group.id, group.latestVersionCode)],
+                        progressLoading = progressLoading,
                         onOpenProgress = { onOpenProgress(group.id) },
                     )
                 }
@@ -314,6 +323,10 @@ private fun HistoryCardMiuix(
     picking: Boolean,
     pickingThis: Boolean,
     onPick: () -> Unit,
+    /** 最新一版的收录进度；null = 还没查到（按「已提交」灰签兜底或转圈）。 */
+    latestProgress: ProgressItem?,
+    /** 进度正在请求中：还没拿到任何读数时徽标位转圈。 */
+    progressLoading: Boolean,
     /** 打开这个模块的收录进度（弹层）。 */
     onOpenProgress: () -> Unit,
 ) {
@@ -369,14 +382,52 @@ private fun HistoryCardMiuix(
                         content = colorScheme.onPrimaryContainer,
                     )
                 }
-                // 「收录进度」入口：右侧一枚文字按钮，点开弹层。
-                // wrapContentWidth：Miuix 的 TextButton 宽度策略与 Material 不同，
-                // 在 Row 里不约束就会把模块名挤掉。
-                TextButton(
-                    modifier = Modifier.wrapContentWidth(Alignment.End),
-                    text = stringResource(R.string.module_upload_progress_title),
-                    onClick = onOpenProgress,
-                )
+                // 收录进度徽标：彩色状态签替代原先的文字按钮——收起状态下不展开
+                // 就能看到「这版到哪了」；外面包一层 Box 承接点击（TagMiuix 没有
+                // modifier 参数），点徽标不会触发卡片自己的展开/收起。
+                if (latestProgress == null && progressLoading) {
+                    Box(modifier = Modifier.clickable(onClick = onOpenProgress)) {
+                        CircularProgressIndicator(
+                            progress = null,
+                            size = 16.dp,
+                            strokeWidth = 2.dp,
+                        )
+                    }
+                } else {
+                    val stage = latestProgress?.stage ?: ProgressStage.SUBMITTED
+                    // 专用大号徽标：通用 TagMiuix 是给列表行的小签（10sp），在卡片标题行
+                    // 上「这一版到哪了」是主信息，按正文小字放大一档。
+                    Box(
+                        modifier = Modifier
+                            .clickable(onClick = onOpenProgress)
+                            .background(
+                                color = when (stage) {
+                                    ProgressStage.SUBMITTED -> colorScheme.surfaceContainer
+                                    ProgressStage.REVIEWING -> colorScheme.tertiaryContainer
+                                    ProgressStage.MERGED -> colorScheme.secondaryContainer
+                                    ProgressStage.PUBLISHED -> colorScheme.primaryContainer
+                                    ProgressStage.REJECTED -> colorScheme.errorContainer
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                            )
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    ) {
+                        Text(
+                            text = stringResource(stage.labelRes()),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight(750),
+                            color = when (stage) {
+                                ProgressStage.SUBMITTED -> colorScheme.onSurfaceVariantSummary
+                                ProgressStage.REVIEWING -> colorScheme.onTertiaryContainer
+                                ProgressStage.MERGED -> colorScheme.onSecondaryContainer
+                                ProgressStage.PUBLISHED -> colorScheme.onPrimaryContainer
+                                ProgressStage.REJECTED -> colorScheme.onErrorContainer
+                            },
+                            maxLines = 1,
+                            softWrap = false,
+                        )
+                    }
+                }
             }
 
             if (expanded) {
@@ -413,8 +464,6 @@ private fun HistoryCardMiuix(
                             }
                         }
                     }
-                    // 动作后面跟一句说明，与列表页每个动作同一个结构：
-                    // 只给一枚「发新版本」，用户没法预判点了会发生什么。
                     // 挑包要弹系统选择器，回来之前这一行没有任何反馈——正在挑的那张卡
                     // 转圈并把按钮禁掉，其余卡一起禁用（闸门本来就是全局的）。
                     if (pickingThis) {
@@ -435,18 +484,16 @@ private fun HistoryCardMiuix(
                             )
                         }
                     } else {
-                        Column(modifier = Modifier.padding(top = 4.dp)) {
-                            TextButton(
-                                text = stringResource(R.string.module_upload_mine_update),
-                                onClick = onPick,
-                                enabled = !picking,
-                            )
-                            Text(
-                                text = stringResource(R.string.module_upload_history_update_summary),
-                                fontSize = 12.sp,
-                                color = colorScheme.onSurfaceVariantSummary,
-                            )
-                        }
+                        // 收成右对齐的一枚小按钮：原先「整幅宽按钮 + 一行说明」把展开区
+                        // 撑得很空，版本清单已经把上下文说清了，说明文字是重复的。
+                        TextButton(
+                            modifier = Modifier
+                                .align(Alignment.End)
+                                .padding(top = 2.dp),
+                            text = stringResource(R.string.module_upload_mine_update),
+                            onClick = onPick,
+                            enabled = !picking,
+                        )
                     }
                 }
             }

@@ -771,6 +771,8 @@ class ModuleUploadViewModel(
     fun openHistory() {
         _step.value = UploadStep.HISTORY
         refreshMine()
+        // 徽标长在记录页的每张卡上：进页面不查的话，它只能一直是灰的「已提交」。
+        refreshProgressIfStale()
     }
 
     /** 只改这一行的「有没有留存包」标记，其余状态不动。 */
@@ -1985,6 +1987,8 @@ class ModuleUploadViewModel(
                         progress = outcome.items.associateBy {
                             progressKey(it.id, it.versionCode.toLong())
                         },
+                        // 只在成功时打点：失败的那一趟留给自动查下次进页面补发。
+                        progressFetchedAt = System.currentTimeMillis(),
                     )
 
                     is ProgressOutcome.Failed ->
@@ -2005,6 +2009,22 @@ class ModuleUploadViewModel(
                 }
             }
         }
+    }
+
+    /**
+     * 进「上传记录」页的自动查：距上次成功不到 [PROGRESS_AUTO_REFRESH_MS] 就不重发。
+     *
+     * 与手动刷新的分界：弹层里的重试永远发（用户明确要新读数），自动查是省一次
+     * 「打开页面必然撞上」的请求 —— worker 的 60 秒缓存没过期时，重问拿到的也是
+     * 同一份。上一次失败的（[ModuleUploadListState.progressError] 非 null）不节流：
+     * 进页面先补一发，别让用户手动点重试才能恢复。
+     */
+    private fun refreshProgressIfStale() {
+        val state = _listState.value
+        val fresh = state.progressFetchedAt > 0L &&
+            System.currentTimeMillis() - state.progressFetchedAt < PROGRESS_AUTO_REFRESH_MS
+        if (fresh && state.progressError == null) return
+        refreshProgress()
     }
 
     /**
@@ -2416,6 +2436,14 @@ class ModuleUploadViewModel(
          * 缓存，纯白打；60 秒正好是缓存过期后能拿到新读数的节奏。
          */
         const val PROGRESS_POLL_INTERVAL_MS = 60_000L
+
+        /**
+         * 进「上传记录」页自动查进度的节流窗口：5 分钟内重复进出不重发。
+         *
+         * 比轮询间隔（60 秒）宽得多：自动查面向的是「来回翻页面」的路径，徽标落后
+         * 几分钟无感；弹层里还有 60 秒轮询兜底，数据不会真的变陈。
+         */
+        const val PROGRESS_AUTO_REFRESH_MS = 5 * 60_000L
 
         /** Worker used-nonce 分支的机器可读码（与旧入口同一条约定）。 */
         const val PROOF_USED_CODE = "proof_used"

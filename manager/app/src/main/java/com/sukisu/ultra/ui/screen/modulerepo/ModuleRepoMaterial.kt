@@ -1933,7 +1933,7 @@ internal fun CommentsPage(
                             }
                         }
                     }
-                    if (state.nextCursor.isNotEmpty()) {
+                    if (state.comments.isNotEmpty() && state.nextCursor.isNotEmpty()) {
                         item(key = "load_more") {
                             Box(
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),

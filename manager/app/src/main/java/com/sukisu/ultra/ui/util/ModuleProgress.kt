@@ -16,6 +16,7 @@
 
 package com.sukisu.ultra.ui.util
 
+import com.sukisu.ultra.R
 import com.sukisu.ultra.ksuApp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -277,6 +278,18 @@ fun progressStageOf(raw: String): ProgressStage = when (raw.trim().lowercase()) 
     "published" -> ProgressStage.PUBLISHED
     "rejected" -> ProgressStage.REJECTED
     else -> ProgressStage.SUBMITTED
+}
+
+/**
+ * 徽标用的短文案：直接复用步骤条那组四语言键（已提交/待审核/已合并/已收录/未通过收录），
+ * 不为「卡片上的徽标」另起一套说法 —— 两处说的是同一件事，叫法必须一致。
+ */
+fun ProgressStage.labelRes(): Int = when (this) {
+    ProgressStage.SUBMITTED -> R.string.module_upload_progress_step_submitted
+    ProgressStage.REVIEWING -> R.string.module_upload_progress_step_reviewing
+    ProgressStage.MERGED -> R.string.module_upload_progress_step_merged
+    ProgressStage.PUBLISHED -> R.string.module_upload_progress_step_published
+    ProgressStage.REJECTED -> R.string.module_upload_progress_step_rejected
 }
 
 /**

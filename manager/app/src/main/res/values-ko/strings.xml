@@ -269,6 +269,8 @@
     <string name="module_my_comments_open">내 댓글</string>
     <string name="module_my_comments_title">내 댓글</string>
     <string name="module_my_comments_empty">아직 모듈에 댓글을 남기지 않았습니다.</string>
+    <string name="module_my_comments_empty_title">댓글이 없습니다</string>
+    <string name="module_my_comments_browse">모듈 둘러보기</string>
     <string name="module_my_comments_deleted">삭제됨</string>
     <string name="module_my_comments_load_failed">댓글을 불러오지 못했습니다</string>
     <string name="module_my_comments_need_verify">세션이 만료되었습니다. 내 댓글을 보려면 다시 인증해 주세요.</string>

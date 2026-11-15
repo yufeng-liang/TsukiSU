@@ -249,8 +249,17 @@ internal fun UploadProgressDialogMaterial(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    if (loading) {
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    // 固定高度槽：指示器出现/消失不再推动下面的内容（高度跳变的根源）。
+                    // 槽常驻，空着时就是内容顶部一段正常留白。
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(20.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (loading) {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
                     }
                     if (error != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {

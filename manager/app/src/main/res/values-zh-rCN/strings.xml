@@ -2390,6 +2390,8 @@
     <string name="module_my_comments_open">我的评论</string>
     <string name="module_my_comments_title">我的评论</string>
     <string name="module_my_comments_empty">还没有在模块商店发过评论。</string>
+    <string name="module_my_comments_empty_title">还没有评论</string>
+    <string name="module_my_comments_browse">去逛逛模块</string>
     <string name="module_my_comments_deleted">已删除</string>
     <string name="module_my_comments_load_failed">评论加载失败</string>
     <string name="module_my_comments_need_verify">会话已过期，重新验证身份后查看自己的评论。</string>

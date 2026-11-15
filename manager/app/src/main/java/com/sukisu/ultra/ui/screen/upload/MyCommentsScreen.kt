@@ -2,6 +2,14 @@ package com.sukisu.ultra.ui.screen.upload
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ArrowForward
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -19,8 +27,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.Surface
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text as M3Text
 import androidx.compose.material3.TextButton
@@ -31,6 +42,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -141,20 +155,23 @@ private fun MyCommentsScreenMaterial(viewModel: ModuleMyCommentsViewModel) {
                             }
                         }
                     }
-                    // 空态：一句说明就够。
+                    // 空态：图标卡片，给一条去逛逛的出路。
                     state.comments.isEmpty() -> {
                         item(key = "empty") {
-                            M3Text(
-                                text = stringResource(R.string.module_my_comments_empty),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(vertical = 24.dp),
-                            )
+                            MyCommentsEmptyCardMaterial(onBrowse = { navigator.pop() })
                         }
                     }
                     else -> {
                         itemsIndexed(items = state.comments, key = { _, c -> c.id }) { _, comment ->
-                            MyCommentRowMaterial(comment = comment)
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            ) {
+                                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                                    MyCommentRowMaterial(comment = comment)
+                                }
+                            }
                         }
                         if (state.nextCursor.isNotEmpty()) {
                             item(key = "load_more") {
@@ -171,6 +188,102 @@ private fun MyCommentsScreenMaterial(viewModel: ModuleMyCommentsViewModel) {
                     }
                 }
             }
+        }
+    }
+}
+
+/** 空态卡（Material）：图标 + 主文案 + 副文案 + 去逛逛按钮。 */
+@Composable
+private fun MyCommentsEmptyCardMaterial(onBrowse: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(18.dp),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.Chat,
+                    contentDescription = null,
+                    modifier = Modifier.size(28.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            M3Text(
+                text = stringResource(R.string.module_my_comments_empty_title),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            M3Text(
+                text = stringResource(R.string.module_my_comments_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Button(onClick = onBrowse) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    M3Text(stringResource(R.string.module_my_comments_browse))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.Rounded.ArrowForward,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 空态卡（Miuix）：AppCard + 图标 + 主副文案，与评论区空态同一风格。 */
+@Composable
+private fun MyCommentsEmptyCardMiuix() {
+    AppCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .background(
+                        color = colorScheme.secondaryContainer,
+                        shape = RoundedCornerShape(18.dp),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.Chat,
+                    contentDescription = null,
+                    modifier = Modifier.size(28.dp),
+                    tint = colorScheme.primary,
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.module_my_comments_empty_title),
+                fontSize = 17.sp,
+                color = colorScheme.onSurface,
+            )
+            Text(
+                text = stringResource(R.string.module_my_comments_empty),
+                fontSize = 14.sp,
+                color = colorScheme.onSurfaceVariantSummary,
+            )
         }
     }
 }
@@ -303,12 +416,7 @@ private fun MyCommentsScreenMiuix(viewModel: ModuleMyCommentsViewModel) {
                         }
                         state.comments.isEmpty() -> {
                             item(key = "empty") {
-                                Text(
-                                    text = stringResource(R.string.module_my_comments_empty),
-                                    fontSize = 14.sp,
-                                    color = colorScheme.onSurfaceVariantSummary,
-                                    modifier = Modifier.padding(vertical = 24.dp),
-                                )
+                                MyCommentsEmptyCardMiuix()
                             }
                         }
                         else -> {
@@ -352,6 +460,11 @@ private fun MyCommentRowMiuix(comment: ModuleComments.MyCommentItem) {
         )
         Text(
             text = formatRepoTime(comment.createdAt),
+            fontSize = 12.sp,
+            color = colorScheme.onSurfaceVariantSummary,
+        )
+        Text(
+            text = comment.moduleId,
             fontSize = 12.sp,
             color = colorScheme.onSurfaceVariantSummary,
         )

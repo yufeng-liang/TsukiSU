@@ -236,12 +236,21 @@ internal fun UploadProgressDialogMiuix(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                if (loading) {
-                    Text(
-                        text = stringResource(R.string.module_upload_mine_loading),
-                        fontSize = 13.sp,
-                        color = colorScheme.onSurfaceVariantSummary,
-                    )
+                // 固定高度槽：加载文案出现/消失不再推动下面的卡片（高度跳变的根源）。
+                // 槽常驻，空着时就是内容顶部一段正常留白。
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(18.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    if (loading) {
+                        Text(
+                            text = stringResource(R.string.module_upload_mine_loading),
+                            fontSize = 13.sp,
+                            color = colorScheme.onSurfaceVariantSummary,
+                        )
+                    }
                 }
                 if (error != null) {
                     Row(verticalAlignment = Alignment.CenterVertically) {

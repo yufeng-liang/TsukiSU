@@ -2,7 +2,10 @@ package com.sukisu.ultra.ui.screen.upload
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -19,6 +22,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.outlined.History
@@ -62,7 +66,10 @@ import com.sukisu.ultra.ui.component.material.expressiveTopAppBarColors
 import com.sukisu.ultra.ui.component.statustag.StatusTag
 import com.sukisu.ultra.ui.util.MineModule
 import com.sukisu.ultra.ui.util.ProgressItem
+import com.sukisu.ultra.ui.util.ProgressStage
 import com.sukisu.ultra.ui.util.formatEpochTime
+import com.sukisu.ultra.ui.util.labelRes
+import com.sukisu.ultra.ui.util.progressKey
 import com.sukisu.ultra.ui.util.progressVersions
 
 /**
@@ -237,6 +244,9 @@ fun ModuleUploadHistoryMaterial(
                         picking = state.pickingFor != null,
                         pickingThis = state.pickingFor == group.id,
                         onPick = { onPickForMine(group.latest) },
+                        // 徽标只认最新一版：收起状态下用户最想知道的是「现在这版到哪了」。
+                        latestProgress = state.progress[progressKey(group.id, group.latestVersionCode)],
+                        progressLoading = progressLoading,
                         onOpenProgress = { onOpenProgress(group.id) },
                     )
                 }
@@ -307,6 +317,10 @@ private fun HistoryCardMaterial(
     picking: Boolean,
     pickingThis: Boolean,
     onPick: () -> Unit,
+    /** 最新一版的收录进度；null = 还没查到（按「已提交」灰签兜底或转圈）。 */
+    latestProgress: ProgressItem?,
+    /** 进度正在请求中：还没拿到任何读数时徽标位转圈。 */
+    progressLoading: Boolean,
     /** 打开这个模块的收录进度（弹层）。 */
     onOpenProgress: () -> Unit,
 ) {
@@ -359,15 +373,48 @@ private fun HistoryCardMaterial(
                         backgroundColor = MaterialTheme.colorScheme.primaryContainer,
                     )
                 }
-                // 「收录进度」入口：右侧一枚文字按钮，点开弹层。放在卡片里而不是
-                // 展开区，是因为「这一版到哪了」是收起状态下最想知道的第二件事
-                // （第一件是名字）。
-                TextButton(onClick = onOpenProgress) {
-                    Text(
-                        text = stringResource(R.string.module_upload_progress_title),
-                        style = MaterialTheme.typography.labelMedium,
-                        maxLines = 1,
+                // 收录进度徽标：一枚彩色状态签替代原先的文字按钮——收起状态下
+                // 不展开就能看到「这版到哪了」，点徽标本身打开弹层（不会触发卡片
+                // 的展开/收起）。还没查到读数时转圈，不假装给一个结论。
+                if (latestProgress == null && progressLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clickable(onClick = onOpenProgress),
+                        strokeWidth = 2.dp,
                     )
+                } else {
+                    val stage = latestProgress?.stage ?: ProgressStage.SUBMITTED
+                    val scheme = MaterialTheme.colorScheme
+                    // 专用大号徽标：通用 StatusTag 是给列表行的小签，在卡片标题行上
+                    // 「这一版到哪了」是主信息，按正文小字放大一档。
+                    Box(
+                        modifier = Modifier
+                            .clickable(onClick = onOpenProgress)
+                            .background(
+                                color = when (stage) {
+                                    ProgressStage.SUBMITTED -> scheme.surfaceVariant
+                                    ProgressStage.REVIEWING -> scheme.tertiaryContainer
+                                    ProgressStage.MERGED -> scheme.secondaryContainer
+                                    ProgressStage.PUBLISHED -> scheme.primaryContainer
+                                    ProgressStage.REJECTED -> scheme.errorContainer
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                            )
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    ) {
+                        Text(
+                            text = stringResource(stage.labelRes()),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = when (stage) {
+                                ProgressStage.SUBMITTED -> scheme.onSurfaceVariant
+                                ProgressStage.REVIEWING -> scheme.onTertiaryContainer
+                                ProgressStage.MERGED -> scheme.onSecondaryContainer
+                                ProgressStage.PUBLISHED -> scheme.onPrimaryContainer
+                                ProgressStage.REJECTED -> scheme.onErrorContainer
+                            },
+                        )
+                    }
                 }
             }
 
@@ -405,8 +452,6 @@ private fun HistoryCardMaterial(
                             }
                         }
                     }
-                    // 动作与它的说明成对出现，与列表页每个动作同一个结构：
-                    // 只给一枚「发新版本」，用户没法预判点了会发生什么。
                     // 挑包要弹系统选择器，回来之前这一行没有任何反馈——正在挑的那张卡
                     // 转圈并把按钮禁掉，其余卡一起禁用（闸门本来就是全局的）。
                     if (pickingThis) {
@@ -426,15 +471,21 @@ private fun HistoryCardMaterial(
                             )
                         }
                     } else {
-                        RowActionMaterial(
-                            label = stringResource(R.string.module_upload_mine_update),
-                            summary = stringResource(R.string.module_upload_history_update_summary),
-                            enabled = !picking,
+                        // 收成右对齐的一枚小按钮：整幅宽的大动作块 + 说明把展开区撑得
+                        // 很空，而版本清单已经把上下文说清了，说明文字是重复的。
+                        TextButton(
                             onClick = onPick,
-                            // 版本清单是 2dp 的紧凑行距，动作要自己和它分开一点，
-                            // 否则读起来像是清单的最后一行。
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
+                            enabled = !picking,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            modifier = Modifier
+                                .align(Alignment.End)
+                                .padding(top = 2.dp),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.module_upload_mine_update),
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
                     }
                 }
             }

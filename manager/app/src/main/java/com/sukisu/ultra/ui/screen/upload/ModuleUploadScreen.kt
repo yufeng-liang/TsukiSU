@@ -53,10 +53,13 @@ fun ModuleUploadScreen() {
     // 名字带 upload 前缀是为了与下面表单自己的 formState.notice 分清（两者不是一回事）。
     val uploadNotice by viewModel.notice.collectAsStateWithLifecycle()
 
-    // 顶栏头像：核验过就有地址可画（会话里存的那份是登录时留下的，令牌过期也还在）。
+    // 顶栏头像：核验过用核验那份；还没核完（服务端核实要出网）就落回本地会话里存的
+    // 那份 —— session 在 refreshSession 里同步读盘，首帧就有。原先兜底挂在「uidState
+    // 已是 Verified」后面，等于核完才允许用缓存头像，进页面必然先看到图标闪一下再变
+    // 头像；缓存头像本来就是登录时服务端给的，核实只是确认它还活着，不该挡着它先画。
     val avatarUrl = (formState.uidState as? CoolapkUidState.Verified)?.avatar
-        ?.ifBlank { formState.session?.avatar.orEmpty() }
-        .orEmpty()
+        ?.takeIf { it.isNotBlank() }
+        ?: formState.session?.avatar.orEmpty()
 
     // 人机校验的 WebView 只在需要时弹出；它自己管生命周期。
     val turnstile = remember { WebViewTurnstileProvider() }
@@ -254,6 +257,7 @@ fun ModuleUploadScreen() {
                 onOpenHistory = viewModel::openHistory,
                 // 商店入口：跳过去时把筛选钉在酷安社区模块上，而不是让用户自己再找。
                 onOpenStore = { navigator.push(Route.ModuleRepo(COOLAPK_COMMUNITY_SOURCE_ID)) },
+                onOpenMyComments = { navigator.push(Route.MyComments) },
             )
 
             UiMode.Material -> ModuleUploadListMaterial(
@@ -273,6 +277,7 @@ fun ModuleUploadScreen() {
                 avatarUrl = avatarUrl,
                 onOpenHistory = viewModel::openHistory,
                 onOpenStore = { navigator.push(Route.ModuleRepo(COOLAPK_COMMUNITY_SOURCE_ID)) },
+                onOpenMyComments = { navigator.push(Route.MyComments) },
             )
         }
 

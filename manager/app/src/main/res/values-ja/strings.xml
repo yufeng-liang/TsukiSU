@@ -253,6 +253,8 @@
     <string name="module_my_comments_open">自分のコメント</string>
     <string name="module_my_comments_title">自分のコメント</string>
     <string name="module_my_comments_empty">まだコメントしていません。</string>
+    <string name="module_my_comments_empty_title">コメントはまだありません</string>
+    <string name="module_my_comments_browse">モジュールを見る</string>
     <string name="module_my_comments_deleted">削除済み</string>
     <string name="module_my_comments_load_failed">コメントの読み込みに失敗しました</string>
     <string name="module_my_comments_need_verify">セッションが期限切れです。自分のコメントを見るには再度本人確認してください。</string>
