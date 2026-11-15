@@ -967,12 +967,16 @@ fun ModuleRepoDetailScreenMaterial(
             )
         }
         val tabComments = stringResource(R.string.module_comments_tab)
+        val tabCommentsCount = stringResource(R.string.module_comments_tab_count)
+        // 评论数由评论区页上报（首拉完成后才有值，-1 表示还没加载）。
+        var commentCount by remember { mutableIntStateOf(-1) }
         val tabs = pages.map { kind ->
             when (kind) {
                 RepoDetailPageKind.README -> tabReadme
                 RepoDetailPageKind.RELEASES -> tabReleases
                 RepoDetailPageKind.INFO -> tabInfo
-                RepoDetailPageKind.COMMENTS -> tabComments
+                RepoDetailPageKind.COMMENTS ->
+                    if (commentCount >= 0) tabCommentsCount.format(tabComments, commentCount) else tabComments
             }
         }
         val pagerState = rememberPagerState(initialPage = 0, pageCount = { tabs.size })
@@ -1051,6 +1055,7 @@ fun ModuleRepoDetailScreenMaterial(
                         initialLikeCount = module.likes,
                         innerPadding = paddedInnerPadding,
                         scrollBehavior = scrollBehavior,
+                        onCommentCountChange = { commentCount = it },
                     )
                 }
             }
@@ -1752,6 +1757,8 @@ internal fun CommentsPage(
     initialLikeCount: Int,
     innerPadding: PaddingValues,
     scrollBehavior: TopAppBarScrollBehavior,
+    /** 已加载评论数变化时上报给详情页（tab 标题「评论 (N)」用）。 */
+    onCommentCountChange: (Int) -> Unit = {},
 ) {
     val viewModel: ModuleCommentsViewModel = viewModel(
         key = moduleId,
@@ -1764,6 +1771,9 @@ internal fun CommentsPage(
     // 从评论区验证页 pop 回来时 NavDisplay 重组本页：重读会话，令牌到手就清
     // 「去验证」卡并刷新列表；init 那次 readSession 比较不出变化，这里补上。
     LaunchedEffect(Unit) { viewModel.recheckSession() }
+
+    // 已加载条数变化（首拉/翻页/删除）就报给外层，tab 标题跟着变。
+    LaunchedEffect(state.comments.size) { onCommentCountChange(state.comments.size) }
 
     var draft by remember { mutableStateOf("") }
     var replyTarget by remember { mutableStateOf<CommentItem?>(null) }
