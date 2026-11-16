@@ -11,6 +11,7 @@ on:
       - '.github/workflows/ksud.yml'
       - '.github/workflows/ksud-extra.yml'
       - '.github/workflows/ksuinit.yml'
+      - '.github/workflows/builtzygisk.yml'
       - '.github/scripts/setup-rust-build.sh'
       - '.github/riscv64-cargo.toml'
       - 'repack_apk.py'
@@ -20,6 +21,7 @@ on:
       - 'manager/**'
       - 'kernel/**'
       - 'userspace/**'
+      - 'external/BuiltZygisk/**'
       - 'Cargo.lock'
       - 'Cargo.toml'
 
@@ -32,6 +34,7 @@ on:
       - '.github/workflows/ksud.yml'
       - '.github/workflows/ksud-extra.yml'
       - '.github/workflows/ksuinit.yml'
+      - '.github/workflows/builtzygisk.yml'
       - '.github/scripts/setup-rust-build.sh'
       - '.github/riscv64-cargo.toml'
       - 'repack_apk.py'
@@ -41,6 +44,7 @@ on:
       - 'manager/**'
       - 'kernel/**'
       - 'userspace/**'
+      - 'external/BuiltZygisk/**'
       - 'Cargo.lock'
       - 'Cargo.toml'
 
@@ -222,9 +226,11 @@ jobs:
   build-ksuinit:
     uses: ./.github/workflows/ksuinit.yml
 
+  build-builtzygisk:
+    uses: ./.github/workflows/builtzygisk.yml
 
   build-ksud:
-    needs: [build-lkm, build-ksuinit, determine-version]
+    needs: [build-lkm, build-ksuinit, determine-version, build-builtzygisk]
 
     strategy:
       fail-fast: false
@@ -241,6 +247,7 @@ jobs:
       pack_lkm: true
       pack_ksuinit: true
       version_code: ${{ needs.determine-version.outputs.version_code }}
+      pack_builtzygisk: true
 
 
   # ------------------------------------------------------------
@@ -318,7 +325,7 @@ jobs:
           find . -depth -type d -name 'sukisu' \
             -execdir mv {} "$word2" \;
 
-          find . -depth -type d -name 'ultra' \
+          find . -depth -type d -name 'nova' \
             -execdir mv {} "$word3" \;
 
           find . -depth -type d -name 'io' \
@@ -326,13 +333,13 @@ jobs:
 
           # Replace package references inside files.
           find . -type f -exec sed -i \
-            -e "s/com\.sukisu\.ultra/$word1.$word2.$word3/g" \
-            -e "s/io\.sukisu\.ultra/$word4.$word2.$word3/g" \
+            -e "s/com\.sukisu\.nova/$word1.$word2.$word3/g" \
+            -e "s/io\.sukisu\.nova/$word4.$word2.$word3/g" \
             -e "s/com\.sukisu\.zako/$word1.$word2.zako/g" \
-            -e "s/com\/sukisu\/ultra/$word1\/$word2\/$word3/g" \
-            -e "s/io\/sukisu\/ultra/$word4\/$word2\/$word3/g" \
-            -e "s/io_sukisu_ultra/${word4}_${word2}_${word3}/g" \
-            -e "s/com_sukisu_ultra/${word1}_${word2}_${word3}/g" \
+            -e "s/com\/sukisu\/nova/$word1\/$word2\/$word3/g" \
+            -e "s/io\/sukisu\/nova/$word4\/$word2\/$word3/g" \
+            -e "s/io_sukisu_nova/${word4}_${word2}_${word3}/g" \
+            -e "s/com_sukisu_nova/${word1}_${word2}_${word3}/g" \
             {} +
 
           # 包名默认值已收敛到仓库根的 manager-package.properties，它不在 ./manager
