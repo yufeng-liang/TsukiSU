@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -32,7 +33,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -238,7 +239,28 @@ internal fun UploadProgressDialogMaterial(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.module_upload_progress_title)) },
+        // 标题行水平居中；加载中在标题右边转圈（MD3 的 title 是槽位，能放任意组件）。
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // 标题自己居中，转圈浮在标题右侧（Box 宽度=标题宽度），转圈出现/消失不会推动标题。
+                Box {
+                    Text(stringResource(R.string.module_upload_progress_title))
+                    if (loading) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .offset(x = 26.dp),
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        }
+                    }
+                }
+            }
+        },
         confirmButton = {},
         // 关闭与「去商店看看」/「查看 PR」同一行：Actions 没按钮时关闭自动独占全宽。
         text = {
@@ -249,18 +271,6 @@ internal fun UploadProgressDialogMaterial(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    // 固定高度槽：指示器出现/消失不再推动下面的内容（高度跳变的根源）。
-                    // 槽常驻，空着时就是内容顶部一段正常留白。
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(20.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (loading) {
-                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                        }
-                    }
                     if (error != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(

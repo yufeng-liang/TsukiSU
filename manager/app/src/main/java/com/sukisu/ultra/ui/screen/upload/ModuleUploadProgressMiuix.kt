@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -50,6 +51,7 @@ import com.sukisu.ultra.ui.util.formatProgressTime
 import com.sukisu.ultra.ui.util.nodeTimeAt
 import com.sukisu.ultra.ui.util.nodeStateOf
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.ButtonDefaults as MiuixButtonDefaults
@@ -227,29 +229,40 @@ internal fun UploadProgressDialogMiuix(
 ) {
     OverlayDialog(
         show = true,
-        title = stringResource(R.string.module_upload_progress_title),
+        // 不传 title：库签名是 title: String? = null，为 null 时压根不画标题行（传 "" 才会画一行空标题）。
+        // 标题行自绘在内容顶部，「标题 + 右边转圈」才能同一行，也不会有空标题行白占 24dp。
         onDismissRequest = onDismiss,
         content = {
             Column(
                 modifier = Modifier
                     .heightIn(max = MaxProgressDialogHeight)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                // 固定高度槽：加载文案出现/消失不再推动下面的卡片（高度跳变的根源）。
-                // 槽常驻，空着时就是内容顶部一段正常留白。
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(18.dp),
-                    contentAlignment = Alignment.CenterStart,
+                // 标题行：水平居中，加载中在标题右边转圈。
+                // 标题自己居中，转圈浮在标题右侧（Box 的宽度就是标题宽度），
+                // 这样转圈出现/消失都不会推动标题的水平位置。
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (loading) {
+                    Box {
                         Text(
-                            text = stringResource(R.string.module_upload_mine_loading),
-                            fontSize = 13.sp,
-                            color = colorScheme.onSurfaceVariantSummary,
+                            text = stringResource(R.string.module_upload_progress_title),
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = colorScheme.onSurface,
                         )
+                        if (loading) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .offset(x = 24.dp),
+                            ) {
+                                CircularProgressIndicator(progress = null, size = 16.dp, strokeWidth = 2.dp)
+                            }
+                        }
                     }
                 }
                 if (error != null) {
