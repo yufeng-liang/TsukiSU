@@ -1044,26 +1044,34 @@ object ModuleContribution {
     }
 
     /**
-     * 吊销服务端那一张令牌（「退出验证」用）。
+     * 吊销服务端那一张令牌（「退出验证」用）。返回**是否已确认吊销**。
      *
-     * 服务端是**幂等**的：形状不对、压根没有这张、已经吊销过 —— 全都回 `{ok:true}`，
-     * 所以这个端点不会变成一个「猜中即证实」的探测器。因此这里也不区分成败：
-     * 网络不通时本地那份照样抹掉（用户的意图是「这台设备不再记住我」，服务端那张
-     * 九十天后自己过期，留着它不会让本地重新变成已验证）。
+     * 服务端是幂等的：形状不对、压根没有这张、已经吊销过 —— 全都回 ok，所以这个端点
+     * 不会变成一个「猜中即证实」的探测器。也正因为「一律 200」，这里的返回值不能只看
+     * 状态码：限流命中时服务端同样回 ok（它不想让网页端把 429 读成「令牌坏了」并清掉
+     * 本地那份凭据），但那一趟**没有真的删**，它会多带一个 skipped 标记。把这种情形认成
+     * 成功，就等于把一条还活着的令牌从待吊销队列里划掉 —— 这正是调用点需要区分的东西。
+     *
+     * 形状不对的令牌直接算「已办完」：服务端本来就不会有它，记进待吊销队列反而会留下
+     * 一条永远吊销不掉的条目。
      */
-    suspend fun revokeSession(token: String) {
+    suspend fun revokeSession(token: String): Boolean {
         val safeToken = token.trim()
-        if (!SESSION_TOKEN_RE.matches(safeToken)) return
+        if (!SESSION_TOKEN_RE.matches(safeToken)) return true
         val body = JSONObject().put("token", safeToken).toString().toRequestBody(JSON_MEDIA_TYPE)
         val url = BASE_URL.trimEnd('/') + "/session/revoke"
-        withContext(Dispatchers.IO) {
+        return withContext(Dispatchers.IO) {
             val call = runCatching {
                 client().newCall(Request.Builder().url(url).post(body).build())
-            }.getOrNull() ?: return@withContext
+            }.getOrNull() ?: return@withContext false
             runCatching {
-                withTimeout(QUERY_TIMEOUT_MS) { execute(call, QUERY_TIMEOUT_MS) }.use { it.body.string() }
-            }
-            Unit
+                withTimeout(QUERY_TIMEOUT_MS) { execute(call, QUERY_TIMEOUT_MS) }.use { response ->
+                    val text = response.body.string()
+                    if (!response.isSuccessful) return@withContext false
+                    val skipped = runCatching { JSONObject(text).optString("skipped") }.getOrDefault("")
+                    skipped.isEmpty()
+                }
+            }.getOrDefault(false)
         }
     }
 

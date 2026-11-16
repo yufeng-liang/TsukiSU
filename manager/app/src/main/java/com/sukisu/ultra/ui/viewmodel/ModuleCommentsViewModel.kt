@@ -8,6 +8,7 @@ import com.sukisu.ultra.ui.util.ModuleComments
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -59,6 +60,11 @@ class ModuleCommentsViewModel(
         _uiState.update { it.copy(likeCount = initialLikeCount) }
         refresh()
         readSession()
+        // 会话在别处变了（登出、换令牌）：立刻跟着变，不等用户离开再进来。
+        // drop(1) 跳过当前值 —— 首次读会话上面那一行已经做了。
+        viewModelScope.launch {
+            ModuleUploadPrefs.sessionVersion.drop(1).collect { readSession() }
+        }
     }
 
     /**
@@ -72,11 +78,17 @@ class ModuleCommentsViewModel(
         val previous = sessionToken
         val session = ModuleUploadPrefs.readSession()
         sessionToken = if (session != null && session.validAt(System.currentTimeMillis())) session.token else ""
-        _uiState.update {
-            it.copy(
-                myUid = session?.uid ?: "",
-                myNickname = session?.nickname ?: "",
+        _uiState.update { state ->
+            val nextUid = session?.uid.orEmpty()
+            // 点赞记忆（likedModuleIds）是按「这个人点过」记的：身份没了、或者换了一个
+            // UID，它就不再成立 —— 留着的话，登出/换账号之后同一个页面还会亮着上一个人
+            // 点过的红心。
+            val keepLikes = sessionToken.isNotEmpty() && nextUid == state.myUid
+            state.copy(
+                myUid = nextUid,
+                myNickname = session?.nickname.orEmpty(),
                 canInteract = sessionToken.isNotEmpty(),
+                likedModuleIds = if (keepLikes) state.likedModuleIds else emptySet(),
             )
         }
         return sessionToken.isNotEmpty() && sessionToken != previous

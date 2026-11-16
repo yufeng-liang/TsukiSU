@@ -8,6 +8,12 @@ import com.sukisu.ultra.data.backup.sha256Hex
 import com.sukisu.ultra.ksuApp
 import com.sukisu.ultra.ui.util.UploadSession
 import java.security.SecureRandom
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 /**
  * 上传表单记住的「上次用的酷安 UID」。
@@ -73,6 +79,19 @@ object ModuleUploadPrefs {
     // 被云备份拷走等于换台机器也能直接换令牌（见文件头那段取舍）。
     const val KEY_IDENTITY_SECRET = "module_upload_identity_secret"
 
+    // ---- 吊销未遂的待办 ----
+    //
+    // 服务端那张令牌是九十天有效的凭据：本地抹掉只解决「这台设备不再记住我」，
+    // 解决不了「那张令牌本身还能用」。登出时吊销失败（断网、超时、服务端抽风）如果
+    // 就此丢掉，用户以为自己退了，那张令牌却还能被人用满九十天。所以失败的那一张先
+    // 记在盘上，下次进投稿链路时顺手重试 —— 服务端吊销是幂等的（令牌不存在也回 ok，
+    // 见 worker 的 /session/revoke），重试没有副作用。
+    const val KEY_PENDING_REVOKE = "module_upload_pending_revoke"
+
+    /** 待吊销队列最多记这么多张：它是「还没办完的凭据」，不是流水账。 */
+    private const val PENDING_REVOKE_LIMIT = 20
+
+
     // ---- 落盘加密 ----
     //
     // 令牌与身份验证串写盘前过一层 Keystore 信封（[CredentialCipher]，格式 `v1:iv:ct`）。
@@ -134,10 +153,19 @@ object ModuleUploadPrefs {
         if (valid && rawToken.isNotEmpty() && !rawToken.startsWith(ENVELOPE_PREFIX)) {
             runCatching { p.edit { putString(KEY_SESSION_TOKEN, seal(rawToken)) } }
         }
-        session.takeIf { valid }
+        if (!valid) {
+            // 令牌按时间到点了：盘上那一份已经没有用 —— 但它不会自己消失，而评论区与「我的
+            // 评论」只在「会话变更」时才重读（见 sessionVersion）。不在这里抹掉并喊一声，
+            // 用户停在评论页会一直看到「已登录」、红心还亮着，直到他离开再回来。
+            // 只有确实存过东西才走这一步：没存过的设备不该因为一次读就写一次盘。
+            if (rawToken.isNotEmpty()) clearSession()
+            null
+        } else {
+            session
+        }
     }.getOrNull()
 
-    /** 存下一张令牌。形状不对的一律不存（脏数据不许落到盘上）。 */
+    /** 存下一张令牌。形状不对的一律不存（脏数据不许落到盘上）；写成功就喊一声（见 sessionVersion）。 */
     fun writeSession(session: UploadSession) {
         if (!session.wellFormed) return
         runCatching {
@@ -150,9 +178,15 @@ object ModuleUploadPrefs {
                 putInt(KEY_SESSION_LEVEL, session.level)
             }
         }
+        bumpSessionVersion()
     }
 
-    /** 「退出验证」：把本地这一份抹掉。服务端那张另外吊销（见 ViewModel）。 */
+    /**
+     * 「退出验证」：把本地这一份抹掉。服务端那张另外吊销（见 ViewModel）。
+     *
+     * 抹完喊一声（见 sessionVersion）：评论区的 ViewModel 各自握着内存里的令牌快照，
+     * 不喊的话它们会继续显示「已登录」，直到用户离开再回来。
+     */
     fun clearSession() {
         runCatching {
             sessionPrefs()?.edit {
@@ -162,6 +196,81 @@ object ModuleUploadPrefs {
                 remove(KEY_SESSION_AVATAR)
                 remove(KEY_SESSION_EXPIRES_AT)
                 remove(KEY_SESSION_LEVEL)
+            }
+        }
+        bumpSessionVersion()
+    }
+
+    // ---- 会话变更信号 ----
+
+    private val _sessionVersion = MutableStateFlow(0L)
+
+    /**
+     * 会话身份版本号：写下新令牌、抹掉令牌（登出）各 +1。只在进程内有效，不落盘。
+     *
+     * 「登出」发生在投稿链路的 ViewModel 里，而评论区、我的评论页各有自己的 ViewModel ——
+     * 它们不会因为别人清了盘就自动作废。与其在每个页面各写一套「记得重读」，不如让改
+     * 会话的那一处喊一声：收集方收这个 Flow，用 drop(1) 跳过当前值，只在**变化**时重读
+     * 会话（当前值属于「页面自己首次读取」的事）。
+     */
+    val sessionVersion: StateFlow<Long> = _sessionVersion.asStateFlow()
+
+    /** 会话身份变了：喊一声（见 [sessionVersion]）。 */
+    private fun bumpSessionVersion() {
+        _sessionVersion.update { it + 1 }
+    }
+
+    // ---- 吊销未遂的待办（见 [KEY_PENDING_REVOKE]）----
+
+    /** 盘上那几张待吊销令牌的**信封串**（未解密；Editor 没有读方法，所以读在 edit 之外）。 */
+    private fun pendingRevokeEnvelopes(): Set<String> = runCatching {
+        sessionPrefs()?.getStringSet(KEY_PENDING_REVOKE, emptySet()).orEmpty()
+    }.getOrDefault(emptySet())
+
+    /**
+     * 记一张「吊销没成功」的令牌：信封加密后落盘，与其它凭据同一条处理。
+     *
+     * 三处讲究：解不开的旧信封（换过密钥）顺手清掉 —— 它们再也吊销不掉，留着只会让每次
+     * 读都白解一遍；同一张令牌不重复记（每张信封的 IV 不同，得解出原文才比得出重复）；
+     * 拿不到密钥时 seal 会降级成明文，那就**不记** —— 宁可这一条不留痕，也不在盘上多存
+     * 一份明文令牌。
+     */
+    suspend fun addPendingRevoke(token: String) {
+        withContext(Dispatchers.IO) {
+            val pending = token.trim()
+            if (pending.isBlank()) return@withContext
+            val alive = pendingRevokeEnvelopes().filter { unseal(it).isNotBlank() }
+            if (alive.any { unseal(it) == pending }) return@withContext
+            val sealed = seal(pending)
+            if (sealed == pending) return@withContext
+            val next = (alive + sealed).takeLast(PENDING_REVOKE_LIMIT).toSet()
+            runCatching { sessionPrefs()?.edit { putStringSet(KEY_PENDING_REVOKE, next) } }
+        }
+    }
+
+    /** 还没吊销掉的令牌原文；解不开的（密钥没了）当没记过。信封解密要碰 Keystore，放 IO 上做。 */
+    suspend fun pendingRevokes(): List<String> = withContext(Dispatchers.IO) {
+        pendingRevokeEnvelopes().map { unseal(it) }.filter { it.isNotBlank() }
+    }
+
+    /**
+     * 一张待吊销的令牌办完了（或确认不必再试）：划掉它。
+     *
+     * 每次都得解出原文比对：每张信封的 IV 不同，比信封串是看不出重复的。解不开的那些
+     * （密钥没了、信封坏了）也一并清掉 —— 它们永远办不完，留着只是每次读都白解一遍。
+     */
+    suspend fun removePendingRevoke(token: String) {
+        withContext(Dispatchers.IO) {
+            val pending = token.trim()
+            if (pending.isBlank()) return@withContext
+            val next = pendingRevokeEnvelopes()
+                .filterNot { unseal(it) == pending }
+                .filter { unseal(it).isNotBlank() }
+                .toSet()
+            runCatching {
+                sessionPrefs()?.edit {
+                    if (next.isEmpty()) remove(KEY_PENDING_REVOKE) else putStringSet(KEY_PENDING_REVOKE, next)
+                }
             }
         }
     }

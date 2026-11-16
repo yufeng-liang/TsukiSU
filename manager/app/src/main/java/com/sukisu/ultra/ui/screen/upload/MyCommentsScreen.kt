@@ -101,7 +101,7 @@ private fun MyCommentsScreenMaterial(viewModel: ModuleMyCommentsViewModel) {
     val navigator = LocalNavigator.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
-    LaunchedEffect(Unit) { viewModel.refresh() }
+    LaunchedEffect(Unit) { viewModel.recheckSession() }
 
     ExpressiveScaffold(
         topBar = {
@@ -346,7 +346,7 @@ private fun MyCommentsScreenMiuix(viewModel: ModuleMyCommentsViewModel) {
     val backdrop = rememberBlurBackdrop(enableBlur)
     val barColor = if (backdrop != null) Color.Transparent else colorScheme.surface
 
-    LaunchedEffect(Unit) { viewModel.refresh() }
+    LaunchedEffect(Unit) { viewModel.recheckSession() }
 
     AppScaffold(
         topBar = {

@@ -136,6 +136,10 @@ class ModuleUploadViewModel(
     private var loadJob: Job? = null
     private var lookupJob: Job? = null
     private var mineJob: Job? = null
+
+    /** 补做待吊销令牌的那个协程：只用来防重入（onEnter 每次进出都会调），与页面生命周期无关。 */
+    private var pendingRevokeJob: Job? = null
+
     private var indexLoadJob: Job? = null
 
     /**
@@ -191,6 +195,8 @@ class ModuleUploadViewModel(
         // 当前表单里正在引用的那几份要留着——它们正是「下一批」要接着用的文件。
         val keep = _formState.value.items.map { it.path }
         viewModelScope.launch { ModuleUploadStaging.purgeStale(keep) }
+        // 上次登出时吊销失败的令牌：进页面顺手再试一次（幂等，没待办就直接返回）。
+        retryPendingRevokes()
         loadModules(thenCheck = true)
     }
 
@@ -1561,6 +1567,12 @@ class ModuleUploadViewModel(
         progressJob?.cancel()
         progressJob = null
         closeProgress()
+        // 「我投过的模块」同样是这个账号的投影：不清的话，记录页会继续列出上一个账号的
+        // 模块名/版本/上传者（那份数据来自 GET /mine，令牌一没就没有依据了）。取消在飞请求
+        // 再落 needVerify，与 refreshMine 在没有令牌时的落点保持一致。
+        mineJob?.cancel()
+        mineJob = null
+        _mineState.value = MineState(needVerify = true)
         _listState.update {
             it.copy(progress = emptyMap(), progressLoading = false, progressError = null)
         }
@@ -1589,7 +1601,44 @@ class ModuleUploadViewModel(
         // 那张令牌会继续有效九十天。本地抹掉只解决这台设备，不解决那张令牌。
         viewModelScope.launch {
             withContext(NonCancellable) {
-                runCatching { ModuleContribution.revokeSession(token) }
+                // 先记账、再吊销：吊销请求最长要等一次 QUERY_TIMEOUT，这期间进程可能被杀
+                // —— 先把「这张令牌还活着」记在盘上，才不会连它一起带走。先入队也让
+                // 「登出后立刻重进投稿页」读到的不再是空队列。
+                ModuleUploadPrefs.addPendingRevoke(token)
+                val revoked = runCatching { ModuleContribution.revokeSession(token) }.getOrDefault(false)
+                if (revoked) {
+                    ModuleUploadPrefs.removePendingRevoke(token)
+                } else {
+                    // 服务端没确认吊销（断网、超时、非 2xx，或限流命中时它回的 skipped）：
+                    // 用户看到的是「我退了」，而那张令牌还活着（九十天）。留在待办里等下次。
+                    Log.w(TAG, "revokeSession not confirmed, kept for retry")
+                }
+            }
+        }
+    }
+
+    /**
+     * 补做「上次没吊销成」的令牌。
+     *
+     * 服务端吊销是幂等的（令牌不存在也回 ok），所以重试没有副作用；只有服务端**确认**
+     * 吊销了才从待办里划掉，否则留在盘上等下一次。进投稿链路时顺手跑一次（见 [onEnter]）。
+     */
+    private fun retryPendingRevokes() {
+        // 防重入：这个函数挂在 onEnter 上，用户来回进出投稿页会连着调几次；上一次还在
+        // 解信封、发请求时再来一次只是白干一遍。
+        if (pendingRevokeJob?.isActive == true) return
+        pendingRevokeJob = viewModelScope.launch {
+            withContext(NonCancellable) {
+                // 读队列要解每一张信封（Keystore 调用），不能放在主线程上做。
+                val pending = ModuleUploadPrefs.pendingRevokes()
+                for (pendingToken in pending) {
+                    val revoked = runCatching { ModuleContribution.revokeSession(pendingToken) }.getOrDefault(false)
+                    if (revoked) {
+                        ModuleUploadPrefs.removePendingRevoke(pendingToken)
+                    } else {
+                        Log.w(TAG, "pending revoke still failing")
+                    }
+                }
             }
         }
     }
