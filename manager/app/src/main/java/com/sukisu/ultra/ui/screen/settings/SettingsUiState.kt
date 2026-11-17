@@ -95,6 +95,10 @@ data class SettingsUiState(
     val moduleContributionEnabled: Boolean = false,
 
     // Soft Reboot
+    // 内置 Zygisk（读写 ksud 状态）
+    val builtinZygisk: Boolean = false,
+    /** null，或仍需软重启的原因（pending）。 */
+    val builtinZygiskProblem: String? = null,
     val useSoftReboot: Boolean = false,
 
     val customBackgroundUri: String = "",
@@ -264,12 +268,15 @@ data class SettingsScreenActions(
     val onSetAutoJailbreak: (Boolean) -> Unit = {},
     val onSetModuleContributionEnabled: (Boolean) -> Unit = {},
     val onSetUseSoftReboot: (Boolean) -> Unit = {},
+    val onSetBuiltinZygisk: (Boolean) -> Unit = {},
+    val onDismissBuiltinZygiskFailure: () -> Unit = {},
     val onOpenModuleUpload: () -> Unit = {},
     val onOpenAbout: () -> Unit = {},
     val onOpenTools: () -> Unit = {},
     val onOpenSusfsConfig: () -> Unit = {},
     val onOpenBackup: () -> Unit = {},
     val onOpenExtensions: () -> Unit = {},
+    val onOpenBuiltinZygisk: () -> Unit = {},
     val onSetProxyMode: (String) -> Unit = {},
     val onSetProxyPinnedId: (String) -> Unit = {},
     val onTestProxies: () -> Unit = {},

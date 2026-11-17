@@ -242,6 +242,8 @@ fun ModulePagerMaterial(
 
     val shortcutState = rememberModuleShortcutState(context)
     val showShortcutDialog = remember { mutableStateOf(false) }
+    // 模块信息弹窗：长按模块卡片记录要查看的模块 id
+    var infoModuleId by rememberSaveable { mutableStateOf<String?>(null) }
     val confirmDialog = rememberConfirmDialog(
         onConfirm = {
             when (val request = confirmDialogState?.request) {
@@ -262,6 +264,11 @@ fun ModulePagerMaterial(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         shortcutState.updateIconUri(uri?.toString())
+    }
+
+    // 长按模块卡片：记录要查看的模块 id，交给页面末尾的信息弹窗
+    fun onShowInfo(module: Module) {
+        infoModuleId = module.id
     }
 
     fun onModuleAddShortcut(module: Module, type: ShortcutType) {
@@ -511,6 +518,7 @@ fun ModulePagerMaterial(
                         updateInfoMap = uiState.updateInfo,
                         actions = actions,
                         onModuleAddShortcut = { module, type -> onModuleAddShortcut(module, type) },
+                        onShowInfo = { onShowInfo(it) },
                         closeSearch = closeSearch,
                         updatingModuleId = updatingModuleId,
                         updateProgress = updateProgress,
@@ -585,6 +593,7 @@ fun ModulePagerMaterial(
                 updateInfoMap = uiState.updateInfo,
                 actions = actions,
                 onModuleAddShortcut = { module, type -> onModuleAddShortcut(module, type) },
+                onShowInfo = { onShowInfo(it) },
                 reorderEnabled = uiState.sortManual,
                 updatingModuleId = updatingModuleId,
                 updateProgress = updateProgress,
@@ -632,6 +641,18 @@ fun ModulePagerMaterial(
         }
     }
 
+    // 模块信息弹窗：长按模块卡片打开（横幅可编辑）
+    infoModuleId?.let { id ->
+        (uiState.moduleList + uiState.searchResults).firstOrNull { it.id == id }?.let { infoModule ->
+            ModuleInfoDialogMaterial(
+                module = infoModule,
+                updateInfo = uiState.updateInfo[infoModule.id],
+                onDismiss = { infoModuleId = null },
+                onBannerChanged = { actions.onRefresh() },
+            )
+        }
+    }
+
     ModuleShortcutSheet(
         show = showShortcutDialog.value,
         shortcutState = shortcutState,
@@ -657,6 +678,7 @@ private fun ModuleList(
     updateInfoMap: Map<String, ModuleUpdateInfo>,
     actions: ModuleActions,
     onModuleAddShortcut: (Module, ShortcutType) -> Unit,
+    onShowInfo: (Module) -> Unit,
     reorderEnabled: Boolean = false,
     closeSearch: () -> Unit? = {},
     header: (@Composable () -> Unit)? = null,
@@ -715,6 +737,7 @@ private fun ModuleList(
                         }
                     },
                     onAddShortcut = { type -> onModuleAddShortcut(module, type) },
+                    onShowInfo = { onShowInfo(module) },
                     onOpenWebUi = {
                         if (module.hasWebUi) {
                             actions.onOpenWebUi(module)
@@ -903,6 +926,7 @@ private fun ModuleItem(
     onCheckChanged: (Boolean) -> Unit,
     onUpdate: () -> Unit,
     onAddShortcut: (ShortcutType) -> Unit,
+    onShowInfo: () -> Unit,
     onOpenWebUi: () -> Unit,
     onExecuteAction: () -> Unit,
     closeSearch: () -> Unit,
@@ -934,7 +958,8 @@ private fun ModuleItem(
             } else if (hasDescription) {
                 expanded = !expanded
             }
-        }
+        },
+        onLongClick = onShowInfo,
     ) {
         val haptic = LocalHapticFeedback.current
         val textDecoration = if (!module.remove) null else TextDecoration.LineThrough

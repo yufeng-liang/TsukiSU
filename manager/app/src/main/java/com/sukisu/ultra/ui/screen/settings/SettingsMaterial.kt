@@ -91,6 +91,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.RadioButton
 import androidx.compose.ui.Alignment
@@ -517,6 +519,23 @@ fun SettingPagerMaterial(
                                 onCheckedChange = actions.onSetUseSoftReboot
                             )
                         },
+                        {
+                            SegmentedSwitchItem(
+                                icon = Icons.Filled.Extension,
+                                title = customText(CustomTextKey.ZYGISK_SETTINGS_TITLE),
+                                summary = stringResource(id = R.string.settings_builtin_zygisk_summary),
+                                checked = uiState.builtinZygisk,
+                                onCheckedChange = { actions.onSetBuiltinZygisk(it) }
+                            )
+                        },
+                        *(if (uiState.builtinZygisk) arrayOf<@Composable () -> Unit>({
+                            SegmentedListItem(
+                                onClick = actions.onOpenBuiltinZygisk,
+                                headlineContent = { Text(customText(CustomTextKey.ZYGISK_DASHBOARD_TITLE)) },
+                                supportingContent = { Text(stringResource(id = R.string.settings_builtin_zygisk_dashboard_summary)) },
+                                leadingContent = { IconTile(Icons.Filled.Settings, stringResource(id = R.string.settings_builtin_zygisk_dashboard)) }
+                            )
+                        }) else emptyArray()),
                     )
                 )
 

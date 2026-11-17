@@ -90,6 +90,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import com.sukisu.ultra.data.proxy.ProxyHealth
@@ -581,7 +583,7 @@ fun SettingPagerMiuix(
                                 checked = uiState.isShellSuAdbOnlyEnabled,
                                 onCheckedChange = actions.onSetShellSuAdbOnlyEnabled
                             )
-                            SwitchPreference(
+SwitchPreference(
                                 title = customText(CustomTextKey.SETTING_SOFT_REBOOT),
                                 summary = stringResource(id = R.string.settings_soft_reboot_summary),
                                 startAction = {
@@ -596,6 +598,36 @@ fun SettingPagerMiuix(
                                 checked = uiState.isLateLoadMode || uiState.useSoftReboot,
                                 onCheckedChange = actions.onSetUseSoftReboot
                             )
+
+                            SwitchPreference(
+                                title = customText(CustomTextKey.ZYGISK_SETTINGS_TITLE),
+                                summary = stringResource(id = R.string.settings_builtin_zygisk_summary),
+                                startAction = {
+                                    Icon(
+                                        Icons.Rounded.Extension,
+                                        modifier = Modifier.padding(end = 6.dp),
+                                        contentDescription = stringResource(id = R.string.settings_builtin_zygisk),
+                                        tint = colorScheme.onBackground
+                                    )
+                                },
+                                checked = uiState.builtinZygisk,
+                                onCheckedChange = { actions.onSetBuiltinZygisk(it) }
+                            )
+                            if (uiState.builtinZygisk) {
+                                ArrowPreference(
+                                    title = customText(CustomTextKey.ZYGISK_DASHBOARD_TITLE),
+                                    summary = stringResource(id = R.string.settings_builtin_zygisk_dashboard_summary),
+                                    startAction = {
+                                        Icon(
+                                            Icons.Rounded.Settings,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            contentDescription = stringResource(id = R.string.settings_builtin_zygisk_dashboard),
+                                            tint = colorScheme.onBackground
+                                        )
+                                    },
+                                    onClick = actions.onOpenBuiltinZygisk
+                                )
+                            }
                         }
 
                         AppCard(

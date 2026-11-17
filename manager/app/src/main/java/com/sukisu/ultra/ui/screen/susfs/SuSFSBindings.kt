@@ -5,6 +5,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.sukisu.ultra.R
 import com.sukisu.ultra.ui.screen.susfs.component.*
 import com.sukisu.ultra.ui.screen.susfs.content.*
+import com.sukisu.ultra.ui.screen.susfs.content.SusPathUidFilterContent
 import com.sukisu.ultra.ui.screen.susfs.util.SuSFSManager
 import com.sukisu.ultra.ui.screen.susfs.viewmodel.SuSFSViewModel
 
@@ -19,6 +20,16 @@ internal fun SuSFSDialogs(uiState: SuSFSUiState, viewModel: SuSFSViewModel) {
         apps = uiState.priorityApps,
         isLoadingApps = uiState.isLoadingPriorityApps,
         selectedPackages = uiState.priorityUidFilter,
+    )
+    PriorityUidFilterDialog(
+        showDialog = uiState.showSusPathUidFilterDialog && uiState.selectedTab == SuSFSTab.SUS_PATH_UID_FILTER,
+        onDismiss = { viewModel.showSusPathUidFilterDialog(false) },
+        onConfirm = { viewModel.applySusPathUidFilter(context, it.toSet()) },
+        isLoading = uiState.isLoading,
+        apps = uiState.susPathUidFilterApps,
+        isLoadingApps = uiState.isLoadingSusPathUidFilterApps,
+        selectedPackages = uiState.susPathUidFilter,
+        titleRes = R.string.susfs_sus_path_uid_filter,
     )
     SlotInfoDialog(
         showDialog = uiState.showSlotInfoDialog,
@@ -359,6 +370,16 @@ internal fun SuSFSTabContent(uiState: SuSFSUiState, viewModel: SuSFSViewModel) {
                 onSelectApps = { viewModel.showPriorityAppsDialog(true) },
                 onApply = { viewModel.applyPriorityUidFilter(context, uiState.priorityUidFilter) },
                 onClear = { viewModel.applyPriorityUidFilter(context, emptySet()) },
+            )
+        }
+        SuSFSTab.SUS_PATH_UID_FILTER -> {
+            com.sukisu.ultra.ui.component.ConfigResults(uiState.susPathUidFilterResults)
+            SusPathUidFilterContent(
+                packages = uiState.susPathUidFilter,
+                isLoading = uiState.isLoading,
+                onSelectApps = { viewModel.showSusPathUidFilterDialog(true) },
+                onApply = { viewModel.applySusPathUidFilter(context, uiState.susPathUidFilter) },
+                onClear = { viewModel.applySusPathUidFilter(context, emptySet()) },
             )
         }
         SuSFSTab.ENABLED_FEATURES -> {

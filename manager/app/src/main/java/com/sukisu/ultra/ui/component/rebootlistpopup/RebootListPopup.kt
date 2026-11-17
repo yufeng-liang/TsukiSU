@@ -45,6 +45,11 @@ fun getRebootListOption(): List<RebootListOption> {
 }
 
 
+/// Zygisk 交接完成后的两种重启方式：完整重启与软重启，标签与原因沿用主页重启菜单。
+@Composable
+fun rememberRebootChoices(): List<RebootListOption> =
+    getRebootListOption().filter { it.reason.isEmpty() || it.reason == "soft_reboot" }
+
 @Composable
 fun rememberRebootAction(): (String) -> Unit {
     val title = stringResource(R.string.reboot)

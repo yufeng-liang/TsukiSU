@@ -215,6 +215,8 @@ fun ModulePagerMiuix(
 
     val shortcutState = rememberModuleShortcutState(context)
     val showShortcutDialog = remember { mutableStateOf(false) }
+    // 模块信息弹窗：长按模块卡片记录要查看的模块 id
+    var infoModuleId by rememberSaveable { mutableStateOf<String?>(null) }
 
     val pickShortcutIconLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -280,6 +282,11 @@ fun ModulePagerMiuix(
         message = stringResource(R.string.module_contribution_snackbar),
         actionLabel = stringResource(R.string.module_contribution_action),
     )
+
+    // 长按模块卡片：记录要查看的模块 id，交给页面末尾的信息弹窗
+    fun onShowInfo(module: Module) {
+        infoModuleId = module.id
+    }
 
     fun onModuleAddShortcut(module: Module, type: ShortcutType) {
         shortcutState.bindModule(module)
@@ -514,6 +521,7 @@ fun ModulePagerMiuix(
                     updateInfoMap = uiState.updateInfo,
                     actions = actions,
                     onModuleAddShortcut = ::onModuleAddShortcut,
+                    onShowInfo = { onShowInfo(it) },
                     contentPadding = PaddingValues(
                         top = 6.dp,
                         start = 0.dp,
@@ -628,6 +636,7 @@ fun ModulePagerMiuix(
                             onModuleAddShortcut = { module, type ->
                                 onModuleAddShortcut(module, type)
                             },
+                            onShowInfo = { onShowInfo(it) },
                             contentPadding = contentPadding,
                             listState = listState,
                             reorderEnabled = uiState.sortManual,
@@ -670,6 +679,18 @@ fun ModulePagerMiuix(
             )
         }
     }
+    // 模块信息弹窗：长按模块卡片打开（横幅可编辑）
+    infoModuleId?.let { id ->
+        (uiState.moduleList + uiState.searchResults).firstOrNull { it.id == id }?.let { infoModule ->
+            ModuleInfoDialogMiuix(
+                module = infoModule,
+                updateInfo = uiState.updateInfo[infoModule.id],
+                onDismiss = { infoModuleId = null },
+                onBannerChanged = { actions.onRefresh() },
+            )
+        }
+    }
+
     ModuleShortcutDialog(
         show = showShortcutDialog.value,
         onDismissRequest = { showShortcutDialog.value = false },
@@ -815,6 +836,7 @@ private fun ModuleList(
     updateInfoMap: Map<String, ModuleUpdateInfo>,
     actions: ModuleActions,
     onModuleAddShortcut: (Module, ShortcutType) -> Unit,
+    onShowInfo: (Module) -> Unit,
     contentPadding: PaddingValues,
     listState: LazyListState = rememberLazyListState(),
     reorderEnabled: Boolean = false,
@@ -892,6 +914,7 @@ private fun ModuleList(
                     onAddActionShortcut = { type: ShortcutType ->
                         onModuleAddShortcut(currentModuleState.value, type)
                     },
+                    onShowInfo = { onShowInfo(currentModuleState.value) },
                     onOpenWebUi = {
                         if (module.hasWebUi) {
                             actions.onOpenWebUi(module)
@@ -928,6 +951,7 @@ fun ModuleItem(
     onUpdate: () -> Unit,
     onExecuteAction: () -> Unit,
     onAddActionShortcut: (ShortcutType) -> Unit,
+    onShowInfo: () -> Unit,
     onOpenWebUi: () -> Unit,
     updatingModuleId: String? = null,
     updateProgress: Int = 0,
@@ -957,7 +981,8 @@ fun ModuleItem(
         colors = backgroundAwareCardColors(),
         onClick = if (hasDescription) {
             { expanded = !expanded }
-        } else null
+        } else null,
+        onLongPress = onShowInfo,
     ) {
         Column(
             modifier = Modifier

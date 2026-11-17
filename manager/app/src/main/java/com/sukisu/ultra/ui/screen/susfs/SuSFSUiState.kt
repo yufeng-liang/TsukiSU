@@ -11,6 +11,7 @@ import com.sukisu.ultra.ui.screen.susfs.util.SlotInfo
 data class SuSFSUiState(
     val operationResults: List<com.sukisu.ultra.ui.component.ConfigResult> = emptyList(),
     val priorityUidFilterResults: List<com.sukisu.ultra.ui.component.ConfigResult> = emptyList(),
+    val susPathUidFilterResults: List<com.sukisu.ultra.ui.component.ConfigResult> = emptyList(),
     val isLoading: Boolean = false,
     val runtimeInfo: SuSFSRuntimeInfo? = null,
     val isNavigatingBack: Boolean = false,
@@ -46,6 +47,12 @@ data class SuSFSUiState(
     val priorityApps: List<AppInfo> = emptyList(),
     val isLoadingPriorityApps: Boolean = false,
     val showPriorityAppsDialog: Boolean = false,
+
+    // sus_path_uid_filter：sus 路径的 UID 过滤（写入配置，开机由模块应用）
+    val susPathUidFilter: Set<String> = emptySet(),
+    val susPathUidFilterApps: List<AppInfo> = emptyList(),
+    val isLoadingSusPathUidFilterApps: Boolean = false,
+    val showSusPathUidFilterDialog: Boolean = false,
 
     // Kstat 配置
     val kstatConfigs: Set<String> = emptySet(),
@@ -91,6 +98,7 @@ enum class SuSFSTab(val displayNameRes: Int) {
     SUS_MAPS(R.string.susfs_tab_sus_maps),
     KSTAT_CONFIG(R.string.susfs_tab_kstat_config),
     PRIORITY_UID_FILTER(R.string.susfs_priority_uid_filter),
+    SUS_PATH_UID_FILTER(R.string.susfs_sus_path_uid_filter),
     ENABLED_FEATURES(R.string.susfs_tab_enabled_features);
 
     companion object {
@@ -107,6 +115,7 @@ enum class SuSFSTab(val displayNameRes: Int) {
             "sus_maps" -> SUS_MAPS
             "kstat", "kstat_config" -> KSTAT_CONFIG
             "priority_uid", "priority_uid_filter" -> PRIORITY_UID_FILTER
+            "sus_path_uid", "sus_path_uid_filter" -> SUS_PATH_UID_FILTER
             "enabled_features" -> ENABLED_FEATURES
             else -> null
         }

@@ -237,6 +237,10 @@ sealed interface Route : NavKey, Parcelable {
     
     @Parcelize
     @Serializable
+    data object BuiltinZygisk : Route
+
+    @Parcelize
+    @Serializable
     data object Extensions : Route
 
     

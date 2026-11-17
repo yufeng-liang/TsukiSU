@@ -253,6 +253,7 @@ class SettingsViewModel(
             val appLanguage = repo.appLanguage
             val autoJailbreak = repo.autoJailbreak
             val useSoftReboot = repo.useSoftReboot
+            val builtinZygisk = repo.builtinZygisk
             val moduleContributionEnabled = repo.isModuleContributionEnabled()
             val isLateLoadMode = Natives.isLateLoadMode
             val systemWallpaperPath = ImageStorage.systemWallpaperFile(ksuApp)
@@ -341,6 +342,7 @@ homePillScale = HomeStatusStyle.coercePillScale(repo.homePillScale),
                     autoJailbreak = autoJailbreak,
                     moduleContributionEnabled = moduleContributionEnabled,
                     useSoftReboot = useSoftReboot,
+                    builtinZygisk = builtinZygisk,
                     isLateLoadMode = isLateLoadMode,
                     customBackgroundUri = repo.customBackgroundUri,
                     customBackgroundUpdatedAt = repo.customBackgroundUpdatedAt,
@@ -3128,6 +3130,23 @@ homePillScale = repo.homePillScale,
     fun setModuleContributionEnabled(enabled: Boolean) {
         repo.setModuleContributionEnabled(enabled)
         _uiState.update { it.copy(moduleContributionEnabled = enabled) }
+    }
+
+    fun setBuiltinZygisk(enabled: Boolean) {
+        // 先翻开关，让 ksud 在后台完成交接：在这里等 zygote 只会卡住设置页，
+        // 而且结果本来就要软重启才生效。
+        _uiState.update {
+            it.copy(builtinZygisk = enabled, builtinZygiskProblem = "pending")
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            repo.builtinZygisk = enabled
+            val applied = repo.builtinZygisk
+            _uiState.update { it.copy(builtinZygisk = applied) }
+        }
+    }
+
+    fun dismissBuiltinZygiskFailure() {
+        _uiState.update { it.copy(builtinZygiskProblem = null) }
     }
 
     fun setUseSoftReboot(enabled: Boolean) {

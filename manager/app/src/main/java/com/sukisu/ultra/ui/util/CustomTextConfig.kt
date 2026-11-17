@@ -49,6 +49,8 @@ enum class CustomTextKey(
     HOME_INFO_SELINUX("home.info_selinux", R.string.home_selinux_status, R.string.home_selinux_status, CustomTextGroup.HOME),
     HOME_INFO_SECCOMP("home.info_seccomp", R.string.home_seccomp_status, R.string.home_seccomp_status, CustomTextGroup.HOME),
     HOME_INFO_ZYGISK("home.info_zygisk", R.string.home_zygisk_implementation, R.string.home_zygisk_implementation, CustomTextGroup.HOME),
+    ZYGISK_SETTINGS_TITLE("zygisk.settings_title", R.string.settings_builtin_zygisk, R.string.settings_builtin_zygisk, CustomTextGroup.SETTINGS),
+    ZYGISK_DASHBOARD_TITLE("zygisk.dashboard_title", R.string.settings_builtin_zygisk_dashboard, R.string.settings_builtin_zygisk_dashboard, CustomTextGroup.SETTINGS),
     HOME_INFO_HOOK_TYPE("home.info_hook_type", R.string.hook_type, R.string.hook_type, CustomTextGroup.HOME),
     HOME_INFO_DEVICE_MODEL("home.info_device_model", R.string.home_device_model, R.string.home_device_model, CustomTextGroup.HOME),
     HOME_INFO_FINGERPRINT("home.info_fingerprint", R.string.home_fingerprint, R.string.home_fingerprint, CustomTextGroup.HOME),

@@ -128,6 +128,8 @@ interface SettingsRepository {
     /** Show the AI assistant card on the home page. Off disconnects the home entry entirely. */
     var showAiHomeCard: Boolean
     var autoJailbreak: Boolean
+    /** 内置 Zygisk 是否启用（读写 ksud 状态，不落 SharedPreferences）。 */
+    var builtinZygisk: Boolean
     var useSoftReboot: Boolean
 
     /** WebDAV 云端备份设置。三个凭据属性对外都是明文，密文只落在 SharedPreferences 里。 */
