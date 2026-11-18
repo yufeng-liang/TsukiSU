@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.sukisu.ultra.data.column.ColumnCheckIds
 import com.sukisu.ultra.data.column.ColumnKeyboxFetcher
 import com.sukisu.ultra.data.column.ColumnModuleFetcher
+import com.sukisu.ultra.data.column.ColumnRollbackReport
 import com.sukisu.ultra.data.column.ColumnRollbackStore
 import com.sukisu.ultra.data.column.ColumnHealthReport
 import com.sukisu.ultra.data.column.ColumnPreflight
@@ -17,6 +18,7 @@ import com.sukisu.ultra.data.column.buildColumnHealthReport
 import com.sukisu.ultra.data.column.ColumnRunContext
 import com.sukisu.ultra.data.column.ColumnSelfCheckRunner
 import com.sukisu.ultra.data.column.ColumnSelfCheckRunnerImpl
+import com.sukisu.ultra.data.column.ColumnStepConfirm
 import com.sukisu.ultra.data.column.ColumnStepResult
 import com.sukisu.ultra.data.column.ColumnStepRunner
 import com.sukisu.ultra.data.column.ColumnStepRunnerImpl
@@ -25,7 +27,9 @@ import com.sukisu.ultra.data.column.ColumnStepUiState
 import com.sukisu.ultra.data.column.ColumnWizardUiState
 import com.sukisu.ultra.data.column.isValidColumnModuleId
 import com.sukisu.ultra.data.model.RepoColumnStep
+import com.sukisu.ultra.data.model.externalAppPackage
 import com.sukisu.ultra.data.model.RepoColumnTopic
+import com.sukisu.ultra.R
 import com.sukisu.ultra.ksuApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
@@ -83,6 +87,9 @@ class ColumnWizardViewModel(
     /** 同一条向导只允许一个步骤在跑。 */
     private var runningStep = false
 
+    /** 一键执行的后台任务；界面上的「停止执行」用它取消后续步骤。 */
+    private var runAllJob: Job? = null
+
     /**
      * 重启倒计时期间用户的选择：true = 立刻重启，false = 稍后自己重启。
      *
@@ -90,11 +97,17 @@ class ColumnWizardViewModel(
      */
     private var rebootDecision: CompletableDeferred<Boolean>? = null
 
+    /** 等待用户确认某一步的决策；只有 [confirmStepBeforeRunning] 在等的时候非空。 */
+    private var stepConfirmDecision: CompletableDeferred<Boolean>? = null
+
     /** 已经预取过密钥的专题 id，避免重复网络请求。 */
     private var prefetchedTopicId: String? = null
 
     /** 密钥预取任务；续跑 / 单步执行前先等它完成，避免「密钥还没拉到」导致步骤失败。 */
     private var keyboxJob: Job? = null
+
+    /** keybox 写入互斥：自动更新与用户点「更新密钥」可能同时发生，不能并发改同一个文件。 */
+    private var keyboxUpdateRunning = false
 
     /**
      * 进入向导时调用。同一专栏下的同一专题重复调用不会重置已有进度（导航返回再进来还能看到上次跑到哪）。
@@ -106,16 +119,29 @@ class ColumnWizardViewModel(
         if (this.columnId == columnId && this.topic?.id == topic.id && _uiState.value.stepStates.isNotEmpty()) return
         this.columnId = columnId
         this.topic = topic
+        // 回滚账本按「专栏 + 专题」分文件，避免 A 专题的回滚误伤 B 专题装过的模块。
+        rollbackStore.selectScope(columnId, topic.id)
+        // 旧版全局账本没有专题作用域：升级后第一次进专题时把它整体接过来，并明确告诉用户
+        // 「旧账本没有专题归属」，回滚前自己确认一遍，避免误删别的专题装过的东西。
+        viewModelScope.launch {
+            runCatching { rollbackStore.adoptLegacyLedgerIfNeeded() }
+                .onSuccess { notice -> notice?.let { appendLog(it) } }
+                .onFailure { appendLog("旧版回滚账本迁移失败：${it.message ?: "未知错误"}") }
+        }
         this.keyboxContent = null
         val restored = restoreProgress(topic.id)
         _uiState.value = ColumnWizardUiState(
             topicId = topic.id,
             stepStates = topic.steps.map { step ->
                 val saved = restored?.get(step.id)
+                // 外部 App 检测步骤（如「跑一遍春秋」）由用户自己打开 App 完成：
+                // 旧版本把它当成 verify，存过 SUCCESS 和「自检通过…」；这里强制回到待执行，
+                // 否则升级上来的用户会一直看到一条已经无法复现的通过记录。
+                val externalApp = step.isExternalAppStep()
                 ColumnStepUiState(
                     step = step,
-                    status = saved?.first ?: ColumnStepStatus.PENDING,
-                    message = saved?.second.orEmpty(),
+                    status = if (externalApp) ColumnStepStatus.PENDING else saved?.first ?: ColumnStepStatus.PENDING,
+                    message = if (externalApp) "" else modernizeInstalledMessage(saved?.second.orEmpty()),
                 )
             },
             // 体检要跑 root 探针，先置为扫描中，让界面从第一帧就显示骨架卡。
@@ -128,7 +154,8 @@ class ColumnWizardViewModel(
             _uiState.update { it.copy(optedIn = savedOptedIn.toSet()) }
         }
         if (!restored.isNullOrEmpty()) {
-            appendLog("已恢复上次的进度（${restored.size} 步已处理），接着往下做就行")
+            val settledCount = _uiState.value.stepStates.count { it.status.isSettled }
+            appendLog("已恢复上次的进度（$settledCount 步已处理），接着往下做就行")
         }
         keyboxJob = prefetchKeybox(topic)
         // 恢复出来的进度可能已经全部落定（上次做完就退出了），这时要立刻进入完成态，
@@ -136,6 +163,9 @@ class ColumnWizardViewModel(
         maybeFinish(allowCelebrate = false)
         // SUCCESS 只是上次的记录；设备可能已经刷机或卸载，根目录复核要异步做，不能阻塞主线程。
         verifyRestoredInstallSteps()
+        // 恢复旧进度时顺手写回一次：分母规则可能已经变过（如未勾选的可选步骤不再计数），
+        // 否则主页卡片会一直显示旧的 x/y。
+        if (!restored.isNullOrEmpty()) saveProgress()
         // 存量用户检测：设备上可能早就配好了一套（甚至用别的工具配的），进专题先看一眼现状。
         runHealthCheck()
         // 检测器是否已经装过：装过就不用再下载一次、界面也该按「已安装」来说话。
@@ -198,7 +228,7 @@ class ColumnWizardViewModel(
             val installed = withContext(Dispatchers.IO) { declared.filter(::packageInstalled).toSet() }
             if (installed.isEmpty()) return@launch
             _uiState.update { it.copy(installedApps = it.installedApps + installed) }
-            appendLog("设备上已经装了：${installed.joinToString("、")}，这一步可以直接跳过")
+            appendLog(ksuApp.getString(R.string.column_wizard_installed_skip, installed.joinToString("、")))
         }
     }
 
@@ -271,7 +301,8 @@ class ColumnWizardViewModel(
             _uiState.update { it.copy(keyboxAgeDays = fileState.ageDays) }
             val shouldAutoUpdate = fileState.exists == false ||
                 (fileState.exists == true && fileState.ageDays > KEYBOX_AUTO_UPDATE_DAYS)
-            if (autoUpdate && needsKeybox && shouldAutoUpdate) {
+            // 一键执行期间不要自动改 keybox：写文件与步骤执行会抢同一个目标，等用户跑完再更新。
+            if (autoUpdate && needsKeybox && shouldAutoUpdate && !_uiState.value.running) {
                 updateKeybox(auto = true)
             }
         }
@@ -284,7 +315,12 @@ class ColumnWizardViewModel(
      * 否则等于替用户造了一个半残目录。每写完一份都 chmod 644，保证模块进程读得到。
      */
     fun updateKeybox(auto: Boolean = false) {
-        if (_uiState.value.keyboxUpdating) return
+        if (keyboxUpdateRunning || _uiState.value.keyboxUpdating) return
+        if (!auto && _uiState.value.running) {
+            appendLog("正在执行步骤，等这轮跑完再更新密钥")
+            return
+        }
+        keyboxUpdateRunning = true
         viewModelScope.launch {
             _uiState.update { it.copy(keyboxUpdating = true) }
             try {
@@ -312,6 +348,7 @@ class ColumnWizardViewModel(
                 appendLog("更新密钥材料失败：${error.message ?: "未知错误"}")
             } finally {
                 _uiState.update { it.copy(keyboxUpdating = false) }
+                keyboxUpdateRunning = false
             }
         }
     }
@@ -324,6 +361,14 @@ class ColumnWizardViewModel(
         )
         return targets.mapNotNull { (moduleDir, path, label) ->
             if (!ColumnRootIo.isDirectory(moduleDir)) return@mapNotNull null
+            // 写入前先记账：文件不存在也要记（回滚时才知道该删掉），空文件/读失败也不能漏记。
+            try {
+                rollbackStore.recordWrittenFile(path)
+                appendLog("已记录 keybox 回滚点：$path")
+            } catch (error: Exception) {
+                appendLog("记录 keybox 回滚点失败，已跳过写入：${error.message ?: "未知错误"}")
+                return@mapNotNull null
+            }
             // 覆盖前先备份：自动更新可能发生在用户不知情的时候，至少保留上一份可恢复的副本。
             val oldContent = runCatching { ColumnRootIo.readText(path) }.getOrNull()
             if (!oldContent.isNullOrBlank()) {
@@ -334,15 +379,8 @@ class ColumnWizardViewModel(
                 runCatching { backup.writeText(oldContent) }
                     .onSuccess { appendLog("原 ${path} 已备份到 ${backup.absolutePath}") }
                     .onFailure { appendLog("备份原 keybox 到应用缓存失败：${it.message ?: "未知错误"}") }
-                // 同步写回滚账本：用户回滚整个专题时，自动更新写入的 keybox 也能恢复。
-                try {
-                    rollbackStore.recordWrittenFile(path)
-                    appendLog("已记录 keybox 回滚点：$path")
-                } catch (error: Exception) {
-                    appendLog("记录 keybox 回滚点失败：${error.message ?: "未知错误"}")
-                }
             }
-            ColumnRootIo.writeText(path, content)
+            ColumnRootIo.writeText(path, content, newFileMode = "644")
             // keybox 会被模块进程以非 root 身份读取，600 权限（writeText 的默认）不够。
             if (!ColumnRootIo.exec("chmod 644 ${ColumnRootIo.shellQuote(path)}").isSuccess) {
                 appendLog("已写入 $path，但 chmod 644 失败，模块可能读不到这份密钥")
@@ -367,8 +405,7 @@ class ColumnWizardViewModel(
             } catch (error: kotlinx.coroutines.CancellationException) {
                 throw error
             } catch (error: Exception) {
-                appendLog("预检失败（${error.message ?: "未知错误"}），按普通流程继续")
-                runAll()
+                appendLog("预检失败（${error.message ?: "未知错误"}），已停止本次一键执行；请单步执行或稍后重试")
                 return@launch
             }
             if (plan.needsConfirmation) {
@@ -430,7 +467,7 @@ class ColumnWizardViewModel(
                             ColumnPreflightAction.NEW to "会下载并交给系统安装器"
                         }
                     }
-                    "writefile" -> {
+                    "writefile", "writeconfig" -> {
                         val path = step.filePath.trim()
                         val current = runCatching { ColumnRootIo.readText(path) }.getOrNull()
                         when {
@@ -446,7 +483,7 @@ class ColumnWizardViewModel(
                         // 使用同一套两层 glob：HMA 真机配置可能在 /data/misc/<随机串>/hide_my_applist_* 下。
                         val hasConfig = runCatching {
                             ColumnRootIo.exec(
-                                "ls -d /data/misc/*hide_my_applist* /data/misc/*/*hide_my_applist* 2>/dev/null",
+                                "find /data/misc -maxdepth 4 -type f -name config.json -path '*hide_my_applist*' 2>/dev/null",
                             ).out.any { it.trim().startsWith("/") }
                         }.getOrDefault(false)
                         if (hasConfig) {
@@ -485,22 +522,27 @@ class ColumnWizardViewModel(
     private fun verifyRestoredInstallSteps() {
         val candidates = _uiState.value.stepStates.filter {
             it.status == ColumnStepStatus.SUCCESS &&
-                it.step.kind.trim().equals("installModule", ignoreCase = true)
+                (it.step.kind.trim().equals("installModule", ignoreCase = true) ||
+                    it.step.kind.trim().equals("installApp", ignoreCase = true))
         }
         if (candidates.isEmpty()) return
+        val wasDone = _uiState.value.done
+        // 复核期间先把 done 放下：updateStep 会立即 saveProgress，先把 done=true 写进磁盘的旧问题堵住。
+        if (wasDone) _uiState.update { it.copy(done = false) }
         viewModelScope.launch {
             val verdicts = withContext(Dispatchers.IO) {
                 // ColumnRootIo 会把异常收敛成 isSuccess=false，先单独探一次 root，
                 // 否则「目录不存在」和「没有 root」会混成同一种结果。
                 val rootAvailable = ColumnRootIo.exec("true").isSuccess
                 candidates.map { item ->
-                    val moduleId = item.step.source.moduleId.trim()
-                    val verdict = if (!rootAvailable || !isValidColumnModuleId(moduleId)) {
-                        RestoreVerdict.Unverifiable(moduleId)
-                    } else if (ColumnRootIo.isDirectory("/data/adb/modules/$moduleId")) {
-                        RestoreVerdict.Installed
-                    } else {
-                        RestoreVerdict.Missing(moduleId)
+                    val isApp = item.step.kind.trim().equals("installApp", ignoreCase = true)
+                    val target = if (isApp) item.step.source.packageName.trim() else item.step.source.moduleId.trim()
+                    val verdict = when {
+                        isApp && target.isEmpty() -> RestoreVerdict.Unverifiable(target)
+                        isApp -> if (packageInstalled(target)) RestoreVerdict.Installed else RestoreVerdict.Missing(target)
+                        !rootAvailable || !isValidColumnModuleId(target) -> RestoreVerdict.Unverifiable(target)
+                        ColumnRootIo.isDirectory("/data/adb/modules/$target") -> RestoreVerdict.Installed
+                        else -> RestoreVerdict.Missing(target)
                     }
                     item.step.id to verdict
                 }
@@ -514,13 +556,17 @@ class ColumnWizardViewModel(
                 when (verdict) {
                     RestoreVerdict.Installed -> Unit
                     is RestoreVerdict.Missing -> {
+                        val isApp = _uiState.value.stepStates
+                            .firstOrNull { it.step.id == stepId }?.step?.kind
+                            ?.trim()?.equals("installApp", ignoreCase = true) == true
+                        val what = if (isApp) "应用" else "模块"
                         updateStep(stepId) {
                             it.copy(
                                 status = ColumnStepStatus.PENDING,
-                                message = "上次记录为已完成，但设备上找不到模块「${verdict.moduleId}」，请重做这一步",
+                                message = "上次记录为已完成，但设备上找不到${what}「${verdict.moduleId}」，请重做这一步",
                             )
                         }
-                        appendLog("恢复进度：模块「${verdict.moduleId}」已不在 /data/adb/modules 下，该步骤退回待执行")
+                        appendLog("恢复进度：${what}「${verdict.moduleId}」已不存在，该步骤退回待执行")
                         downgraded = true
                     }
                     is RestoreVerdict.Unverifiable -> {
@@ -531,6 +577,11 @@ class ColumnWizardViewModel(
                         )
                     }
                 }
+            }
+            if (wasDone) {
+                // 复核结果落定后再写回 done，并立即持久化，避免重启后继续显示旧的完成态。
+                _uiState.update { it.copy(done = !downgraded) }
+                saveProgress()
             }
             if (downgraded) {
                 // 有步骤其实没做成，之前的完成态不再成立，底部操作条要重新出现。
@@ -560,6 +611,9 @@ class ColumnWizardViewModel(
         for (step in steps) {
             // hidden 步骤只能由降级逻辑触发，不参与一键执行的正常排队。
             if (step.hidden) continue
+            // 外部 App 检测步骤（如「跑一遍春秋」）必须由用户自己打开 App 操作：
+            // 一键执行直接绕过它，既不代跑，也不把它当成阻断后续步骤的理由。
+            if (step.isExternalAppStep()) continue
             val status = state.stepStates.firstOrNull { it.step.id == step.id }?.status
             // 已经处理过的直接跳过（SUCCESS / SKIPPED）
             if (status?.isSettled == true) continue
@@ -579,10 +633,6 @@ class ColumnWizardViewModel(
                 stopReason = "「${step.title}」需要你手动做"
                 break
             }
-            if (step.confirm.isNotBlank()) {
-                stopReason = "「${step.title}」需要你单独确认"
-                break
-            }
             planned += step
         }
         if (planned.isEmpty()) {
@@ -593,7 +643,7 @@ class ColumnWizardViewModel(
         runningStep = true
         _uiState.update { it.copy(running = true, error = "") }
         appendLog("一键执行：本次自动处理 ${planned.size} 个步骤")
-        viewModelScope.launch {
+        runAllJob = viewModelScope.launch {
             try {
                 // 等密钥预取完成再开始，避免需要 keybox 的步骤因为「还没拉到」直接失败。
                 keyboxJob?.join()
@@ -614,6 +664,15 @@ class ColumnWizardViewModel(
                             return@launch
                         }
                     }
+                    // 带 confirm 的高危步骤（改 denylist、伪装 BL 锁、清痕迹）不再要求用户
+                    // 预先单步点一次：跑到这里时弹一次确认框，确认后继续跑剩下的步骤。
+                    if (!step.kind.trim().equals("reboot", ignoreCase = true) &&
+                        step.confirm.isNotBlank() &&
+                        !confirmStepBeforeRunning(step)
+                    ) {
+                        appendLog("已暂停：「" + step.title + "」没有确认，剩下的步骤没有执行")
+                        break
+                    }
                     val result = executeStep(step, force = false)
                     if (result.isFailure) {
                         // TEESimulator 装不上时自动降级到备选的 OhMyKeymint：它在界面上是 hidden 的，
@@ -632,6 +691,13 @@ class ColumnWizardViewModel(
                                 return@launch
                             }
                             appendLog("备选方案已装好：${fallback.title}")
+                            // 主步骤已经由备选方案替代，不能让它继续以 FAILED 卡住「专题完成」判定。
+                            updateStep(step.id) {
+                                it.copy(
+                                    status = ColumnStepStatus.SKIPPED,
+                                    message = "已由备选方案替代：${fallback.title}",
+                                )
+                            }
                             continue
                         }
                         _uiState.update { it.copy(error = result.message) }
@@ -658,10 +724,25 @@ class ColumnWizardViewModel(
                     else "自动步骤都执行完了；剩下的需要你手动确认",
                 )
             } finally {
+                if (!isActive) appendLog("已停止一键执行，已经跑完的步骤会保留")
+                runAllJob = null
                 runningStep = false
                 _uiState.update { it.copy(running = false) }
             }
         }
+    }
+
+    /**
+     * 停止正在跑的一键执行。
+     *
+     * 只取消后续步骤：当前 root 命令可能已经发出去，无法回滚，但跑完的步骤会保留，
+     * 用户可以检查日志后重新点「一键执行剩余步骤」接着跑。
+     */
+    fun cancelRunAll() {
+        val job = runAllJob ?: return
+        if (!job.isActive) return
+        appendLog("正在停止一键执行…")
+        job.cancel()
     }
 
     /**
@@ -859,35 +940,45 @@ class ColumnWizardViewModel(
         _uiState.update { it.copy(running = true) }
         viewModelScope.launch {
             try {
-                val lines = try {
+                val report = try {
                     rollbackStore.rollback()
                 } catch (error: kotlinx.coroutines.CancellationException) {
                     throw error
                 } catch (error: Exception) {
-                    listOf("回滚失败：${error.message ?: "未知错误"}")
-                }
-                lines.forEach { appendLog(it) }
-                // 回滚是「回到开始前」，不是「结束」：进度要清掉、步骤要复位，用户才能重新走一遍。
-                val topicId = _uiState.value.topicId
-                runCatching { progressPrefs().edit().remove(progressKey(topicId)).apply() }
-                runCatching { ColumnProgressStore.clear(ksuApp, columnId.orEmpty(), topicId) }
-                // 回滚之后不该再自动续跑，否则重启回来会把刚撤掉的步骤又跑一遍；
-                // 但只能清当前专题自己的标记，不能把其他专题的重启续跑标记一并删掉。
-                runCatching {
-                    ColumnProgressStore.clearPendingResume(ksuApp, columnId.orEmpty(), topicId)
-                }
-                prefetchedTopicId = null
-                _uiState.update { state ->
-                    state.copy(
-                        done = false,
-                        error = "",
-                        checks = emptyList(),
-                        stepStates = state.stepStates.map {
-                            it.copy(status = ColumnStepStatus.PENDING, message = "", upgrade = null)
-                        },
+                    ColumnRollbackReport(
+                        listOf("回滚失败：${error.message ?: "未知错误"}"),
+                        complete = false,
                     )
                 }
-                appendLog("已回滚到开始前的状态，可以重新执行")
+                report.messages.forEach { appendLog(it) }
+                if (report.complete) {
+                    // 回滚是「回到开始前」，不是「结束」：进度要清掉、步骤要复位，用户才能重新走一遍。
+                    val topicId = _uiState.value.topicId
+                    runCatching { progressPrefs().edit().remove(progressKey(topicId)).commit() }
+                    runCatching { ColumnProgressStore.clear(ksuApp, columnId.orEmpty(), topicId) }
+                    // 回滚之后不该再自动续跑，否则重启回来会把刚撤掉的步骤又跑一遍；
+                    // 但只能清当前专题自己的标记，不能把其他专题的重启续跑标记一并删掉。
+                    runCatching {
+                        ColumnProgressStore.clearPendingResume(ksuApp, columnId.orEmpty(), topicId)
+                    }
+                    prefetchedTopicId = null
+                    _uiState.update { state ->
+                        state.copy(
+                            done = false,
+                            error = "",
+                            checks = emptyList(),
+                            stepStates = state.stepStates.map {
+                                it.copy(status = ColumnStepStatus.PENDING, message = "", upgrade = null)
+                            },
+                        )
+                    }
+                    appendLog("已回滚到开始前的状态，可以重新执行")
+                } else {
+                    // 还有失败项留在账本里：进度不能清，否则用户看不到刚才撤了什么、也没法再点一次回滚。
+                    val message = "回滚未全部完成，失败项已保留在账本里，修复后可再次回滚"
+                    _uiState.update { it.copy(error = message) }
+                    appendLog(message)
+                }
             } finally {
                 runningStep = false
                 _uiState.update { it.copy(running = false) }
@@ -898,10 +989,16 @@ class ColumnWizardViewModel(
     /** 手动重跑自检。步骤全部处理完时会自动跑一次。 */
     fun runSelfCheck() {
         viewModelScope.launch {
-            val checks = selfCheck.check(ColumnCheckIds.ALL)
-            _uiState.update { it.copy(checks = checks) }
-            checks.forEach { result ->
-                appendLog("自检 ${result.id}：${if (result.passed) "通过" else "未通过"} — ${result.detail}")
+            try {
+                val checks = selfCheck.check(ColumnCheckIds.ALL)
+                _uiState.update { it.copy(checks = checks) }
+                checks.forEach { result ->
+                    appendLog("自检 ${result.id}：${if (result.passed) "通过" else "未通过"} — ${result.detail}")
+                }
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                appendLog("自检失败：${error.message ?: "未知错误"}")
             }
         }
     }
@@ -982,6 +1079,35 @@ class ColumnWizardViewModel(
         }
     }
 
+    /**
+     * 跑到带 confirm 的步骤时停下来，等用户点「确认执行」。
+     *
+     * 返回 true 才继续执行；false 表示用户拒绝，调用方要停止本次一键执行。
+     * 协程被取消时 finally 会复位状态，界面不会留下一个永远关不掉的对话框。
+     */
+    private suspend fun confirmStepBeforeRunning(step: RepoColumnStep): Boolean {
+        val decision = CompletableDeferred<Boolean>()
+        stepConfirmDecision = decision
+        _uiState.update {
+            it.copy(stepConfirm = ColumnStepConfirm(stepId = step.id, title = step.title, message = step.confirm))
+        }
+        return try {
+            decision.await()
+        } finally {
+            stepConfirmDecision = null
+            _uiState.update { it.copy(stepConfirm = null) }
+        }
+    }
+
+    /** 步骤确认框上点「确认执行」。 */
+    fun confirmStep() {
+        stepConfirmDecision?.complete(true)
+    }
+
+    /** 步骤确认框上点「不执行」。 */
+    fun cancelStepConfirm() {
+        stepConfirmDecision?.complete(false)
+    }
     /** 倒计时卡片上的「立即重启」。 */
     fun rebootNow() {
         rebootDecision?.complete(true)
@@ -1025,16 +1151,16 @@ class ColumnWizardViewModel(
             progressPrefs().edit()
                 .putString(progressKey(state.topicId), array.toString())
                 .putStringSet(optedKey(state.topicId), state.optedIn.toSet())
-                .apply()
+                .commit()
         }
         // 汇总一条给主页卡片用：主页不该为了画一张卡去解析每个专题的步骤明细。
         val currentTopic = topic ?: return
         // hidden 步骤是备选方案，不占界面位置，也不进主页进度分母。
         val visibleStates = state.stepStates.filter { !it.step.hidden }
-        val settled = visibleStates.count { it.status.isSettled }
-        val next = visibleStates.firstOrNull {
-            !it.status.isSettled && (!it.step.optIn || it.step.id in state.optedIn)
-        }
+        // 未勾选的可选步骤不参与进度分母：否则用户明确不装，主页会永远差一格。
+        val countable = visibleStates.filter { it.status.isSettled || !it.step.optIn || it.step.id in state.optedIn }
+        val settled = countable.count { it.status.isSettled }
+        val next = countable.firstOrNull { !it.status.isSettled }
         runCatching {
             ColumnProgressStore.record(
                 ksuApp,
@@ -1044,7 +1170,7 @@ class ColumnWizardViewModel(
                     topicTitle = currentTopic.title,
                     lastActiveAt = System.currentTimeMillis(),
                     settledSteps = settled,
-                    totalSteps = visibleStates.size,
+                    totalSteps = countable.size,
                     done = state.done,
                     nextStepTitle = next?.step?.title.orEmpty(),
                     nextStepId = next?.step?.id.orEmpty(),
@@ -1090,6 +1216,19 @@ class ColumnWizardViewModel(
 
     /** 勾选状态单独存一份：进度是按步骤记的，勾选是「用户想装什么」的偏好，跨进度保留。 */
     private fun optedKey(topicId: String): String = wizardKey("wizard_opted", topicId)
+
+    /** askUser + 索引里声明了包名：界面只提供「打开应用」，不代用户执行。 */
+    private fun RepoColumnStep.isExternalAppStep(): Boolean = externalAppPackage().isNotEmpty()
+
+
+    /** 旧版本把“已经装了，跳过”写进了进度记录；恢复时统一成新文案，避免老用户继续看到旧措辞。 */
+    private fun modernizeInstalledMessage(message: String): String {
+        val module = Regex("^模块 (.+?) 已经装了，跳过.*$").find(message)
+        if (module != null) return "已安装模块 ${module.groupValues[1]}，将跳过"
+        val app = Regex("^(.+?) 已经装了，跳过.*$").find(message)
+        if (app != null) return "已安装 ${app.groupValues[1]}，将跳过"
+        return message
+    }
 
     /** 只认已知状态名；RUNNING 之类的中间态一律回落到 PENDING（重启后它确实没在跑了）。 */
     private fun String.toColumnStepStatus(): ColumnStepStatus = when (this) {

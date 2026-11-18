@@ -38,10 +38,10 @@ data class ColumnHealthReport(
             passed(ColumnCheckIds.DENYLIST) &&
             passed(ColumnCheckIds.ADB)
 
-    /** 三绿（过 Play Integrity）的达标判据：日用级 + TEE 模拟 + PIF + 密钥材料有效。 */
+    /** 三绿（过 Play Integrity）的达标判据：日用级 + 密钥注入 + PIF + 密钥材料有效。 */
     val integrityLevelReady: Boolean
         get() = dayLevelReady &&
-            passed(ColumnCheckIds.TEESIMULATOR) &&
+            passed(ColumnCheckIds.KEY_INJECT) &&
             passed(ColumnCheckIds.PIF) &&
             passed(ColumnCheckIds.KEYBOX)
 }

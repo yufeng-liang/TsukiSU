@@ -3,6 +3,8 @@ package com.sukisu.ultra.data.column
 import android.content.Context
 import android.provider.Settings
 import com.sukisu.ultra.ksuApp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -103,6 +105,15 @@ object ColumnProgressStore {
     fun snapshot(context: Context, now: Long = System.currentTimeMillis()): List<ColumnProgressEntry> =
         readAll(context).filter { now - it.lastActiveAt <= STALE_AFTER_MS }
 
+    /**
+     * 组合期用的异步快照：SharedPreferences 首次读取会碰磁盘，不能放在 remember 里同步做。
+     * 首帧先返回空表，读完再重组；模块页的进度角标晚一帧出现是可接受的。
+     */
+    suspend fun snapshotAsync(
+        context: Context = ksuApp,
+        now: Long = System.currentTimeMillis(),
+    ): List<ColumnProgressEntry> = withContext(Dispatchers.IO) { snapshot(context, now) }
+
     /** 最近一条「已完成」的记录（默认看 24 小时内）：主页用它做完成态的正反馈。 */
     fun recentDone(
         context: Context,
@@ -198,7 +209,7 @@ object ColumnProgressStore {
     /** 记下这个专题已经庆祝过。 */
     fun markCelebrated(context: Context, columnId: String, topicId: String) {
         runCatching {
-            prefs(context).edit().putBoolean(celebratedKey(columnId, topicId), true).apply()
+            prefs(context).edit().putBoolean(celebratedKey(columnId, topicId), true).commit()
         }
     }
 
@@ -284,7 +295,7 @@ object ColumnProgressStore {
             )
         }
         runCatching {
-            prefs(context).edit().putString(KEY, array.toString()).apply()
+            prefs(context).edit().putString(KEY, array.toString()).commit()
         }
     }
 

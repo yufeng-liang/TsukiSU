@@ -60,7 +60,7 @@ object RepoColumnParser {
             JSONObject(body.trimStart('\uFEFF').trimStart())
         }.getOrNull() ?: return null
         val columns = root.optJSONArray("columns") ?: return null
-        return columns.toObjects(::parseColumn).sortedBy { it.order }
+        return columns.toObjects(::parseColumn).distinctBy { it.id }.sortedBy { it.order }
     }
 
     private fun parseColumn(item: JSONObject): RepoColumn? {
@@ -76,7 +76,7 @@ object RepoColumnParser {
             icon = item.text("icon"),
             // 没写 order 的排最后：解析结果已经排过序，这个值只是让界面自己再排一遍时结论一致。
             order = item.optInt("order", Int.MAX_VALUE),
-            topics = item.optJSONArray("topics").toObjects(::parseTopic),
+            topics = item.optJSONArray("topics").toObjects(::parseTopic).distinctBy { it.id },
             guide = item.optJSONArray("guide").toObjects(::parseGuide),
         )
     }
@@ -112,7 +112,7 @@ object RepoColumnParser {
             requires = item.optJSONArray("requires").toStringList(),
             // 没有 evidence 的专题不丢：全空对象会让新鲜度自然落到 GRAY，界面照实说「没有证据」。
             evidence = item.optJSONObject("evidence")?.let(::parseEvidence) ?: emptyEvidence(),
-            steps = item.optJSONArray("steps").toObjects(::parseStep),
+            steps = item.optJSONArray("steps").toObjects(::parseStep).distinctBy { it.id },
             verifyHints = item.optJSONArray("verifyHints").toStringList(),
             // 没有 keybox 是常态（大部分专题不需要），只有显式给出 url 才算「这个专题要用密钥材料」。
             keybox = item.optJSONObject("keybox")?.let(::parseKeybox)?.takeIf { it.url.isNotEmpty() },
@@ -168,6 +168,7 @@ object RepoColumnParser {
             linkLabel = item.text("linkLabel"),
             optIn = item.optBoolean("optIn", false),
             setDefaultUmount = item.optBoolean("setDefaultUmount", false),
+            rollbackModuleId = item.text("rollbackModuleId"),
             hidden = item.optBoolean("hidden", false),
         )
     }

@@ -528,7 +528,8 @@ fun ModuleRepoScreenMiuix(
             )
             val coolapkSource = coolapkCommunitySource(state.sources)
             // 入口卡没了（源被删掉）又没有第二个筛选项时，这个头就没有内容可放。
-            val showHeader = coolapkSource != null || filterOptions.size > 1
+            val showHeader = coolapkSource != null || filterOptions.size > 1 ||
+                state.columns.isNotEmpty() || state.columnsFailed
             val filteredModules = rememberSourceFilteredModules(state.modules, state.selectedSourceId)
             // 筛选把列表筛空，跟「一个源都没配」是两回事：前者换个筛选就有内容，后者要去加源。
             val filteredEmpty = state.selectedSourceId != null && filteredModules.isEmpty()

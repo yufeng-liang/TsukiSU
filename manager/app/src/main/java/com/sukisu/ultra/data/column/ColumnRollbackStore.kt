@@ -41,7 +41,7 @@ private const val DEFAULT_NEW_FILE_MODE = "600"
 private val FILE_MODE_PATTERN = Regex("^[0-7]{3,4}$")
 
 /** 伪文件系统：内容由内核动态生成，「文件大小」和「读完」都不成立，向导一律不碰。 */
-private val PSEUDO_FS_PREFIXES = listOf("/proc", "/sys")
+private val PSEUDO_FS_PREFIXES = listOf("/proc", "/sys", "/dev")
 
 /**
  * 模块 id 是否合法。
@@ -54,6 +54,9 @@ private val PSEUDO_FS_PREFIXES = listOf("/proc", "/sys")
 internal fun isValidColumnModuleId(value: String): Boolean {
     val id = value.trim()
     if (id.isEmpty() || id.length > 64) return false
+    // "unknown-module" 是执行器解析失败时的哨兵，不是真实模块 id；
+    // 绝不能让它进入回滚账本，否则回滚会执行一次无效的 uninstall。
+    if (id == "unknown-module") return false
     return id.matches(Regex("^[A-Za-z][A-Za-z0-9._-]*$"))
 }
 
@@ -133,7 +136,8 @@ internal object ColumnRootIo {
      * 向导的读写目标只应该是真实存在的配置文件，碰这类路径一定是索引写错了。
      */
     fun requireNotPseudoFs(path: String) {
-        val normalized = path.trim()
+        // 先折叠重复斜杠：//proc/kmsg 和 /proc/kmsg 是同一个内核文件，不能靠字面前缀漏过去。
+        val normalized = path.trim().replace(Regex("/+"), "/")
         PSEUDO_FS_PREFIXES.forEach { prefix ->
             if (normalized == prefix || normalized.startsWith("$prefix/")) {
                 throw IOException("$path 在 $prefix 下，内容是内核动态生成的，向导不读写这类路径")
@@ -199,14 +203,16 @@ internal object ColumnRootIo {
      *
      * 写入是「临时文件 + mv」两步，目标文件要么是旧内容、要么是新内容，不会出现半截文件。
      */
-    fun writeText(path: String, content: String) {
+    @Synchronized
+    fun writeText(path: String, content: String, newFileMode: String = DEFAULT_NEW_FILE_MODE) {
         val parent = path.substringBeforeLast('/', "")
         if (parent.isNotEmpty() && !mkdirs(parent)) throw IOException("无法创建目录：$parent")
 
-        // 权限：向导写的东西常常是敏感的（keybox 私钥、HMA 隐藏名单），新建文件一律 600（只 root 可读）。
-        // 已存在的文件沿用原 mode——它可能是某个模块或系统组件按既有权限读取的配置，硬改成 600 会把
-        // 「那边读不到」变成新的故障。读不到原 mode 时退回 600（保守：宁可自己看不了，不让别人看）。
-        val mode = fileMode(path) ?: DEFAULT_NEW_FILE_MODE
+        // 权限：向导写的东西常常是敏感的（keybox 私钥、HMA 隐藏名单），新建文件默认 600（只 root 可读）。
+        // 少数文件（keybox.xml）必须让模块进程以非 root 身份读取，调用方传 644；已存在的文件沿用原
+        // mode——它可能是某个模块或系统组件按既有权限读取的配置，硬改会把「那边读不到」变成新故障。
+        // 读不到原 mode 时退回调用方给的默认值。
+        val mode = fileMode(path) ?: newFileMode
 
         val bytes = content.toByteArray(Charsets.UTF_8)
         if (bytes.isEmpty()) {
@@ -251,12 +257,15 @@ internal object ColumnRootIo {
         if (trimmed.contains('\n') || trimmed.contains('\r')) {
             throw IOException("路径里不能包含换行：$path")
         }
-        val normalized = trimmed.trimEnd('/')
+        val normalized = trimmed.replace(Regex("/+"), "/").trimEnd('/')
         if (normalized.isEmpty() || normalized == "/") {
             throw IOException("路径不能是根目录：$path")
         }
         if (normalized.split('/').any { it == ".." }) {
             throw IOException("路径里不能包含 ..：$path")
+        }
+        if (normalized == COLUMN_LEDGER_DIR || normalized.startsWith("$COLUMN_LEDGER_DIR/")) {
+            throw IOException("索引不允许直接写 $COLUMN_LEDGER_DIR：$path")
         }
         return normalized
     }
@@ -275,8 +284,56 @@ class ColumnRollbackStore(
     private val rootDir: String = COLUMN_LEDGER_DIR,
 ) : ColumnRollback {
 
-    private val ledgerPath = "$rootDir/$LEDGER_FILE_NAME"
-    private val backupDir = "$rootDir/$BACKUP_DIR_NAME"
+    /**
+     * 当前专题的账本子目录。不同专题的改动必须分开记：否则回滚「银行」会把「三绿」装的模块
+     * 一起卸掉。空串表示还没 selectScope（例如单元测试直接构造），沿用旧版根目录行为。
+     */
+    @Volatile
+    private var scopeDir: String? = null
+
+    private val ledgerPath: String
+        get() = "${scopeDir ?: rootDir}/$LEDGER_FILE_NAME"
+    private val backupDir: String
+        get() = "${scopeDir ?: rootDir}/$BACKUP_DIR_NAME"
+
+    /** 切换当前专题账本；同一 ViewModel 的 start() 在每次进入专题时调用。 */
+    fun selectScope(columnId: String, topicId: String) {
+        require(columnId.isNotBlank() && topicId.isNotBlank()) { "columnId/topicId 不能为空" }
+        val key = "$columnId\u0000$topicId".toByteArray(Charsets.UTF_8).sha256Hex().take(16)
+        scopeDir = "$rootDir/scope-$key"
+        legacyMigrationChecked = false
+    }
+
+    /** 本次 selectScope 是否已经检查过旧版全局账本，避免每次 load 都去 root shell 问一遍。 */
+    @Volatile
+    private var legacyMigrationChecked = false
+
+    /**
+     * 把旧版 `$rootDir/rollback.json` 的一次性迁移到当前专题。
+     *
+     * 旧版本没有专题作用域，所有改动都记在根目录这一份账本里；直接留在原地会让升级后的用户
+     * 永远找不到回滚入口（新代码只看 scope-*）。迁移只做一次：第一个打开的专题接收整份旧账本，
+     * 并在返回的提示里说明「旧账本没有专题归属」，让用户在回滚前自己确认。
+     *
+     * 返回 null 表示没有可迁移的账本；返回文案表示迁移成功，由 ViewModel 写进执行日志。
+     */
+    suspend fun adoptLegacyLedgerIfNeeded(): String? = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            if (legacyMigrationChecked) return@withLock null
+            legacyMigrationChecked = true
+            val scope = scopeDir ?: return@withLock null
+            if (ColumnRootIo.exists(ledgerPath)) return@withLock null
+            val legacyPath = "$rootDir/$LEDGER_FILE_NAME"
+            if (!ColumnRootIo.exists(legacyPath)) return@withLock null
+            // 先解析一遍：损坏的旧账本不能靠 mv 混进新作用域，否则回滚会以为它是可信记录。
+            parseLedger(ColumnRootIo.readText(legacyPath))
+            if (!ColumnRootIo.mkdirs(scope)) throw IOException("无法创建账本目录：$scope")
+            if (!ColumnRootIo.move(legacyPath, ledgerPath)) {
+                throw IOException("旧版回滚账本迁移失败：$legacyPath -> $ledgerPath")
+            }
+            "检测到旧版全局回滚账本，已整体归入当前专题（$scope）。旧账本没有专题归属，回滚前请先确认其中的模块与文件都属于这个专题。"
+        }
+    }
 
     /** 账本是「读-改-写」，同一时刻只允许一个操作，否则两次 record 会互相覆盖。 */
     private val mutex = Mutex()
@@ -403,11 +460,13 @@ class ColumnRollbackStore(
      * 顺序遵循契约 §4.5：先逆序卸载本次装的模块，再逆序处理文件（删除本次新建的、还原备份的）。
      * 单条失败不影响后续条目，失败项会写回账本，用户修好环境后可以再点一次回滚。
      */
-    override suspend fun rollback(): List<String> = withContext(Dispatchers.IO) {
+    override suspend fun rollback(): ColumnRollbackReport = withContext(Dispatchers.IO) {
         requireLedgerUsable()
         mutex.withLock {
             val ledger = load(strict = true)
-            if (ledger.isEmpty) return@withLock listOf("没有需要回滚的记录")
+            if (ledger.isEmpty) {
+                return@withLock ColumnRollbackReport(listOf("没有需要回滚的记录"), complete = true)
+            }
 
             val messages = mutableListOf<String>()
             val failedModules = mutableListOf<String>()
@@ -418,6 +477,7 @@ class ColumnRollbackStore(
                 // 不合法的 id 绝不执行：它会被拼进 root 命令行（见 KsuCli.uninstallModule）。
                 if (!isValidColumnModuleId(moduleId)) {
                     messages += "跳过非法的模块 id：$moduleId（未执行任何卸载命令；请手动检查该模块）"
+                    failedModules += moduleId
                     return@forEach
                 }
                 val uninstalled = try {
@@ -451,16 +511,21 @@ class ColumnRollbackStore(
                 installedModules = failedModules.asReversed().toMutableList(),
                 writtenFiles = failedFiles.asReversed().toMutableList(),
             )
+            var saveSucceeded = true
             try {
                 save(remaining)
             } catch (e: IOException) {
+                saveSucceeded = false
                 messages += "回滚账本更新失败：${e.message}（下次回滚可能重复处理已完成的条目）"
             }
 
             if (remaining.isEmpty && ledger.installedModules.isNotEmpty()) {
                 messages += "模块卸载需要重启才彻底生效，建议重启设备。"
             }
-            messages
+            ColumnRollbackReport(
+                messages = messages,
+                complete = failedModules.isEmpty() && failedFiles.isEmpty() && saveSucceeded,
+            )
         }
     }
 

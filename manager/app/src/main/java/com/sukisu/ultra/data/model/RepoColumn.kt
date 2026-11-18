@@ -201,6 +201,13 @@ data class RepoColumnStep(
      */
     val setDefaultUmount: Boolean = false,
     /**
+     * `runCommand` 成功后额外记入回滚账本的模块 id。
+     *
+     * 有些命令不是在装模块（ksud 不能覆盖），而是直接往 /data/adb/modules 写一个目录；
+     * 执行器不知道它叫什么，只能由索引显式声明，回滚时才能把这个目录卸掉。
+     */
+    val rollbackModuleId: String = "",
+    /**
      * 不在界面上展示的步骤，只能由执行器按降级逻辑自动跑到。
      *
      * 典型用法是备选方案（例如 TEESimulator 装不上时改装的 OhMyKeymint）：平时不出现，
@@ -241,6 +248,17 @@ data class RepoColumnStepSource(
      */
     val url: String = "",
 ) : Parcelable
+
+/**
+ * 「跑一遍春秋」在旧索引里被写成 `verify`，也没有 `packageName`。
+ * 线上索引更新前先按 id 兼容成外部 App 手动步骤，用户升级 App 后就能直接看到「打开春秋」；
+ * 新索引已经写成 `askUser` + `packageName`，始终以索引声明为准。
+ */
+fun RepoColumnStep.externalAppPackage(): String = when {
+    kind.equals("askUser", ignoreCase = true) -> source.packageName.trim()
+    id == "run-check" && kind.equals("verify", ignoreCase = true) -> "com.chunqiunativecheck"
+    else -> ""
+}
 
 /** 证据的时效档位：越旧越不该被读成「现在还能用」。 */
 enum class EvidenceFreshness {

@@ -50,10 +50,12 @@ class ColumnSelfCheckRunnerImpl : ColumnSelfCheckRunner {
         ColumnCheckIds.FUSE_FIXER -> checkFuseFixer(shell)
         ColumnCheckIds.TRICKY_STORE -> checkTrickyStoreInstalled(shell)
         ColumnCheckIds.KEY_INJECT -> checkKeyInject(shell)
+        ColumnCheckIds.INTEGRITY_LEVEL -> checkIntegrityLevel(shell)
         ColumnCheckIds.HYBRID_MOUNT -> checkHybridMount(shell)
         ColumnCheckIds.HMA_CONFIG -> checkHmaConfig(shell)
         ColumnCheckIds.DENYLIST -> checkDenylistPolicy(shell)
         ColumnCheckIds.PATHMASK -> checkPathMask(shell)
+        ColumnCheckIds.MOUNT_HIDE -> checkMountHide(shell)
         ColumnCheckIds.TARGET_LIST -> checkTargetList(shell)
         ColumnCheckIds.KEYBOX -> checkKeybox(shell)
         ColumnCheckIds.ADB -> checkAdb(shell)
@@ -198,6 +200,31 @@ class ColumnSelfCheckRunnerImpl : ColumnSelfCheckRunner {
             passed(ColumnCheckIds.KEY_INJECT, "$label 已安装（$dir）")
         } else {
             failed(ColumnCheckIds.KEY_INJECT, "没有装密钥注入模块（TEESimulator 或 TrickyStore 任选其一）")
+        }
+    }
+
+    /** 3b. 三绿综合判据：复用各单项检查，避免 verify 步骤只看 keybox 文件就假阳性。 */
+    private fun checkIntegrityLevel(shell: Shell): ColumnCheckResult {
+        val checks = listOf(
+            checkRootManager(shell),
+            checkZygiskNext(shell),
+            checkLsposed(shell),
+            checkHmaOss(shell),
+            checkHmaConfig(shell),
+            checkDenylistPolicy(shell),
+            checkAdb(shell),
+            checkKeyInject(shell),
+            checkPif(shell),
+            checkKeybox(shell),
+        )
+        val missing = checks.filter { !it.passed }
+        return if (missing.isEmpty()) {
+            passed(ColumnCheckIds.INTEGRITY_LEVEL, "日用底座、密钥注入、PIF、keybox 全部通过")
+        } else {
+            failed(
+                ColumnCheckIds.INTEGRITY_LEVEL,
+                "未通过：" + missing.joinToString("；") { "${it.id}：${it.detail}" },
+            )
         }
     }
 

@@ -10,12 +10,18 @@ import com.sukisu.ultra.ksuApp
 import android.util.Base64
 import com.sukisu.ultra.ui.util.hasAnyNetwork
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /**
  * 密钥材料（keybox.xml）的体积上限。
@@ -65,6 +71,31 @@ class ColumnKeyboxFetcher(
         http.newBuilder()
             .callTimeout(KEYBOX_CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .build()
+    }
+
+    /**
+     * 异步发起请求，并把协程取消接到 `Call.cancel()` 上。
+     *
+     * 原来用阻塞的 `execute()`：协程被取消后线程还在 socket 上等，最长要等满 15 秒整次超时，
+     * 用户点了「停止」却看着日志不动。enqueue + invokeOnCancellation 才能立刻断掉连接。
+     */
+    private suspend fun call(url: String): Response = suspendCancellableCoroutine { continuation ->
+        val call = client.newCall(Request.Builder().url(url).build())
+        continuation.invokeOnCancellation { call.cancel() }
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                if (continuation.isActive) continuation.resumeWithException(e)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                if (continuation.isActive) {
+                    continuation.resume(response)
+                } else {
+                    // 协程已经取消：响应体必须关掉，否则连接泄漏。
+                    response.close()
+                }
+            }
+        })
     }
 
     suspend fun fetch(keybox: RepoColumnKeybox): Result<String> = withContext(Dispatchers.IO) {
@@ -189,9 +220,8 @@ class ColumnKeyboxFetcher(
     }
 
     /** 原始体的取回，上限比 keybox 本身宽松（解码前是混淆文本）。 */
-    private fun fetchRaw(url: String): ByteArray {
-        val request = Request.Builder().url(url).build()
-        return client.newCall(request).execute().use { response ->
+    private suspend fun fetchRaw(url: String): ByteArray {
+        return call(url).use { response ->
             if (!response.isSuccessful) {
                 throw IOException("下载密钥源失败：HTTP ${response.code}")
             }
@@ -277,9 +307,8 @@ class ColumnKeyboxFetcher(
     }
 
     /** 单个候选地址的一次取回；体积上限与 https 强制都在这里兜住。 */
-    private fun fetchBytes(url: String): ByteArray {
-        val request = Request.Builder().url(url).build()
-        return client.newCall(request).execute().use { response ->
+    private suspend fun fetchBytes(url: String): ByteArray {
+        return call(url).use { response ->
             if (!response.isSuccessful) {
                 throw IOException("下载密钥材料失败：HTTP ${response.code}")
             }

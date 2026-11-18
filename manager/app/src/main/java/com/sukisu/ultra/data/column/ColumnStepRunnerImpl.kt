@@ -97,7 +97,7 @@ class ColumnStepRunnerImpl(
                 KIND_INSTALL_MODULE -> installModule(step, ctx, log)
                 KIND_INSTALL_APP -> installApp(step, ctx, log)
                 KIND_WRITE_CONFIG, KIND_WRITE_FILE -> writeFile(step, ctx, log)
-                KIND_WRITE_HMA_CONFIG -> writeHmaConfig(step, log)
+                KIND_WRITE_HMA_CONFIG -> writeHmaConfig(step, ctx, log)
                 KIND_RUN_COMMAND -> runCommand(step, log)
                 KIND_VERIFY -> verify(step)
                 KIND_REBOOT -> reboot(step, log)
@@ -143,7 +143,7 @@ class ColumnStepRunnerImpl(
             log.line("$declaredPkg 已安装，跳过下载")
             return ColumnStepResult(
                 ColumnStepStatus.SKIPPED,
-                "$declaredPkg 已经装了，跳过（要重装请在步骤上点升级/重做）",
+                "已安装 $declaredPkg，将跳过",
                 log.text(),
             )
         }
@@ -174,7 +174,7 @@ class ColumnStepRunnerImpl(
                 log.line("$pkg 已安装，跳过")
                 return ColumnStepResult(
                     ColumnStepStatus.SKIPPED,
-                    "$pkg 已经装了，跳过（要重装请在步骤上点升级/重做）",
+                    "已安装 $pkg，将跳过",
                     log.text(),
                 )
             }
@@ -465,7 +465,7 @@ class ColumnStepRunnerImpl(
     private fun skippedInstalled(moduleId: String, log: StepLog): ColumnStepResult =
         ColumnStepResult(
             status = ColumnStepStatus.SKIPPED,
-            message = "模块 $moduleId 已经装了，跳过（要重装请先回滚）",
+            message = "已安装模块 $moduleId，将跳过",
             log = log.text(),
         )
 
@@ -598,7 +598,16 @@ class ColumnStepRunnerImpl(
             rollback.recordWrittenFile(path)
             log.line("已记录回滚点：$path")
 
-            ColumnRootIo.writeText(path, content)
+            ColumnRootIo.writeText(
+                path,
+                content,
+                newFileMode = if (step.fileContent.contains(KEYBOX_PLACEHOLDER)) "644" else "600",
+            )
+            if (step.fileContent.contains(KEYBOX_PLACEHOLDER) &&
+                !ColumnRootIo.exec("chmod 644 ${ColumnRootIo.shellQuote(path)}").isSuccess
+            ) {
+                return failed("已写入 $path，但 chmod 644 失败，模块可能读不到密钥材料", log)
+            }
             if (!ColumnRootIo.isFile(path)) {
                 return failed("写入后校验失败：$path 不存在或不是普通文件", log)
             }
@@ -612,6 +621,8 @@ class ColumnStepRunnerImpl(
                 message = "已写入 $path（$size 字节）",
                 log = log.text(),
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             failed("写入 $path 失败：${e.message ?: e.javaClass.simpleName}", log)
         }
@@ -632,6 +643,7 @@ class ColumnStepRunnerImpl(
      */
     private suspend fun writeHmaConfig(
         step: RepoColumnStep,
+        ctx: ColumnRunContext,
         log: StepLog,
     ): ColumnStepResult {
         if (step.fileContent.isBlank()) {
@@ -718,7 +730,7 @@ class ColumnStepRunnerImpl(
         }
 
         val merged = try {
-            mergeHmaConfig(existing, normalizedPack, log)
+            mergeHmaConfig(existing, normalizedPack, log, ctx.force)
         } catch (e: HmaSchemaException) {
             return failed("合并 HMA 配置失败：${e.message}；未写入任何内容", log)
         }
@@ -752,6 +764,8 @@ class ColumnStepRunnerImpl(
                 message = "已写入 HMA 配置（$size 字节），重启后生效",
                 log = log.text(),
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             failed("写入 HMA 配置失败：${e.message ?: e.javaClass.simpleName}", log)
         }
@@ -769,6 +783,7 @@ class ColumnStepRunnerImpl(
         existing: JSONObject,
         pack: JSONObject,
         log: StepLog,
+        force: Boolean,
     ): JSONObject {
         val out = JSONObject(existing.toString())
 
@@ -797,9 +812,9 @@ class ColumnStepRunnerImpl(
         run {
             val templates = out.optJSONObject("templates")
                 ?: JSONObject().also { out.put("templates", it) }
-            if (!templates.has(templateName)) {
+            if (!templates.has(templateName) || force) {
                 templates.put(templateName, template)
-                log.line("新增模板：$templateName（${template.optJSONArray("appList")?.length() ?: 0} 个包名）")
+                log.line("${if (force) "覆盖" else "新增"}模板：$templateName（${template.optJSONArray("appList")?.length() ?: 0} 个包名）")
             } else {
                 log.line("模板已存在，保持用户原样：$templateName")
             }
@@ -857,7 +872,11 @@ class ColumnStepRunnerImpl(
     // runCommand
     // ---------------------------------------------------------------------------------------
 
-    private fun runCommand(step: RepoColumnStep, log: StepLog): ColumnStepResult {
+    private suspend fun runCommand(step: RepoColumnStep, log: StepLog): ColumnStepResult {
+        // 命令必须以 confirm 文案进入用户确认流程；没有确认文案的 runCommand 不允许被一键执行自动排队。
+        if (step.confirm.isBlank()) {
+            return failed("runCommand 缺少确认文案，已停止：root 命令必须由用户确认后才能执行", log)
+        }
         val command = step.command.trim()
         if (command.isEmpty()) {
             return failed("命令为空，无法执行", log)
@@ -890,6 +909,25 @@ class ColumnStepRunnerImpl(
             log.line(if (ok) "已开启「默认卸载模块」" else "「默认卸载模块」开启失败，可在设置里手动打开")
         }
 
+        // 命令自己创建的模块目录不在 ksud 的安装记录里，只能靠索引声明的 id 补记账本。
+        val rollbackId = step.rollbackModuleId.trim()
+        if (rollbackId.isNotEmpty()) {
+            if (!isValidColumnModuleId(rollbackId)) {
+                return failed("rollbackModuleId 不是合法模块 id：$rollbackId", log)
+            }
+            try {
+                rollback.recordInstalledModule(rollbackId)
+                log.line("已记录模块回滚点：$rollbackId")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return failed(
+                    "命令已执行，但模块 $rollbackId 记入回滚账本失败：${e.message ?: e.javaClass.simpleName}；请手动卸载",
+                    log,
+                )
+            }
+        }
+
         return ColumnStepResult(
             status = ColumnStepStatus.SUCCESS,
             message = "命令执行成功",
@@ -907,7 +945,7 @@ class ColumnStepRunnerImpl(
             // note 已经在上面的说明区完整展示过，这里再抄一遍会让用户看到同一段话两次。
             return ColumnStepResult(ColumnStepStatus.NEEDS_USER, "请按上面的说明自行确认")
         }
-        if (checkId !in ColumnCheckIds.ALL) {
+        if (checkId !in ColumnCheckIds.SUPPORTED) {
             return ColumnStepResult(
                 ColumnStepStatus.NEEDS_USER,
                 "请在下方自检里确认：$checkId（该自检项未登记，请按说明手动确认）",
@@ -939,7 +977,11 @@ class ColumnStepRunnerImpl(
         // 同上：note 已经在说明区展示，message 只讲这一步现在要做什么。
         log.line("执行重启命令：reboot（${step.title}）")
         return try {
-            ProcessBuilder("su", "-c", "reboot").start()
+            val process = ProcessBuilder("su", "-c", "reboot").start()
+            // 独立进程通常来不及返回就被重启杀掉；能等到退出码时检查一下，避免把权限错误当成功。
+            if (process.waitFor(3, java.util.concurrent.TimeUnit.SECONDS) && process.exitValue() != 0) {
+                return failed("重启命令退出码 ${process.exitValue()}，请手动重启设备后回来继续", log)
+            }
             ColumnStepResult(ColumnStepStatus.SUCCESS, "设备正在重启…", log.text())
         } catch (e: Exception) {
             failed("重启失败：${e.message ?: e.javaClass.simpleName}，请手动重启设备后回来继续", log)
@@ -1105,7 +1147,7 @@ private fun requireStringArray(value: Any?, field: String): JSONArray {
  * 规范化一条 `disabledHooks`：`className` / `methodName` 必须有，
  * `argumentCount` 缺失时补 **-1**（HMA 的界面里 -1 表示「任意参数个数」），类型不对就报错。
  */
-private fun normalizeHook(value: Any?, index: Int, log: (String) -> Unit): JSONObject {
+private fun normalizeHook(value: Any?, index: Int, log: (String) -> Unit, preserveUnknown: Boolean = false): JSONObject {
     val field = "disabledHooks[$index]"
     val hook = requireJsonObject(value, field)
     val className = requireJsonText(hook, "className", field)
@@ -1132,7 +1174,7 @@ private fun normalizeHook(value: Any?, index: Int, log: (String) -> Unit): JSONO
 
         else -> throw HmaSchemaException("$field.argumentCount 必须是整数，实际是${jsonTypeName(raw)}")
     }
-    return JSONObject().apply {
+    return (if (preserveUnknown) JSONObject(hook.toString()) else JSONObject()).apply {
         put("className", className)
         put("methodName", methodName)
         put("argumentCount", argumentCount)
@@ -1143,7 +1185,7 @@ private fun normalizeHook(value: Any?, index: Int, log: (String) -> Unit): JSONO
  * 规范化一个模板：`isWhitelist` 缺失补 **true**（HMA 默认「隐藏名单」语义，与向导模板一致），
  * `appList` 必须有且是字符串数组。返回只含这两个键的对象——多余键 HMA 不认识，留着反而有风险。
  */
-private fun normalizeTemplate(value: Any?, name: String, log: (String) -> Unit): JSONObject {
+private fun normalizeTemplate(value: Any?, name: String, log: (String) -> Unit, preserveUnknown: Boolean = false): JSONObject {
     val field = "templates[$name]"
     val template = requireJsonObject(value, field)
     val isWhitelist = when (val raw = template.opt("isWhitelist")) {
@@ -1158,7 +1200,7 @@ private fun normalizeTemplate(value: Any?, name: String, log: (String) -> Unit):
     val rawAppList = template.opt("appList")
         ?: throw HmaSchemaException("$field 缺少 appList（HMA 要求该字段必须存在）")
     val appList = requireStringArray(rawAppList, "$field.appList")
-    return JSONObject().apply {
+    return (if (preserveUnknown) JSONObject(template.toString()) else JSONObject()).apply {
         put("isWhitelist", isWhitelist)
         put("appList", appList)
     }
@@ -1207,7 +1249,7 @@ private fun validateHmaConfig(config: JSONObject, log: (String) -> Unit, where: 
         val keys = templates.keys()
         while (keys.hasNext()) {
             val name = keys.next()
-            normalized.put(name, normalizeTemplate(templates.get(name), name, log))
+            normalized.put(name, normalizeTemplate(templates.get(name), name, log, preserveUnknown = true))
         }
         config.put("templates", normalized)
     }
@@ -1215,7 +1257,7 @@ private fun validateHmaConfig(config: JSONObject, log: (String) -> Unit, where: 
         val array = raw as? JSONArray
             ?: throw HmaSchemaException("$where 的 disabledHooks 必须是数组，实际是${jsonTypeName(raw)}")
         val normalized = JSONArray()
-        for (i in 0 until array.length()) normalized.put(normalizeHook(array.get(i), i, log))
+        for (i in 0 until array.length()) normalized.put(normalizeHook(array.get(i), i, log, preserveUnknown = true))
         config.put("disabledHooks", normalized)
     }
     if (config.has("scope")) {
@@ -1257,8 +1299,8 @@ private fun normalizeHmaPack(pack: JSONObject, log: (String) -> Unit): JSONObjec
             val key = keys.next()
             // HMA 的全局项都是标量（Boolean / Int），给成对象或数组说明索引写错了层级。
             val value = globals.get(key)
-            if (value is JSONObject || value is JSONArray || value == JSONObject.NULL) {
-                throw HmaSchemaException("globals.$key 必须是布尔值或数字，实际是${jsonTypeName(value)}")
+            if (value !is Boolean && value !is Int && value !is Long) {
+                throw HmaSchemaException("globals.$key 必须是布尔值或整数，实际是${jsonTypeName(value)}")
             }
         }
         normalized.put("globals", globals)

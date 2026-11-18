@@ -486,8 +486,11 @@ class MainActivity : ComponentActivity() {
                                             onUpgradeStep = { step -> wizardViewModel.runStep(step, force = true) },
                                             // 走预检：有会覆盖已有配置的步骤时先让用户确认。
                                             onRunAll = { wizardViewModel.requestRunAll() },
+                                            onCancelRunAll = { wizardViewModel.cancelRunAll() },
                                             onConfirmPreflight = { wizardViewModel.confirmPreflight() },
                                             onDismissPreflight = { wizardViewModel.dismissPreflight() },
+                                            onConfirmStep = { wizardViewModel.confirmStep() },
+                                            onCancelStepConfirm = { wizardViewModel.cancelStepConfirm() },
                                             onToggleOptIn = { step -> wizardViewModel.toggleOptIn(step.id) },
                                             onMarkDone = { step -> wizardViewModel.markDone(step) },
                                             // 「进入 AI 助手」：向导里跑完检测拿到红项截图后直接跳过去排查。

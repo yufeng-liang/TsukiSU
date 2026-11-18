@@ -42,6 +42,7 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -202,7 +203,7 @@ private fun ColumnEntryCard(column: RepoColumn, onClick: () -> Unit, modifier: M
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                ColumnIconBadge(columnGlyph(column.accent))
+                ColumnIconBadge(columnGlyph(column.icon, column.accent))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = column.title,
@@ -305,7 +306,7 @@ private fun ColumnEntryCardMiuix(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            ColumnIconBadgeMiuix(columnGlyph(column.accent))
+            ColumnIconBadgeMiuix(columnGlyph(column.icon, column.accent))
             Column(modifier = Modifier.weight(1f)) {
                 MiuixText(
                     text = column.title,
@@ -353,12 +354,25 @@ private fun ColumnIconBadge(image: ImageVector) {
 }
 
 /**
- * 专栏图标：语义只按 accent 近似推断。
+ * 专栏图标：先看索引给的 icon 白名单，没给再按 accent 近似推断。
+ *
+ * 白名单是契约里定死的 key（shield / list / key / tool / eye-off）：索引写错时退回 accent，
+ * 而不是把远程字符串直接当类名或资源名用。
  *
  * material-icons 是裁剪版（`manager/app/libs/material-icons-custom.jar`），
  * 只从确认存在的 outlined 集合里挑，别写没打进去的图标名。
  */
-private fun columnGlyph(accent: String): ImageVector = when (accent) {
+private fun iconGlyph(icon: String): ImageVector? = when (icon.lowercase()) {
+    "shield" -> Icons.Outlined.Shield
+    "list" -> Icons.Outlined.Article
+    "key" -> Icons.Outlined.VpnKey
+    "tool" -> Icons.Outlined.Build
+    "eye-off", "eye_off" -> Icons.Outlined.VisibilityOff
+    else -> null
+}
+
+private fun columnGlyph(icon: String, accent: String): ImageVector =
+    iconGlyph(icon) ?: when (accent) {
     "root" -> Icons.Outlined.Shield
     "hide" -> Icons.Outlined.VisibilityOff
     "integrity" -> Icons.Outlined.VerifiedUser
@@ -401,8 +415,8 @@ fun ModuleColumnScreen(
 /**
  * 按 id 从仓库列表还原专栏。
  *
- * `refreshColumns` 失败是静默的，`columnsLoaded` 会一直是 false；这里最多等 4 秒，
- * 超时或列表加载完仍找不到就回调 [onMissing]，避免用户永远停在加载态。
+ * `refreshColumns` 失败是静默的；这里等到仓库真正给出「加载完成 / 加载失败」，
+ * 最长等 16 秒（仓库单次请求上限 15 秒）再退回商店，避免冷启动慢网时 4 秒就被弹回。
  */
 @Composable
 internal fun rememberColumnById(columnId: String, onMissing: (String) -> Unit): RepoColumn? {
@@ -411,15 +425,20 @@ internal fun rememberColumnById(columnId: String, onMissing: (String) -> Unit): 
     LaunchedEffect(columnId) { repoViewModel.refreshColumns() }
     val column = state.columns.firstOrNull { it.id == columnId }
     var missing by remember(columnId) { mutableStateOf(false) }
-    LaunchedEffect(columnId, column, state.columnsLoaded) {
+    LaunchedEffect(columnId, column, state.columnsLoaded, state.columnsFailed) {
         if (column != null || missing) return@LaunchedEffect
-        // 4 秒足够一趟慢网请求；再久就该退回商店，而不是让用户盯着一屏加载态。
-        if (!state.columnsLoaded) delay(4_000)
-        if (column == null && !missing) {
-            missing = true
-            Log.w(MODULE_COLUMN_TAG, "找不到专栏 $columnId（columnsLoaded=${state.columnsLoaded}），返回上一页")
-            onMissing(columnId)
+        var waited = 0L
+        while (!state.columnsLoaded && !state.columnsFailed && waited < 16_000L) {
+            delay(500)
+            waited += 500
         }
+        if (missing) return@LaunchedEffect
+        missing = true
+        Log.w(
+            MODULE_COLUMN_TAG,
+            "找不到专栏 $columnId（columnsLoaded=${state.columnsLoaded}，columnsFailed=${state.columnsFailed}），返回上一页",
+        )
+        onMissing(columnId)
     }
     return column
 }
@@ -461,6 +480,32 @@ private fun ModuleColumnLoadingMaterial(onBack: () -> Unit) {
 /** 找不到专栏时的日志 tag。 */
 private const val MODULE_COLUMN_TAG = "ModuleColumnScreen"
 
+/**
+ * 专题进度：读 SharedPreferences 放到 IO 线程，组合期只拿状态。
+ *
+ * 以前这里在 remember 里同步读，主页/详情页第一帧会卡在磁盘 I/O 上；现在首帧先空着，
+ * 读完自动重组，进度角标稍微晚一帧出现。
+ */
+@Composable
+private fun rememberTopicProgress(column: RepoColumn): Map<String, ColumnProgressEntry> {
+    var progress by remember(column.id, column.topics) {
+        mutableStateOf<Map<String, ColumnProgressEntry>>(emptyMap())
+    }
+    LaunchedEffect(column.id, column.topics) {
+        val saved = ColumnProgressStore.snapshotAsync().filter { it.columnId == column.id }
+        progress = column.topics.mapNotNull { topic ->
+            val entry = saved.firstOrNull { it.topicId == topic.id } ?: return@mapNotNull null
+            val settled = entry.settledSteps.coerceAtMost(topic.visibleSteps.size)
+            topic.id to entry.copy(
+                settledSteps = settled,
+                totalSteps = topic.visibleSteps.size,
+                done = topic.visibleSteps.isNotEmpty() && settled >= topic.visibleSteps.size,
+            )
+        }.toMap()
+    }
+    return progress
+}
+
 @Composable
 private fun ModuleColumnScreenMaterial(
     column: RepoColumn,
@@ -470,19 +515,7 @@ private fun ModuleColumnScreenMaterial(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
-    // 每个专题的进度（做过哪步、第几步）只在进页面时读一次 SharedPreferences。
-    // 索引里加过/删过步骤时，持久化的 totalSteps 会过期（专题现在是 13 步、旧记录还是 12 步），
-    // 所以分母一律以当前索引为准，分子也不超过分母，避免出现「查看 13 个步骤」却显示「1 / 12」。
-    val progressByTopic: Map<String, ColumnProgressEntry> = remember(column.id) {
-        val saved = ColumnProgressStore.snapshot().filter { it.columnId == column.id }
-        column.topics.mapNotNull { topic ->
-            val entry = saved.firstOrNull { it.topicId == topic.id } ?: return@mapNotNull null
-            topic.id to entry.copy(
-                settledSteps = entry.settledSteps.coerceAtMost(topic.steps.size),
-                totalSteps = topic.steps.size,
-            )
-        }.toMap()
-    }
+    val progressByTopic = rememberTopicProgress(column)
     // 引导卡按档位跳到对应专题：映射到具体 topicId 后再滚动 + 短暂高亮，避免用户滚过去找不到刚点的是哪张卡。
     var highlightedTopicId by remember(column.id) { mutableStateOf("") }
     val onGuideSelect: (String) -> Unit = { tier ->
@@ -563,7 +596,7 @@ private fun ColumnHeaderCard(column: RepoColumn) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                ColumnIconBadge(columnGlyph(column.accent))
+                ColumnIconBadge(columnGlyph(column.icon, column.accent))
                 Text(
                     // 副标题缺失的专栏（老索引没写 subtitle）退回专栏名，不然卡片会只剩一个图标。
                     text = column.subtitle.ifBlank { column.title },
@@ -573,7 +606,7 @@ private fun ColumnHeaderCard(column: RepoColumn) {
                 )
             }
             Text(
-                text = stringResource(R.string.column_header_intro),
+                text = column.description.ifBlank { stringResource(R.string.column_header_intro) },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -592,7 +625,7 @@ private fun TopicCard(
     val requires = remember(topic.requires) { topic.requires.filter { it.isNotBlank() } }
     val verifyHints = remember(topic.verifyHints) { topic.verifyHints.filter { it.isNotBlank() } }
     // 没有步骤但还有前置/验证时，折叠区照样要留入口，否则那两块内容永远看不到。
-    val hasDetails = topic.steps.isNotEmpty() || requires.isNotEmpty() || verifyHints.isNotEmpty()
+    val hasDetails = topic.visibleSteps.isNotEmpty() || requires.isNotEmpty() || verifyHints.isNotEmpty()
     TonalCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -632,7 +665,7 @@ private fun TopicCard(
                 )
             }
             // 「开始执行」紧跟在摘要后面：详情页卡片很长，按钮沉底会让用户翻完 11 个步骤才找到它。
-            if (topic.steps.isNotEmpty()) {
+            if (topic.visibleSteps.isNotEmpty()) {
                 // 主色容器 + onPrimaryContainer：和商店页其它主按钮同一套配色，不再是紫色调。
                 Button(
                     onClick = { onOpenWizard(topic) },
@@ -650,7 +683,7 @@ private fun TopicCard(
                 var detailsExpanded by remember(topic.id) { mutableStateOf(false) }
                 DetailsToggle(
                     expanded = detailsExpanded,
-                    stepCount = topic.steps.size,
+                    stepCount = topic.visibleSteps.size,
                     onToggle = { detailsExpanded = !detailsExpanded },
                 )
                 // 展开/收起用高度动画，列表不会因为内容突然出现而整体跳一下。
@@ -667,7 +700,7 @@ private fun TopicCard(
                                 lines = requires,
                             )
                         }
-                        topic.steps.forEachIndexed { index, step -> StepRow(index = index, step = step) }
+                        topic.visibleSteps.forEachIndexed { index, step -> StepRow(index = index, step = step) }
                         if (verifyHints.isNotEmpty()) {
                             Section(
                                 title = stringResource(R.string.module_column_verify_title),
@@ -906,7 +939,7 @@ private fun EvidenceBlock(evidence: RepoColumnEvidence) {
     val month = evidenceMonth(evidence.verifiedAt)
     val status = when {
         month.isEmpty() -> stringResource(R.string.module_column_evidence_unknown)
-        evidence.freshness(now) == EvidenceFreshness.GRAY ->
+        evidence.freshness(now) != EvidenceFreshness.GREEN ->
             stringResource(R.string.module_column_evidence_stale)
         else -> stringResource(R.string.module_column_evidence_verified)
     }
@@ -927,6 +960,15 @@ private fun EvidenceBlock(evidence: RepoColumnEvidence) {
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
+        // 证据口径（例如「依据 2026-08 的社区实测帖」）单独一行：它解释的是 verifiedAt 的来源，
+        // 不是「商店最近核对时间」，混进 headline 会被读成「N 天前验证」。
+        if (evidence.label.isNotEmpty()) {
+            Text(
+                text = evidence.label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
         Text(
             text = headline,
             style = MaterialTheme.typography.labelSmall,
@@ -1085,19 +1127,7 @@ private fun ModuleColumnScreenMiuix(
 
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
-    // 每个专题的进度（做过哪步、第几步）只在进页面时读一次 SharedPreferences。
-    // 索引里加过/删过步骤时，持久化的 totalSteps 会过期（专题现在是 13 步、旧记录还是 12 步），
-    // 所以分母一律以当前索引为准，分子也不超过分母，避免出现「查看 13 个步骤」却显示「1 / 12」。
-    val progressByTopic: Map<String, ColumnProgressEntry> = remember(column.id) {
-        val saved = ColumnProgressStore.snapshot().filter { it.columnId == column.id }
-        column.topics.mapNotNull { topic ->
-            val entry = saved.firstOrNull { it.topicId == topic.id } ?: return@mapNotNull null
-            topic.id to entry.copy(
-                settledSteps = entry.settledSteps.coerceAtMost(topic.steps.size),
-                totalSteps = topic.steps.size,
-            )
-        }.toMap()
-    }
+    val progressByTopic = rememberTopicProgress(column)
     // 引导卡按档位跳到对应专题：映射到具体 topicId 后再滚动 + 短暂高亮，避免用户滚过去找不到刚点的是哪张卡。
     var highlightedTopicId by remember(column.id) { mutableStateOf("") }
     val onGuideSelect: (String) -> Unit = { tier ->
@@ -1221,7 +1251,7 @@ private fun ModuleColumnHeaderMiuix(column: RepoColumn) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                ColumnIconBadgeMiuix(columnGlyph(column.accent))
+                ColumnIconBadgeMiuix(columnGlyph(column.icon, column.accent))
                 MiuixText(
                     // 副标题缺失的专栏（老索引没写 subtitle）退回专栏名，不然卡片会只剩一个图标。
                     text = column.subtitle.ifBlank { column.title },
@@ -1232,7 +1262,7 @@ private fun ModuleColumnHeaderMiuix(column: RepoColumn) {
                 )
             }
             MiuixText(
-                text = stringResource(R.string.column_header_intro),
+                text = column.description.ifBlank { stringResource(R.string.column_header_intro) },
                 color = colorScheme.onSurfaceVariantSummary,
                 fontSize = 13.sp,
             )
@@ -1347,7 +1377,7 @@ private fun TopicCardMiuix(
     val requires = remember(topic.requires) { topic.requires.filter { it.isNotBlank() } }
     val verifyHints = remember(topic.verifyHints) { topic.verifyHints.filter { it.isNotBlank() } }
     // 没有步骤但还有前置/验证时，折叠区照样要留入口，否则那两块内容永远看不到。
-    val hasDetails = topic.steps.isNotEmpty() || requires.isNotEmpty() || verifyHints.isNotEmpty()
+    val hasDetails = topic.visibleSteps.isNotEmpty() || requires.isNotEmpty() || verifyHints.isNotEmpty()
     var detailsExpanded by remember(topic.id) { mutableStateOf(false) }
 
     AppCard(
@@ -1388,7 +1418,7 @@ private fun TopicCardMiuix(
                 )
             }
             // 「开始执行」紧跟在摘要后面：详情页卡片很长，按钮沉底会让用户翻完十几个步骤才找到它。
-            if (topic.steps.isNotEmpty()) {
+            if (topic.visibleSteps.isNotEmpty()) {
                 MiuixButton(
                     onClick = { onOpenWizard(topic) },
                     modifier = Modifier.fillMaxWidth(),
@@ -1402,7 +1432,7 @@ private fun TopicCardMiuix(
             if (hasDetails) {
                 DetailsToggleMiuix(
                     expanded = detailsExpanded,
-                    stepCount = topic.steps.size,
+                    stepCount = topic.visibleSteps.size,
                     onToggle = { detailsExpanded = !detailsExpanded },
                 )
                 // 展开/收起用高度动画，列表不会因为内容突然出现而整体跳一下。
@@ -1419,7 +1449,7 @@ private fun TopicCardMiuix(
                                 lines = requires,
                             )
                         }
-                        topic.steps.forEachIndexed { index, step -> StepRowMiuix(index = index, step = step) }
+                        topic.visibleSteps.forEachIndexed { index, step -> StepRowMiuix(index = index, step = step) }
                         if (verifyHints.isNotEmpty()) {
                             SectionMiuix(
                                 title = stringResource(R.string.module_column_verify_title),
@@ -1593,7 +1623,7 @@ private fun EvidenceBlockMiuix(evidence: RepoColumnEvidence) {
     val month = evidenceMonth(evidence.verifiedAt)
     val status = when {
         month.isEmpty() -> stringResource(R.string.module_column_evidence_unknown)
-        evidence.freshness(now) == EvidenceFreshness.GRAY ->
+        evidence.freshness(now) != EvidenceFreshness.GREEN ->
             stringResource(R.string.module_column_evidence_stale)
         else -> stringResource(R.string.module_column_evidence_verified)
     }
@@ -1614,6 +1644,14 @@ private fun EvidenceBlockMiuix(evidence: RepoColumnEvidence) {
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
+        // 与 Material 版一致：口径说明单独一行，避免把「证据来源日期」误读成「最近核对日期」。
+        if (evidence.label.isNotEmpty()) {
+            MiuixText(
+                text = evidence.label,
+                color = colorScheme.onSurface,
+                fontSize = 11.sp,
+            )
+        }
         MiuixText(
             text = headline,
             color = colorScheme.onSurfaceVariantSummary,
@@ -1741,3 +1779,7 @@ private fun ModuleColumnLoadingMiuix(onBack: () -> Unit) {
         }
     }
 }
+
+/** 界面上真正展示的步骤：hidden 只给执行器降级用，不计入进度分母、也不画进列表。 */
+private val RepoColumnTopic.visibleSteps: List<RepoColumnStep>
+    get() = steps.filterNot { it.hidden }

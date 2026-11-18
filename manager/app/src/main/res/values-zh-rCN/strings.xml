@@ -1744,13 +1744,17 @@
     <string name="column_wizard_run_all">一键执行</string>
     <string name="column_wizard_opt_in">纳入一键执行</string>
     <string name="column_wizard_installed" translatable="true">已安装</string>
-    <string name="column_wizard_installed_skip">已安装 %1$s，默认跳过</string>
+    <string name="column_wizard_installed_skip">已安装 %1$s，将跳过</string>
+    <string name="column_wizard_open_chunqiu">打开春秋</string>
+    <string name="column_wizard_open_chunqiu_missing">还没安装春秋，先完成上一步的安装</string>
+    <string name="column_wizard_open_chunqiu_failed">打不开春秋，请从桌面手动启动</string>
     <string name="column_wizard_reinstall" translatable="true">重新安装</string>
     <string name="column_wizard_test_title" translatable="true">测试专用</string>
     <string name="column_wizard_test_body" translatable="true">只预览界面，不执行任何隐藏操作、也不会真的重启。长按顶栏标题可再次打开。</string>
     <string name="column_wizard_test_celebrate" translatable="true">预览庆祝动画</string>
     <string name="column_wizard_test_countdown" translatable="true">预览重启倒计时</string>
     <string name="column_wizard_run_all_rest">一键执行剩余步骤</string>
+    <string name="column_wizard_cancel_run">停止执行</string>
     <string name="module_column_guide_title">你该从哪一档开始</string>
     <string name="module_column_tier_day">日用级</string>
     <string name="module_column_tier_integrity">三绿</string>
@@ -1774,6 +1778,8 @@
     <string name="column_preflight_manual" translatable="true">%1$d 步需要你手动完成</string>
     <string name="column_preflight_backup_note" translatable="true">被覆盖的文件都会先备份，之后可以从回滚入口还原。</string>
     <string name="column_preflight_continue" translatable="true">继续</string>
+    <string name="column_step_confirm_run" translatable="true">确认执行</string>
+    <string name="column_step_confirm_cancel" translatable="true">不执行，停止</string>
     <string name="column_preflight_cancel" translatable="true">取消</string>
     <string name="column_health_title_short" translatable="true">设备初检</string>
     <string name="column_health_score" translatable="true">%2$d 项检查 · %1$d 项通过</string>

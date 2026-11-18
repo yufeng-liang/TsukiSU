@@ -318,6 +318,9 @@ class ColumnModuleFetcher(
                 if (!response.isSuccessful) {
                     throw ColumnFetchException("读取 update.json 失败：HTTP ${response.code}（$url）")
                 }
+                if (!response.request.url.toString().startsWith("https://", ignoreCase = true)) {
+                    throw ColumnFetchException("update.json 地址被重定向到非 https：${response.request.url}")
+                }
                 val bytes = response.peekBody(MAX_RELEASES_BODY_BYTES + 1).bytes()
                 if (bytes.size > MAX_RELEASES_BODY_BYTES) {
                     throw ColumnFetchException(
@@ -387,6 +390,9 @@ class ColumnModuleFetcher(
         return guarded(repo, "访问 GitHub 接口") {
             apiClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) throw httpFailure(repo, response.code)
+                if (!response.request.url.toString().startsWith("https://", ignoreCase = true)) {
+                    throw ColumnFetchException("GitHub 接口被重定向到非 https：${response.request.url}")
+                }
                 val bytes = response.peekBody(MAX_RELEASES_BODY_BYTES + 1).bytes()
                 if (bytes.size > MAX_RELEASES_BODY_BYTES) {
                     throw ColumnFetchException(
@@ -511,6 +517,10 @@ class ColumnModuleFetcher(
                 val request = Request.Builder().url(url).build()
                 downloadClient.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) throw httpFailure(repo, response.code)
+                    // 重定向后也必须还是 https：模块包会直接进刷入，不能在半路降级成明文。
+                    if (!response.request.url.toString().startsWith("https://", ignoreCase = true)) {
+                        throw ColumnFetchException("下载地址被重定向到非 https：${response.request.url}")
+                    }
                     val declared = response.body.contentLength()
                     if (declared > MAX_MODULE_BYTES) throw tooLargeFailure()
 

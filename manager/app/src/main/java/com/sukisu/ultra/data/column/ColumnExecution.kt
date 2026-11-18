@@ -105,9 +105,15 @@ interface ColumnRollback {
     /** 记一笔「本次要写哪个文件」，回滚时恢复原内容。 */
     suspend fun recordWrittenFile(path: String)
 
-    /** 逆序撤销全部记录；返回逐条结果，给用户看。 */
-    suspend fun rollback(): List<String>
+    /** 逆序撤销全部记录；返回逐条结果与是否全部成功。 */
+    suspend fun rollback(): ColumnRollbackReport
 }
+
+/** 回滚结果。complete=false 表示还有条目没撤掉，调用方不能清进度。 */
+data class ColumnRollbackReport(
+    val messages: List<String>,
+    val complete: Boolean,
+)
 
 /** 自检项的固定 id。索引仓里的 `verify` 步骤只能引用这里出现过的值，写错就当成「只提示用户」。 */
 object ColumnCheckIds {
@@ -135,7 +141,10 @@ object ColumnCheckIds {
     /** 密钥注入方案：TEESimulator 与 TrickyStore 任选其一，装哪个都算通过。 */
     const val KEY_INJECT = "key-inject"
 
-    /** 全部自检项，顺序即界面展示顺序：底座 → 隐藏 → 密钥 → 收尾。 */
+    /** 综合判据：日用底座 + 密钥注入 + PIF + keybox 全部通过，才算「三绿」达标。 */
+    const val INTEGRITY_LEVEL = "integrity-level"
+
+    /** 初检卡默认展示的自检项，顺序即界面展示顺序：底座 → 隐藏 → 密钥 → 收尾。 */
     val ALL = listOf(
         ROOT_MANAGER,
         ZYGISK_NEXT,
@@ -149,6 +158,16 @@ object ColumnCheckIds {
         TARGET_LIST,
         FUSE_FIXER,
         ADB,
+    )
+
+    /** 执行器真正认识的全部自检项；verify 判断用这个，避免把已实现的检查当成未知。 */
+    val SUPPORTED = ALL + listOf(
+        TEESIMULATOR,
+        TRICKY_STORE,
+        HYBRID_MOUNT,
+        PATHMASK,
+        MOUNT_HIDE,
+        INTEGRITY_LEVEL,
     )
 }
 
@@ -221,6 +240,8 @@ data class ColumnWizardUiState(
      * 或「我稍后自己重启」。倒计时走完就按原计划重启。
      */
     val rebootCountdown: Int = -1,
+    /** 非空时界面弹「执行这一步之前先确认」对话框；用户确认或取消后清空。 */
+    val stepConfirm: ColumnStepConfirm? = null,
     /**
      * 设备上现有 keybox.xml 距今多少天；-1 表示没检测到文件或读取失败。
      *
@@ -238,6 +259,13 @@ data class ColumnWizardUiState(
 )
 
 /** 预检时对某一步的判定，决定「一键执行」要不要把它列给用户看。 */
+/** 一键执行跑到带 confirm 的步骤时，停下来等用户点头的那条请求。 */
+data class ColumnStepConfirm(
+    val stepId: String,
+    val title: String,
+    val message: String,
+)
+
 enum class ColumnPreflightAction {
     /** 设备上已经有了，执行器会直接跳过。 */
     SKIP,

@@ -30,6 +30,7 @@ import com.sukisu.ultra.ui.component.miuix.AppCard
 import com.sukisu.ultra.ui.UiMode
 import com.sukisu.ultra.ui.LocalUiMode
 import com.sukisu.ultra.ui.theme.AiAssistantMaterialTheme
+import com.sukisu.ultra.ui.util.findActivity
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.layout.Spacer
 import com.sukisu.ultra.data.column.ColumnPreflight
@@ -40,8 +41,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import android.content.Intent
 import android.net.Uri
+import android.os.SystemClock
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
@@ -80,6 +86,7 @@ import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -90,7 +97,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -117,14 +123,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -145,6 +149,7 @@ import com.sukisu.ultra.data.column.ColumnStepStatus
 import com.sukisu.ultra.data.column.ColumnStepUiState
 import com.sukisu.ultra.data.column.ColumnWizardUiState
 import com.sukisu.ultra.data.model.RepoColumnStep
+import com.sukisu.ultra.data.model.externalAppPackage
 import com.sukisu.ultra.data.model.RepoColumnTopic
 import com.sukisu.ultra.ui.component.material.ExpressiveConfirmDialog
 import com.sukisu.ultra.ui.component.material.ExpressiveScaffold
@@ -161,7 +166,6 @@ import com.sukisu.ultra.ui.util.BlurredBar
 import com.sukisu.ultra.ui.util.rememberBlurBackdrop
 import top.yukonga.miuix.kmp.basic.Button as MiuixButton
 import top.yukonga.miuix.kmp.basic.ButtonDefaults as MiuixButtonDefaults
-import top.yukonga.miuix.kmp.basic.Checkbox as MiuixCheckbox
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator as MiuixCircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.HorizontalDivider as MiuixHorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
@@ -230,6 +234,8 @@ fun ColumnWizardScreen(
     onUpgradeStep: (RepoColumnStep) -> Unit = {},
     /** 一键执行：把不需要人看着的步骤按顺序跑完，遇到需要人工的就停下。 */
     onRunAll: () -> Unit = {},
+    /** 一键执行进行中点「停止执行」：只停止后续步骤，已经跑完的保留。 */
+    onCancelRunAll: () -> Unit = {},
     /** 勾选 / 取消勾选一个「可选安装」的步骤。 */
     onToggleOptIn: (RepoColumnStep) -> Unit = {},
     /** 用户按提示自己做完了（重启回来 / 装好 APK / 自己确认过），把这一步标成完成。 */
@@ -240,6 +246,10 @@ fun ColumnWizardScreen(
     onConfirmPreflight: () -> Unit = {},
     /** 预检确认框上点「取消」。 */
     onDismissPreflight: () -> Unit = {},
+    /** 步骤确认框上点「确认执行」。 */
+    onConfirmStep: () -> Unit = {},
+    /** 步骤确认框上点「不执行」。 */
+    onCancelStepConfirm: () -> Unit = {},
     /** 庆祝 overlay 上点「去自检」：跳到自检专题，那里有「进入 AI 助手」可以发截图排查红项。 */
     onOpenSelfCheck: () -> Unit = {},
     /** 关掉庆祝 overlay。 */
@@ -281,6 +291,7 @@ fun ColumnWizardScreen(
             onProvideKeybox = onProvideKeybox,
             onUpgradeStep = onUpgradeStep,
             onRunAll = onRunAll,
+            onCancelRunAll = onCancelRunAll,
             onToggleOptIn = onToggleOptIn,
             onMarkDone = onMarkDone,
             onOpenAi = onOpenAi,
@@ -299,6 +310,7 @@ fun ColumnWizardScreen(
             onProvideKeybox = onProvideKeybox,
             onUpgradeStep = onUpgradeStep,
             onRunAll = onRunAll,
+            onCancelRunAll = onCancelRunAll,
             onToggleOptIn = onToggleOptIn,
             onMarkDone = onMarkDone,
             onOpenAi = onOpenAi,
@@ -343,6 +355,26 @@ fun ColumnWizardScreen(
                 plan = plan,
                 onConfirm = onConfirmPreflight,
                 onDismiss = onDismissPreflight,
+            )
+        }
+    }
+    // 一键执行跑到带 confirm 的高危步骤时，只弹一次确认；确认后继续跑剩下的步骤。
+    state.stepConfirm?.let { request ->
+        AiAssistantMaterialTheme {
+            AlertDialog(
+                onDismissRequest = onCancelStepConfirm,
+                title = { Text(text = request.title) },
+                text = { Text(text = request.message) },
+                confirmButton = {
+                    TextButton(onClick = onConfirmStep) {
+                        Text(text = stringResource(R.string.column_step_confirm_run))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = onCancelStepConfirm) {
+                        Text(text = stringResource(R.string.column_step_confirm_cancel))
+                    }
+                },
             )
         }
     }
@@ -718,6 +750,7 @@ private fun ColumnWizardScreenMiuix(
     onProvideKeybox: (String) -> String?,
     onUpgradeStep: (RepoColumnStep) -> Unit,
     onRunAll: () -> Unit,
+    onCancelRunAll: () -> Unit,
     onToggleOptIn: (RepoColumnStep) -> Unit,
     onMarkDone: (RepoColumnStep) -> Unit,
     onOpenAi: () -> Unit,
@@ -751,11 +784,13 @@ private fun ColumnWizardScreenMiuix(
             if (index >= 0) listState.animateScrollToItem(index)
         }
     }
-    val total = orderedStates.size
-    val finished = orderedStates.count {
+    // 未勾选的可选步骤不进进度分母：用户明确不装时，底栏不该再显示一格永远完不成的进度。
+    val progressStates = orderedStates.filter { it.status == ColumnStepStatus.SUCCESS || it.status == ColumnStepStatus.SKIPPED || !it.step.optIn || it.step.id in state.optedIn }
+    val total = progressStates.size
+    val finished = progressStates.count {
         it.status == ColumnStepStatus.SUCCESS || it.status == ColumnStepStatus.SKIPPED
     }
-    val started = orderedStates.any { it.status != ColumnStepStatus.PENDING }
+    val started = progressStates.any { it.status != ColumnStepStatus.PENDING }
 
     // 高风险步骤的确认弹窗；卡片按钮和底部「开始第一步」共用这一条路径，避免漏掉确认。
     var confirmStep by remember { mutableStateOf<RepoColumnStep?>(null) }
@@ -845,6 +880,7 @@ private fun ColumnWizardScreenMiuix(
                     started = started,
                     running = state.running,
                     onRunAll = onRunAll,
+                    onCancelRunAll = onCancelRunAll,
                 )
             }
         },
@@ -919,7 +955,7 @@ private fun ColumnWizardScreenMiuix(
                     index = index + 1,
                     uiState = uiState,
                     busy = state.running,
-                    installed = uiState.step.source.packageName.trim() in state.installedApps,
+                    installed = externalAppPackage(uiState.step).isEmpty() && uiState.step.source.packageName.trim() in state.installedApps,
                     optedIn = uiState.step.id in state.optedIn,
                     onToggleOptIn = { onToggleOptIn(uiState.step) },
                     onRun = { requestRun(uiState.step) },
@@ -939,7 +975,7 @@ private fun ColumnWizardScreenMiuix(
                     )
                 }
             }
-            if (state.done) {
+            if (state.done || state.stepStates.any { it.status != ColumnStepStatus.PENDING }) {
                 item(key = "wizard-checks") {
                     WizardChecksCardMiuix(
                         checks = state.checks,
@@ -1307,11 +1343,10 @@ private fun WizardStepCardMiuix(
         animationSpec = tween(durationMillis = 180),
         label = "wizardNoteArrowMiuix",
     )
-    val canSkip = step.optional && (
-        uiState.status == ColumnStepStatus.PENDING ||
-            uiState.status == ColumnStepStatus.FAILED ||
-            uiState.status == ColumnStepStatus.NEEDS_USER
-        )
+    // 外部 App 检测步骤不代用户执行：卡片只留「打开应用」和「进入 AI 助手」两个入口。
+    val externalPackage = externalAppPackage(step)
+    // 外部 App 检测步骤永远不算“已安装”：它要用户自己去 App 里跑，装了也不代表完成。
+    val effectivelyInstalled = installed && externalPackage.isEmpty()
 
     AppCard(
         modifier = Modifier
@@ -1324,21 +1359,37 @@ private fun WizardStepCardMiuix(
                 },
             ),
         insideMargin = PaddingValues(16.dp),
+        // 卡片只展示状态，执行统一走底部「一键执行」；点标题不触发任何动作。
+        onClick = null,
     ) {
+        // 可选步骤的勾选框放到卡片左上角：不占标题行宽度，序号才能和普通步骤对齐。
+        if (step.optIn && uiState.status == ColumnStepStatus.PENDING) {
+            Row(
+                modifier = Modifier.padding(bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                CompactCheckbox(
+                    checked = optedIn,
+                    enabled = !busy,
+                    accent = colorScheme.primary,
+                    outline = colorScheme.outline,
+                    checkColor = colorScheme.onPrimary,
+                    onToggle = onToggleOptIn,
+                )
+                MiuixText(
+                    text = stringResource(R.string.column_wizard_opt_in),
+                    color = colorScheme.onSurfaceVariantSummary,
+                    fontSize = 11.sp,
+                )
+            }
+        }
         // 标题行：序号/状态徽章 + 标题；执行动作由整张卡片承担。和 Material 版同一套结构。
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            if (step.optIn && uiState.status == ColumnStepStatus.PENDING) {
-                // 可选步骤用左侧勾选框决定是否纳入一键执行，勾上才跑。
-                MiuixCheckbox(
-                    state = if (optedIn) ToggleableState.On else ToggleableState.Off,
-                    onClick = onToggleOptIn,
-                    enabled = !busy,
-                )
-            }
-            StepBadgeMiuix(index = index, status = uiState.status, installed = installed)
+            StepBadgeMiuix(index = index, status = uiState.status, installed = effectivelyInstalled)
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1368,12 +1419,12 @@ private fun WizardStepCardMiuix(
                         fontSize = 11.sp,
                     )
                     MiuixText(
-                        text = if (installed && uiState.status == ColumnStepStatus.PENDING) {
+                        text = if (effectivelyInstalled && uiState.status == ColumnStepStatus.PENDING) {
                             stringResource(R.string.column_wizard_installed)
                         } else {
                             stringResource(statusLabel(uiState.status))
                         },
-                        color = if (installed && uiState.status == ColumnStepStatus.PENDING) {
+                        color = if (effectivelyInstalled && uiState.status == ColumnStepStatus.PENDING) {
                             successGreenMiuix()
                         } else {
                             statusColor
@@ -1393,7 +1444,7 @@ private fun WizardStepCardMiuix(
                         )
                     }
                 }
-                if (installed && uiState.status == ColumnStepStatus.PENDING) {
+                if (effectivelyInstalled && uiState.status == ColumnStepStatus.PENDING) {
                     MiuixText(
                         text = stringResource(R.string.column_wizard_installed_skip, step.title.trim().removePrefix("装").removePrefix("安装").trim()),
                         color = successGreenMiuix(),
@@ -1416,47 +1467,78 @@ private fun WizardStepCardMiuix(
                             .clickable(enabled = noteCanExpand) { noteExpanded = !noteExpanded },
                     )
                 }
-                // 官方只肯走群/网盘发的检测器（春秋），商店给不了直链，但能把官方入口摆出来；
-                // 链接来自索引仓，只放行 http/https，点了也只是打开浏览器，不执行任何东西。
-                if (step.link.isNotEmpty()) {
-                    // 与 Material 版同一套：sukisu://ai 是站内「进入 AI 助手」，其余按外链处理。
-                    val isAiEntry = step.link == COLUMN_LINK_AI
+                // 外部 App 检测步骤：只给入口，不代用户执行；两个入口并排，省一行高度。
+                if (externalPackage.isNotEmpty() || step.link.isNotEmpty()) {
                     Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .clickable {
-                                if (isAiEntry) {
-                                    onOpenAi()
-                                } else {
-                                    runCatching {
-                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(step.link)))
-                                    }
-                                }
-                            }
-                            .padding(vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        MiuixText(
-                            text = if (isAiEntry) {
-                                stringResource(R.string.column_wizard_open_ai)
-                            } else {
-                                step.linkLabel.ifBlank { stringResource(R.string.column_wizard_open_link) }
-                            },
-                            color = colorScheme.primary,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                        )
-                        MiuixIcon(
-                            imageVector = if (isAiEntry) {
-                                Icons.Rounded.AutoAwesome
-                            } else {
-                                Icons.AutoMirrored.Rounded.OpenInNew
-                            },
-                            contentDescription = null,
-                            tint = colorScheme.primary,
-                            modifier = Modifier.size(13.dp),
-                        )
+                        if (externalPackage.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .clickable { openInstalledApp(context, externalPackage) { onMarkDone() } }
+                                    .padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                            ) {
+                                MiuixText(
+                                    text = stringResource(R.string.column_wizard_open_chunqiu),
+                                    color = colorScheme.primary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                MiuixIcon(
+                                    imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
+                                    contentDescription = null,
+                                    tint = colorScheme.primary,
+                                    modifier = Modifier.size(13.dp),
+                                )
+                            }
+                        }
+                        // 官方只肯走群/网盘发的检测器（春秋），商店给不了直链，但能把官方入口摆出来；
+                        // 链接来自索引仓，只放行 http/https，点了也只是打开浏览器，不执行任何东西。
+                        if (step.link.isNotEmpty()) {
+                            // 与 Material 版同一套：sukisu://ai 是站内「进入 AI 助手」，其余按外链处理。
+                            val isAiEntry = step.link == COLUMN_LINK_AI
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .clickable {
+                                        if (isAiEntry) {
+                                            onOpenAi()
+                                        } else {
+                                            runCatching {
+                                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(step.link)))
+                                            }
+                                        }
+                                    }
+                                    .padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                            ) {
+                                MiuixText(
+                                    text = if (isAiEntry) {
+                                        stringResource(R.string.column_wizard_open_ai)
+                                    } else {
+                                        step.linkLabel.ifBlank { stringResource(R.string.column_wizard_open_link) }
+                                    },
+                                    color = colorScheme.primary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                MiuixIcon(
+                                    imageVector = if (isAiEntry) {
+                                        Icons.Rounded.AutoAwesome
+                                    } else {
+                                        Icons.AutoMirrored.Rounded.OpenInNew
+                                    },
+                                    contentDescription = null,
+                                    tint = colorScheme.primary,
+                                    modifier = Modifier.size(13.dp),
+                                )
+                            }
+                        }
                     }
                 }
                 // 已装但上游有新版：跳过不等于「已经是最新」。只有用户点这里才会带 force
@@ -1475,12 +1557,43 @@ private fun WizardStepCardMiuix(
                         colors = MiuixButtonDefaults.textButtonColorsPrimary(),
                     )
                 }
-                if (uiState.message.isNotEmpty()) {
+                if (uiState.message.isNotEmpty() && externalPackage.isEmpty()) {
                     MiuixText(
                         text = uiState.message,
                         color = statusColor,
                         fontSize = 13.sp,
                     )
+                }
+                // 只保留「我已处理」：手动步骤（askUser/verify）需要用户确认后才能继续。
+                if (!busy && externalPackage.isEmpty() && (
+                        uiState.status == ColumnStepStatus.NEEDS_USER ||
+                            uiState.status == ColumnStepStatus.FAILED
+                        )
+                ) {
+                    val doneShape = RoundedCornerShape(50)
+                    Row(
+                        modifier = Modifier
+                            .clip(doneShape)
+                            .background(colorScheme.primary.copy(alpha = 0.10f))
+                            .border(1.dp, colorScheme.primary.copy(alpha = 0.30f), doneShape)
+                            .clickable(enabled = !busy) { onMarkDone() }
+                            .padding(horizontal = 14.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        MiuixIcon(
+                            imageVector = Icons.Rounded.Check,
+                            contentDescription = null,
+                            tint = colorScheme.primary,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        MiuixText(
+                            text = stringResource(R.string.column_wizard_done_step),
+                            color = colorScheme.primary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
                 }
             }
             if (step.note.isNotEmpty() && noteCanExpand) {
@@ -1514,7 +1627,7 @@ private fun WizardStepCardMiuix(
 @Composable
 private fun StepBadgeMiuix(index: Int, status: ColumnStepStatus, installed: Boolean = false) {
     val colorScheme = MiuixTheme.colorScheme
-    Box(modifier = Modifier.size(52.dp), contentAlignment = Alignment.Center) {
+    Box(modifier = Modifier.size(44.dp), contentAlignment = Alignment.Center) {
         when (status) {
             // 已经装好的步骤不用再点执行，直接把序号换成对勾。
             ColumnStepStatus.PENDING -> if (installed) {
@@ -1526,7 +1639,7 @@ private fun StepBadgeMiuix(index: Int, status: ColumnStepStatus, installed: Bool
                 )
             } else Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
                     .background(colorScheme.surfaceContainerHigh),
                 contentAlignment = Alignment.Center,
@@ -1534,7 +1647,7 @@ private fun StepBadgeMiuix(index: Int, status: ColumnStepStatus, installed: Bool
                 MiuixText(
                     text = index.toString(),
                     color = colorScheme.onSurface,
-                    fontSize = 30.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
@@ -1561,7 +1674,7 @@ private fun StepBadgeMiuix(index: Int, status: ColumnStepStatus, installed: Bool
 
             ColumnStepStatus.SKIPPED -> Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
                     .background(colorScheme.surfaceContainerHigh),
                 contentAlignment = Alignment.Center,
@@ -1569,7 +1682,7 @@ private fun StepBadgeMiuix(index: Int, status: ColumnStepStatus, installed: Bool
                 MiuixText(
                     text = index.toString(),
                     color = colorScheme.onSurface,
-                    fontSize = 30.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
@@ -1797,6 +1910,7 @@ private fun WizardBottomBarMiuix(
     started: Boolean,
     running: Boolean,
     onRunAll: () -> Unit,
+    onCancelRunAll: () -> Unit,
 ) {
     if (total == 0) return
     val colorScheme = MiuixTheme.colorScheme
@@ -1858,6 +1972,18 @@ private fun WizardBottomBarMiuix(
                     )
                 }
             }
+            // 跑动中才给「停止执行」：已经发出的 root 命令无法撤回，但后续步骤可以不再排队。
+            if (running) {
+                MiuixTextButton(
+                    text = stringResource(R.string.column_wizard_cancel_run),
+                    onClick = onCancelRunAll,
+                    modifier = Modifier.fillMaxWidth(),
+                    minWidth = 0.dp,
+                    minHeight = 0.dp,
+                    insideMargin = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
+                    colors = MiuixButtonDefaults.textButtonColorsPrimary(),
+                )
+            }
         }
     }
 }
@@ -1887,6 +2013,7 @@ private fun ColumnWizardScreenMaterial(
     onProvideKeybox: (String) -> String?,
     onUpgradeStep: (RepoColumnStep) -> Unit,
     onRunAll: () -> Unit,
+    onCancelRunAll: () -> Unit,
     onToggleOptIn: (RepoColumnStep) -> Unit,
     onMarkDone: (RepoColumnStep) -> Unit,
     onOpenAi: () -> Unit,
@@ -1910,11 +2037,13 @@ private fun ColumnWizardScreenMaterial(
             if (index >= 0) listState.animateScrollToItem(index)
         }
     }
-    val total = orderedStates.size
-    val finished = orderedStates.count {
+    // 未勾选的可选步骤不进进度分母：用户明确不装时，底栏不该再显示一格永远完不成的进度。
+    val progressStates = orderedStates.filter { it.status == ColumnStepStatus.SUCCESS || it.status == ColumnStepStatus.SKIPPED || !it.step.optIn || it.step.id in state.optedIn }
+    val total = progressStates.size
+    val finished = progressStates.count {
         it.status == ColumnStepStatus.SUCCESS || it.status == ColumnStepStatus.SKIPPED
     }
-    val started = orderedStates.any { it.status != ColumnStepStatus.PENDING }
+    val started = progressStates.any { it.status != ColumnStepStatus.PENDING }
 
     // 高风险步骤的确认弹窗；卡片按钮和底部「开始第一步」共用这一条路径，避免漏掉确认。
     var confirmStep by remember { mutableStateOf<RepoColumnStep?>(null) }
@@ -1989,6 +2118,7 @@ private fun ColumnWizardScreenMaterial(
                     started = started,
                     running = state.running,
                     onRunAll = onRunAll,
+                    onCancelRunAll = onCancelRunAll,
                 )
             }
         },
@@ -2060,7 +2190,7 @@ private fun ColumnWizardScreenMaterial(
                     index = index + 1,
                     uiState = uiState,
                     busy = state.running,
-                    installed = uiState.step.source.packageName.trim() in state.installedApps,
+                    installed = externalAppPackage(uiState.step).isEmpty() && uiState.step.source.packageName.trim() in state.installedApps,
                     optedIn = uiState.step.id in state.optedIn,
                     onToggleOptIn = { onToggleOptIn(uiState.step) },
                     onRun = { requestRun(uiState.step) },
@@ -2080,7 +2210,7 @@ private fun ColumnWizardScreenMaterial(
                     )
                 }
             }
-            if (state.done) {
+            if (state.done || state.stepStates.any { it.status != ColumnStepStatus.PENDING }) {
                 item(key = "wizard-checks") {
                     WizardChecksCard(
                         checks = state.checks,
@@ -2207,11 +2337,10 @@ private fun WizardStepCard(
         label = "wizardNoteArrow",
     )
     val context = LocalContext.current
-    val canSkip = step.optional && (
-        uiState.status == ColumnStepStatus.PENDING ||
-            uiState.status == ColumnStepStatus.FAILED ||
-            uiState.status == ColumnStepStatus.NEEDS_USER
-        )
+    // 外部 App 检测步骤不代用户执行：卡片只留「打开应用」和「进入 AI 助手」两个入口。
+    val externalPackage = externalAppPackage(step)
+    // 外部 App 检测步骤永远不算“已安装”：它要用户自己去 App 里跑，装了也不代表完成。
+    val effectivelyInstalled = installed && externalPackage.isEmpty()
 
     WizardCard(
         modifier = Modifier
@@ -2223,26 +2352,41 @@ private fun WizardStepCard(
                     Modifier
                 },
             ),
+        // 卡片只展示状态，执行统一走底部「一键执行」；点标题不触发任何动作。
+        onClick = null,
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            // 可选步骤的勾选框放到卡片左上角：不占标题行宽度，序号才能和普通步骤对齐。
+            if (step.optIn && uiState.status == ColumnStepStatus.PENDING) {
+                Row(
+                    modifier = Modifier.padding(bottom = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    CompactCheckbox(
+                        checked = optedIn,
+                        enabled = !busy,
+                        accent = MaterialTheme.colorScheme.primary,
+                        outline = MaterialTheme.colorScheme.outline,
+                        checkColor = MaterialTheme.colorScheme.onPrimary,
+                        onToggle = onToggleOptIn,
+                    )
+                    Text(
+                        text = stringResource(R.string.column_wizard_opt_in),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             // 标题行：左边一个序号/状态徽章，右边不再放按钮；执行动作由整张卡片承担。
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                if (step.optIn && uiState.status == ColumnStepStatus.PENDING) {
-                    // 可选步骤用左侧勾选框决定是否纳入一键执行，勾上才跑。
-                    Checkbox(
-                        checked = optedIn,
-                        onCheckedChange = { onToggleOptIn() },
-                        enabled = !busy,
-                        modifier = Modifier.scale(0.85f),
-                    )
-                }
-                StepBadge(index = index, status = uiState.status, installed = installed)
+                StepBadge(index = index, status = uiState.status, installed = effectivelyInstalled)
                 Text(
                     text = step.title,
                     style = MaterialTheme.typography.bodyLarge,
@@ -2282,13 +2426,13 @@ private fun WizardStepCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                 )
                 Text(
-                    text = if (installed && uiState.status == ColumnStepStatus.PENDING) {
+                    text = if (effectivelyInstalled && uiState.status == ColumnStepStatus.PENDING) {
                         stringResource(R.string.column_wizard_installed)
                     } else {
                         stringResource(statusLabel(uiState.status))
                     },
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (installed && uiState.status == ColumnStepStatus.PENDING) {
+                    color = if (effectivelyInstalled && uiState.status == ColumnStepStatus.PENDING) {
                         successGreen()
                     } else {
                         statusColor(uiState.status)
@@ -2307,7 +2451,7 @@ private fun WizardStepCard(
                     )
                 }
             }
-            if (installed && uiState.status == ColumnStepStatus.PENDING) {
+            if (effectivelyInstalled && uiState.status == ColumnStepStatus.PENDING) {
                 Text(
                     text = stringResource(R.string.column_wizard_installed_skip, step.title.trim().removePrefix("装").removePrefix("安装").trim()),
                     style = MaterialTheme.typography.labelSmall,
@@ -2329,48 +2473,77 @@ private fun WizardStepCard(
                         .clickable(enabled = noteOverflows) { noteExpanded = !noteExpanded },
                 )
             }
-            // 官方只肯走群/网盘发的检测器（春秋），商店给不了直链，但能把官方入口摆出来；
-            // 链接来自索引仓，只放行 http/https，点了也只是打开浏览器，不执行任何东西。
-            // 做成纯文字链接 + 小箭头：一个次要入口不该比「执行」还显眼。
-            if (step.link.isNotEmpty()) {
-                // 索引里的 link 有两种：外部网页（春秋官网之类）和站内入口。后者写成 sukisu://ai，
-                // 点了直接进 AI 助手发截图，省得先跳浏览器再让用户自己找回来。
-                val isAiEntry = step.link == COLUMN_LINK_AI
+            // 外部 App 检测步骤：只给入口，不代用户执行；两个入口并排，省一行高度。
+            if (externalPackage.isNotEmpty() || step.link.isNotEmpty()) {
                 Row(
-                    modifier = Modifier
-                        .clip(MaterialTheme.shapes.small)
-                        .clickable {
-                            if (isAiEntry) {
-                                onOpenAi()
-                            } else {
-                                runCatching {
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(step.link)))
-                                }
-                            }
-                        }
-                        .padding(vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    Text(
-                        text = if (isAiEntry) {
-                            stringResource(R.string.column_wizard_open_ai)
-                        } else {
-                            step.linkLabel.ifBlank { stringResource(R.string.column_wizard_open_link) }
-                        },
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    Icon(
-                        imageVector = if (isAiEntry) {
-                            Icons.Rounded.AutoAwesome
-                        } else {
-                            Icons.AutoMirrored.Rounded.OpenInNew
-                        },
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(13.dp),
-                    )
+                    if (externalPackage.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier
+                                .clip(MaterialTheme.shapes.small)
+                                .clickable { openInstalledApp(context, externalPackage) { onMarkDone() } }
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.column_wizard_open_chunqiu),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(13.dp),
+                            )
+                        }
+                    }
+                    // 官方只肯走群/网盘发的检测器（春秋），商店给不了直链，但能把官方入口摆出来；
+                    // 链接来自索引仓，只放行 http/https，点了也只是打开浏览器，不执行任何东西。
+                    if (step.link.isNotEmpty()) {
+                        // 索引里的 link 有两种：外部网页（春秋官网之类）和站内入口。后者写成 sukisu://ai，
+                        // 点了直接进 AI 助手发截图，省得先跳浏览器再让用户自己找回来。
+                        val isAiEntry = step.link == COLUMN_LINK_AI
+                        Row(
+                            modifier = Modifier
+                                .clip(MaterialTheme.shapes.small)
+                                .clickable {
+                                    if (isAiEntry) {
+                                        onOpenAi()
+                                    } else {
+                                        runCatching {
+                                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(step.link)))
+                                        }
+                                    }
+                                }
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        ) {
+                            Text(
+                                text = if (isAiEntry) {
+                                    stringResource(R.string.column_wizard_open_ai)
+                                } else {
+                                    step.linkLabel.ifBlank { stringResource(R.string.column_wizard_open_link) }
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Icon(
+                                imageVector = if (isAiEntry) {
+                                    Icons.Rounded.AutoAwesome
+                                } else {
+                                    Icons.AutoMirrored.Rounded.OpenInNew
+                                },
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(13.dp),
+                            )
+                        }
+                    }
                 }
             }
             // 已装但上游有新版：跳过不等于「已经是最新」。只有用户点这里才会带 force
@@ -2390,16 +2563,143 @@ private fun WizardStepCard(
                     )
                 }
             }
-            if (uiState.message.isNotEmpty()) {
+            if (uiState.message.isNotEmpty() && externalPackage.isEmpty()) {
                 Text(
                     text = uiState.message,
                     style = MaterialTheme.typography.bodySmall,
                     color = statusColor(uiState.status),
                 )
             }
+            // 只保留「我已处理」：手动步骤（askUser/verify）需要用户确认后才能继续。
+            if (!busy && externalPackage.isEmpty() && (
+                    uiState.status == ColumnStepStatus.NEEDS_USER ||
+                        uiState.status == ColumnStepStatus.FAILED
+                    )
+            ) {
+                val doneShape = RoundedCornerShape(50)
+                Row(
+                    modifier = Modifier
+                        .clip(doneShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
+                        .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.30f), doneShape)
+                        .clickable(enabled = !busy) { onMarkDone() }
+                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Check,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(15.dp),
+                    )
+                    Text(
+                        text = stringResource(R.string.column_wizard_done_step),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
             if (step.kind == STEP_KIND_RUN_COMMAND && step.command.isNotEmpty()) {
                 CommandBlock(command = step.command)
             }
+        }
+    }
+}
+
+/** 外部 App 检测步骤：只给「打开应用」，不代用户执行；旧索引的 verify 写法由模型层兼容。 */
+private fun externalAppPackage(step: RepoColumnStep): String = step.externalAppPackage()
+
+
+/**
+ * 从桌面启动索引里声明的 App，并在用户真正离开本应用一段时间后把步骤标为完成。
+ *
+ * 外部检测步骤没有「我已处理」按钮，但 startActivity 成功并不等于外部 App 真的被打开：
+ * MIUI 的「ConfirmStartActivity」确认框可能在拉起前弹出，用户点取消时本应用根本没有进入后台。
+ * 这里观察 Activity 生命周期，只有先 ON_STOP、再在至少 1.5 秒后回到 ON_START，才认为用户
+ * 确实去外部 App 里跑过检测。没装、启动失败、取消确认都只提示，不改状态。
+ */
+private fun openInstalledApp(
+    context: android.content.Context,
+    packageName: String,
+    onReturned: (() -> Unit)? = null,
+) {
+    val owner = context.findActivity() as? LifecycleOwner
+    var stoppedAt = 0L
+    var marked = false
+    val observer = if (owner == null) {
+        null
+    } else {
+        object : LifecycleEventObserver {
+            override fun onStateChanged(source: LifecycleOwner, event: Lifecycle.Event) {
+                when (event) {
+                    Lifecycle.Event.ON_STOP -> stoppedAt = SystemClock.elapsedRealtime()
+                    Lifecycle.Event.ON_START -> {
+                        if (!marked && stoppedAt > 0L &&
+                            SystemClock.elapsedRealtime() - stoppedAt >= 1500L
+                        ) {
+                            marked = true
+                            source.lifecycle.removeObserver(this)
+                            onReturned?.invoke()
+                        }
+                    }
+                    Lifecycle.Event.ON_DESTROY -> source.lifecycle.removeObserver(this)
+                    else -> Unit
+                }
+            }
+        }
+    }
+    if (owner != null && observer != null) {
+        owner.lifecycle.addObserver(observer)
+    }
+    val launched = openInstalledAppNow(context, packageName)
+    if (!launched && owner != null && observer != null) {
+        owner.lifecycle.removeObserver(observer)
+    }
+}
+
+private fun openInstalledAppNow(
+    context: android.content.Context,
+    packageName: String,
+): Boolean {
+    val intent = context.packageManager.getLaunchIntentForPackage(packageName)
+    if (intent == null) {
+        Toast.makeText(context, R.string.column_wizard_open_chunqiu_missing, Toast.LENGTH_SHORT).show()
+        return false
+    }
+    return runCatching { context.startActivity(intent) }
+        .onFailure {
+            Toast.makeText(context, R.string.column_wizard_open_chunqiu_failed, Toast.LENGTH_SHORT).show()
+        }
+        .isSuccess
+}
+
+/** 紧凑勾选框：18dp 方块，放在可选步骤卡片的左上角。 */
+@Composable
+private fun CompactCheckbox(
+    checked: Boolean,
+    enabled: Boolean,
+    accent: Color,
+    outline: Color,
+    checkColor: Color,
+    onToggle: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(18.dp)
+            .clip(RoundedCornerShape(5.dp))
+            .background(if (checked) accent else Color.Transparent)
+            .border(1.5.dp, if (checked) accent else outline, RoundedCornerShape(5.dp))
+            .clickable(enabled = enabled, onClick = onToggle),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (checked) {
+            Icon(
+                imageVector = Icons.Rounded.Check,
+                contentDescription = null,
+                tint = checkColor,
+                modifier = Modifier.size(12.dp),
+            )
         }
     }
 }
@@ -2412,7 +2712,7 @@ private fun WizardStepCard(
  */
 @Composable
 private fun StepBadge(index: Int, status: ColumnStepStatus, installed: Boolean = false) {
-    Box(modifier = Modifier.size(52.dp), contentAlignment = Alignment.Center) {
+    Box(modifier = Modifier.size(44.dp), contentAlignment = Alignment.Center) {
         when (status) {
             // 已经装好的步骤不用再点执行，直接把序号换成对勾。
             ColumnStepStatus.PENDING -> if (installed) {
@@ -2424,14 +2724,14 @@ private fun StepBadge(index: Int, status: ColumnStepStatus, installed: Boolean =
                 )
             } else Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceContainerHigh),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = index.toString(),
-                    fontSize = 30.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -2458,14 +2758,14 @@ private fun StepBadge(index: Int, status: ColumnStepStatus, installed: Boolean =
 
             ColumnStepStatus.SKIPPED -> Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceContainerHigh),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = index.toString(),
-                    fontSize = 30.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -2671,6 +2971,7 @@ private fun WizardBottomBar(
     started: Boolean,
     running: Boolean,
     onRunAll: () -> Unit,
+    onCancelRunAll: () -> Unit,
 ) {
     if (total == 0) return
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 3.dp) {
@@ -2726,6 +3027,15 @@ private fun WizardBottomBar(
                         style = MaterialTheme.typography.labelLarge,
                         fontSize = 16.sp,
                     )
+                }
+            }
+            // 跑动中才给「停止执行」：已经发出的 root 命令无法撤回，但后续步骤可以不再排队。
+            if (running) {
+                TextButton(
+                    onClick = onCancelRunAll,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(text = stringResource(R.string.column_wizard_cancel_run))
                 }
             }
         }
