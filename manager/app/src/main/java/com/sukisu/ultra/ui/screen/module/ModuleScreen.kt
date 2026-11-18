@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,6 +42,7 @@ import com.sukisu.ultra.ui.util.module.Shortcut
 import com.sukisu.ultra.ui.viewmodel.ModuleViewModel
 import com.sukisu.ultra.ui.webui.WebUIActivity
 
+@RequiresApi(Build.VERSION_CODES.Q)
 @Composable
 fun ModulePager(
     bottomInnerPadding: Dp,
@@ -96,7 +98,7 @@ fun ModulePager(
             if (!state.isRefreshing) {
                 viewModel.fetchModuleList(
                     checkUpdate = !state.hasLoaded || viewModel.isNeedRefresh,
-                    resort = !state.hasLoaded,
+                    resort = !state.hasLoaded || viewModel.isNeedRefresh,
                 )
             }
         }

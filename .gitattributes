@@ -7,3 +7,8 @@
 manager-package.properties text eol=lf
 kernel/manager-package.mk text eol=lf
 scripts/check_manager_package.py text eol=lf
+
+# Scripts and workflow files must stay LF: the runner containers and the shell
+# in the ddk-min image reject CRLF shebangs.
+*.sh text eol=lf
+.github/workflows/*.yml text eol=lf
