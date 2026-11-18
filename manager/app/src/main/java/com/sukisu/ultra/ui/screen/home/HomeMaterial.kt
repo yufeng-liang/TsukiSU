@@ -1,6 +1,5 @@
 package com.sukisu.ultra.ui.screen.home
 
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.width
@@ -939,14 +938,7 @@ fun HideEnvCard(
                     )
                 }
             }
-            Spacer(Modifier.height(12.dp))
-            if (!done) LinearProgressIndicator(
-                progress = { fraction },
-                modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (entry.nextStepTitle.isNotBlank()) {
                     Text(
