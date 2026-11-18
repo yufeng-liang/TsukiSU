@@ -2385,6 +2385,9 @@
     <string name="module_comments_delete_confirm_title">Delete this comment?</string>
     <string name="module_comments_delete_confirm_body">Replies under it will be kept.</string>
     <string name="module_comments_deleted">Deleted</string>
+    <string name="module_comments_deleted_user">Deleted user</string>
+    <string name="module_comments_need_verify">Verify your Coolapk account first to like modules</string>
+    <string name="module_comments_like_failed">Could not update the like. Try again later.</string>
     <string name="module_comments_like">Like</string>
     <string name="module_comments_unlike">Unlike</string>
     <string name="module_comments_error_sensitive">Content violates the community rules</string>

@@ -335,6 +335,9 @@ fun ModuleRepoScreenMiuix(
                     items(state.searchResults, key = { "${it.sourceId}|${it.moduleId}" }, contentType = { "module" }) { module ->
                         // 源码状态只有一枚，判据与 Material 侧共用同一个函数。
                         val sourceBadge = repoSourceBadge(module)
+                        // 点赞数优先用本次会话的覆盖值，否则用索引快照。
+                        val likes = state.likeOverrides[module.moduleId] ?: module.likes
+                        val liked = module.moduleId in state.likedModuleIds
                         AppCard(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -441,20 +444,26 @@ fun ModuleRepoScreenMiuix(
                                                 )
                                             }
                                         }
-                                        if (module.likes > 0) {
-                                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp)) {
-                                                Text(
-                                                    text = "♥",
-                                                    fontSize = 12.sp,
-                                                    color = colorScheme.onSurfaceVariantSummary,
-                                                )
-                                                Text(
-                                                    text = module.likes.toString(),
-                                                    fontSize = 12.sp,
-                                                    color = colorScheme.onSurfaceVariantSummary,
-                                                    modifier = Modifier.padding(start = 2.dp)
-                                                )
-                                            }
+                                        // 点赞数放卡片底栏，0 也画：位置固定，用户才知道这里能点。
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(50))
+                                                .clickable(enabled = module.moduleId.isNotEmpty()) {
+                                                    actions.onToggleLike(module)
+                                                },
+                                        ) {
+                                            Text(
+                                                text = if (liked) "♥" else "♡",
+                                                fontSize = 12.sp,
+                                                color = if (liked) colorScheme.primary else colorScheme.onSurfaceVariantSummary,
+                                            )
+                                            Text(
+                                                text = likes.toString(),
+                                                fontSize = 12.sp,
+                                                color = if (liked) colorScheme.primary else colorScheme.onSurfaceVariantSummary,
+                                                modifier = Modifier.padding(start = 2.dp)
+                                            )
                                         }
                                     }
                                 }
@@ -681,6 +690,9 @@ fun ModuleRepoScreenMiuix(
                                 val latestReleaseTime = remember(module.latestReleaseTime) {
                                     formatRepoTime(module.latestReleaseTime)
                                 }
+                                // 点赞数优先用本次会话的覆盖值，否则用索引快照。
+                                val likes = state.likeOverrides[module.moduleId] ?: module.likes
+                                val liked = module.moduleId in state.likedModuleIds
 
                                 AppCard(
                                     modifier = Modifier
@@ -769,7 +781,7 @@ fun ModuleRepoScreenMiuix(
                                             )
                                         }
                                         HorizontalDivider(
-                                            modifier = Modifier.padding(vertical = 8.dp),
+                                            modifier = Modifier.padding(vertical = 6.dp),
                                             thickness = 0.5.dp,
                                             color = colorScheme.outline.copy(alpha = 0.5f)
                                         )
@@ -777,47 +789,51 @@ fun ModuleRepoScreenMiuix(
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            Row {
-                                                if (module.stargazerCount > 0) {
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        Icon(
-                                                            imageVector = MiuixIcons.TopDownloads,
-                                                            contentDescription = "stars",
-                                                            tint = colorScheme.onSurfaceVariantSummary,
-                                                            modifier = Modifier.size(16.dp)
-                                                        )
-                                                        Text(
-                                                            text = module.stargazerCount.toString(),
-                                                            fontSize = 12.sp,
-                                                            color = colorScheme.onSurfaceVariantSummary,
-                                                            modifier = Modifier.padding(start = 4.dp)
-                                                        )
-                                                    }
-                                                }
-                                                if (module.likes > 0) {
-                                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp)) {
-                                                        Text(
-                                                            text = "♥",
-                                                            fontSize = 12.sp,
-                                                            color = colorScheme.onSurfaceVariantSummary,
-                                                        )
-                                                        Text(
-                                                            text = module.likes.toString(),
-                                                            fontSize = 12.sp,
-                                                            color = colorScheme.onSurfaceVariantSummary,
-                                                            modifier = Modifier.padding(start = 2.dp)
-                                                        )
-                                                    }
-                                                }
-                                                Spacer(Modifier.weight(1f))
-                                                if (latestReleaseTime.isNotEmpty()) {
+                                            // 点赞固定在最左，左沿与上方模块名同一条基准线。
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(50))
+                                                    .clickable(enabled = module.moduleId.isNotEmpty()) {
+                                                        actions.onToggleLike(module)
+                                                    },
+                                            ) {
+                                                Text(
+                                                    text = if (liked) "♥" else "♡",
+                                                    fontSize = 12.sp,
+                                                    color = if (liked) colorScheme.primary else colorScheme.onSurfaceVariantSummary,
+                                                )
+                                                Text(
+                                                    text = likes.toString(),
+                                                    fontSize = 12.sp,
+                                                    color = if (liked) colorScheme.primary else colorScheme.onSurfaceVariantSummary,
+                                                    modifier = Modifier.padding(start = 2.dp)
+                                                )
+                                            }
+                                            if (module.stargazerCount > 0) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(
+                                                        imageVector = MiuixIcons.TopDownloads,
+                                                        contentDescription = "stars",
+                                                        tint = colorScheme.onSurfaceVariantSummary,
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
                                                     Text(
-                                                        text = latestReleaseTime,
+                                                        text = module.stargazerCount.toString(),
                                                         fontSize = 12.sp,
                                                         color = colorScheme.onSurfaceVariantSummary,
-                                                        textAlign = TextAlign.End
+                                                        modifier = Modifier.padding(start = 4.dp)
                                                     )
                                                 }
+                                            }
+                                            Spacer(Modifier.weight(1f))
+                                            if (latestReleaseTime.isNotEmpty()) {
+                                                Text(
+                                                    text = latestReleaseTime,
+                                                    fontSize = 12.sp,
+                                                    color = colorScheme.onSurfaceVariantSummary,
+                                                    textAlign = TextAlign.End
+                                                )
                                             }
                                         }
                                     }
@@ -2242,43 +2258,14 @@ private fun CommentsPageMiuix(
             ),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            // 头部汇总条：左侧「N 条评论」，右侧点赞胶囊——点赞不再是孤零零一行。
+            // 头部只留条数：点赞是模块维度的热度，展示与操作都在商店列表卡片的底栏。
             item(key = "header") {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = stringResource(R.string.module_comments_count, state.comments.size),
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = colorScheme.onSurface,
-                        modifier = Modifier.weight(1f),
-                    )
-                    val liked = state.likedModuleIds.contains(moduleId)
-                    Box(
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(if (liked) colorScheme.primary else colorScheme.surfaceContainerHigh)
-                            .clickable(enabled = state.canInteract && !state.submitting) {
-                                viewModel.toggleLike(moduleId, !liked)
-                            }
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Icon(
-                                imageVector = if (liked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                                contentDescription = stringResource(
-                                    if (liked) R.string.module_comments_unlike else R.string.module_comments_like
-                                ),
-                                modifier = Modifier.size(16.dp),
-                                tint = if (liked) Color.White else colorScheme.onSurfaceVariantSummary,
-                            )
-                            Text(
-                                text = state.likeCount.toString(),
-                                fontSize = 13.sp,
-                                color = if (liked) Color.White else colorScheme.onSurface,
-                            )
-                        }
-                    }
-                }
+                Text(
+                    text = stringResource(R.string.module_comments_count, state.comments.size),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = colorScheme.onSurface,
+                )
             }
 
             when {
@@ -2330,7 +2317,11 @@ private fun CommentsPageMiuix(
                         contentType = { _, _ -> "comment" },
                     ) { _, comment ->
                         // 楼中楼用左侧引导线挂在同一张卡里，缩进关系一眼可见。
-                        AppCard(modifier = Modifier.fillMaxWidth()) {
+                        AppCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            // Card 默认 insideMargin 太小、正文几乎贴着卡片边框，这里与 Material 版的 12/10 对齐。
+                            insideMargin = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                        ) {
                             CommentRowMiuix(
                                 comment = comment,
                                 isReply = false,
@@ -2344,7 +2335,7 @@ private fun CommentsPageMiuix(
                                         modifier = Modifier
                                             .width(2.dp)
                                             .fillMaxHeight()
-                                            .background(colorScheme.outline, RoundedCornerShape(1.dp)),
+                                            .background(colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(1.dp)),
                                     )
                                     Spacer(Modifier.width(10.dp))
                                     Column(
@@ -2374,9 +2365,12 @@ private fun CommentsPageMiuix(
                                 if (state.paging) {
                                     CircularProgressIndicator(progress = null, size = 22.dp, strokeWidth = 2.dp)
                                 } else {
-                                    TextButton(
+                                    // 与 Material 版一致用文本按钮，不用 miuix 的大胶囊，避免两皮肤视觉重量差太多。
+                                    Text(
                                         text = stringResource(R.string.module_comments_load_more),
-                                        onClick = viewModel::loadMore,
+                                        fontSize = 14.sp,
+                                        color = colorScheme.onSurfaceVariantSummary,
+                                        modifier = Modifier.clickable { viewModel.loadMore() },
                                     )
                                 }
                             }
@@ -2450,7 +2444,8 @@ private fun CommentRowMiuix(
             Column {
                 // 昵称次级色、时间更弱，把视觉重量留给正文。
                 Text(
-                    text = comment.nickname.ifBlank { comment.uid },
+                    // 已删除评论服务端只给空昵称；不能回退到 uid，否则界面上是一串数字。
+                    text = if (deleted) stringResource(R.string.module_comments_deleted_user) else comment.nickname.ifBlank { comment.uid },
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     color = colorScheme.onSurfaceVariantSummary,
@@ -2614,7 +2609,7 @@ private fun CommentsStateCardMiuix(
     actionText: String? = null,
     onAction: (() -> Unit)? = null,
 ) {
-    AppCard(modifier = Modifier.fillMaxWidth()) {
+    AppCard(modifier = Modifier.fillMaxWidth(), insideMargin = PaddingValues(0.dp)) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,

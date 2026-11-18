@@ -24,6 +24,20 @@ data class ModuleRepoUiState(
     val offline: Boolean = false,
     val modules: List<RepoModule> = emptyList(),
     /**
+     * 点赞数覆盖：key = moduleId，value = 服务端回的计数。
+     *
+     * 索引里的 likes 只是拉列表那一刻的快照；点赞成功后用这个覆盖立即刷新卡片底栏，
+     * 不必为一次点赞重拉整张列表。
+     */
+    val likeOverrides: Map<String, Int> = emptyMap(),
+    /**
+     * 本会话内我点过赞的模块。
+     *
+     * 服务端没有「我点过没」的查询（见 ModuleCommentsViewModel 的同名字段），
+     * 重进商店页按未点处理；这里只保证本次会话内的即时反馈。
+     */
+    val likedModuleIds: Set<String> = emptySet(),
+    /**
      * 专栏数据，来自索引仓的 `json/columns.json`，按 `order` 排好序。
      *
      * 空表示还没拉到或拉不到。专栏是可选内容：空的时候界面整块隐藏专栏区，不留空占位，也不报错。
@@ -106,6 +120,8 @@ data class ModuleRepoActions(
     /** 切换来源筛选；null 是「全部」。 */
     val onSelectSource: (String?) -> Unit,
     val onOpenRepoDetail: (RepoModule) -> Unit,
+    /** 列表卡片底栏的点赞/取消：点赞是模块维度，入口放在商店列表而不是评论页。 */
+    val onToggleLike: (RepoModule) -> Unit,
     /** [name] is the display name to store, or null to derive one from the address. */
     val onAddSource: (url: String, name: String?) -> Unit,
     val onRemoveSource: (String) -> Unit,

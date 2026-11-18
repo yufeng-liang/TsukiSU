@@ -252,6 +252,9 @@
     <string name="module_comments_delete_confirm_title">이 댓글을 삭제할까요?</string>
     <string name="module_comments_delete_confirm_body">아래 답글은 유지됩니다.</string>
     <string name="module_comments_deleted">삭제됨</string>
+    <string name="module_comments_deleted_user">삭제된 사용자</string>
+    <string name="module_comments_need_verify">좋아요를 누르려면 먼저 모듈 업로드 페이지에서 Coolapk 계정을 인증하세요</string>
+    <string name="module_comments_like_failed">좋아요를 갱신하지 못했습니다. 잠시 후 다시 시도하세요</string>
     <string name="module_comments_like">좋아요</string>
     <string name="module_comments_unlike">좋아요 취소</string>
     <string name="module_comments_error_sensitive">커뮤니티 규칙을 위반한 내용입니다</string>

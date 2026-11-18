@@ -9,8 +9,16 @@ import java.time.Instant
  * hand-written index may carry something else — that must not break the module list.
  */
 fun isoToEpochMillis(iso: String): Long {
-    if (iso.isBlank()) return 0L
-    return runCatching { Instant.parse(iso).toEpochMilli() }.getOrDefault(0L)
+    val text = iso.trim()
+    if (text.isEmpty()) return 0L
+    // 评论接口给的是纯数字 epoch：10 位按秒、13 位按毫秒。先按数字判掉，
+    // 否则 Instant.parse 失败后会把 "1795007370" 原样显示到界面上。
+    val numeric = text.toLongOrNull()
+    if (numeric != null) {
+        if (numeric <= 0L) return 0L
+        return if (numeric < 100_000_000_000L) numeric * 1000L else numeric
+    }
+    return runCatching { Instant.parse(text).toEpochMilli() }.getOrDefault(0L)
 }
 
 /**

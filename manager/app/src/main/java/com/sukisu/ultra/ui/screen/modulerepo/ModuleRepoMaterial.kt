@@ -273,6 +273,9 @@ fun ModuleRepoScreenMaterial(
                         // 搜索无结果不是「还没配源」，这里没有什么可以添加；地址栏就在上方，再摆一个
                         // 什么都不做的「添加仓库」只会是死控件。
                         emptyHint = stringResource(R.string.module_repo_search_no_results),
+                        likeOverrides = state.likeOverrides,
+                        likedModuleIds = state.likedModuleIds,
+                        onToggleLike = actions.onToggleLike,
                         onModuleClick = {
                             closeSearch()
                             actions.onOpenRepoDetail(it)
@@ -406,6 +409,9 @@ fun ModuleRepoScreenMaterial(
                             )
                         }
                     } else null,
+                    likeOverrides = state.likeOverrides,
+                    likedModuleIds = state.likedModuleIds,
+                    onToggleLike = actions.onToggleLike,
                     onModuleClick = actions.onOpenRepoDetail
                 )
             }
@@ -449,6 +455,10 @@ private fun RepoModuleList(
     onDismissSourceError: (String) -> Unit = {},
     // 商店页顶部的入口卡与来源筛选，跟着列表一起滚；搜索列表不传，搜的就是全部结果。
     header: (@Composable () -> Unit)? = null,
+    /** 点赞数覆盖与「我点过」集合：卡片底栏按 moduleId 取，见 ModuleRepoUiState。 */
+    likeOverrides: Map<String, Int> = emptyMap(),
+    likedModuleIds: Set<String> = emptySet(),
+    onToggleLike: (RepoModule) -> Unit = {},
     onModuleClick: (RepoModule) -> Unit,
 ) {
     LazyColumn(
@@ -498,6 +508,9 @@ private fun RepoModuleList(
                 module.repoCoversLatest,
                 module.repoLicense,
             ) { repoSourceBadge(module) }
+            // 点赞数优先用本次会话的覆盖值（点赞后立即更新），否则用索引快照。
+            val likes = likeOverrides[module.moduleId] ?: module.likes
+            val liked = module.moduleId in likedModuleIds
 
             TonalCard(
                 modifier = Modifier.fillMaxWidth(),
@@ -506,7 +519,7 @@ private fun RepoModuleList(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp, 14.dp, 16.dp, 10.dp)
+                        .padding(16.dp, 14.dp, 16.dp, 6.dp)
                 ) {
                     if (module.moduleName.isNotEmpty()) {
                         Text(
@@ -586,43 +599,52 @@ private fun RepoModuleList(
                         }
                     }
                     HorizontalDivider(thickness = Dp.Hairline)
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
 
                     Row(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // 点赞固定在最左，左沿与上方模块名同一条基准线；0 也画，
+                        // 位置固定用户才知道这里能点，空心/实心区分已赞。
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .clickable(enabled = module.moduleId.isNotEmpty()) { onToggleLike(module) }
+                                .padding(vertical = 1.dp),
+                        ) {
+                            Icon(
+                                imageVector = if (liked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                                contentDescription = stringResource(
+                                    if (liked) R.string.module_comments_unlike else R.string.module_comments_like
+                                ),
+                                tint = if (liked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = likes.toString(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (liked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 2.dp)
+                            )
+                        }
                         if (module.stargazerCount > 0) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(start = 8.dp)
+                            ) {
                                 Icon(
                                     imageVector = Icons.Rounded.Star,
                                     contentDescription = "stars",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(14.dp)
                                 )
                                 Text(
                                     text = module.stargazerCount.toString(),
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(start = 4.dp)
-                                )
-                            }
-                        }
-                        // 点赞数与星标并排：酷安社区条目没有星标，这颗爱心是它唯一的热度表达；
-                        // 0 时整块不画，与星标「索引没带就不显示」同一规则。
-                        if (module.likes > 0) {
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp)) {
-                                Icon(
-                                    imageVector = Icons.Rounded.FavoriteBorder,
-                                    contentDescription = "likes",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Text(
-                                    text = module.likes.toString(),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(start = 2.dp)
                                 )
                             }
                         }
@@ -630,7 +652,7 @@ private fun RepoModuleList(
                         if (latestReleaseTime.isNotEmpty()) {
                             Text(
                                 text = latestReleaseTime,
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -1802,50 +1824,20 @@ internal fun CommentsPage(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = innerPadding.calculateTopPadding() + 8.dp,
-                start = innerPadding.calculateStartPadding(layoutDirection) + 16.dp,
-                end = innerPadding.calculateEndPadding(layoutDirection) + 16.dp,
+                start = innerPadding.calculateStartPadding(layoutDirection) + 12.dp,
+                end = innerPadding.calculateEndPadding(layoutDirection) + 12.dp,
                 // 底部多留出发送条的高度：最后一条评论不能被输入框压住。
                 bottom = innerPadding.calculateBottomPadding() + 120.dp,
             ),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            // 头部汇总条：左侧「N 条评论」，右侧点赞胶囊——点赞不再是孤零零一行。
+            // 头部只留条数：点赞是模块维度的热度，展示与操作都在商店列表卡片的底栏。
             item(key = "header") {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = stringResource(R.string.module_comments_count, state.comments.size),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f),
-                    )
-                    val liked = state.likedModuleIds.contains(moduleId)
-                    Surface(
-                        onClick = { viewModel.toggleLike(moduleId, !liked) },
-                        enabled = state.canInteract && !state.submitting,
-                        shape = CircleShape,
-                        color = if (liked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Icon(
-                                imageVector = if (liked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                                contentDescription = stringResource(
-                                    if (liked) R.string.module_comments_unlike else R.string.module_comments_like
-                                ),
-                                modifier = Modifier.size(16.dp),
-                                tint = if (liked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(
-                                text = state.likeCount.toString(),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = if (liked) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
-                    }
-                }
+                Text(
+                    text = stringResource(R.string.module_comments_count, state.comments.size),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
             }
 
             when {
@@ -2031,7 +2023,8 @@ private fun CommentRowMaterial(
             Column {
                 // 昵称次级色、时间更弱，把视觉重量留给正文。
                 Text(
-                    text = comment.nickname.ifBlank { comment.uid },
+                    // 已删除评论服务端只给空昵称；不能回退到 uid，否则界面上是一串数字。
+                    text = if (deleted) stringResource(R.string.module_comments_deleted_user) else comment.nickname.ifBlank { comment.uid },
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -2215,18 +2208,20 @@ private fun CommentsStateCardMaterial(
     onAction: (() -> Unit)? = null,
     filledAction: Boolean = false,
 ) {
+    // 与 Miuix 空态卡对齐：卡片撑满列表宽度、上下留 20dp，不额外加垂直外边距。
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 24.dp),
+        modifier = Modifier.fillMaxWidth(),
         contentAlignment = Alignment.Center,
     ) {
         Surface(
+            modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surfaceContainerLow,
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 32.dp, vertical = 24.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {

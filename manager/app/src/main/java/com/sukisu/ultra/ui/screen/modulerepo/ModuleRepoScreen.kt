@@ -92,6 +92,7 @@ fun ModuleRepoScreen(selectedSourceId: String? = null) {
             )
             navigator.push(Route.ModuleRepoDetail(args))
         },
+        onToggleLike = viewModel::toggleLike,
         onAddSource = viewModel::addSource,
         onRemoveSource = viewModel::removeSource,
         onSetSourceEnabled = viewModel::setSourceEnabled,

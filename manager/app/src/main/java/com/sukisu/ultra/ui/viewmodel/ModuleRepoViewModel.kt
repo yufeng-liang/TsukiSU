@@ -26,6 +26,8 @@ import com.sukisu.ultra.data.repository.defaultRepoCandidates
 import com.sukisu.ultra.data.repository.isSameSource
 import com.sukisu.ultra.ksuApp
 import com.sukisu.ultra.ui.component.SearchStatus
+import com.sukisu.ultra.ui.screen.upload.ModuleUploadPrefs
+import com.sukisu.ultra.ui.util.ModuleComments
 import com.sukisu.ultra.ui.screen.modulerepo.ModuleRepoUiState
 import com.sukisu.ultra.ui.screen.modulerepo.RepoCandidateUi
 import com.sukisu.ultra.ui.screen.modulerepo.RepoSort
@@ -237,6 +239,48 @@ class ModuleRepoViewModel(
             } finally {
                 // 取消也要放行：否则一次被打断的请求会把这个标记永久占住。
                 columnsRefreshing = false
+            }
+        }
+    }
+
+    /**
+     * 列表卡片底栏的点赞/取消点赞。
+     *
+     * 点赞成功后用服务端回的 like_count 覆盖 [ModuleRepoUiState.likeOverrides]，卡片立即显示
+     * 新计数；失败只提示、不动本地状态——避免「点了没反应又看不出错」。
+     */
+    fun toggleLike(module: RepoModule) {
+        val moduleId = module.moduleId
+        if (moduleId.isEmpty()) return
+        val likedNow = _uiState.value.likedModuleIds.contains(moduleId)
+        viewModelScope.launch {
+            val session = withContext(Dispatchers.IO) { ModuleUploadPrefs.readSession() }
+            if (session == null) {
+                Toast.makeText(ksuApp, R.string.module_comments_need_verify, Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            when (val result = ModuleComments.setLike(session.token, moduleId, !likedNow)) {
+                is ModuleComments.CommentsResult.Ok -> {
+                    val count = result.value.optInt("like_count", -1)
+                    _uiState.update { state ->
+                        state.copy(
+                            likedModuleIds = if (likedNow) {
+                                state.likedModuleIds - moduleId
+                            } else {
+                                state.likedModuleIds + moduleId
+                            },
+                            likeOverrides = if (count >= 0) {
+                                state.likeOverrides + (moduleId to count)
+                            } else {
+                                state.likeOverrides
+                            },
+                        )
+                    }
+                }
+                ModuleComments.CommentsResult.NeedVerify ->
+                    Toast.makeText(ksuApp, R.string.module_comments_need_verify, Toast.LENGTH_SHORT).show()
+                is ModuleComments.CommentsResult.Failed ->
+                    Toast.makeText(ksuApp, R.string.module_comments_like_failed, Toast.LENGTH_SHORT).show()
             }
         }
     }

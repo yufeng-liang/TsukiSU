@@ -2377,6 +2377,9 @@
     <string name="module_comments_delete_confirm_title">删除这条评论？</string>
     <string name="module_comments_delete_confirm_body">它下面的回复会保留。</string>
     <string name="module_comments_deleted">已删除</string>
+    <string name="module_comments_deleted_user">已删除用户</string>
+    <string name="module_comments_need_verify">先在模块投稿页验证酷安账号，才能点赞</string>
+    <string name="module_comments_like_failed">点赞失败，请稍后重试</string>
     <string name="module_comments_like">点赞</string>
     <string name="module_comments_unlike">取消点赞</string>
     <string name="module_comments_error_sensitive">内容违反社区规范</string>

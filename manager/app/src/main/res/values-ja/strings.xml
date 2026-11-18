@@ -236,6 +236,9 @@
     <string name="module_comments_delete_confirm_title">このコメントを削除しますか？</string>
     <string name="module_comments_delete_confirm_body">下の返信は残ります。</string>
     <string name="module_comments_deleted">削除済み</string>
+    <string name="module_comments_deleted_user">削除済みユーザー</string>
+    <string name="module_comments_need_verify">いいねするには、まずモジュール投稿ページで Coolapk アカウントを認証してください</string>
+    <string name="module_comments_like_failed">いいねを更新できませんでした。しばらくしてから再試行してください</string>
     <string name="module_comments_like">いいね</string>
     <string name="module_comments_unlike">いいねを取り消す</string>
     <string name="module_comments_error_sensitive">内容がコミュニティルールに違反しています</string>

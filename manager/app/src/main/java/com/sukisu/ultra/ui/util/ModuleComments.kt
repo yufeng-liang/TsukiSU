@@ -12,6 +12,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 /**
@@ -211,7 +212,29 @@ object ModuleComments {
             val row = arr.optJSONObject(i) ?: continue
             parseComment(row)?.let { list.add(it) }
         }
-        return CommentPage(comments = list, nextCursor = json.optString("next_cursor", "").trim())
+        // 服务端没有下一页时给的是 JSON null；optString 会把它变成字符串 "null"，
+        // 不判掉的话 nextCursor 永远非空，「加载更多」会一直显示。
+        val rawCursor = json.opt("next_cursor")
+        val nextCursor = if (rawCursor is String && rawCursor.isNotBlank() && rawCursor != "null") {
+            rawCursor.trim()
+        } else {
+            ""
+        }
+        return CommentPage(comments = list, nextCursor = nextCursor)
+    }
+
+    /**
+     * `created_at` 有两种形态：仓库索引给 ISO-8601 字符串，评论接口给秒级 epoch 数字。
+     * [JSONObject.optString] 对数字会取 toString，直接当 ISO 解析必然失败并把秒数原样显示，
+     * 所以这里统一归一成 ISO 字符串，再交给 formatRepoTime 排版。
+     */
+    private fun readCreatedAt(row: JSONObject): String {
+        val raw: Any? = row.opt("created_at")
+        return when {
+            raw == null || raw == JSONObject.NULL -> ""
+            raw is Number -> runCatching { Instant.ofEpochSecond(raw.toLong()).toString() }.getOrDefault("")
+            else -> raw.toString().trim()
+        }
     }
 
     /** 把单条评论对象拆成 [CommentItem]；id 缺失的行丢弃。 */
@@ -232,7 +255,7 @@ object ModuleComments {
                             nickname = r.optString("nickname", "").trim(),
                             avatar = r.optString("avatar", "").trim(),
                             content = r.optString("content", "").trim(),
-                            createdAt = r.optString("created_at", "").trim(),
+                            createdAt = readCreatedAt(r),
                             replyToNickname = r.optString("reply_to_nickname", "").trim(),
                         )
                     )
@@ -245,7 +268,7 @@ object ModuleComments {
             nickname = row.optString("nickname", "").trim(),
             avatar = row.optString("avatar", "").trim(),
             content = row.optString("content", "").trim(),
-            createdAt = row.optString("created_at", "").trim(),
+            createdAt = readCreatedAt(row),
             replies = replies,
         )
     }
@@ -258,7 +281,7 @@ object ModuleComments {
             id = id,
             moduleId = row.optString("module_id", "").trim(),
             content = row.optString("content", "").trim(),
-            createdAt = row.optString("created_at", "").trim(),
+            createdAt = readCreatedAt(row),
             deleted = row.optBoolean("deleted", false),
         )
     }
