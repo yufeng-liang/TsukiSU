@@ -1,6 +1,7 @@
 package com.sukisu.ultra.ui.viewmodel
 
 import android.content.Context
+import com.sukisu.ultra.ui.util.SELF_UPDATE_REPO
 import androidx.core.content.edit
 import android.net.Uri
 import android.system.OsConstants
@@ -69,6 +70,15 @@ import java.io.File
 
 /** 进入加速页时复用上次测速结果的窗口；超过这个时间才重新探测。 */
 private const val PROXY_TEST_CACHE_MS = 3 * 60 * 1000L
+
+/**
+ * 测速样本：本 fork 的 latest release 页。
+ *
+ * 以前 sampleUrl 传 null，探测的是代理根路径——那只能证明「这台机器活着」，很多代理根路径
+ * 直接回 200 或 403，和真实下载毫无关系，设置页的延迟排序因此系统性偏悲观。用 release 页
+ * （真实下载的重定向起点）更接近用户点「更新」时走的路径。
+ */
+private val PROXY_TEST_SAMPLE_URL = "https://github.com/$SELF_UPDATE_REPO/releases/latest"
 
 /**
  * 按测速延迟升序排列代理；不可达/未测统一排在最后。
@@ -2667,7 +2677,12 @@ homePillScale = repo.homePillScale,
         val snapshot = _uiState.value
         if (snapshot.proxyTesting) return
         val now = System.currentTimeMillis()
-        if (!force && snapshot.proxyTestedAt > 0L && now - snapshot.proxyTestedAt < PROXY_TEST_CACHE_MS) {
+        // 缓存要同时看「多久以前」和「换没换网」：蜂窝网测出来的名次，切到 WiFi 后毫无意义。
+        val network = ProxyRuntime.prefs.networkKey()
+        if (!force && snapshot.proxyTestedAt > 0L &&
+            now - snapshot.proxyTestedAt < PROXY_TEST_CACHE_MS &&
+            snapshot.proxyTestedNetwork == network
+        ) {
             return
         }
         _uiState.update { it.copy(proxyTesting = true) }
@@ -2676,8 +2691,25 @@ homePillScale = repo.homePillScale,
                 val entries = _uiState.value.proxyEntries.ifEmpty {
                     withContext(Dispatchers.IO) { ProxyRuntime.list.load() }
                 }
+                // 开测前先清空旧结果：否则上一轮的延迟会和新结果混在一起，看不出谁还在测。
+                _uiState.update { it.copy(proxyHealth = emptyList()) }
                 val health = withContext(Dispatchers.IO) {
-                    ProxyRuntime.prober.probeAll(entries, sampleUrl = null)
+                    // 逐条回填：谁先测完谁先上屏，界面不必等最慢的那条（可能打满 8 秒超时）。
+                    // 回调在采集协程里串行执行，partial 只在这一次回调线程里读写，无需额外加锁。
+                    val partial = LinkedHashMap<String, ProxyHealth>()
+                    ProxyRuntime.prober.probeAll(
+                        entries,
+                        sampleUrl = PROXY_TEST_SAMPLE_URL,
+                        onResult = { single ->
+                            partial[single.id] = single
+                            _uiState.update { state ->
+                                state.copy(
+                                    proxyEntries = sortProxyEntriesByLatency(entries, partial),
+                                    proxyHealth = partial.values.toList(),
+                                )
+                            }
+                        },
+                    )
                 }
                 // 测完按延迟升序展示；不可达/未测排在最后（稳定排序保留原顺序）。
                 val sortedEntries = sortProxyEntriesByLatency(entries, health.associateBy { it.id })
@@ -2686,6 +2718,7 @@ homePillScale = repo.homePillScale,
                         proxyEntries = sortedEntries,
                         proxyHealth = health,
                         proxyTestedAt = System.currentTimeMillis(),
+                        proxyTestedNetwork = ProxyRuntime.prefs.networkKey(),
                     )
                 }
             } catch (e: CancellationException) {

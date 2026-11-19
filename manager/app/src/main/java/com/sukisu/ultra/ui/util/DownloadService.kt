@@ -4,6 +4,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.Uri
@@ -21,8 +22,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import com.sukisu.ultra.R
-import com.sukisu.ultra.data.proxy.ProxyEntry
-import com.sukisu.ultra.data.proxy.ProxyRuntime
 import com.sukisu.ultra.data.proxy.ProxyUrl
 import com.sukisu.ultra.data.registry.DownloadVerificationException
 import com.sukisu.ultra.data.registry.ExpectedFile
@@ -70,9 +69,26 @@ class DownloadService : Service() {
         const val EXTRA_USER_AGENT = "userAgent"
         const val EXTRA_COMPLETION_ACTION = "completionAction"
         const val EXTRA_DELETE_FILE_ON_DISMISS = "deleteFileOnDismiss"
+        const val EXTRA_PROXY_BASE = "proxyBase"
+        const val EXTRA_NOTIFY_ON_FAILURE = "notifyOnFailure"
 
         private const val COMPLETION_NOTIFICATION_ID_BASE = 100000
         private const val REGISTRY_DOWNLOAD_MAX_AGE_MS = 24L * 60 * 60 * 1000
+
+        /**
+         * 取消一条下载。
+         *
+         * 调用方（候选链）等超时后必须主动收尾：服务被杀时它不会再发任何回调，而这条
+         * 记录会一直占着通知栏。
+         */
+        fun cancel(context: Context, downloadId: Int) {
+            runCatching {
+                context.startService(Intent(context, DownloadService::class.java).apply {
+                    action = ACTION_CANCEL
+                    putExtra(EXTRA_DOWNLOAD_ID, downloadId)
+                })
+            }
+        }
     }
 
     private fun sanitizeFileName(raw: String): String {
@@ -120,7 +136,13 @@ class DownloadService : Service() {
                 val expectedSha256 = intent.getStringExtra(EXTRA_EXPECTED_SHA256)
                 val expectedSize = intent.getLongExtra(EXTRA_EXPECTED_SIZE, -1L)
                 val expected = expectedSha256?.let { ExpectedFile(expectedSize, it) }
-                startDownload(downloadId, url, fileName, mimeType, cookie, userAgent, completionAction, expected)
+                // 代理前缀是入队那一刻的快照，服务端不再重新读远程清单；中间候选失败不弹通知。
+                val proxyBase = intent.getStringExtra(EXTRA_PROXY_BASE)
+                val notifyOnFailure = intent.getBooleanExtra(EXTRA_NOTIFY_ON_FAILURE, true)
+                startDownload(
+                    downloadId, url, fileName, mimeType, cookie, userAgent,
+                    completionAction, expected, proxyBase, silentFailure = !notifyOnFailure,
+                )
             }
 
             ACTION_CANCEL -> {
@@ -151,15 +173,14 @@ class DownloadService : Service() {
      * Registry downloads ([expected] != null) may only come from GitHub Release download URLs
      * and their CDN redirect targets; every hop is checked.
      *
-     * 走下载加速时代理本身就是被请求的主机，它不在 GitHub 的域名表里，所以额外放行
-     * 「本次候选列表里确实存在的代理地址」。判定仍然要求它包着一个白名单内层地址，
-     * 见 [isAllowedRegistryHop]。
+     * 走加速时代理本身就是被请求的主机，它不在 GitHub 的域名表里，所以额外放行
+     * 「[proxyBase] + 白名单内层地址」这种形状，见 [proxiedInnerReleaseUrl]。
      */
-    private fun registryClient(proxies: List<ProxyEntry>): OkHttpClient = ksuApp.okhttpClient.newBuilder()
+    private fun registryClient(proxyBase: String?): OkHttpClient = ksuApp.okhttpClient.newBuilder()
         .followSslRedirects(false)
         .addNetworkInterceptor { chain ->
             val requestUrl = chain.request().url
-            if (!isAllowedRegistryHop(requestUrl.toString(), proxies)) {
+            if (!isAllowedRegistryHop(requestUrl.toString(), proxyBase)) {
                 throw DownloadVerificationException(
                     DownloadVerificationException.Reason.URL_NOT_ALLOWED,
                     "Download host not allowed: ${requestUrl.host}"
@@ -169,17 +190,26 @@ class DownloadService : Service() {
         }
         .build()
 
+    /** 单跳放行：白名单域名，或「入队时记下的代理前缀 + 白名单内层地址」。 */
+    private fun isAllowedRegistryHop(url: String, proxyBase: String?): Boolean {
+        if (RegistryUrls.isAllowedDownloadHop(url)) return true
+        return proxiedInnerReleaseUrl(url, proxyBase) != null
+    }
+
     /**
-     * 单跳放行规则：白名单域名，或「代理前缀 + 白名单内层地址」。
+     * 「代理前缀 + 白名单内层地址」→ 内层地址；不成立返回 null。
      *
-     * 后半段由 [ProxyUrl.unwrap] 保证：它只认 [proxies] 里那些 https、无路径的代理前缀，
-     * 且内层地址必须自己通过 [RegistryUrls.isAllowedReleaseDownloadUrl]——
+     * 前缀取自入队时的候选快照：下载途中远程清单被刷新、过期、甚至暂时读不出来，都不该让一个
+     * 已经排到队首的候选当场失效（旧实现每次下载都重新 load 一遍，最长还要等 15 秒网络）。
+     * 前缀必须是无路径的 https 基址，内层必须通过 [RegistryUrls.isAllowedReleaseDownloadUrl]，
      * 所以放行代理域名不会变成放行任意 host。
      */
-    private fun isAllowedRegistryHop(url: String, proxies: List<ProxyEntry>): Boolean {
-        if (RegistryUrls.isAllowedDownloadHop(url)) return true
-        if (proxies.isEmpty()) return false
-        return ProxyUrl.unwrap(url, proxies) != null
+    private fun proxiedInnerReleaseUrl(url: String, proxyBase: String?): String? {
+        val base = proxyBase?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() } ?: return null
+        if (!ProxyUrl.isValidBaseUrl(base)) return null
+        if (!url.startsWith("$base/", ignoreCase = true)) return null
+        return url.substring(base.length + 1)
+            .takeIf { RegistryUrls.isAllowedReleaseDownloadUrl(it) }
     }
 
     private fun startDownload(
@@ -191,18 +221,26 @@ class DownloadService : Service() {
         userAgent: String?,
         completionAction: DownloadCompletionAction,
         expected: ExpectedFile?,
+        proxyBase: String?,
+        silentFailure: Boolean,
     ) {
         val job = serviceScope.launch(start = CoroutineStart.LAZY) {
             var pendingUri: Uri? = null
             var displayName = fileName
+            var transferred = 0L
+            val startedAt = System.currentTimeMillis()
             try {
                 val uri = if (expected != null) {
                     // Already stored under its final name: delete it if cancelled before completion.
-                    downloadVerified(id, url, fileName, expected).also { pendingUri = it }
+                    downloadVerified(id, url, fileName, expected, proxyBase).also {
+                        pendingUri = it
+                        transferred = expected.size
+                    }
                 } else {
-                    // 纵深防御：没有 expected 的下载在上层已经只走直连，这里再挡一次代理封装地址，
-                    // 免得将来有别的调用方又把它送进来——这条分支没有任何哈希可兜底。
-                    if (ProxyUrl.looksLikeProxied(url)) {
+                    // 没有哈希也能走加速：只要「代理前缀 + 白名单内层地址」成立就放行。
+                    // 这里不再要求代理仍出现在最新列表里——清单刷新不该让已在跑的候选作废；
+                    // 但内层必须是 GitHub release 地址，否则代理就成了任意 URL 转发器。
+                    if (ProxyUrl.looksLikeProxied(url) && proxiedInnerReleaseUrl(url, proxyBase) == null) {
                         throw DownloadVerificationException(
                             DownloadVerificationException.Reason.URL_NOT_ALLOWED,
                             "Download URL not allowed"
@@ -243,6 +281,7 @@ class DownloadService : Service() {
                                 progress.report(soFar)
                             }
                             fos.flush()
+                            transferred = soFar
                         }
                         ensureActive()
                         destination.publish()
@@ -251,7 +290,7 @@ class DownloadService : Service() {
                 }
                 ensureActive()
                 pendingUri = null
-                DownloadManager.markCompleted(id, uri)
+                DownloadManager.markCompleted(id, uri, transferred, System.currentTimeMillis() - startedAt)
 
                 notificationManager.cancel(id)
                 notificationManager.notify(
@@ -269,18 +308,23 @@ class DownloadService : Service() {
                 DownloadManager.markFailed(id, e.message ?: "Unknown error", verificationFailure)
 
                 notificationManager.cancel(id)
-                notificationManager.notify(
-                    COMPLETION_NOTIFICATION_ID_BASE + id,
-                    buildFailureNotification(displayName, verificationFailure)
-                )
+                // 只让链上最后一个候选报错：中间候选的失败对用户没有信息量。
+                if (!silentFailure) {
+                    notificationManager.notify(
+                        COMPLETION_NOTIFICATION_ID_BASE + id,
+                        buildFailureNotification(displayName, verificationFailure)
+                    )
+                }
             } finally {
                 pendingUri?.let { deleteDownload(it) }
             }
         }
         activeJobs[id] = job
         job.invokeOnCompletion { cause ->
+            val status = DownloadManager.downloads.value[id]?.status
             if (cause is CancellationException &&
-                DownloadManager.downloads.value[id]?.status != DownloadManager.Status.COMPLETED
+                status != DownloadManager.Status.COMPLETED &&
+                status != DownloadManager.Status.FAILED
             ) {
                 DownloadManager.markFailed(id, "Cancelled")
                 notificationManager.cancel(id)
@@ -317,16 +361,16 @@ class DownloadService : Service() {
      * 后者只是换一条到同一个 release 资产的路，sha256 仍然由直连拿到的登记值把关，
      * 所以代理看到/改写内容也骗不过校验。
      */
-    private suspend fun CoroutineScope.downloadVerified(id: Int, url: String, fileName: String, expected: ExpectedFile): Uri {
-        // 直连不需要代理列表；只有加速地址才去加载它，避免为了一次普通下载读配置。
+    private suspend fun CoroutineScope.downloadVerified(
+        id: Int,
+        url: String,
+        fileName: String,
+        expected: ExpectedFile,
+        proxyBase: String?,
+    ): Uri {
+        // 直连直接放行；加速地址只认「入队快照里的代理 + 白名单内层」，不接受任意 host。
         val direct = RegistryUrls.isAllowedReleaseDownloadUrl(url)
-        val proxies: List<ProxyEntry> = if (direct) {
-            emptyList()
-        } else {
-            runCatching { ProxyRuntime.list.load() }.getOrDefault(emptyList())
-        }
-        // 不是直连、也不属于「已知代理包着白名单地址」：拒绝，这条链路不接受任意 host。
-        if (!direct && ProxyUrl.unwrap(url, proxies) == null) {
+        if (!direct && proxiedInnerReleaseUrl(url, proxyBase) == null) {
             throw DownloadVerificationException(
                 DownloadVerificationException.Reason.URL_NOT_ALLOWED,
                 "Download URL not allowed"
@@ -334,7 +378,7 @@ class DownloadService : Service() {
         }
         val root = registryStoreRoot()
         runCatching { RegistryDownloadStore.cleanup(root, REGISTRY_DOWNLOAD_MAX_AGE_MS) }
-        val call = registryClient(proxies).newCall(Request.Builder().url(url).build())
+        val call = registryClient(proxyBase).newCall(Request.Builder().url(url).build())
         activeCalls[id] = call
         ensureActive()
         val file = call.execute().use { resp ->
@@ -486,6 +530,14 @@ class DownloadService : Service() {
     }
 
     override fun onDestroy() {
+        // 服务被系统杀掉时协程也会被取消，invokeOnCompletion 未必来得及跑：这里主动把还挂着
+        // 的任务标成失败，免得调用方永远等一个 PENDING（下载器的等待超时是最后一道保险）。
+        activeJobs.keys.forEach { id ->
+            val status = DownloadManager.downloads.value[id]?.status
+            if (status != DownloadManager.Status.COMPLETED && status != DownloadManager.Status.FAILED) {
+                DownloadManager.markFailed(id, "Service destroyed")
+            }
+        }
         serviceScope.cancel()
         activeCalls.values.forEach { it.cancel() }
         super.onDestroy()

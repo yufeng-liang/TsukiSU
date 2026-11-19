@@ -350,4 +350,20 @@
 <string name="builtin_zygisk_opt_custom_linker_summary">内蔵 ELF ローダーでモジュールを読み込み、システムリンカーの solist に入らないようにします。読み込めない場合はシステムリンカーに戻ります。</string>
 <string name="builtin_zygisk_opt_lsplt">PLT フックに LSPLT を使う</string>
 <string name="builtin_zygisk_opt_lsplt_summary">オフなら ByteHook、オンなら LSPLT を使います。</string>
+    <!-- GitHub ダウンロード高速化 -->
+    <string name="settings_proxy_title">GitHub ダウンロード高速化</string>
+    <string name="settings_proxy_summary">自動モードは直接接続と各プロキシをまとめて速度測定し、最速の経路を使います。システムプロキシや VPN が有効なときは直接接続を優先します。ここでの測定は参考値で、自動モードはダウンロード時に再測定します。</string>
+    <string name="settings_proxy_intro">この高速化は、このアプリ内で GitHub からモジュールや更新をダウンロードするときだけに影響します。システムプロキシは変更せず、他のアプリにも影響しません。GitHub に直接つながるなら「公式直接接続」が最速です。直接接続がよくタイムアウトするなら「自動選択」を選ぶと、使えるミラーをアプリが選びます。</string>
+    <string name="settings_proxy_entry_summary">直接接続とすべてのプロキシを速度測定し、GitHub のダウンロードを最速の経路で行います。</string>
+    <string name="settings_proxy_mode_official">公式直接接続</string>
+    <string name="settings_proxy_mode_auto">自動（最速）</string>
+    <string name="settings_proxy_mode_pinned">プロキシを指定</string>
+    <string name="settings_proxy_latency">%1$d ミリ秒</string>
+    <string name="settings_proxy_unavailable">利用不可</string>
+    <string name="settings_proxy_untested">未測定</string>
+    <string name="settings_proxy_test_all">すべて測定</string>
+    <string name="settings_proxy_testing">測定中…</string>
+    <string name="settings_proxy_pinned_hint">プロキシがまだ選ばれていません。ダウンロードは公式直接接続にフォールバックします。</string>
+    <string name="settings_proxy_pinned_missing">選択したプロキシは利用できません。ダウンロードは公式直接接続にフォールバックします。</string>
+    <string name="settings_proxy_empty">現在利用できるプロキシがありません。しばらくしてからこのページを開き直すと自動で再試行します。</string>
 </resources>

@@ -109,12 +109,11 @@ object ProxyUrl {
      * 不依赖代理列表，所以服务层拿不到 entries 时也能判。
      */
     fun looksLikeProxied(url: String): Boolean {
-        val schemeEnd = url.indexOf("://")
-        if (schemeEnd < 0) return false
-        val afterScheme = url.substring(schemeEnd + 3)
-        val pathStart = afterScheme.indexOf('/')
-        if (pathStart < 0) return false
-        return afterScheme.substring(pathStart + 1).contains("://")
+        // 只看 path：query 里恰好带 next=https://… 的普通地址不该被当成代理封装，
+        // 那种误判会让一次合法直连在服务层被 URL_NOT_ALLOWED 拒掉。
+        val uri = runCatching { java.net.URI(url) }.getOrNull() ?: return false
+        val path = uri.rawPath ?: return false
+        return path.trimStart('/').contains("://")
     }
 }
 
@@ -219,6 +218,11 @@ interface ProxyProber {
         entries: List<ProxyEntry>,
         sampleUrl: String? = null,
         timeoutMs: Long = 8_000,
+        /**
+         * 每测完一个代理就回调一次，用于让界面边测边显示；不需要逐条结果时可以不传。
+         * 回调按「谁先测完谁先回调」的顺序串行执行，不会并发进入。
+         */
+        onResult: (suspend (ProxyHealth) -> Unit)? = null,
     ): List<ProxyHealth>
 
     /**
@@ -242,6 +246,14 @@ interface ProxyProber {
      * 下载器**只需调用这个方法拿排序**，不要自己决定先试代理还是先试直连。
      */
     suspend fun ranking(originalUrl: String, force: Boolean = false): List<String>
+
+    /**
+     * 后台预热 [ranking]：立即返回，让竞速在后台跑完并写回缓存。
+     *
+     * 首次竞速要 8 秒；下载器只软等一小会儿，超时先按现有顺序开跑，由这里把结果补上，
+     * 下一次下载就能直接命中新鲜缓存。
+     */
+    fun warmRanking(originalUrl: String) {}
 }
 
 /** 远程代理列表地址（与 modules.json / columns.json 同一发布路径）。 */

@@ -20,12 +20,14 @@ import com.sukisu.ultra.data.proxy.ProxyEntry
 import com.sukisu.ultra.data.proxy.ProxyMode
 import com.sukisu.ultra.data.proxy.ProxyRuntime
 import com.sukisu.ultra.data.proxy.ProxyUrl
+import com.sukisu.ultra.data.registry.RegistryUrls
 import com.sukisu.ultra.ksuApp
 import com.sukisu.ultra.ui.util.module.LatestVersionInfo
 import com.sukisu.ultra.ui.util.getRootShell
 import com.sukisu.ultra.ui.util.shellQuote
 import com.sukisu.ultra.ui.util.withNewRootShell
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
@@ -45,7 +47,7 @@ class CiManagerUpdater(private val context: Context) {
         // 还原不出来（代理列表加载失败/不是已知代理）时保留原样，交给下面的校验去拒绝。
         val entries = proxyEntries()
         val originalUrl = ProxyUrl.unwrap(update.downloadUrl, entries) ?: update.downloadUrl
-        if (!originalUrl.startsWith(RELEASE_ASSET_PREFIX)) {
+        if (!isAllowedReleaseAsset(originalUrl)) {
             throw IOException(context.getString(R.string.ci_update_request_failed))
         }
         val abi = Build.SUPPORTED_ABIS.firstOrNull()?.takeIf { it in SUPPORTED_ABIS }
@@ -147,9 +149,13 @@ class CiManagerUpdater(private val context: Context) {
             listOf(originalUrl)
         } else {
             // 竞速排序（含直连）可能为空：拿不到就交给路由的保守默认顺序。
+            // 先触发测速再最多软等 2s，和 Downloader 一致 —— 别让首次更新白等满竞速的 8s。
+            ProxyRuntime.prober.warmRanking(originalUrl)
             val ranking = runBlocking {
-                runCatching { ProxyRuntime.prober.ranking(originalUrl) }.getOrDefault(emptyList())
-            }
+                withTimeoutOrNull(RANKING_SOFT_WAIT_MS) {
+                    runCatching { ProxyRuntime.prober.ranking(originalUrl) }.getOrDefault(emptyList())
+                }
+            } ?: emptyList()
             GithubProxyRouter.candidates(
                 originalUrl = originalUrl,
                 mode = mode,
@@ -367,18 +373,21 @@ class CiManagerUpdater(private val context: Context) {
         }
     }
 
+    /**
+     * 判定一个地址能否作为自更新资产。
+     *
+     * 上游用 `startsWith("https://github.com/<owner>/<repo>/releases/download/")` 校验，但仓库
+     * 改名（SukiSU-Ultra → TsukiSU）后 GitHub 返回的 browser_download_url 会换成新名，写死仓库名的
+     * 前缀立刻失效，每次更新都被判成「地址无效」。这里改成：结构交给
+     * [RegistryUrls.isAllowedReleaseDownloadUrl]（https + github.com + /releases/download/ + 分段合法），
+     * 再按 owner 收敛到本 fork 的账号 —— 仓库再改名也不会失效。
+     */
+    private fun isAllowedReleaseAsset(url: String): Boolean = isAllowedSelfUpdateAsset(url)
+
     companion object {
-        /**
-         * 本 fork 的 release 资产前缀。
-         *
-         * 上游把这个常量写死成官方仓库，但本 fork 的更新检查走
-         * [com.sukisu.ultra.ui.util.checkNewVersion] → fork 自己的 latest release，
-         * 拿回来的 downloadUrl 一定是 `yufeng-liang/SukiSU-Ultra` 下的资产。
-         * 若继续用官方前缀，`startsWith` 校验会把每一次更新都判成「地址无效」，
-         * 所以这里必须跟 Downloader 里的 SELF_UPDATE_REPO 保持一致。
-         */
-        private const val RELEASE_ASSET_PREFIX =
-            "https://github.com/yufeng-liang/SukiSU-Ultra/releases/download/"
+        /** 竞速结果的软等待上限，与 Downloader 的 RANKING_SOFT_WAIT_MS 保持一致。 */
+        private const val RANKING_SOFT_WAIT_MS = 2_000L
+
         private const val MAX_APK_BYTES = 512L * 1024 * 1024
         private val SUPPORTED_ABIS = setOf("arm64-v8a", "armeabi-v7a", "x86_64", "riscv64")
 
@@ -390,4 +399,23 @@ class CiManagerUpdater(private val context: Context) {
         /** sha256 的十六进制长度。 */
         private const val SHA256_HEX_LENGTH = 64
     }
+}
+
+/** 允许作为自更新资产的 GitHub 账号：仓库改过名，所以只认 owner，不认仓库名。 */
+private val SELF_UPDATE_ASSET_OWNERS = setOf("yufeng-liang")
+
+/**
+ * 判定一个地址能否作为自更新资产。
+ *
+ * 上游用 `startsWith("https://github.com/<owner>/<repo>/releases/download/")` 校验，但仓库改名
+ * （SukiSU-Ultra → TsukiSU）后 GitHub 返回的 browser_download_url 会换成新名，写死仓库名的前缀
+ * 立刻失效，每次更新都被判成「地址无效」。这里分两步：结构交给
+ * [RegistryUrls.isAllowedReleaseDownloadUrl]（https + github.com + /releases/download/ + 分段合法），
+ * 再按 owner 收敛到本 fork 的账号 —— 仓库再改名也不会失效。
+ */
+internal fun isAllowedSelfUpdateAsset(url: String): Boolean {
+    if (!RegistryUrls.isAllowedReleaseDownloadUrl(url)) return false
+    val path = runCatching { java.net.URI(url) }.getOrNull()?.rawPath ?: return false
+    val owner = path.trimStart('/').substringBefore('/').lowercase()
+    return owner in SELF_UPDATE_ASSET_OWNERS
 }

@@ -1,11 +1,15 @@
 package com.sukisu.ultra.data.proxy
 
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import com.sukisu.ultra.ksuApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -40,20 +44,44 @@ class ProxyProberImpl(
     /** 竞速互斥：同一时刻只允许一轮竞速在跑，后到的等结果而复用，见 [ranking]。 */
     private val rankingLock = Mutex()
 
+    /** 预热竞速用：不跟随界面生命周期，调用方超时放弃后仍把结果写完。 */
+    private val warmScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override fun warmRanking(originalUrl: String) {
+        if (prefs.isRankingFresh()) return
+        warmScope.launch {
+            // 失败无所谓：下一次下载还会再试，这里只是尽量让缓存提前热起来。
+            runCatching { ranking(originalUrl) }
+        }
+    }
+
     override suspend fun probeAll(
         entries: List<ProxyEntry>,
         sampleUrl: String?,
         timeoutMs: Long,
-    ): List<ProxyHealth> {
-        if (entries.isEmpty()) return emptyList()
+        onResult: (suspend (ProxyHealth) -> Unit)?,
+    ): List<ProxyHealth> = coroutineScope {
+        if (entries.isEmpty()) return@coroutineScope emptyList()
         val budget = timeoutMs.coerceAtLeast(MIN_TIMEOUT_MS)
-        return coroutineScope {
-            // 一个代理卡住不该拖住其他代理的结果：每个探测自己带超时，失败也只是它自己那条
-            // 变成 unreachable。
-            entries.map { entry ->
-                async(Dispatchers.IO) { probe(entry, sampleUrl, budget) }
-            }.awaitAll()
+        // 用 Channel 收集：谁先测完谁先回填，最慢的那条（可能打满 8 秒超时）不再拖住全部结果。
+        // UNLIMITED 是因为最多也就几条到十几条代理，没必要让探测协程等消费者。
+        val finished = Channel<ProxyHealth>(Channel.UNLIMITED)
+        val collected = mutableListOf<ProxyHealth>()
+        val collector = launch(Dispatchers.Default) {
+            for (health in finished) {
+                collected += health
+                // 界面回调失败（例如页面已销毁）只影响展示，不该让整轮测速变成异常。
+                onResult?.let { callback -> runCatching { callback(health) } }
+            }
         }
+        // 一个代理卡住不该拖住其他代理的结果：每个探测自己带超时，失败也只是它自己那条
+        // 变成 unreachable。
+        entries.map { entry ->
+            launch(Dispatchers.IO) { finished.send(probe(entry, sampleUrl, budget)) }
+        }.forEach { it.join() }
+        finished.close()
+        collector.join()
+        collected
     }
 
     override suspend fun race(
@@ -170,6 +198,7 @@ class ProxyProberImpl(
                 .build()
             val call = client.newCall(request)
             runCatching { call.timeout().timeout(timeoutMs, TimeUnit.MILLISECONDS) }
+                .onFailure { Log.w("ProxyProber", "设置 callTimeout 失败: " + it.message) }
             val readable = call.execute().use { response ->
                 response.isSuccessful && response.body.byteStream().read() >= 0
             }
@@ -189,6 +218,7 @@ class ProxyProberImpl(
      */
     private fun execute(call: Call, timeoutMs: Long): Response {
         runCatching { call.timeout().timeout(timeoutMs, TimeUnit.MILLISECONDS) }
+            .onFailure { Log.w("ProxyProber", "设置 callTimeout 失败: " + it.message) }
         return call.execute()
     }
 

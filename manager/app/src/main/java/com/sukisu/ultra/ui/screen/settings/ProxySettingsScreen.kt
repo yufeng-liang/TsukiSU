@@ -1,5 +1,6 @@
 package com.sukisu.ultra.ui.screen.settings
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.StartOffset
@@ -31,6 +32,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
@@ -56,7 +58,6 @@ import com.sukisu.ultra.data.proxy.ProxyMode
 import com.sukisu.ultra.ui.LocalUiMode
 import com.sukisu.ultra.ui.UiMode
 import com.sukisu.ultra.ui.component.material.ExpressiveScaffold
-import com.sukisu.ultra.ui.component.material.IconTile
 import com.sukisu.ultra.ui.component.material.SegmentedColumn
 import com.sukisu.ultra.ui.component.material.SegmentedListItem
 import com.sukisu.ultra.ui.component.material.SegmentedRadioItem
@@ -247,35 +248,59 @@ private fun ProxySettingsContentMaterial(
                     }
                 }
                 add {
-                    SegmentedListItem(
-                        // 测速中禁用整行，避免重复点出好几轮并发探测
-                        onClick = if (uiState.proxyTesting) null else actions.onTestProxies,
-                        enabled = !uiState.proxyTesting,
-                        headlineContent = {
-                            Text(
-                                stringResource(
-                                    if (uiState.proxyTesting) {
-                                        R.string.settings_proxy_testing
-                                    } else {
-                                        R.string.settings_proxy_test_all
-                                    }
-                                )
-                            )
-                        },
-                        leadingContent = {
-                            IconTile(
-                                Icons.Filled.Refresh,
-                                stringResource(R.string.settings_proxy_test_all),
-                                // 测速中整行禁用，图标也跟着灰掉，否则看着像还能再点一次
-                                enabled = !uiState.proxyTesting
-                            )
-                        },
-                        trailingContent = {
-                            if (uiState.proxyTesting) {
-                                ProxyTestingWave(MaterialTheme.colorScheme.primary)
-                            }
-                        }
+                    // 测速按钮改成胶囊：底色随状态过渡（平时淡、测速时加深），
+                    // 刷新图标匀速旋转，右侧再跟一段脉冲——一眼就能看出「正在后台跑」。
+                    val container by animateColorAsState(
+                        targetValue = MaterialTheme.colorScheme.primary.copy(
+                            alpha = if (uiState.proxyTesting) 0.18f else 0.10f
+                        ),
+                        label = "proxy-test-container",
                     )
+                    val spinAngle = rememberTestingSpin(uiState.proxyTesting)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            // clip 放在 clickable 前面：水波纹才会被裁成胶囊，而不是方块
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(container)
+                            // 测速中禁用点击，避免叠出好几轮并发探测
+                            .clickable(enabled = !uiState.proxyTesting) { actions.onTestProxies() }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Refresh,
+                                contentDescription = stringResource(R.string.settings_proxy_test_all),
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .graphicsLayer { rotationZ = spinAngle },
+                            )
+                        }
+                        Text(
+                            text = stringResource(
+                                if (uiState.proxyTesting) {
+                                    R.string.settings_proxy_testing
+                                } else {
+                                    R.string.settings_proxy_test_all
+                                }
+                            ),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (uiState.proxyTesting) {
+                            ProxyTestingWave(MaterialTheme.colorScheme.primary)
+                        }
+                    }
                 }
             }
         )
@@ -399,43 +424,73 @@ private fun ProxySettingsContentMiuix(
                 }
             }
         }
-        AppCard(modifier = Modifier.fillMaxWidth(), insideMargin = PaddingValues(8.dp)) {
-            Row(
+        // 不再套 AppCard：按钮自己就是一颗胶囊，外层再包矩形卡片会多出一层边，显得脏。
+        val testing = uiState.proxyTesting
+        val spinAngle = rememberTestingSpin(testing)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                // 与 Material 版保持一致：同款胶囊，只是换成 Miuix 的配色与图标
+                .clip(RoundedCornerShape(999.dp))
+                .background(MiuixTheme.colorScheme.primary.copy(alpha = if (testing) 0.18f else 0.10f))
+                .clickable(enabled = !testing) { actions.onTestProxies() }
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable(enabled = !uiState.proxyTesting) { actions.onTestProxies() }
-                    .padding(horizontal = 8.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center,
             ) {
-                MiuixIcon(
-                    imageVector = Icons.Filled.Refresh,
-                    contentDescription = null,
-                    tint = if (uiState.proxyTesting) {
-                        MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.4f)
-                    } else {
-                        MiuixTheme.colorScheme.primary
-                    },
-                )
-                MiuixText(
-                    text = stringResource(
-                        if (uiState.proxyTesting) {
-                            R.string.settings_proxy_testing
-                        } else {
-                            R.string.settings_proxy_test_all
-                        }
-                    ),
-                    color = MiuixTheme.colorScheme.onSurface,
-                    fontSize = 15.sp,
-                    modifier = Modifier.weight(1f),
-                )
-                if (uiState.proxyTesting) {
-                    ProxyTestingWave(MiuixTheme.colorScheme.primary)
+                // 旋转放在外层 Box：不依赖 Miuix 图标是否暴露 modifier，包一层最稳
+                Box(modifier = Modifier.graphicsLayer { rotationZ = spinAngle }) {
+                    MiuixIcon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = null,
+                        tint = MiuixTheme.colorScheme.primary,
+                    )
                 }
+            }
+            MiuixText(
+                text = stringResource(
+                    if (testing) {
+                        R.string.settings_proxy_testing
+                    } else {
+                        R.string.settings_proxy_test_all
+                    }
+                ),
+                color = MiuixTheme.colorScheme.primary,
+                fontSize = 15.sp,
+                modifier = Modifier.weight(1f),
+            )
+            if (testing) {
+                ProxyTestingWave(MiuixTheme.colorScheme.primary)
             }
         }
     }
+}
+
+/**
+ * 测速进行中时返回一个 0→360 循环角度；不在测速时直接返回 0，连动画对象都不创建。
+ *
+ * 旋转只写进 graphicsLayer（绘制阶段），不触发重新布局，滚动时几乎不额外耗性能。
+ */
+@Composable
+private fun rememberTestingSpin(rotating: Boolean): Float {
+    if (!rotating) return 0f
+    val transition = rememberInfiniteTransition(label = "proxy-testing-spin")
+    return transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "proxy-testing-spin-angle",
+    ).value
 }
 
 @Composable
@@ -487,7 +542,8 @@ private fun ProxyEntryRowMiuix(
             fontSize = 15.sp,
             modifier = Modifier.weight(1f),
         )
-        if (testing) {
+        // 只给「这一轮还没测到」的行画波浪线：先测完的先显示毫秒，别让全表陪着最慢的那条等。
+        if (testing && health == null) {
             ProxyTestingWave(MiuixTheme.colorScheme.primary)
         } else {
             MiuixText(

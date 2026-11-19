@@ -167,6 +167,8 @@ data class SettingsUiState(
     val proxyTesting: Boolean = false,
     /** 最近一次测速完成的时间戳；0 表示本次进程内还没测过。 */
     val proxyTestedAt: Long = 0L,
+    /** 测速时的网络指纹：换网后缓存作废，延迟名次不可复用。 */
+    val proxyTestedNetwork: String? = null,
 )
 
 /**

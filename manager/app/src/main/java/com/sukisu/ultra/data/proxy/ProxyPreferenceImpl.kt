@@ -76,12 +76,13 @@ class ProxyPreferenceImpl(
      * 跑通的那个仍然值得优先复用。清掉速度与时间是为了不留下「有记录但已经不可用」的假象。
      *
      * 同时把它从竞速排序里摘掉（等于降到队尾）：否则一个刚挂掉的代理会在接下来一小时里继续
-     * 排第一，每次下载都先撞它一次。摘除本身就是一条新事实，顺手刷新时间戳没有坏处。
+     * 排第一，每次下载都先撞它一次。但**不能顺手刷新时间戳**：setRanking 会写「刚测过」，
+     * 整份排序（包括剩下的代理）会被当成新鲜 1 小时，连失败的那个也再不会被重测。
      */
     override fun recordFailure(entryId: String) {
         val order = ranking()
-        if (entryId in order) {
-            setRanking(order.filterNot { it == entryId })
+        if (entryId in order && order.size > 1) {
+            writeRankingOnly(order.filterNot { it == entryId })
         }
         if (lastGoodId() != entryId) return
         prefs.edit()
@@ -126,13 +127,23 @@ class ProxyPreferenceImpl(
     }
 
     override fun setRanking(order: List<String>) {
-        val array = JSONArray()
-        order.filter { it.isNotEmpty() }.distinct().forEach { array.put(it) }
+        val array = order.toJsonArray()
         prefs.edit()
-            .putString(KEY_RANKING, array.toString())
+            .putString(KEY_RANKING, array)
             .putLong(KEY_RANKING_AT, System.currentTimeMillis())
             .putString(KEY_RANKING_NETWORK, networkKey())
             .apply()
+    }
+
+    /** 只改顺序、不动「什么时候测的」：失败降级不该伪造出一份新鲜排序。 */
+    private fun writeRankingOnly(order: List<String>) {
+        prefs.edit().putString(KEY_RANKING, order.toJsonArray()).apply()
+    }
+
+    private fun List<String>.toJsonArray(): String {
+        val array = JSONArray()
+        filter { it.isNotEmpty() }.distinct().forEach { array.put(it) }
+        return array.toString()
     }
 
     /**

@@ -1,6 +1,8 @@
 package com.sukisu.ultra.data.proxy
 
 import android.content.Context
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import android.content.SharedPreferences
 import com.sukisu.ultra.data.registry.RegistryUrls
 import com.sukisu.ultra.ksuApp
@@ -75,15 +77,38 @@ class ProxyListRepositoryImpl : ProxyListRepository {
     /** 后台刷新用的作用域：不跟随任何界面生命周期，页面关掉也让它把缓存写完。 */
     private val refreshScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /** 解析后的内存副本：一次下载会连着调好几次 [load]，别每次都 JSON parse。 */
+    @Volatile
+    private var memoryCache: List<ProxyEntry>? = null
+
+    @Volatile
+    private var memoryCacheAt = 0L
+
+    /** 手动刷新与后台刷新共用一把锁：同时发两份同样的请求纯属浪费。 */
+    private val refreshLock = Mutex()
+
     override suspend fun load(): List<ProxyEntry> = withContext(Dispatchers.IO) {
-        val cached = cachedEntries()
-        if (cached != null) return@withContext cached
+        val memory = memoryCache
+        if (memory != null && isFresh(memoryCacheAt)) return@withContext memory
+
+        val cached = readCache()
+        if (cached != null) {
+            remember(cached.entries, cached.fetchedAt)
+            // 过期也先用着：这份列表变化很慢，为一次网络往返把下载入口卡住不值得。
+            if (!isFresh(cached.fetchedAt)) triggerBackgroundRefresh()
+            return@withContext cached.entries
+        }
         triggerBackgroundRefresh()
         BUILTIN_PROXIES
     }
 
     override suspend fun refresh(): Result<List<ProxyEntry>> = withContext(Dispatchers.IO) {
-        try {
+        // 手动刷新也过同一把锁：后台已经拉过就等它写完，不重复发请求。
+        refreshLock.withLock { refreshNow() }
+    }
+
+    private suspend fun refreshNow(): Result<List<ProxyEntry>> {
+        return try {
             // 软检查（有没有网）而不是要求 NET_CAPABILITY_VALIDATED：有些 ROM 从不把网络标成
             // 已验证，硬检查会把明明能上网的机器判成离线。
             if (!hasAnyNetwork(ksuApp)) throw IOException("no network available")
@@ -105,8 +130,10 @@ class ProxyListRepositoryImpl : ProxyListRepository {
                 ?: throw IOException("proxies document has no proxy list")
 
             // 只有整份文档确实可用时才写缓存：写进去一份坏文档，接下来 24 小时都会拿它当缓存。
+            val entries = mergeProxyList(remote)
             writeCache(body)
-            Result.success(mergeProxyList(remote))
+            remember(entries, System.currentTimeMillis())
+            Result.success(entries)
         } catch (e: CancellationException) {
             // 取消不是失败：吞掉它会把这层变成一个「正常的失败结果」，上层就再也取消不掉了。
             throw e
@@ -115,19 +142,30 @@ class ProxyListRepositoryImpl : ProxyListRepository {
         }
     }
 
-    /** 新鲜缓存里的条目；没有缓存、缓存过期或缓存坏掉都返回 null，由调用方回落内置列表。 */
-    private fun cachedEntries(): List<ProxyEntry>? {
+    /** 缓存里的条目与写入时间；没有缓存或文档坏掉时返回 null。 */
+    private fun readCache(): CachedProxies? {
         val prefs = prefs() ?: return null
         val body = prefs.getString(KEY_CACHED_JSON, null)
         if (body.isNullOrBlank()) return null
         val fetchedAt = prefs.getLong(KEY_CACHED_AT, 0L)
         if (fetchedAt <= 0L) return null
-        // 时钟被往回拨时 `now - fetchedAt` 会变成负数，按「刚拉过」处理比按过期处理更合理：
-        // 反过来会让每次进页面都白拉一遍。
-        if (System.currentTimeMillis() - fetchedAt > CACHE_TTL_MS) return null
         val remote = parseProxyList(body) ?: return null
-        return mergeProxyList(remote)
+        return CachedProxies(mergeProxyList(remote), fetchedAt)
     }
+
+    /**
+     * 时钟被往回拨时 now - fetchedAt 会变成负数，按「刚拉过」处理比按过期处理更合理：
+     * 反过来会让每次进页面都白拉一遍。
+     */
+    private fun isFresh(fetchedAt: Long): Boolean =
+        System.currentTimeMillis() - fetchedAt <= CACHE_TTL_MS
+
+    private fun remember(entries: List<ProxyEntry>, fetchedAt: Long) {
+        memoryCache = entries
+        memoryCacheAt = fetchedAt
+    }
+
+    private data class CachedProxies(val entries: List<ProxyEntry>, val fetchedAt: Long)
 
     /**
      * 后台拉一次远程列表，不阻塞调用方。
@@ -138,7 +176,7 @@ class ProxyListRepositoryImpl : ProxyListRepository {
         if (!refreshing.compareAndSet(false, true)) return
         refreshScope.launch {
             try {
-                refresh()
+                refreshLock.withLock { refreshNow() }
             } finally {
                 // 放闸必须在 finally 里：中途被取消也得让下一次 load 有机会再试。
                 refreshing.set(false)
