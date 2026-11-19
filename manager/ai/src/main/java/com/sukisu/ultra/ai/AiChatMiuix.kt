@@ -1,12 +1,4 @@
 package com.sukisu.ultra.ai
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Surface
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.NavigationDrawerItem
-
-import androidx.compose.material3.TextButton as MaterialTextButton
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.OutlinedTextField
 
 import com.sukisu.ultra.ai.api.AiNavigationTarget
 
@@ -32,6 +24,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -67,6 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -153,12 +147,13 @@ fun AiChatMiuix(
         }
     }
 
-    // 不在列表底部时显示「回到底部」按钮。
+    // 真的还能往下滚时才显示「回到底部」按钮。
+    // 旧判据「最后可见项 index < 总项数-1」会被列表末尾那个永远滚不进可视区的
+    // bottom Spacer 骗到：欢迎页内容占满一屏时首屏就常驻一个点不动的下滑按钮。
+    // canScrollForward 只在真实可滚动余量 > 0 时为 true，首屏放得下就为 false。
     val jumpScope = rememberCoroutineScope()
     val showJumpDown = remember(listState) { derivedStateOf {
-        val info = listState.layoutInfo
-        val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: 0
-        lastVisible < info.totalItemsCount - 1
+        listState.canScrollForward
     } }.value
 
     val fallbackTitle = remember(state.messages) {
@@ -322,14 +317,15 @@ fun AiChatMiuix(
                 )
             }
 
-                if (showJumpDown) {
-                Surface(
-                    shape = CircleShape,
-                    color = MiuixTheme.colorScheme.secondaryContainer,
-                    shadowElevation = 4.dp,
+                if (showJumpDown && state.messages.isNotEmpty()) {
+                Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = 12.dp),
+                        .padding(end = 16.dp, bottom = 12.dp)
+                        .shadow(4.dp, CircleShape)
+                        .clip(CircleShape)
+                        .background(colorScheme.secondaryContainer)
+                        .size(40.dp),
                 ) {
                     IconButton(onClick = {
                         jumpScope.launch {
@@ -363,44 +359,50 @@ fun AiChatMiuix(
     }
 
     if (showSessions) {
-        ModalBottomSheet(
+        OverlayDialog(
+            show = true,
+            title = stringResource(R.string.ai_sessions),
             onDismissRequest = { showSessions = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        ) {
-            androidx.compose.foundation.layout.Column(
-                modifier = androidx.compose.ui.Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            ) {
-                androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    androidx.compose.material3.Text(
-                        text = stringResource(R.string.ai_sessions),
-                        style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-                        modifier = androidx.compose.ui.Modifier.weight(1f),
-                    )
-                    androidx.compose.material3.TextButton(onClick = {
-                        actions.onNewSession()
-                        showSessions = false
-                    }) { androidx.compose.material3.Text(stringResource(R.string.ai_new_chat)) }
-                }
-                LazyColumn(modifier = androidx.compose.ui.Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+            content = {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                ) {
                     items(state.sessions, key = { it.id }) { session ->
-                        NavigationDrawerItem(
-                            label = {
-                                androidx.compose.material3.Text(
-                                    text = session.title.ifBlank { stringResource(R.string.ai_new_chat) },
-                                    maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                )
-                            },
-                            selected = session.id == state.activeSessionId,
-                            onClick = {
-                                actions.onSwitchSession(session.id)
-                                showSessions = false
-                            },
-                        )
+                        val active = session.id == state.activeSessionId
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (active) colorScheme.secondaryContainer else Color.Transparent)
+                                .clickable {
+                                    actions.onSwitchSession(session.id)
+                                    showSessions = false
+                                }
+                                .padding(horizontal = 12.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = session.title.ifBlank { stringResource(R.string.ai_new_chat) },
+                                style = MiuixTheme.textStyles.body1,
+                                color = if (active) colorScheme.primary else colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                     }
                 }
-            }
-        }
+                TextButton(
+                    text = stringResource(R.string.ai_new_chat),
+                    onClick = {
+                        actions.onNewSession()
+                        showSessions = false
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    colors = ButtonDefaults.textButtonColorsPrimary(),
+                )
+            },
+        )
     }
 
     state.pendingApproval?.let { pending ->
@@ -628,26 +630,40 @@ private fun AiMessageBubbleMiuix(
             }
             if (editing) {
                 var draft by remember(message.id, editing) { mutableStateOf(message.content) }
-                AlertDialog(
+                OverlayDialog(
+                    show = true,
+                    title = stringResource(R.string.ai_edit_message),
                     onDismissRequest = { editing = false },
-                    title = { Text(stringResource(R.string.ai_edit_message)) },
-                    text = {
-                        OutlinedTextField(
+                    content = {
+                        TextField(
                             value = draft,
                             onValueChange = { draft = it },
+                            useLabelAsPlaceholder = false,
+                            singleLine = false,
                             modifier = Modifier.fillMaxWidth(),
                         )
-                    },
-                    confirmButton = {
-                        MaterialTextButton(onClick = {
-                            if (draft.isNotBlank()) {
-                                editing = false
-                                onEditResend(message.id, draft)
-                            }
-                        }) { Text(stringResource(R.string.ai_edit_send)) }
-                    },
-                    dismissButton = {
-                        MaterialTextButton(onClick = { editing = false }) { Text(stringResource(R.string.ai_edit_cancel)) }
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            TextButton(
+                                text = stringResource(R.string.ai_edit_cancel),
+                                onClick = { editing = false },
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(
+                                text = stringResource(R.string.ai_edit_send),
+                                onClick = {
+                                    if (draft.isNotBlank()) {
+                                        editing = false
+                                        onEditResend(message.id, draft)
+                                    }
+                                },
+                                enabled = draft.isNotBlank(),
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.textButtonColorsPrimary(),
+                            )
+                        }
                     },
                 )
             }
@@ -926,7 +942,7 @@ private fun AiCapabilityCardsMiuix(
         Triple(R.string.ai_home_card_device, R.string.ai_home_card_device_prompt, "\uD83D\uDCF1"),
         Triple(R.string.ai_home_card_troubleshoot, R.string.ai_home_card_troubleshoot_prompt, "\uD83D\uDD0D"),
         Triple(R.string.ai_home_card_module_pick, R.string.ai_home_card_module_pick_prompt, "\uD83E\uDDE9"),
-        Triple(R.string.ai_home_card_cleanup, R.string.ai_home_card_cleanup_prompt, "\uD83E\uDDF9"),
+        Triple(R.string.ai_home_card_cleanup, R.string.ai_home_card_cleanup_prompt, "\uD83D\uDCBE"),
     )
     FlowRow(
         modifier = modifier.fillMaxWidth(),
@@ -984,10 +1000,14 @@ private fun AiWelcomeMiuix(
             text = stringResource(R.string.ai_welcome_title),
             style = MiuixTheme.textStyles.title2,
             textAlign = TextAlign.Center,
+            // 标题+小字整体上移一点，视觉重心更靠上。
+            modifier = Modifier.offset(y = (-6).dp),
         )
         Text(
             text = stringResource(R.string.ai_welcome_body),
-            modifier = Modifier.padding(horizontal = 20.dp),
+            modifier = Modifier
+                .padding(horizontal = 20.dp)
+                .offset(y = (-6).dp),
             style = MiuixTheme.textStyles.body2,
             color = colorScheme.onSurfaceVariantSummary,
             textAlign = TextAlign.Center,
@@ -1058,11 +1078,11 @@ private fun AiComposerMiuix(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (contextLabel.isNotEmpty()) {
-            androidx.compose.material3.Text(
+            Text(
                 text = contextLabel,
-                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = androidx.compose.ui.Modifier.padding(start = 4.dp),
+                style = MiuixTheme.textStyles.body2,
+                color = colorScheme.onSurfaceVariantSummary,
+                modifier = Modifier.padding(start = 4.dp),
             )
         }
         AnimatedVisibility(visible = error != null) {

@@ -178,6 +178,10 @@
     <string name="ai_approval_kpm">KPM module operation</string>
     <string name="ai_approval_susfs">SuSFS setting</string>
     <string name="ai_approval_module_install">Download and install module</string>
+    <string name="ai_approval_column_step">Run column step</string>
+    <string name="ai_approval_column_topic">Allow this topic's regular steps</string>
+    <string name="ai_approval_column_reboot">Restart the device</string>
+    <string name="ai_approval_column_rollback">Undo column changes</string>
     <string name="ai_allow_theme_read">Allow theme data</string>
     <string name="ai_allow_theme_read_summary">Read appearance, colors, layout and custom text settings.</string>
     <string name="ai_superuser_section">Superuser control</string>
@@ -271,9 +275,9 @@
     <string name="ai_home_card_troubleshoot">Fix a red item</string>
     <string name="ai_home_card_troubleshoot_prompt">A detector reported a red item, help me fix it</string>
     <string name="ai_home_card_module_pick">Pick modules</string>
-    <string name="ai_home_card_module_pick_prompt">Which modules should I install for hiding root</string>
-    <string name="ai_home_card_cleanup">Clean up traces</string>
-    <string name="ai_home_card_cleanup_prompt">Help me clean up flashing traces on this device</string>
+    <string name="ai_home_card_module_pick_prompt">Recommend some ad-blocking modules and what they do</string>
+    <string name="ai_home_card_cleanup">Backup &amp; restore</string>
+    <string name="ai_home_card_cleanup_prompt">Help me back up modules and configs before flashing</string>
     <string name="ai_regenerate">Regenerate</string>
     <string name="ai_tool_expand">Show output</string>
     <string name="ai_tool_collapse">Hide output</string>

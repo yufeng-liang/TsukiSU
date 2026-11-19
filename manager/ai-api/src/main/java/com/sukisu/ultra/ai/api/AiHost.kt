@@ -40,6 +40,13 @@ interface AiHost {
     val modules: AiModuleService
     val features: AiFeatureService
     val themeImages: AiThemeImageService
+
+    /**
+     * 「隐藏环境」专栏执行服务。
+     *
+     * 宿主没接入专栏时返回 null（旧版本宿主），助手侧工具会直接回答「这个宿主版本不支持」。
+     */
+    val column: AiColumnService? get() = null
 }
 
 data class AiAvatarDrawables(
@@ -197,6 +204,8 @@ interface AiFeatureService {
         moduleId: String? = null,
         section: String? = null,
         tab: String? = null,
+        columnId: String? = null,
+        topicId: String? = null,
     ): AiOpenPageResult
 }
 
@@ -210,3 +219,104 @@ interface AiThemeImageService {
     fun currentThemeImage(target: String): File?
     fun shareImages(files: List<File>, title: String): Boolean
 }
+
+/**
+ * 「隐藏环境」专栏的执行契约。
+ *
+ * 只读动作（[overview]/[status]/[checks]）直接把结果拼成模型可读文本返回；写动作（[runStep]/[reboot]/
+ * [rollback]）由宿主负责「先问用户、再执行」，助手侧只按 [AiColumnOutcome] 播报结果。
+ *
+ * 文本化而不是结构化，是为了让这个模块保持零依赖：专栏文档模型留在宿主应用里，
+ * 助手库不需要跟着它升级。
+ */
+interface AiColumnService {
+    /** 专栏 + 专题清单（档位、风险、步骤数、是否要密钥）。 */
+    suspend fun overview(): String
+
+    /** 进度账本 + 「重启后待继续」标记。 */
+    suspend fun status(): String
+
+    /** 12 项只读自检的红绿结果。 */
+    suspend fun checks(): String
+
+    /** 单个专题的步骤清单（id/标题/类型/是否可选/是否需要确认）。 */
+    suspend fun steps(columnId: String, topicId: String): String
+
+    /**
+     * 执行一步；重启步骤会被拒绝，要走 [reboot]。
+     *
+     * [force] 是「重做 / 覆盖」：设备上已有的文件会被真的改写一遍，同时跳过顺序保护；
+     * [optIn] 对应步骤上的「需勾选」，必须由用户明确同意后传 true。
+     */
+    suspend fun runStep(
+        columnId: String,
+        topicId: String,
+        stepId: String,
+        force: Boolean = false,
+        optIn: Boolean = false,
+    ): AiColumnOutcome
+
+    /**
+     * 重启后的接续：把重启那一步补记为完成、清掉「待继续」标记，并返回下一步是哪一步。
+     *
+     * 只做记账，不替用户跑下一步——设计上是被动接续，用户说「继续」之后助手才调用它。
+     */
+    suspend fun resume(columnId: String, topicId: String): AiColumnOutcome
+
+    /** 用户回报「这一步我自己做完了」时补记完成；只记账，不执行任何命令。 */
+    suspend fun markDone(columnId: String, topicId: String, stepId: String): AiColumnOutcome
+
+    /** 给确认卡用的一句话：这一步到底会改什么（标题 + kind + 命令/写入路径）。 */
+    suspend fun stepBrief(columnId: String, topicId: String, stepId: String): String
+
+    /**
+     * 审批策略要用的事实；拿不到时返回 null（调用方退回「每步都问、且不许记住」）。
+     *
+     * [AiColumnStepFacts.planDigest] 是当前索引版本下整个专题正文的摘要，用来把
+     * 「本次请求始终允许」限制在**用户真正看过的那一版内容**上。
+     */
+    suspend fun stepFacts(columnId: String, topicId: String, stepId: String): AiColumnStepFacts?
+
+    /** 写续跑标记后重启设备。返回后进程可能随时被杀。 */
+    suspend fun reboot(columnId: String, topicId: String, stepId: String): AiColumnOutcome
+
+    /** 逆序撤销该专题本次的改动。 */
+    suspend fun rollback(columnId: String, topicId: String): AiColumnOutcome
+
+    /** 记下用户选的档位（专题 id）；返回给用户看的一句话。 */
+    fun selectTier(columnId: String, topicId: String, tier: String): String
+
+    /** 读回档位偏好；没选过为 null。 */
+    fun selectedTier(columnId: String, topicId: String): String?
+}
+
+/** 一步的审批事实：谁能批量放行、谁必须逐步确认。 */
+data class AiColumnStepFacts(
+    val stepId: String,
+    val title: String,
+    val kind: String,
+    /** 命令 / 配置写入 / 带 confirm / 需勾选：每步都要真人点。 */
+    val needsOwnConfirmation: Boolean,
+    /** installapp / askuser：用户自己动手，助手不执行命令。 */
+    val userAction: Boolean,
+    val optIn: Boolean,
+    /** 专题正文摘要（16 位），索引一改就变。 */
+    val planDigest: String,
+    /** 专题里可见步骤数。 */
+    val topicSteps: Int,
+    /** 其中可以走批量授权的常规步骤数。 */
+    val routineSteps: Int,
+    /** 这些常规步骤的标题：确认卡列出来，用户才知道「批量」放行的是哪几步。 */
+    val routineTitles: List<String>,
+)
+
+/** 一步执行的结果：给模型看的文本 + 两个必须由调用方处理的状态位。 */
+data class AiColumnOutcome(
+    val text: String,
+    /** 这一步是否成功（NEEDS_USER / 失败都是 false）。 */
+    val ok: Boolean = false,
+    /** 这一步要用户自己在设备上做，模型必须停下来问结果。 */
+    val needsUser: Boolean = false,
+    /** 已经发出重启命令，进程随时会死。 */
+    val rebooting: Boolean = false,
+)

@@ -46,6 +46,8 @@ data class ColumnPendingResume(
     val topicId: String,
     val lastStepId: String,
     val bootCount: Int,
+    /** 写标记的主体：[ColumnProgressStore.ORIGIN_WIZARD] 由向导发起、回来后自动续跑；[ColumnProgressStore.ORIGIN_AI] 由助手发起、等用户说「继续」。 */
+    val origin: String = ColumnProgressStore.ORIGIN_WIZARD,
 )
 
 /**
@@ -58,6 +60,12 @@ data class ColumnPendingResume(
 object ColumnProgressStore {
 
     const val PREFS = "column_wizard"
+
+    /** 标记来源：向导自己发起的重启，设备回来后向导会自动接着跑。 */
+    const val ORIGIN_WIZARD = "wizard"
+
+    /** 标记来源：AI 助手发起的重启。向导不得据此自动开跑，只能等用户说「继续」。 */
+    const val ORIGIN_AI = "ai"
 
     private const val KEY = "wizard_state"
 
@@ -137,24 +145,25 @@ object ColumnProgressStore {
         columnId: String,
         topicId: String,
         lastStepId: String = "",
-    ) {
-        runCatching {
-            prefs(context).edit()
-                .putString(
-                    KEY_PENDING_RESUME,
-                    JSONObject()
-                        .put("columnId", columnId)
-                        .put("topicId", topicId)
-                        .put("lastStepId", lastStepId)
-                        .put("bootCount", readBootCount(context))
-                        .put("at", System.currentTimeMillis())
-                        .toString(),
-                )
-                // 必须同步落盘：写完这条标记后马上就要重启，apply() 的异步写可能还没落盘
-                // 进程就被杀了，那这次续跑标记等于没写。
-                .commit()
-        }
-    }
+        origin: String = ORIGIN_WIZARD,
+    ): Boolean = runCatching {
+        prefs(context).edit()
+            .putString(
+                KEY_PENDING_RESUME,
+                JSONObject()
+                    .put("columnId", columnId)
+                    .put("topicId", topicId)
+                    .put("lastStepId", lastStepId)
+                    .put("origin", origin)
+                    .put("bootCount", readBootCount(context))
+                    .put("at", System.currentTimeMillis())
+                    .toString(),
+            )
+            // 必须同步落盘：写完这条标记后马上就要重启，apply() 的异步写可能还没落盘
+            // 进程就被杀了，那这次续跑标记等于没写。commit() 的返回值要原样带出去：
+            // 调用方靠它决定「标记没落盘就别重启」。
+            .commit()
+    }.getOrDefault(false)
 
     /**
      * 读「待继续」标记，不做删除。
@@ -181,7 +190,8 @@ object ColumnProgressStore {
             val at = item.optLong("at")
             if (columnId.isEmpty() || topicId.isEmpty()) return@runCatching null
             if (now - at > PENDING_RESUME_TTL_MS) return@runCatching null
-            ColumnPendingResume(columnId, topicId, lastStepId, bootCount)
+            val origin = item.optString("origin", ORIGIN_WIZARD)
+            ColumnPendingResume(columnId, topicId, lastStepId, bootCount, origin)
         }.getOrNull()
         if (parsed == null) {
             clearPendingResume(context)

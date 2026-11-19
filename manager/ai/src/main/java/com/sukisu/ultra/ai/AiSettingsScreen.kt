@@ -57,7 +57,10 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 
 @SuppressLint("LocalContextGetResourceValueCall")
 @Composable
-fun AiSettingsScreen(onBack: () -> Unit) {
+fun AiSettingsScreen(
+    onBack: () -> Unit,
+    miuix: Boolean = false,
+) {
     val model = rememberAiChatViewModel()
     val state by model.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -203,19 +206,33 @@ fun AiSettingsScreen(onBack: () -> Unit) {
         }
     }
 
-    // 助手恒用 MD3（宿主已包 AiAssistantMaterialTheme），旧 Miuix 实现保留为死代码
-    AiSettingsMaterial(
-        draft = draft,
-        onDraftChange = updateDraft,
-        testState = testState,
-        fetchingModels = fetchingModels,
-        onTest = testConnection,
-        onFetchModels = fetchModels,
-        onBack = {
-            advancedOptionsError()?.let { reportAdvancedOptionsError(it) }
-            onBack()
-        },
-    )
+    if (miuix) {
+        AiSettingsMiuix(
+            draft = draft,
+            onDraftChange = updateDraft,
+            testState = testState,
+            fetchingModels = fetchingModels,
+            onTest = testConnection,
+            onFetchModels = fetchModels,
+            onBack = {
+                advancedOptionsError()?.let { reportAdvancedOptionsError(it) }
+                onBack()
+            },
+        )
+    } else {
+        AiSettingsMaterial(
+            draft = draft,
+            onDraftChange = updateDraft,
+            testState = testState,
+            fetchingModels = fetchingModels,
+            onTest = testConnection,
+            onFetchModels = fetchModels,
+            onBack = {
+                advancedOptionsError()?.let { reportAdvancedOptionsError(it) }
+                onBack()
+            },
+        )
+    }
 }
 
 @Composable

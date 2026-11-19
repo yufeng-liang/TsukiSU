@@ -19,18 +19,24 @@ class AiFeatureProviderImpl : AiFeatureProvider {
         onClose: () -> Unit,
         onOpenSettings: () -> Unit,
         onNavigate: (AiNavigationTarget) -> Unit,
+        miuix: Boolean,
     ): @Composable () -> Unit = {
         AiChatScreen(
             onClose = onClose,
             onOpenSettings = onOpenSettings,
             onNavigate = onNavigate,
+            miuix = miuix,
         )
     }
 
     override fun settingsScreen(
         onBack: () -> Unit,
+        miuix: Boolean,
     ): @Composable () -> Unit = {
-        AiSettingsScreen(onBack = onBack)
+        AiSettingsScreen(
+            onBack = onBack,
+            miuix = miuix,
+        )
     }
 
     override fun homeCard(onOpenChat: () -> Unit): @Composable () -> Unit = {

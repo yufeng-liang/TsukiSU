@@ -156,12 +156,13 @@ fun AiChatMaterial(
         }
     }
 
-    // 不在列表底部时显示「回到底部」按钮。
+    // 真的还能往下滚时才显示「回到底部」按钮。
+    // 旧判据「最后可见项 index < 总项数-1」会被列表末尾那个永远滚不进可视区的
+    // bottom Spacer 骗到：欢迎页内容占满一屏时首屏就常驻一个点不动的下滑按钮。
+    // canScrollForward 只在真实可滚动余量 > 0 时为 true，首屏放得下就为 false。
     val jumpScope = rememberCoroutineScope()
     val showJumpDown = remember(listState) { derivedStateOf {
-        val info = listState.layoutInfo
-        val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: 0
-        lastVisible < info.totalItemsCount - 1
+        listState.canScrollForward
     } }.value
 
     val fallbackTitle = remember(state.messages) {
@@ -320,7 +321,7 @@ fun AiChatMaterial(
                 )
             }
 
-                if (showJumpDown) {
+                if (showJumpDown && state.messages.isNotEmpty()) {
                 SmallFloatingActionButton(
                     onClick = {
                         jumpScope.launch {
@@ -843,7 +844,7 @@ private fun AiCapabilityCards(
             Triple(R.string.ai_home_card_device, R.string.ai_home_card_device_prompt, "\uD83D\uDCF1"),
             Triple(R.string.ai_home_card_troubleshoot, R.string.ai_home_card_troubleshoot_prompt, "\uD83D\uDD0D"),
             Triple(R.string.ai_home_card_module_pick, R.string.ai_home_card_module_pick_prompt, "\uD83E\uDDE9"),
-            Triple(R.string.ai_home_card_cleanup, R.string.ai_home_card_cleanup_prompt, "\uD83E\uDDF9"),
+            Triple(R.string.ai_home_card_cleanup, R.string.ai_home_card_cleanup_prompt, "\uD83D\uDCBE"),
         ),
         listOf(
             Triple(R.string.ai_cap_status, R.string.ai_suggestion_status2, "\uD83D\uDCCA"),
@@ -954,6 +955,8 @@ private fun AiWelcomeMaterial(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
+            // 标题+小字整体上移一点，视觉重心更靠上。
+            modifier = Modifier.offset(y = (-6).dp),
         ) {
             AiAvatarImage(size = 40.dp)
             Text(
@@ -968,7 +971,9 @@ private fun AiWelcomeMaterial(
             textAlign = TextAlign.Center,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 8.dp),
+            modifier = Modifier
+                .padding(horizontal = 8.dp)
+                .offset(y = (-6).dp),
         )
         AiCapabilityCards(
             onSuggestion = onSuggestion,

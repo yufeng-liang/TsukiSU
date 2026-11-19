@@ -570,10 +570,11 @@ class MainActivity : ComponentActivity() {
                                     if (!AiFeatureBridge.isAvailable) {
                                         LaunchedEffect(Unit) { navigator.pop() }
                                     } else {
-                                        // The assistant is always MD3; inside the Miuix shell it needs
-                                        // the MD3 colour scheme of the current appearance settings.
-                                        AiAssistantMaterialTheme {
-                                            AiFeatureBridge.ChatScreen(
+                                        // 按 UI 模式分发：Miuix 外壳下用 Miuix 版助手（裸调，已在 MiuixTheme 内），
+                                        // Material 外壳保持 MD3 包裹。
+                                        when (LocalUiMode.current) {
+                                            UiMode.Miuix -> AiFeatureBridge.ChatScreen(
+                                                miuix = true,
                                                 onClose = {
                                                     if (navigator.current() == Route.AiAssistant) navigator.pop()
                                                 },
@@ -589,6 +590,24 @@ class MainActivity : ComponentActivity() {
                                                     }
                                                 },
                                             )
+                                            UiMode.Material -> AiAssistantMaterialTheme {
+                                                AiFeatureBridge.ChatScreen(
+                                                onClose = {
+                                                    if (navigator.current() == Route.AiAssistant) navigator.pop()
+                                                },
+                                                onOpenSettings = { navigator.push(Route.AiSettings) },
+                                                onNavigate = { target ->
+                                                    when (target) {
+                                                        is ManagerAiTarget.Tab -> {
+                                                            viewModel.openMainPage(target.pageIndex, target.section)
+                                                            navigator.popUntil { it is Route.Main }
+                                                        }
+
+                                                        is ManagerAiTarget.Push -> navigator.navigateTo(target.route)
+                                                    }
+                                                },
+                                            )
+                                            }
                                         }
                                     }
                                 }
@@ -596,10 +615,16 @@ class MainActivity : ComponentActivity() {
                                     if (!AiFeatureBridge.isAvailable) {
                                         LaunchedEffect(Unit) { navigator.pop() }
                                     } else {
-                                        AiAssistantMaterialTheme {
-                                            AiFeatureBridge.SettingsScreen(
+                                        when (LocalUiMode.current) {
+                                            UiMode.Miuix -> AiFeatureBridge.SettingsScreen(
+                                                miuix = true,
                                                 onBack = { navigator.pop() },
                                             )
+                                            UiMode.Material -> AiAssistantMaterialTheme {
+                                                AiFeatureBridge.SettingsScreen(
+                                                    onBack = { navigator.pop() },
+                                                )
+                                            }
                                         }
                                     }
                                 }

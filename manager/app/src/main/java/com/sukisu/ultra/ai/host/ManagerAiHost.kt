@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.sukisu.ultra.KernelSUApplication
 import com.sukisu.ultra.ai.api.AiAvatarDrawables
+import com.sukisu.ultra.ai.api.AiColumnService
 import com.sukisu.ultra.ai.api.AiExtensionsService
 import com.sukisu.ultra.ai.api.AiFeatureService
 import com.sukisu.ultra.ai.api.AiHost
@@ -105,6 +106,7 @@ class ManagerAiHost(
     override val modules: AiModuleService = AiModuleServiceHost
     override val features: AiFeatureService = AiFeatureCatalog
     override val themeImages: AiThemeImageService = AiThemeImageStore
+    override val column: AiColumnService by lazy { AiColumnController }
 
     private companion object {
         const val ROOT_TIMEOUT_MS = 60_000L

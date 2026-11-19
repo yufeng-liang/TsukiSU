@@ -26,6 +26,14 @@ private const val WRITE_CHUNK_CHARS = 64 * 1024
 private const val TAG = "ColumnRollback"
 
 /**
+ * 账本锁必须是「进程级」的一份。
+ *
+ * 向导和 AI 助手各会 new 一个 [ColumnRollbackStore]，但它们操作的是同一份 rollback.json；
+ * 锁放在实例里等于没锁——两边同时读-改-写会互相覆盖条目，回滚时漏项却报「已全部撤销」。
+ */
+private val sharedLedgerMutex: Mutex = Mutex()
+
+/**
  * 单次读取/备份的文本文件上限。
  *
  * 账本、HMA 配置、模块属性都是几十 KB 级别；1 MiB 已经非常宽松。没有上限时 `base64` 会把整个
@@ -336,7 +344,7 @@ class ColumnRollbackStore(
     }
 
     /** 账本是「读-改-写」，同一时刻只允许一个操作，否则两次 record 会互相覆盖。 */
-    private val mutex = Mutex()
+    private val mutex: Mutex get() = sharedLedgerMutex
 
     /**
      * 本进程里账本损坏后的归档路径；非空表示「账本已不可信」。

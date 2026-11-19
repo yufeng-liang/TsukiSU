@@ -181,6 +181,8 @@ object AiFeatureCatalog : AiFeatureService {
         moduleId: String?,
         section: String?,
         tab: String?,
+        columnId: String?,
+        topicId: String?,
     ): AiOpenPageResult {
         val availability = availability(rootProbeAllowed, extensionReadAllowed)
         val normalized = id.trim().lowercase().replace('-', '_')
@@ -257,6 +259,34 @@ object AiFeatureCatalog : AiFeatureService {
                     "The user can tap it to open the registry module detail.",
                 target = ManagerAiTarget.Push(Route.ModuleRepoDetail(arg)),
                 title = arg.moduleName,
+            )
+        }
+
+        if (normalized == "module_column" || normalized == "column_wizard") {
+            if (!availability.networkAvailable) {
+                return AiOpenPageResult("NOT SUPPORTED: " + NETWORK_REASON + " " + NETWORK_SOLUTION)
+            }
+            val targetColumnId = columnId?.trim()?.takeIf { it.isNotEmpty() }
+                ?: return AiOpenPageResult(
+                    "MISSING ARGUMENT: pass column_id from column_wizard action=list to open the column page."
+                )
+            if (normalized == "module_column") {
+                return AiOpenPageResult(
+                    text = "A navigation button for the column " + targetColumnId + " is shown below. " +
+                        "The user can tap it to browse its topics and guides.",
+                    target = ManagerAiTarget.Push(Route.ModuleColumn(targetColumnId)),
+                    title = "Column · " + targetColumnId,
+                )
+            }
+            val targetTopicId = topicId?.trim()?.takeIf { it.isNotEmpty() }
+                ?: return AiOpenPageResult(
+                    "MISSING ARGUMENT: pass topic_id from column_wizard action=list to open the topic wizard."
+                )
+            return AiOpenPageResult(
+                text = "A navigation button for the topic wizard " + targetTopicId + " is shown below. " +
+                    "The wizard runs the same steps as column_wizard_run and keeps the ledger in sync.",
+                target = ManagerAiTarget.Push(Route.ColumnWizard(targetColumnId, targetTopicId)),
+                title = "Wizard · " + targetTopicId,
             )
         }
 
@@ -399,6 +429,27 @@ object AiFeatureCatalog : AiFeatureService {
                 requires = listOf("module_id"),
                 reason = NETWORK_REASON,
                 solution = "Call open_app_page with module_id from module_search to open the exact module detail.",
+            ),
+            entry(
+                id = "module_column",
+                title = "Hide-environment column",
+                summary = "Store column about hiding root: daily banking, Play Integrity triple green and an " +
+                    "environment self-check, each topic with a step-by-step wizard.",
+                supported = a.networkAvailable,
+                openable = false,
+                requires = listOf("column_id"),
+                reason = NETWORK_REASON,
+                solution = "Call open_app_page with page_id module_column and column_id from column_wizard action=list.",
+            ),
+            entry(
+                id = "column_wizard",
+                title = "Column topic wizard",
+                summary = "Guided executor for one topic: prepare modules, write configs, verify, reboot and resume.",
+                supported = a.networkAvailable && kernelReady,
+                openable = false,
+                requires = listOf("column_id", "topic_id"),
+                reason = rootReason(a, manager),
+                solution = "Call open_app_page with page_id column_wizard plus column_id and topic_id.",
             ),
             entry(
                 id = "install",

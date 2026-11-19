@@ -15,10 +15,12 @@ interface AiFeatureProvider {
         onClose: () -> Unit,
         onOpenSettings: () -> Unit,
         onNavigate: (AiNavigationTarget) -> Unit,
+        miuix: Boolean = false,
     ): @Composable () -> Unit
 
     fun settingsScreen(
         onBack: () -> Unit,
+        miuix: Boolean = false,
     ): @Composable () -> Unit
 
     fun homeCard(onOpenChat: () -> Unit): @Composable () -> Unit
@@ -56,15 +58,17 @@ object AiFeatureBridge {
         onClose: () -> Unit,
         onOpenSettings: () -> Unit,
         onNavigate: (AiNavigationTarget) -> Unit,
+        miuix: Boolean = false,
     ) {
-        provider?.chatScreen(onClose, onOpenSettings, onNavigate)?.invoke()
+        provider?.chatScreen(onClose, onOpenSettings, onNavigate, miuix)?.invoke()
     }
 
     @Composable
     fun SettingsScreen(
         onBack: () -> Unit,
+        miuix: Boolean = false,
     ) {
-        provider?.settingsScreen(onBack)?.invoke()
+        provider?.settingsScreen(onBack, miuix)?.invoke()
     }
 
     @Composable

@@ -186,6 +186,10 @@ class ColumnWizardViewModel(
      */
     private fun resumePendingRunIfAny() {
         val pending = ColumnProgressStore.peekPendingResume(ksuApp) ?: return
+        // 助手发起的重启只等用户说「继续」：向导看到这种标记要让路。既不能自己开跑
+        //（否则 AI 的一次 reboot 会把向导的「一键执行」顺带触发），也不能清掉标记，
+        // 清了助手回来就接不上了。
+        if (pending.origin == ColumnProgressStore.ORIGIN_AI) return
         if (pending.columnId != columnId || pending.topicId != topic?.id) return
         if (_uiState.value.done) {
             // 只清当前专题自己的续跑标记，避免误删其他专题尚未消费的重启标记。

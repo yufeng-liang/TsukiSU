@@ -134,7 +134,14 @@ class AiChatViewModel : ViewModel() {
     private var approvalDeferred: CompletableDeferred<Boolean>? = null
     private var questionDeferred: CompletableDeferred<String?>? = null
     private var historyGeneration = 0
-    private var autoApproveForRequest = false
+    /**
+     * 本轮已经「始终允许」过的授权格（[AiApprovalRequest.grantKey]）。
+     *
+     * 早先是一个布尔：勾一次「本次请求始终允许」就放行本轮所有可记住的工具。专栏接入后
+     * 太粗——一个专题里装模块、写文件、跑命令混在一起，只能整轮全开或整轮全关。
+     * 现在按格记：专栏常规步骤共用「工具 + 专题 + 内容摘要」这一格，命令类根本不参与。
+     */
+    private val autoApprovedGrants = mutableSetOf<String>()
     private var suggestionJob: Job? = null
     private var suggestionGeneration = 0
     private var suggestionRequestedGeneration = -1
@@ -579,8 +586,8 @@ class AiChatViewModel : ViewModel() {
     fun approveAlwaysForRequest() {
         // 只对「允许记住」的请求打开自动通过：run_shell 的 allowRemember=false，
         // 即使这个入口被误触，也不会把后续 root shell 写操作变成自动放行。
-        if (_uiState.value.pendingApproval?.request?.allowRemember == true) {
-            autoApproveForRequest = true
+        _uiState.value.pendingApproval?.request?.takeIf { it.allowRemember }?.let {
+            autoApprovedGrants += it.grantKey
         }
         approvalDeferred?.complete(true)
     }
@@ -696,7 +703,7 @@ class AiChatViewModel : ViewModel() {
             }
             return
         }
-        autoApproveForRequest = false
+        autoApprovedGrants.clear()
         rootGrantedForRequest = false
         rootRequestDeferred?.cancel()
         rootRequestDeferred = null
@@ -1076,9 +1083,9 @@ class AiChatViewModel : ViewModel() {
     }
 
     private suspend fun requestApproval(request: AiApprovalRequest): Boolean {
-        // run_shell 这类 allowRemember=false 的请求每次都要真人点确认，
-        // 不能被本轮之前打开的「始终允许」顺带放行。
-        if (autoApproveForRequest && request.allowRemember) return true
+        // 只认「同一格」的授权：run_shell 的 allowRemember=false 永远进不来；专栏命令类步骤
+        // 走 per-step（allowRemember=false + 独立 scope），常规步骤才共享专题那一格。
+        if (request.allowRemember && request.grantKey in autoApprovedGrants) return true
         val deferred = CompletableDeferred<Boolean>()
         approvalDeferred = deferred
         _uiState.update { it.copy(pendingApproval = AiPendingApproval(request)) }

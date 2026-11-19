@@ -57,6 +57,7 @@ fun AiChatScreen(
     onClose: () -> Unit,
     onOpenSettings: () -> Unit,
     onNavigate: (AiNavigationTarget) -> Unit,
+    miuix: Boolean = false,
 ) {
     val model = rememberAiChatViewModel()
     val state by model.uiState.collectAsStateWithLifecycle()
@@ -141,7 +142,7 @@ fun AiChatScreen(
 
     var pendingRunCommand by remember { mutableStateOf<String?>(null) }
     val runDialog = rememberAiConfirmDialog(
-        AiUiMode.Material,
+        if (miuix) AiUiMode.Miuix else AiUiMode.Material,
         onConfirm = {
             pendingRunCommand?.let(model::runCodeBlock)
             pendingRunCommand = null
@@ -194,8 +195,11 @@ fun AiChatScreen(
         onNavigate = onNavigate,
     )
 
-    // 助手恒用 MD3（宿主已包 AiAssistantMaterialTheme），旧 Miuix 实现保留为死代码
-    AiChatMaterial(state, actions)
+    if (miuix) {
+        AiChatMiuix(state, actions)
+    } else {
+        AiChatMaterial(state, actions)
+    }
 
     if (!disclaimerAccepted) {
         val onAccept = {
@@ -203,7 +207,11 @@ fun AiChatScreen(
             disclaimerAccepted = true
         }
         val onExit = onClose
-        AiDisclaimerDialogMaterial(onAccept = onAccept, onExit = onExit)
+        if (miuix) {
+            AiDisclaimerDialogMiuix(onAccept = onAccept, onExit = onExit)
+        } else {
+            AiDisclaimerDialogMaterial(onAccept = onAccept, onExit = onExit)
+        }
     }
 }
 
