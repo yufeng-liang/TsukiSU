@@ -337,6 +337,7 @@
     <string name="ai_mcp_remove">Remove</string>
     <string name="ai_mcp_name">Name</string>
     <string name="ai_mcp_url">URL (https://...)</string>
+    <string name="ai_mcp_url_label">URL</string>
     <string name="ai_mcp_url_invalid">Must be https:// (http:// is only allowed for localhost debugging)</string>
     <string name="ai_mcp_save">Save</string>
     <string name="ai_mcp_cancel">Cancel</string>
@@ -387,6 +388,13 @@
     <string name="ai_search_test_query_hint">Query, e.g. today’s news</string>
     <string name="ai_search_test_run">Run test search</string>
     <string name="ai_search_test_no_result">No results returned.</string>
+    <string name="ai_quick_models_title">Model</string>
+    <string name="ai_quick_no_models">No models yet. Fetch the list in settings first.</string>
+    <string name="ai_quick_thinking_title">Reasoning effort</string>
+    <string name="ai_quick_thinking_single">This model only supports automatic effort.</string>
+    <string name="ai_quick_search_title">Web search</string>
+    <string name="ai_quick_provider_on">Active</string>
+    <string name="ai_quick_provider_off">Off</string>
     <string name="ai_suggestion_status2">Check this device’s current state</string>
     <string name="ai_suggestion_modules2">Recommend modules that get updated often</string>
     <string name="ai_suggestion_troubleshoot2">A module is installed but does nothing — how do I debug it?</string>
@@ -408,7 +416,6 @@
     <string name="ai_image_model_none">Disabled</string>
     <string name="ai_main_effort_title">Reasoning effort (main model)</string>
     <string name="ai_title_model_follow_main">Follow main model</string>
-    <string name="ai_title_model_summary">Titles are generated without reasoning; the lowest level is used if the model cannot disable it.</string>
     <string name="ai_provider_default_name">Provider %1$d</string>
 <string name="ai_session_default_name">Chat %1$d</string>
     <string name="ai_provider_edit">Edit</string>
@@ -424,5 +431,7 @@
     <string name="ai_mcp_delete_header">Delete header</string>
     <string name="ai_provider_select">Provider</string>
     <string name="ai_mcp_enabled">Enabled</string>
+    <string name="ai_field_required"> *</string>
+    <string name="ai_field_optional">(optional)</string>
     <string name="ai_mcp_transport">Transport</string>
 </resources>

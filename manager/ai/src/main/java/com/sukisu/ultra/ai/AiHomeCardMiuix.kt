@@ -449,7 +449,7 @@ internal fun AiConfigEditorMiuix(
         }
         // 不再单独放获取按钮：点开下拉就自动拉取，列表里还能手填模型 ID。
         AiSelectFieldMiuix(
-            label = stringResource(R.string.ai_main_model),
+            label = stringResource(R.string.ai_main_model) + stringResource(R.string.ai_field_required),
             value = modelLabelOf(selectedModel, draft.model),
             placeholder = stringResource(R.string.ai_model_not_selected),
             onClick = { pickerTarget = MiuixModelPickerTarget.Main },
@@ -537,14 +537,14 @@ internal fun AiConfigEditorMiuix(
 
         // 标题模型只选模型：推理强度固定关闭，不再让用户选。
         AiSelectFieldMiuix(
-            label = stringResource(R.string.ai_title_model),
+            label = stringResource(R.string.ai_title_model) + stringResource(R.string.ai_field_optional),
             value = draft.titleModel,
             placeholder = stringResource(R.string.ai_title_model_follow_main),
             onClick = { pickerTarget = MiuixModelPickerTarget.Title },
             modifier = Modifier.fillMaxWidth(),
         )
         AiSelectFieldMiuix(
-            label = stringResource(R.string.ai_image_model),
+            label = stringResource(R.string.ai_image_model) + stringResource(R.string.ai_field_optional),
             value = draft.imageModel,
             placeholder = stringResource(R.string.ai_image_model_none),
             onClick = { pickerTarget = MiuixModelPickerTarget.Image },
@@ -622,7 +622,7 @@ internal fun AiConfigEditorMiuix(
         beforeSystemPrompt()
         AiSettingsCardMiuix {
         Text(
-            text = stringResource(R.string.ai_system_prompt),
+            text = stringResource(R.string.ai_system_prompt) + stringResource(R.string.ai_field_optional),
             style = MiuixTheme.textStyles.title4,
         )
         Text(

@@ -249,11 +249,10 @@ private fun AiSettingsMaterial(
     AiExpressiveScaffold(
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         topBar = {
-            // 紧凑顶栏：设置页用固定顶栏即可，右侧用圆点轻量提示启用状态
+            // 紧凑顶栏：设置页用固定顶栏即可；启用状态交给页面里的总开关，顶栏不再重复提示。
             TopAppBar(
                 title = { Text(stringResource(R.string.ai_settings)) },
                 navigationIcon = { AiTopBarBackButton(onClick = onBack) },
-                actions = { AiTopBarStatus(enabled = draft.enabled) },
                 colors = aiExpressiveTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainer,
                     scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -282,6 +281,7 @@ private fun AiSettingsMaterial(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
                 )
             }
+            // 字段级必填直接用星号标在标签上，不再加顶部说明行。
             AiConfigEditorMaterial(
                 draft = draft,
                 onDraftChange = onDraftChange,
@@ -291,39 +291,6 @@ private fun AiSettingsMaterial(
                 onFetchModels = onFetchModels,
             )
         }
-    }
-}
-
-/**
- * 顶栏右侧的启用状态：小圆点 + 状态文字。
- * 启用时用主题色，未启用时用弱化描边色。
- */
-@Composable
-private fun AiTopBarStatus(enabled: Boolean) {
-    Row(
-        modifier = Modifier.padding(end = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .background(
-                    color = if (enabled) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.outlineVariant
-                    },
-                    shape = CircleShape,
-                ),
-        )
-        Text(
-            text = stringResource(
-                if (enabled) R.string.ai_state_enabled else R.string.ai_state_disabled,
-            ),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 
@@ -380,6 +347,7 @@ private fun AiSettingsMiuix(
                 )
             }
             // 编辑器自己按分组输出卡片，这里不要再套一层，否则卡片叠卡片看不出分组。
+            // 字段级必填直接用星号标在标签上，不再加顶部说明行。
             AiConfigEditorMiuix(
                 draft = draft,
                 onDraftChange = onDraftChange,

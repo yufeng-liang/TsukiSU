@@ -65,7 +65,7 @@ internal fun AiProviderEditDialogMiuix(
                 TextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = stringResource(R.string.ai_provider_name),
+                    label = stringResource(R.string.ai_provider_name) + stringResource(R.string.ai_field_required),
                     useLabelAsPlaceholder = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -98,7 +98,7 @@ internal fun AiProviderEditDialogMiuix(
                 TextField(
                     value = endpoint,
                     onValueChange = { endpoint = it },
-                    label = stringResource(R.string.ai_endpoint),
+                    label = stringResource(R.string.ai_endpoint) + stringResource(R.string.ai_field_required),
                     useLabelAsPlaceholder = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                     modifier = Modifier.fillMaxWidth(),
@@ -113,6 +113,7 @@ internal fun AiProviderEditDialogMiuix(
                 TextField(
                     value = apiKey,
                     onValueChange = { apiKey = it },
+                    // 字符串本身就带「（可选）」：本地推理服务通常不校验密钥。
                     label = stringResource(R.string.ai_api_key),
                     useLabelAsPlaceholder = true,
                     visualTransformation = if (showKey) {

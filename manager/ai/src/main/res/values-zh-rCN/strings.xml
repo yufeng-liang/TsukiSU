@@ -336,6 +336,7 @@
     <string name="ai_mcp_remove">删除</string>
     <string name="ai_mcp_name">名称</string>
     <string name="ai_mcp_url">地址（https://...）</string>
+    <string name="ai_mcp_url_label">地址</string>
     <string name="ai_mcp_url_invalid">必须是 https://（仅本机调试允许 http://localhost）</string>
     <string name="ai_mcp_save">保存</string>
     <string name="ai_mcp_cancel">取消</string>
@@ -386,6 +387,13 @@
     <string name="ai_search_test_query_hint">搜索词，例如：今天新闻</string>
     <string name="ai_search_test_run">开始测试</string>
     <string name="ai_search_test_no_result">没有返回结果。</string>
+    <string name="ai_quick_models_title">选择模型</string>
+    <string name="ai_quick_no_models">还没有可用的模型，先到设置里点「获取模型」。</string>
+    <string name="ai_quick_thinking_title">推理强度</string>
+    <string name="ai_quick_thinking_single">这个模型只支持自动档。</string>
+    <string name="ai_quick_search_title">联网搜索</string>
+    <string name="ai_quick_provider_on">启用中</string>
+    <string name="ai_quick_provider_off">未启用</string>
     <string name="ai_suggestion_status2">看看这台设备现在的状态</string>
     <string name="ai_suggestion_modules2">推荐几个更新频繁的模块</string>
     <string name="ai_suggestion_troubleshoot2">模块装了却没生效，怎么排查？</string>
@@ -407,7 +415,6 @@
     <string name="ai_image_model_none">不启用</string>
     <string name="ai_main_effort_title">主模型推理强度</string>
     <string name="ai_title_model_follow_main">跟随主模型</string>
-    <string name="ai_title_model_summary">标题生成默认关闭推理，模型不支持关闭时使用最低档。</string>
     <string name="ai_provider_default_name">提供商 %1$d</string>
 <string name="ai_session_default_name">会话 %1$d</string>
     <string name="ai_provider_edit">编辑</string>
@@ -423,5 +430,7 @@
     <string name="ai_mcp_delete_header">删除请求头</string>
     <string name="ai_provider_select">提供商</string>
     <string name="ai_mcp_enabled">启用</string>
+    <string name="ai_field_required"> *</string>
+    <string name="ai_field_optional">（可选）</string>
     <string name="ai_mcp_transport">传输方式</string>
 </resources>

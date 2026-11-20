@@ -68,7 +68,8 @@ internal fun AiProviderEditDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text(stringResource(R.string.ai_provider_name)) },
+                    // 名称留空会自动补「提供商 N」，但仍属于必填项的可视占位，标星号提示。
+                    label = { Text(stringResource(R.string.ai_provider_name) + stringResource(R.string.ai_field_required)) },
                     placeholder = { Text(suggestedName) },
                     singleLine = true,
                     shape = MaterialTheme.shapes.large,
@@ -84,7 +85,7 @@ internal fun AiProviderEditDialog(
                 OutlinedTextField(
                     value = endpoint,
                     onValueChange = { endpoint = it },
-                    label = { Text(stringResource(R.string.ai_endpoint)) },
+                    label = { Text(stringResource(R.string.ai_endpoint) + stringResource(R.string.ai_field_required)) },
                     placeholder = { Text(stringResource(R.string.ai_endpoint_hint)) },
                     singleLine = true,
                     isError = endpoint.isNotBlank() && !isHttpEndpoint(endpoint),
@@ -100,6 +101,7 @@ internal fun AiProviderEditDialog(
                 OutlinedTextField(
                     value = apiKey,
                     onValueChange = { apiKey = it },
+                    // 字符串本身就带「（可选）」：本地推理服务通常不校验密钥。
                     label = { Text(stringResource(R.string.ai_api_key)) },
                     placeholder = { Text(stringResource(R.string.ai_api_key_hint)) },
                     singleLine = true,

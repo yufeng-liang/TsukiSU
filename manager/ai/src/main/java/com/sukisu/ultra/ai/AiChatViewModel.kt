@@ -118,6 +118,8 @@ data class AiChatUiState(
     val rootGrantedForRequest: Boolean = false,
     /** Screenshots the user attached to the next message. */
     val pendingImages: List<AiImage> = emptyList(),
+    /** 联网搜索配置：输入框下方的快捷入口要显示总开关与各服务商状态。 */
+    val searchConfig: AiSearchConfig = AiSearchConfig(),
 )
 
 /**
@@ -151,6 +153,7 @@ class AiChatViewModel : ViewModel() {
 
     private fun initialState(): AiChatUiState {
         val config = AiSettings.load()
+        val searchConfig = AiSearchSettings.load()
         val session = if (config.keepHistory) AiSessionStore.ensureActive() else AiSessionStore.create()
         val restored = if (config.keepHistory) {
             session.turns.map { turn ->
@@ -165,6 +168,7 @@ class AiChatViewModel : ViewModel() {
         }
         return AiChatUiState(
             config = config,
+            searchConfig = searchConfig,
             messages = restored,
             sessions = if (config.keepHistory) AiSessionStore.list() else emptyList(),
             activeSessionId = session.id,
@@ -235,7 +239,8 @@ class AiChatViewModel : ViewModel() {
 
     fun refreshConfig() {
         val config = AiSettings.load()
-        _uiState.update { it.copy(config = config) }
+        val search = AiSearchSettings.load()
+        _uiState.update { it.copy(config = config, searchConfig = search) }
     }
 
     /** Persist edits from the settings page without starting a chat turn. */
@@ -244,6 +249,63 @@ class AiChatViewModel : ViewModel() {
         AiSettings.save(config)
         if (previous.keepHistory && !config.keepHistory) AiSettings.clearHistory()
         _uiState.update { it.copy(config = config) }
+    }
+
+    /**
+     * 输入框里的模型快捷切换。
+     *
+     * 落盘口径与设置页一致：写当前供应商的 modelId，同时同步顶层字段，
+     * 并把推理档位重置成 AUTO —— 换模型后旧的高档位对新模型可能不合法。
+     */
+    fun selectModel(modelId: String) {
+        if (modelId.isBlank()) return
+        val config = _uiState.value.config
+        val provider = AiSettings.activeProvider(config)
+        val next = if (provider != null && config.providers.any { it.id == provider.id }) {
+            config.copy(
+                providers = config.providers.map {
+                    if (it.id == provider.id) {
+                        it.copy(modelId = modelId, thinkingMode = AiThinkingMode.AUTO)
+                    } else {
+                        it
+                    }
+                },
+                currentModelId = modelId,
+                model = modelId,
+                thinkingMode = AiThinkingMode.AUTO,
+            )
+        } else {
+            config.copy(
+                model = modelId,
+                currentModelId = modelId,
+                thinkingMode = AiThinkingMode.AUTO,
+            )
+        }
+        updateConfig(next)
+    }
+
+    /** 输入框里的推理强度快捷切换，同样写供应商与顶层两份。 */
+    fun setThinkingMode(mode: AiThinkingMode) {
+        val config = _uiState.value.config
+        val provider = AiSettings.activeProvider(config)
+        val next = if (provider != null && config.providers.any { it.id == provider.id }) {
+            config.copy(
+                providers = config.providers.map {
+                    if (it.id == provider.id) it.copy(thinkingMode = mode) else it
+                },
+                thinkingMode = mode,
+            )
+        } else {
+            config.copy(thinkingMode = mode)
+        }
+        updateConfig(next)
+    }
+
+    /** 输入框里的联网搜索总开关：只动 searchEnabled，服务商与顺序保持不变。 */
+    fun setSearchEnabled(enabled: Boolean) {
+        val next = _uiState.value.searchConfig.copy(searchEnabled = enabled)
+        AiSearchSettings.save(next)
+        _uiState.update { it.copy(searchConfig = next) }
     }
 
     fun saveConfig(config: AiConfig) {

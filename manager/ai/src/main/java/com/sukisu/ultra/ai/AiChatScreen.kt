@@ -192,6 +192,9 @@ fun AiChatScreen(
         onAttachImage = { attachScreenshotLauncher.launch(arrayOf("image/*")) },
         onRemoveImage = model::removePendingImage,
         onSetCapability = model::setCapability,
+        onSelectModel = model::selectModel,
+        onSetThinkingMode = model::setThinkingMode,
+        onSetSearchEnabled = model::setSearchEnabled,
         onNavigate = onNavigate,
     )
 
@@ -242,4 +245,10 @@ data class AiChatActions(
     val onAttachImage: () -> Unit,
     /** Removes one attached screenshot by index. */
     val onRemoveImage: (Int) -> Unit,
+    /** 输入框里的模型快捷切换。 */
+    val onSelectModel: (String) -> Unit = {},
+    /** 输入框里的推理强度快捷切换。 */
+    val onSetThinkingMode: (AiThinkingMode) -> Unit = {},
+    /** 输入框里的联网搜索总开关。 */
+    val onSetSearchEnabled: (Boolean) -> Unit = {},
 )

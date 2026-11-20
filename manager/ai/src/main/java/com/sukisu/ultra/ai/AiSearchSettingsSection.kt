@@ -329,7 +329,16 @@ private fun SearchProviderDetailDialog(
                 OutlinedTextField(
                     value = draftKey,
                     onValueChange = { draftKey = it },
-                    label = { Text(stringResource(R.string.ai_search_api_key)) },
+                    label = {
+                        Text(
+                            text = stringResource(R.string.ai_search_api_key) +
+                                if (provider.requiresKey) {
+                                    stringResource(R.string.ai_field_required)
+                                } else {
+                                    stringResource(R.string.ai_field_optional)
+                                },
+                        )
+                    },
                     singleLine = true,
                     shape = MaterialTheme.shapes.large,
                     modifier = Modifier.fillMaxWidth(),

@@ -408,7 +408,7 @@ internal fun AiConfigEditorMaterial(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 AiDropdownField(
-                    label = stringResource(R.string.ai_main_model),
+                    label = stringResource(R.string.ai_main_model) + stringResource(R.string.ai_field_required),
                     selectedLabel = selectedModel?.let { it.name.ifBlank { it.id } }
                         ?: stringResource(R.string.ai_model_not_selected),
                     // 只列文本模型，避免把生图模型设成聊天主模型。
@@ -444,7 +444,7 @@ internal fun AiConfigEditorMaterial(
                 modifier = Modifier.padding(vertical = 2.dp),
             )
             AiDropdownField(
-                label = stringResource(R.string.ai_title_model),
+                label = stringResource(R.string.ai_title_model) + stringResource(R.string.ai_field_optional),
                 selectedLabel = draft.titleModel.ifBlank {
                     stringResource(R.string.ai_title_model_follow_main)
                 },
@@ -456,12 +456,6 @@ internal fun AiConfigEditorMaterial(
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
-            Text(
-                text = stringResource(R.string.ai_title_model_summary),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
             // 测试连接收成紧凑按钮：说明放左边，按钮靠右。
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -535,7 +529,7 @@ internal fun AiConfigEditorMaterial(
             }
             // 生图模型与高级 API 模式紧跟测试连接，和 Miuix 同区：模型之外的额外能力放在一起
             AiDropdownField(
-                label = stringResource(R.string.ai_image_model),
+                label = stringResource(R.string.ai_image_model) + stringResource(R.string.ai_field_optional),
                 selectedLabel = draft.imageModel.ifBlank {
                     stringResource(R.string.ai_image_model_none)
                 },
@@ -643,7 +637,7 @@ internal fun AiConfigEditorMaterial(
 
         // ⑤ 自定义指令：独立成组，改指令不用在连接配置里翻
         SettingsSection(
-            title = stringResource(R.string.ai_system_prompt),
+            title = stringResource(R.string.ai_system_prompt) + stringResource(R.string.ai_field_optional),
             subtitle = stringResource(R.string.ai_system_prompt_help),
         ) {
             Text(

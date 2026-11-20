@@ -360,6 +360,12 @@ pendingImages = state.pendingImages,
 onAttachImage = actions.onAttachImage,
 onRemoveImage = actions.onRemoveImage,
                 onDismissError = actions.onDismissError,
+                config = state.config,
+                searchConfig = state.searchConfig,
+                onSelectModel = actions.onSelectModel,
+                onSetThinkingMode = actions.onSetThinkingMode,
+                onSetSearchEnabled = actions.onSetSearchEnabled,
+                onOpenSettings = actions.onOpenSettings,
             )
         }
     }
@@ -1026,6 +1032,12 @@ private fun AiWelcomeMaterial(
 
 @Composable
 private fun AiComposerMaterial(
+    config: AiConfig,
+    searchConfig: AiSearchConfig,
+    onSelectModel: (String) -> Unit,
+    onSetThinkingMode: (AiThinkingMode) -> Unit,
+    onSetSearchEnabled: (Boolean) -> Unit,
+    onOpenSettings: () -> Unit,
     value: String,
     isSending: Boolean,
     error: String?,
@@ -1082,6 +1094,15 @@ private fun AiComposerMaterial(
             }
         }
         PendingImagesRow(images = pendingImages, onRemove = onRemoveImage)
+        // 快捷控制条：当前模型、推理强度、联网搜索，都直接改配置不跳设置页。
+        AiComposerQuickBarMaterial(
+            config = config,
+            search = searchConfig,
+            onSelectModel = onSelectModel,
+            onSetThinkingMode = onSetThinkingMode,
+            onSetSearchEnabled = onSetSearchEnabled,
+            onOpenSettings = onOpenSettings,
+        )
         Surface(
             shape = RoundedCornerShape(28.dp),
             color = MaterialTheme.colorScheme.surfaceContainerHigh,

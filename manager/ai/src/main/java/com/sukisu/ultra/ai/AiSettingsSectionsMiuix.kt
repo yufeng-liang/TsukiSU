@@ -380,10 +380,12 @@ private fun SearchProviderDetailDialogMiuix(
                     value = draftKey,
                     onValueChange = { draftKey = it },
                     // 免 Key 也能用的服务，占位词直接标“可选”，省得用户以为必须去申请。
-                    label = stringResource(
-                        if (provider.requiresKey) R.string.ai_search_api_key
-                        else R.string.ai_search_api_key_optional,
-                    ),
+                    label = stringResource(R.string.ai_search_api_key) +
+                        if (provider.requiresKey) {
+                            stringResource(R.string.ai_field_required)
+                        } else {
+                            stringResource(R.string.ai_field_optional)
+                        },
                     useLabelAsPlaceholder = true,
                     maxLines = 1,
                     modifier = Modifier.fillMaxWidth(),
@@ -631,6 +633,7 @@ private fun McpAuthFieldsMiuix(
     var showExtra by remember { mutableStateOf(extraHeaders.isNotBlank()) }
 
     Text(
+        // 有的 MCP 服务器不校验凭据，认证方式和密钥都不标必填。
         text = stringResource(R.string.ai_mcp_auth),
         style = MiuixTheme.textStyles.body1,
     )
@@ -651,7 +654,7 @@ private fun McpAuthFieldsMiuix(
         TextField(
             value = extraHeaders,
             onValueChange = onExtraHeadersChange,
-            label = stringResource(R.string.ai_mcp_headers),
+            label = stringResource(R.string.ai_mcp_headers) + stringResource(R.string.ai_field_optional),
             useLabelAsPlaceholder = true,
             maxLines = 3,
             modifier = Modifier.fillMaxWidth(),
@@ -766,7 +769,7 @@ private fun McpServerAddDialogMiuix(
                 TextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = stringResource(R.string.ai_mcp_name),
+                    label = stringResource(R.string.ai_mcp_name) + stringResource(R.string.ai_field_required),
                     useLabelAsPlaceholder = true,
                     maxLines = 1,
                     modifier = Modifier.fillMaxWidth(),
@@ -774,7 +777,7 @@ private fun McpServerAddDialogMiuix(
                 TextField(
                     value = url,
                     onValueChange = { url = it },
-                    label = stringResource(R.string.ai_mcp_url),
+                    label = stringResource(R.string.ai_mcp_url_label) + stringResource(R.string.ai_field_required),
                     useLabelAsPlaceholder = true,
                     maxLines = 1,
                     modifier = Modifier.fillMaxWidth(),
@@ -860,7 +863,7 @@ private fun McpServerDetailDialogMiuix(
                 TextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = stringResource(R.string.ai_mcp_name),
+                    label = stringResource(R.string.ai_mcp_name) + stringResource(R.string.ai_field_required),
                     useLabelAsPlaceholder = true,
                     maxLines = 1,
                     modifier = Modifier.fillMaxWidth(),
@@ -868,7 +871,7 @@ private fun McpServerDetailDialogMiuix(
                 TextField(
                     value = url,
                     onValueChange = { url = it },
-                    label = stringResource(R.string.ai_mcp_url),
+                    label = stringResource(R.string.ai_mcp_url_label) + stringResource(R.string.ai_field_required),
                     useLabelAsPlaceholder = true,
                     maxLines = 1,
                     modifier = Modifier.fillMaxWidth(),

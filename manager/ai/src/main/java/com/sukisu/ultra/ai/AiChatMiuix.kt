@@ -354,6 +354,12 @@ fun AiChatMiuix(
                 onSend = actions.onSend,
                 onStop = actions.onStop,
                 onDismissError = actions.onDismissError,
+            config = state.config,
+            searchConfig = state.searchConfig,
+            onSelectModel = actions.onSelectModel,
+            onSetThinkingMode = actions.onSetThinkingMode,
+            onSetSearchEnabled = actions.onSetSearchEnabled,
+            onOpenSettings = actions.onOpenSettings,
             )
         }
     }
@@ -1082,6 +1088,12 @@ private fun AiWelcomeMiuix(
 
 @Composable
 private fun AiComposerMiuix(
+    config: AiConfig,
+    searchConfig: AiSearchConfig,
+    onSelectModel: (String) -> Unit,
+    onSetThinkingMode: (AiThinkingMode) -> Unit,
+    onSetSearchEnabled: (Boolean) -> Unit,
+    onOpenSettings: () -> Unit,
     value: String,
     isSending: Boolean,
     error: String?,
@@ -1136,6 +1148,15 @@ private fun AiComposerMiuix(
             }
         }
         PendingImagesRow(images = pendingImages, onRemove = onRemoveImage)
+        // 快捷控制条：当前模型、推理强度、联网搜索，都直接改配置不跳设置页。
+        AiComposerQuickBarMiuix(
+            config = config,
+            search = searchConfig,
+            onSelectModel = onSelectModel,
+            onSetThinkingMode = onSetThinkingMode,
+            onSetSearchEnabled = onSetSearchEnabled,
+            onOpenSettings = onOpenSettings,
+        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()

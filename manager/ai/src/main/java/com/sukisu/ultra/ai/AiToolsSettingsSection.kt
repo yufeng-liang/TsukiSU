@@ -1,6 +1,7 @@
 package com.sukisu.ultra.ai
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
@@ -16,10 +17,12 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,6 +30,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -42,7 +46,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
@@ -143,6 +149,43 @@ internal fun AiMcpSettingsSection(modifier: Modifier = Modifier) {
  * 两种认证方式只是请求头写法的差别（Bearer / X-API-Key），解析与拼装都交给
  * [detectMcpAuth] / [buildMcpHeaders]，M3 与 Miuix 共用同一套规则。
  */
+/**
+ * 认证方式用的紧凑 chip：等宽、单行，文字不省略。
+ *
+ * Material 的 FilterChip 自带较大的左右内边距，三分宽时 X-API-Key 会被截断，
+ * 所以这里自己画一层，只保留描边与选中填色。
+ */
+@Composable
+private fun McpAuthChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        modifier = modifier
+            .height(36.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick),
+        color = if (selected) colors.secondaryContainer else Color.Transparent,
+        contentColor = if (selected) colors.onSecondaryContainer else colors.onSurfaceVariant,
+        shape = RoundedCornerShape(10.dp),
+        border = if (selected) null else BorderStroke(1.dp, colors.outlineVariant),
+    ) {
+        Box(
+            modifier = Modifier.padding(horizontal = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
 @Composable
 private fun McpAuthFieldsMaterial(
     mode: McpAuthMode,
@@ -155,20 +198,20 @@ private fun McpAuthFieldsMaterial(
     var keyVisible by remember { mutableStateOf(false) }
     var headersExpanded by remember { mutableStateOf(mode == McpAuthMode.Custom) }
     Text(
+        // 有的 MCP 服务器不校验凭据，认证方式和密钥都不标必填。
         text = stringResource(R.string.ai_mcp_auth),
-        style = MaterialTheme.typography.labelLarge,
+        style = MaterialTheme.typography.labelMedium,
     )
-    // 三档换行摆放：窄屏上「自定义」会被挤成两行，交给 FlowRow 断行更稳。
-    FlowRow(
+    // 三档排一行：每枚只占自己文字的宽度，既不换行也不留多余空白。
+    Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         McpAuthMode.entries.forEach { entry ->
-            FilterChip(
+            McpAuthChip(
+                text = stringResource(entry.labelRes()),
                 selected = mode == entry,
                 onClick = { onModeChange(entry) },
-                label = { Text(stringResource(entry.labelRes()), maxLines = 1) },
             )
         }
     }
@@ -176,7 +219,7 @@ private fun McpAuthFieldsMaterial(
         OutlinedTextField(
             value = extraHeaders,
             onValueChange = onExtraHeadersChange,
-            label = { Text(stringResource(R.string.ai_mcp_headers)) },
+            label = { Text(stringResource(R.string.ai_mcp_headers) + stringResource(R.string.ai_field_optional)) },
             placeholder = { Text(stringResource(R.string.ai_mcp_custom_hint)) },
             minLines = 2,
             shape = MaterialTheme.shapes.large,
@@ -272,14 +315,14 @@ private fun McpServerAddDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text(stringResource(R.string.ai_mcp_name)) },
+                    label = { Text(stringResource(R.string.ai_mcp_name) + stringResource(R.string.ai_field_required)) },
                     singleLine = true,
                     shape = MaterialTheme.shapes.large,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
                     text = stringResource(R.string.ai_mcp_transport),
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.labelMedium,
                 )
                 // SSE（legacy）客户端尚未实现，先只提供 Streamable HTTP，避免选了不生效的选项。
                 val transportOptions = listOf("STREAMABLE_HTTP" to "Streamable HTTP")
@@ -300,7 +343,7 @@ private fun McpServerAddDialog(
                 OutlinedTextField(
                     value = url,
                     onValueChange = { url = it },
-                    label = { Text(stringResource(R.string.ai_mcp_url)) },
+                    label = { Text(stringResource(R.string.ai_mcp_url_label) + stringResource(R.string.ai_field_required)) },
                     placeholder = { Text("https://example.com/mcp") },
                     singleLine = true,
                     isError = url.isNotBlank() && !isValidMcpUrl(url),
@@ -416,14 +459,14 @@ private fun McpServerDetailDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text(stringResource(R.string.ai_mcp_name)) },
+                    label = { Text(stringResource(R.string.ai_mcp_name) + stringResource(R.string.ai_field_required)) },
                     singleLine = true,
                     shape = MaterialTheme.shapes.large,
                 )
                 OutlinedTextField(
                     value = url,
                     onValueChange = { url = it },
-                    label = { Text(stringResource(R.string.ai_mcp_url)) },
+                    label = { Text(stringResource(R.string.ai_mcp_url_label) + stringResource(R.string.ai_field_required)) },
                     singleLine = true,
                     isError = url.isNotBlank() && !isValidMcpUrl(url),
                     supportingText = {
