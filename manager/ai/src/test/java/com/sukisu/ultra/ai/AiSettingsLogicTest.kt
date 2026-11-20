@@ -74,11 +74,10 @@ class AiSettingsLogicTest {
     // ------------------------------------------------------------ 提供商
 
     @Test
-    fun uniqueProviderNameAppendsAnIndexOnlyWhenNeeded() {
-        val existing = listOf("新提供商", "新提供商 2")
-        assertEquals("新提供商", uniqueProviderName(emptyList(), "新提供商"))
-        assertEquals("新提供商 3", uniqueProviderName(existing, "新提供商"))
-        assertEquals("别的名字", uniqueProviderName(existing, "别的名字"))
+    fun nextNumberedNameAlwaysCarriesAnIndexAndFillsTheFirstFreeOne() {
+        assertEquals("提供商 1", nextNumberedName(emptyList(), "提供商 %1\$d"))
+        assertEquals("提供商 2", nextNumberedName(listOf("提供商 1", "提供商 3"), "提供商 %1\$d"))
+        assertEquals("会话 1", nextNumberedName(listOf("", "标题"), "会话 %1\$d"))
     }
 
     @Test

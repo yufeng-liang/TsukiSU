@@ -10,6 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
@@ -29,9 +32,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Refresh
@@ -665,23 +670,82 @@ internal fun AiConfigEditorMaterial(
                     )
                 }
             }
+            // 清除与放大都收进输入框内部，和 Miuix 一致：框外不再单独占一行。
+            var promptExpanded by remember { mutableStateOf(false) }
+            val promptHint = stringResource(R.string.ai_system_prompt_hint)
+            val clearLabel = stringResource(R.string.ai_system_prompt_clear)
             OutlinedTextField(
                 value = draft.systemPrompt,
                 onValueChange = { onDraftChange(draft.copy(systemPrompt = it)) },
                 label = { Text(stringResource(R.string.ai_system_prompt)) },
-                placeholder = { Text(stringResource(R.string.ai_system_prompt_hint)) },
-                minLines = 4,
-                maxLines = 8,
+                placeholder = { Text(promptHint) },
+                minLines = 2,
+                maxLines = 6,
                 shape = MaterialTheme.shapes.large,
+                trailingIcon = {
+                    // 图标贴输入框右下角，不占正文行宽。
+                    Column(
+                        modifier = Modifier.fillMaxHeight(),
+                        verticalArrangement = Arrangement.Bottom,
+                        horizontalAlignment = Alignment.End,
+                    ) {
+                        if (draft.systemPrompt.isNotBlank()) {
+                            IconButton(
+                                onClick = { onDraftChange(draft.copy(systemPrompt = "")) },
+                                modifier = Modifier.semantics { contentDescription = clearLabel },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Close,
+                                    contentDescription = clearLabel,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        IconButton(onClick = { promptExpanded = true }) {
+                            Icon(
+                                imageVector = Icons.Rounded.AspectRatio,
+                                contentDescription = stringResource(R.string.ai_system_prompt_expand),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
             )
-            Row(modifier = Modifier.fillMaxWidth()) {
-                TextButton(
-                    onClick = { onDraftChange(draft.copy(systemPrompt = "")) },
-                    enabled = draft.systemPrompt.isNotBlank(),
-                ) {
-                    Text(stringResource(R.string.ai_system_prompt_clear))
-                }
+            Text(
+                text = promptHint,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (promptExpanded) {
+                AlertDialog(
+                    onDismissRequest = { promptExpanded = false },
+                    title = { Text(stringResource(R.string.ai_system_prompt)) },
+                    text = {
+                        OutlinedTextField(
+                            value = draft.systemPrompt,
+                            onValueChange = { onDraftChange(draft.copy(systemPrompt = it)) },
+                            placeholder = { Text(promptHint) },
+                            minLines = 8,
+                            maxLines = 12,
+                            shape = MaterialTheme.shapes.large,
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 380.dp),
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { promptExpanded = false }) {
+                            Text(stringResource(R.string.ai_done))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = { onDraftChange(draft.copy(systemPrompt = "")) },
+                            enabled = draft.systemPrompt.isNotBlank(),
+                        ) {
+                            Text(clearLabel)
+                        }
+                    },
+                )
             }
         }
 

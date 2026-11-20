@@ -15,7 +15,8 @@ AI 助手有两套可切换的界面外壳，都由 `AiFeatureProviderImpl` 按 
 
 - `McpAuthMode` / `McpAuthInput` / `detectMcpAuth()` / `buildMcpHeaders()`：MCP 认证头的「方式 + 密钥」互转。
 - `toggleSearchProvider()` / `reorderSearchProviders()`：联网搜索开关三态（关最后一个 → 关总闸；关着总闸点开某个 → 顺手开总闸）与排序。
-- `uniqueProviderName()` / `upsertProvider()` / `removeProvider()` / `fallbackProvider()`：提供商增删改与回落。
+- `nextNumberedName()` / `nextProviderName()`：新增条目一律带序号（提供商 1、会话 1……），按第一个未占用序号取名。
+- `upsertProvider()` / `removeProvider()` / `fallbackProvider()`：提供商增删改与回落。
 - `AiSystemPromptPreset` / `mergePromptPreset()`：自定义指令预设与幂等追加。
 - `isValidMcpUrl()`（在 `AiToolsSettingsSection.kt`）、`parseHeaders()`（同文件）：URL 校验与请求头文本解析，两侧共用。
 - `AiModelInfo.looksLikeImageModel()`（在 `AiHomeCardMaterial.kt`，已改 `internal`）。
@@ -30,12 +31,13 @@ AI 助手有两套可切换的界面外壳，都由 `AiFeatureProviderImpl` 按 
 2. **模型选择**：主模型、会话标题模型、生图模型三处都是「下拉 + 获取模型」；打开下拉即触发拉取，菜单底部可手填模型 ID；切换模型把推理档位重置为 `AiThinkingMode.AUTO`。
 3. **生图模型位置**：在「高级 API 模式」开关**上方**，带一句说明（`ai_image_model_summary`）。
 4. **会话标题**：模型下拉（含「跟随主模型」）+ 「标题生成默认关闭推理」说明；不提供推理档位选择（`titleEffort` 固定 `OFF`）。
-5. **自定义指令**：独立分组（不塞在连接卡里），说明 + 预设 chips（风趣幽默 / 亲和力强 / 通俗易懂 / 专业严谨 / 简洁直接 / 先确认再执行）+ 多行输入 + 清空。
+5. **自定义指令**：独立分组（不塞在连接卡里），说明 + 预设 chips（风趣幽默 / 亲和力强 / 通俗易懂 / 专业严谨 / 简洁直接 / 先确认再执行）+ 多行输入；「清空 ×」和「放大编辑」都收在输入框内部右下角（Miuix 用 `TextField.trailingIcon`、M3 用 `OutlinedTextField.trailingIcon`），框外不再单独占一行，放大后编辑的是同一份草稿。
 6. **联网搜索**：总开关 + 服务行（拖拽排序、每行开关、缺 Key 提示）；总闸关闭时整组压暗但可操作；空链与缺 Key 数量要明说。
 7. **MCP 服务器**：认证方式三档（Bearer / X-API-Key / 自定义）+ 只填密钥的输入框（默认打码，右侧眼睛切换）+ 默认收起的「其他请求头」。禁止回到「一个多行请求头文本框」。
 8. **顶栏图标**：清空聊天记录 `DeleteSweep`、会话 `History`、设置 `Tune`，两侧一致。
 9. **下拉/选择框边框**：Miuix 用 1dp `outline` 描边，M3 用 `OutlinedTextField` 自带描边，观感不同但都要有边界感。
 10. **文案改动**：中英两份 `strings.xml` 都要加，英文串不能出现裸单引号（AAPT 会报 `does not contain a valid string resource`）。
+11. **主页「隐藏环境进行中」卡片**：和其它卡片同一套底——默认 `surfaceBright`、无描边，进度只体现在圆环与文案上（M3 在 `HomeMaterial.kt` 的 `HideEnvCard`，Miuix 在 `HomeMiuix.kt` 的 `HideEnvCardMiuix`）。
 
 ## 三、验收流程
 

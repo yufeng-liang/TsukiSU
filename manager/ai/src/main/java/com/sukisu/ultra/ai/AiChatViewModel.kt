@@ -179,16 +179,22 @@ class AiChatViewModel : ViewModel() {
         createNewSession()
     }
 
+    /** 新会话默认名带序号（会话 1、会话 2……），与提供商新增共用一套编号规则。 */
+    private fun numberedSessionTitle(): String = nextNumberedName(
+        AiSessionStore.list().map { it.title },
+        aiContext.getString(R.string.ai_session_default_name),
+    )
+
     /** 真正创建一个新会话（删除当前会话时也要强制创建）。 */
     private fun createNewSession() {
         persistHistory()
-        val created = AiSessionStore.create()
+        val created = AiSessionStore.create(numberedSessionTitle())
         AiSessionStore.save(created)
         AiSessionStore.setActiveId(created.id)
         _uiState.update {
             it.copy(
                 messages = emptyList(),
-                sessionTitle = "",
+                sessionTitle = created.title,
                 activeSessionId = created.id,
                 sessions = AiSessionStore.list(),
             )
@@ -1200,7 +1206,7 @@ class AiChatViewModel : ViewModel() {
         AiSettings.saveHistory(turns)
         val activeId = _uiState.value.activeSessionId
         if (activeId.isNotEmpty()) {
-            val existing = AiSessionStore.load(activeId) ?: AiSessionStore.create()
+            val existing = AiSessionStore.load(activeId) ?: AiSessionStore.create(numberedSessionTitle())
             AiSessionStore.save(
                 existing.copy(
                     turns = turns,

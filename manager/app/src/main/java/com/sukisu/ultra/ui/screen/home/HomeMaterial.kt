@@ -883,9 +883,9 @@ fun HideEnvCard(
     modifier: Modifier = Modifier,
 ) {
     val fraction = (entry.settledSteps.toFloat() / entry.totalSteps.coerceAtLeast(1)).coerceIn(0f, 1f)
+    // 和其它卡片同一套底：默认 surfaceBright、无描边，进度只体现在圆环和文案上。
     TonalCard(
         modifier = modifier.fillMaxWidth(),
-        containerColor = if (done) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primaryContainer,
         onClick = onClick,
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {

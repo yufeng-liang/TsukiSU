@@ -214,7 +214,8 @@ internal fun AiConfigEditorMiuix(
     }
     val currentProvider = AiSettings.activeProvider(draft)
     val defaultProviderName = stringResource(R.string.ai_provider_default)
-    val newProviderName = stringResource(R.string.ai_provider_new_name)
+    // 新增商家一律带序号：提供商 1、提供商 2……
+    val providerNameTemplate = stringResource(R.string.ai_provider_default_name)
     var providerPendingDelete by remember { mutableStateOf<AiProvider?>(null) }
     var editingProvider by remember { mutableStateOf<AiProvider?>(null) }
     var showProviderEditor by remember { mutableStateOf(false) }
@@ -275,9 +276,9 @@ internal fun AiConfigEditorMiuix(
         }
     }
 
-    /** 新增提供商时避免重名：重名就依次加序号（共享逻辑，两套外壳同一规则）。 */
+    /** 新增提供商一律带序号（提供商 1、提供商 2……），共享逻辑，两套外壳同一规则。 */
     fun uniqueNewProviderName(): String =
-        uniqueProviderName(draft.providers.map { it.name }, newProviderName)
+        nextNumberedName(draft.providers.map { it.name }, providerNameTemplate)
 
     fun updateCurrentProvider(transform: (AiProvider) -> AiProvider) {
         val existing = currentProvider
@@ -293,7 +294,7 @@ internal fun AiConfigEditorMiuix(
         }
         val seed = existing ?: AiProvider(
             id = "p" + System.currentTimeMillis(),
-            name = newProviderName,
+            name = nextNumberedName(draft.providers.map { it.name }, providerNameTemplate),
             format = draft.format,
             endpoint = draft.endpoint,
             apiKey = draft.apiKey,

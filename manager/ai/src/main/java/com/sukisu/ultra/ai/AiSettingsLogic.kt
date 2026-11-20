@@ -131,13 +131,18 @@ internal fun reorderSearchProviders(
 
 // ------------------------------------------------------------- 提供商列表
 
-/** 新增提供商时避免重名：重名就依次加序号。 */
-internal fun uniqueProviderName(existing: Collection<String>, base: String): String {
-    val taken = existing.toSet()
-    if (base !in taken) return base
-    var index = 2
-    while ("$base $index" in taken) index++
-    return "$base $index"
+/**
+ * 新增条目统一带序号：把 template 里的 %1$d 换成第一个没被占用的序号。
+ * 提供商「提供商 1/2/3」和会话「会话 1/2/3」共用这一条规则，用户一眼能分清谁是谁。
+ */
+internal fun nextNumberedName(existing: Collection<String>, template: String): String {
+    val used = existing.map { it.trim() }.toSet()
+    var index = 1
+    while (true) {
+        val candidate = String.format(template, index)
+        if (candidate !in used) return candidate
+        index++
+    }
 }
 
 /** 保存编辑结果：已存在就原地更新，新增则追加到末尾。 */

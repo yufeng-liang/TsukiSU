@@ -149,13 +149,6 @@ internal fun AiProviderEditDialog(
     )
 }
 
-/** 默认名称：按最小未占用序号取「提供商 N」。 */
-internal fun nextProviderName(existing: List<AiProvider>, template: String): String {
-    val used = existing.map { it.name.trim() }.toSet()
-    var index = 1
-    while (true) {
-        val candidate = String.format(template, index)
-        if (candidate !in used) return candidate
-        index++
-    }
-}
+/** 默认名称：按最小未占用序号取「提供商 N」（规则在共享层，两套外壳一致）。 */
+internal fun nextProviderName(existing: List<AiProvider>, template: String): String =
+    nextNumberedName(existing.map { it.name }, template)
