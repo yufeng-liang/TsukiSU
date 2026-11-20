@@ -226,6 +226,10 @@ internal fun AiConfigEditorMaterial(
     onTest: () -> Unit,
     fetchingModels: Boolean = false,
     onFetchModels: (Boolean) -> Unit = {},
+    // 从聊天页快捷条跳进来时，把锚点挂到对应分组上并描一圈边。
+    focusCard: Modifier = Modifier,
+    focusSearch: Modifier = Modifier,
+    highlight: AiSettingsTarget? = null,
 ) {
     var showKey by remember { mutableStateOf(false) }
     var pendingRiskKind by remember { mutableStateOf<AiRiskKind?>(null) }
@@ -355,6 +359,8 @@ internal fun AiConfigEditorMaterial(
             title = stringResource(R.string.ai_provider_group),
             subtitle = stringResource(R.string.ai_connection_trust),
             contentSpacing = 8.dp,
+            modifier = focusCard,
+            highlighted = highlight == AiSettingsTarget.Model,
         ) {
             // 提供商平铺成行：一眼看到全部，点一下就切换，编辑与删除就地放在行内。
             draft.providers.forEach { provider ->
@@ -626,6 +632,8 @@ internal fun AiConfigEditorMaterial(
         SettingsSection(
             title = stringResource(R.string.ai_search_section),
             subtitle = stringResource(R.string.ai_search_section_summary),
+            modifier = focusSearch,
+            highlighted = highlight == AiSettingsTarget.Search,
         ) {
             AiSearchSettingsSection()
         }
@@ -1047,10 +1055,14 @@ private fun SettingsSection(
     title: String? = null,
     subtitle: String? = null,
     contentSpacing: Dp = 10.dp,
+    modifier: Modifier = Modifier,
+    highlighted: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .aiFocusRing(highlighted, SettingsCardShape, MaterialTheme.colorScheme.primary),
         shape = SettingsCardShape,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow,

@@ -29,12 +29,16 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
@@ -52,7 +56,7 @@ internal fun AiComposerQuickBarMaterial(
     onSelectModel: (String) -> Unit,
     onSetThinkingMode: (AiThinkingMode) -> Unit,
     onSetSearchEnabled: (Boolean) -> Unit,
-    onOpenSettings: () -> Unit,
+    onOpenSettings: (AiSettingsTarget) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showModels by remember { mutableStateOf(false) }
@@ -179,7 +183,7 @@ internal fun AiComposerQuickBarMaterial(
             dismissButton = {
                 TextButton(onClick = {
                     showModels = false
-                    onOpenSettings()
+                    onOpenSettings(AiSettingsTarget.Model)
                 }) {
                     Text(stringResource(R.string.ai_settings))
                 }
@@ -194,22 +198,33 @@ internal fun AiComposerQuickBarMaterial(
             mutableFloatStateOf(modes.indexOf(thinking).coerceAtLeast(0).toFloat())
         }
         val currentMode = modes.getOrElse(sliderValue.roundToInt()) { modes.first() }
+        // 档位变化才震一下：拖动过程里每一帧都反馈会变成持续的嗡嗡声。
+        val haptic = LocalHapticFeedback.current
+        var lastIndex by remember { mutableIntStateOf(sliderValue.roundToInt()) }
         AlertDialog(
             onDismissRequest = { showThinking = false },
             title = { Text(stringResource(R.string.ai_quick_thinking_title)) },
             text = {
                 Column {
+                    // 档位名居中：和下方滑杆当前点对齐，别让读者自己去对位。
                     Text(
                         text = stringResource(currentMode.labelRes()),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
                     )
                     if (maxIndex > 0f) {
                         Slider(
                             value = sliderValue,
                             onValueChange = {
                                 sliderValue = it
-                                modes.getOrNull(it.roundToInt())?.let(onSetThinkingMode)
+                                val index = it.roundToInt()
+                                if (index != lastIndex) {
+                                    lastIndex = index
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                }
+                                modes.getOrNull(index)?.let(onSetThinkingMode)
                             },
                             valueRange = 0f..maxIndex,
                             steps = (modes.size - 2).coerceAtLeast(0),
@@ -296,7 +311,7 @@ internal fun AiComposerQuickBarMaterial(
             dismissButton = {
                 TextButton(onClick = {
                     showSearch = false
-                    onOpenSettings()
+                    onOpenSettings(AiSettingsTarget.Search)
                 }) {
                     Text(stringResource(R.string.ai_settings))
                 }

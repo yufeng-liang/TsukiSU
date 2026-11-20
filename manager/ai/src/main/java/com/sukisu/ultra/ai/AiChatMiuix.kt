@@ -203,7 +203,7 @@ fun AiChatMiuix(
                             tint = colorScheme.onBackground,
                         )
                     }
-                    IconButton(onClick = actions.onOpenSettings) {
+                    IconButton(onClick = { actions.onOpenSettings(null) }) {
                         Icon(
                             imageVector = Icons.Rounded.Tune,
                             contentDescription = stringResource(R.string.ai_settings),
@@ -245,7 +245,7 @@ fun AiChatMiuix(
                     item(key = "setup") {
                         AiSetupCardMiuix(
                             enabled = state.config.enabled,
-                            onOpenSettings = actions.onOpenSettings,
+                            onOpenSettings = { actions.onOpenSettings(null) },
                         )
                     }
                 }
@@ -1093,7 +1093,7 @@ private fun AiComposerMiuix(
     onSelectModel: (String) -> Unit,
     onSetThinkingMode: (AiThinkingMode) -> Unit,
     onSetSearchEnabled: (Boolean) -> Unit,
-    onOpenSettings: () -> Unit,
+    onOpenSettings: (AiSettingsTarget) -> Unit,
     value: String,
     isSending: Boolean,
     error: String?,

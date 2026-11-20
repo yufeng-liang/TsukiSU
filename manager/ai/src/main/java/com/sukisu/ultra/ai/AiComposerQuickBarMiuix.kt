@@ -25,11 +25,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Slider
+import top.yukonga.miuix.kmp.basic.SliderDefaults
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
@@ -51,7 +53,7 @@ internal fun AiComposerQuickBarMiuix(
     onSelectModel: (String) -> Unit,
     onSetThinkingMode: (AiThinkingMode) -> Unit,
     onSetSearchEnabled: (Boolean) -> Unit,
-    onOpenSettings: () -> Unit,
+    onOpenSettings: (AiSettingsTarget) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showModels by remember { mutableStateOf(false) }
@@ -169,7 +171,7 @@ internal fun AiComposerQuickBarMiuix(
                         text = stringResource(R.string.ai_settings),
                         onClick = {
                             showModels = false
-                            onOpenSettings()
+                            onOpenSettings(AiSettingsTarget.Model)
                         },
                         modifier = Modifier.weight(1f),
                     )
@@ -194,10 +196,13 @@ internal fun AiComposerQuickBarMiuix(
             title = stringResource(R.string.ai_quick_thinking_title),
             onDismissRequest = { showThinking = false },
             content = {
+                // 档位名居中对齐，正好落在下方滑杆当前点附近，读者一眼能对上。
                 Text(
                     text = stringResource(currentMode.labelRes()),
                     style = MiuixTheme.textStyles.title4,
                     color = colorScheme.primary,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
                 )
                 if (maxIndex > 0f) {
                     Slider(
@@ -207,6 +212,10 @@ internal fun AiComposerQuickBarMiuix(
                             modes.getOrNull(it.roundToInt())?.let(onSetThinkingMode)
                         },
                         valueRange = 0f..maxIndex,
+                        // 每个档位画一个刻度点，滑到档位时手上有一下反馈，不用盯着屏幕看数字。
+                        steps = (modes.size - 2).coerceAtLeast(0),
+                        showKeyPoints = true,
+                        hapticEffect = SliderDefaults.SliderHapticEffect.Step,
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -291,7 +300,7 @@ internal fun AiComposerQuickBarMiuix(
                         text = stringResource(R.string.ai_settings),
                         onClick = {
                             showSearch = false
-                            onOpenSettings()
+                            onOpenSettings(AiSettingsTarget.Search)
                         },
                         modifier = Modifier.weight(1f),
                     )

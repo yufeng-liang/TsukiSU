@@ -201,7 +201,7 @@ fun AiChatMaterial(
                         Icon(Icons.Rounded.History, contentDescription = stringResource(R.string.ai_sessions))
                     }
                     // 设置
-                    IconButton(onClick = actions.onOpenSettings) {
+                    IconButton(onClick = { actions.onOpenSettings(null) }) {
                         Icon(Icons.Rounded.Tune, contentDescription = stringResource(R.string.ai_settings))
                     }
                     // 清空聊天记录
@@ -238,7 +238,7 @@ fun AiChatMaterial(
                     item(key = "setup") {
                         AiSetupCardMaterial(
                             enabled = state.config.enabled,
-                            onOpenSettings = actions.onOpenSettings,
+                            onOpenSettings = { actions.onOpenSettings(null) },
                         )
                     }
                 }
@@ -1037,7 +1037,7 @@ private fun AiComposerMaterial(
     onSelectModel: (String) -> Unit,
     onSetThinkingMode: (AiThinkingMode) -> Unit,
     onSetSearchEnabled: (Boolean) -> Unit,
-    onOpenSettings: () -> Unit,
+    onOpenSettings: (AiSettingsTarget) -> Unit,
     value: String,
     isSending: Boolean,
     error: String?,
@@ -1117,9 +1117,11 @@ private fun AiComposerMaterial(
                     onClick = onAttachImage,
                     enabled = !isSending,
                 ) {
+                    // 加号用 headlineMedium(28sp) 撑起来：22sp 时在 48dp 按钮里显得又小又飘，
+                    // 28sp 刚好填住按钮视觉重心，但没有大到抢输入框的注意力。
                     Text(
                         text = "+",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }

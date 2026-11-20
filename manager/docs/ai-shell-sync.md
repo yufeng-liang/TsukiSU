@@ -38,11 +38,13 @@ AI 助手有两套可切换的界面外壳，都由 `AiFeatureProviderImpl` 按 
 9. **下拉/选择框边框**：Miuix 用 1dp `outline` 描边，M3 用 `OutlinedTextField` 自带描边，观感不同但都要有边界感。
 10. **文案改动**：中英两份 `strings.xml` 都要加，英文串不能出现裸单引号（AAPT 会报 `does not contain a valid string resource`）。
 11. **主页「隐藏环境进行中」卡片**：和其它卡片同一套底——默认 `surfaceBright`、无描边，进度只体现在圆环与文案上（M3 在 `HomeMaterial.kt` 的 `HideEnvCard`，Miuix 在 `HomeMiuix.kt` 的 `HideEnvCardMiuix`）。
+12. **输入框快捷条**：模型名（点击换模型）、推理强度 `Speed`、联网搜索 `Language`；生效中的图标用 primary 色，关闭时回落普通色。推理强度弹窗的滑杆要按档位画刻度点（Miuix `steps` + `showKeyPoints`）并在落档时给触感，档位名居中压在滑杆正上方。弹窗里的「助手设置」带落点：`AiSettingsTarget`（Model / Search）+ `AiSettingsFocus` 一次性信使，设置页用 `bringIntoViewRequester` 滚到目标分组、描边 1.4s 后淡出，别把用户丢在页面顶部。
+13. **新增图标**：`ai` 模块对 `material-icons-extended` 是 `compileOnly`，运行时图标来自 `app/libs/material-icons-custom.jar`（165 个 rounded 图标）。加图标前先 `unzip -l app/libs/material-icons-custom.jar | grep 图标名` 核对，否则编译通过、真机 `ClassNotFoundException`（踩过 `Bolt`、`Public`）。
 
 ## 三、验收流程
 
 1. `cd manager && export JAVA_HOME="E:/.jdks/ms-17.0.15" && ./gradlew :ai:testDebugUnitTest :app:assembleDebug --offline`——资源错误只有 `:app:assembleDebug` 会暴露。
-2. `adb install -r app/build/outputs/apk/debug/TsukiSU_mod_41556-debug.apk`（先 `export MSYS_NO_PATHCONV=1`）。
+2. `adb install -r app/build/outputs/apk/debug/TsukiSU_mod_*-debug.apk`（先 `export MSYS_NO_PATHCONV=1`；设备有多条 adb 连接时补 `-s` 序列号）。
 3. 切到被改的那一侧，逐屏截图：主页卡片 → 助手设置（提供商 / 模型 / 自定义指令 / 联网搜索 / MCP）。
 4. 再切到另一侧，同样逐屏过一遍，只核对语义与信息架构，不追像素级一致。
 5. 截图放 `test-artifacts/screenshots/YYYY-MM-DD/场景/`，不提交。

@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -31,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +47,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sukisu.ultra.ai.R
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -207,6 +211,24 @@ fun AiSettingsScreen(
         }
     }
 
+    // 聊天页快捷条过来的落点：滚到对应分组并亮一下，别把用户丢在页面顶部。
+    val focusTarget = remember { AiSettingsFocus.consume() }
+    var focusHighlight by remember { mutableStateOf(focusTarget) }
+    val cardAnchor = remember { BringIntoViewRequester() }
+    val searchAnchor = remember { BringIntoViewRequester() }
+    LaunchedEffect(focusTarget) {
+        if (focusTarget == null) return@LaunchedEffect
+        // 目标卡要先完成一次布局，滚过去才有落点。
+        delay(80)
+        when (focusTarget) {
+            AiSettingsTarget.Model -> cardAnchor.bringIntoView()
+            AiSettingsTarget.Search -> searchAnchor.bringIntoView()
+        }
+        // 亮 1.4 秒就撤，别一直描着边影响阅读。
+        delay(1400)
+        focusHighlight = null
+    }
+
     if (miuix) {
         AiSettingsMiuix(
             draft = draft,
@@ -215,6 +237,9 @@ fun AiSettingsScreen(
             fetchingModels = fetchingModels,
             onTest = testConnection,
             onFetchModels = fetchModels,
+            focusCard = Modifier.bringIntoViewRequester(cardAnchor),
+            focusSearch = Modifier.bringIntoViewRequester(searchAnchor),
+            highlight = focusHighlight,
             onBack = {
                 advancedOptionsError()?.let { reportAdvancedOptionsError(it) }
                 onBack()
@@ -228,6 +253,9 @@ fun AiSettingsScreen(
             fetchingModels = fetchingModels,
             onTest = testConnection,
             onFetchModels = fetchModels,
+            focusCard = Modifier.bringIntoViewRequester(cardAnchor),
+            focusSearch = Modifier.bringIntoViewRequester(searchAnchor),
+            highlight = focusHighlight,
             onBack = {
                 advancedOptionsError()?.let { reportAdvancedOptionsError(it) }
                 onBack()
@@ -244,6 +272,9 @@ private fun AiSettingsMaterial(
     fetchingModels: Boolean,
     onTest: () -> Unit,
     onFetchModels: (Boolean) -> Unit,
+    focusCard: Modifier = Modifier,
+    focusSearch: Modifier = Modifier,
+    highlight: AiSettingsTarget? = null,
     onBack: () -> Unit,
 ) {
     AiExpressiveScaffold(
@@ -289,6 +320,9 @@ private fun AiSettingsMaterial(
                 onTest = onTest,
                 fetchingModels = fetchingModels,
                 onFetchModels = onFetchModels,
+                focusCard = focusCard,
+                focusSearch = focusSearch,
+                highlight = highlight,
             )
         }
     }
@@ -302,6 +336,9 @@ private fun AiSettingsMiuix(
     fetchingModels: Boolean,
     onTest: () -> Unit,
     onFetchModels: (Boolean) -> Unit,
+    focusCard: Modifier = Modifier,
+    focusSearch: Modifier = Modifier,
+    highlight: AiSettingsTarget? = null,
     onBack: () -> Unit,
 ) {
     val scroll = MiuixScrollBehavior()
@@ -355,10 +392,14 @@ private fun AiSettingsMiuix(
                 onTest = onTest,
                 fetchingModels = fetchingModels,
                 onFetchModels = onFetchModels,
+                focusCard = focusCard,
+                highlight = highlight,
                 beforeSystemPrompt = {
                     AiSettingsSectionMiuix(
                         title = stringResource(R.string.ai_search_section),
                         subtitle = stringResource(R.string.ai_search_section_summary),
+                        modifier = focusSearch,
+                        highlighted = highlight == AiSettingsTarget.Search,
                     ) {
                         AiSearchSettingsSectionMiuix()
                     }

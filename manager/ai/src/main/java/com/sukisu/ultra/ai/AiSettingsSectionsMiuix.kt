@@ -69,11 +69,18 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
  * 否则卡片底色与文字配色都拿不到 Miuix 主题，整段会发灰。这里用 [AiAppCard] 加同构的标题区。
  */
 @Composable
-internal fun AiSettingsCardMiuix(content: @Composable ColumnScope.() -> Unit) {
+internal fun AiSettingsCardMiuix(
+    modifier: Modifier = Modifier,
+    highlighted: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     // 对齐应用设置页：卡片左右 16dp、上下 12dp 内边距，行与行 10dp。之前用卡片默认内边距，
     // 文字几乎贴着卡片边框。
+    // highlighted：从聊天页快捷条跳进来时给目标卡描一圈边，滚到位也认得出是哪一组。
     AiAppCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier
+            .aiFocusRing(highlighted, RoundedCornerShape(16.dp), colorScheme.primary)
+            .fillMaxWidth(),
         insideMargin = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
@@ -85,9 +92,11 @@ internal fun AiSettingsSectionMiuix(
     title: String? = null,
     subtitle: String? = null,
     contentSpacing: Dp = 10.dp,
+    modifier: Modifier = Modifier,
+    highlighted: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    AiSettingsCardMiuix {
+    AiSettingsCardMiuix(modifier = modifier, highlighted = highlighted) {
         if (title != null) {
             Text(
                 text = title,

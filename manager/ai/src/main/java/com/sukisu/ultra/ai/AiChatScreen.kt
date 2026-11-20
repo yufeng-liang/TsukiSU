@@ -153,6 +153,12 @@ fun AiChatScreen(
     val runMessage = stringResource(R.string.ai_run_code_message)
     val runConfirm = stringResource(R.string.ai_run_code_confirm)
 
+    // 快捷条要求落到设置页的某一组：先把目标登记进一次性信使，再交给宿主导航。
+    val openSettings: (AiSettingsTarget?) -> Unit = { target ->
+        if (target != null) AiSettingsFocus.request(target)
+        onOpenSettings()
+    }
+
     val actions = AiChatActions(
         onBack = onClose,
         onInputChange = model::onInputChange,
@@ -166,7 +172,7 @@ fun AiChatScreen(
         onApprove = model::approvePending,
         onApproveAlways = model::approveAlwaysForRequest,
         onDeny = model::denyPending,
-        onOpenSettings = onOpenSettings,
+        onOpenSettings = openSettings,
         onGrantRoot = model::grantRootForRequest,
         onAnswerQuestion = model::answerQuestion,
         onRunCode = { code ->
@@ -227,7 +233,8 @@ data class AiChatActions(
     val onApprove: () -> Unit,
     val onApproveAlways: () -> Unit,
     val onDeny: () -> Unit,
-    val onOpenSettings: () -> Unit,
+    /** 打开助手设置；带上目标分组时，设置页会滚到那一组并高亮。 */
+    val onOpenSettings: (AiSettingsTarget?) -> Unit,
     val onGrantRoot: () -> Unit,
     val onAnswerQuestion: (String?) -> Unit,
     val onRunCode: (String) -> Unit,

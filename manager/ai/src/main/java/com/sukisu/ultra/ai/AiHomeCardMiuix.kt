@@ -203,6 +203,9 @@ internal fun AiConfigEditorMiuix(
     onFetchModels: (Boolean) -> Unit = {},
     // 联网搜索与 MCP 分组插在「连接」之后、「自定义指令」之前，由设置页从外部传入。
     beforeSystemPrompt: @Composable () -> Unit = {},
+    // 从聊天页快捷条跳进来时，把锚点挂到连接卡上并描一圈边。
+    focusCard: Modifier = Modifier,
+    highlight: AiSettingsTarget? = null,
 ) {
     var pendingRiskKind by remember { mutableStateOf<AiRiskKind?>(null) }
     var pendingRiskPhrase by remember { mutableStateOf<String?>(null) }
@@ -395,7 +398,10 @@ internal fun AiConfigEditorMiuix(
             onCheckedChange = { onDraftChange(draft.copy(enabled = it)) },
         )
         }
-        AiSettingsCardMiuix {
+        AiSettingsCardMiuix(
+            modifier = focusCard,
+            highlighted = highlight == AiSettingsTarget.Model,
+        ) {
         Text(
             text = stringResource(R.string.ai_connection_section),
             style = MiuixTheme.textStyles.title4,
