@@ -29,7 +29,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 
 /** 供应商地址必须是完整的 http(s) URL，保存前即时校验。 */
-private fun isHttpEndpoint(value: String): Boolean {
+internal fun isHttpEndpoint(value: String): Boolean {
     val uri = runCatching { java.net.URI(value.trim()) }.getOrNull() ?: return false
     return (uri.scheme == "http" || uri.scheme == "https") && !uri.host.isNullOrBlank()
 }

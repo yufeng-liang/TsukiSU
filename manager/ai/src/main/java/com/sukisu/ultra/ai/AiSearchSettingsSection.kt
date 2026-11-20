@@ -284,7 +284,8 @@ private fun SearchProviderRow(
                 if (dragging) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
                 else Color.Transparent,
             )
-            .padding(horizontal = 4.dp, vertical = 8.dp),
+            // 开关本身就有 48dp 触摸高度，再叠 8dp 会让每行都撑出大片空带。
+            .padding(horizontal = 4.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -519,16 +520,16 @@ private fun SearchProviderDetailDialog(
 }
 
 /** 设置行圆角：与 MCP 行保持一致，避免同页出现多种圆角。 */
-private val SearchRowShape = RoundedCornerShape(12.dp)
+internal val SearchRowShape = RoundedCornerShape(12.dp)
 
 /** 拖拽交换的最小位移阈值：实测行高后取更大者，手指拖动一小段不会误交换。 */
-private val DragSwapMin = 48.dp
+internal val DragSwapMin = 48.dp
 
 /** 拖柄的触碰区：图标 20dp，外面留出余量，手指更容易抓到。 */
-private val DragHandleTouchSize = 32.dp
+internal val DragHandleTouchSize = 32.dp
 
 /** 单次拖动事件里最多连续交换几行，防止累计值异常时疯狂重排。 */
-private const val MaxSwapsPerEvent = 4
+internal const val MaxSwapsPerEvent = 4
 
 /** 四家服务的默认顺序：老配置里没有 order 或只有部分服务时用来补全。 */
 private val ProviderFallbackOrder = listOf(
@@ -542,7 +543,7 @@ private val ProviderFallbackOrder = listOf(
  * 界面上展示的顺序：去重，再把缺失的服务补到末尾。
  * 这样旧版本配置（或以后新增服务）不会让某一行凭空消失。
  */
-private fun AiSearchConfig.uiOrder(): List<AiSearchProvider> =
+internal fun AiSearchConfig.uiOrder(): List<AiSearchProvider> =
     (order + ProviderFallbackOrder).distinct()
 
 /** 各家服务的 Key 申请页；点按钮直接跳浏览器，不用用户自己找。 */
@@ -551,7 +552,7 @@ private const val ANYSEARCH_KEY_URL = "https://www.anysearch.com/console/api-key
 private const val TAVILY_KEY_URL = "https://app.tavily.com/home"
 private const val YUANBAO_KEY_URL = "https://console.cloud.tencent.com/wsapi/index"
 
-private fun keyUrlOf(provider: AiSearchProvider): String? = when (provider) {
+internal fun keyUrlOf(provider: AiSearchProvider): String? = when (provider) {
     AiSearchProvider.FIRECRAWL -> FIRECRAWL_KEY_URL
     AiSearchProvider.ANYSEARCH -> ANYSEARCH_KEY_URL
     AiSearchProvider.TAVILY -> TAVILY_KEY_URL
@@ -559,7 +560,7 @@ private fun keyUrlOf(provider: AiSearchProvider): String? = when (provider) {
 }
 
 @Composable
-private fun providerTitle(provider: AiSearchProvider): String = when (provider) {
+internal fun providerTitle(provider: AiSearchProvider): String = when (provider) {
     AiSearchProvider.FIRECRAWL -> stringResource(R.string.ai_search_provider_firecrawl)
     AiSearchProvider.ANYSEARCH -> stringResource(R.string.ai_search_provider_anysearch)
     AiSearchProvider.TAVILY -> stringResource(R.string.ai_search_provider_tavily)
@@ -567,7 +568,7 @@ private fun providerTitle(provider: AiSearchProvider): String = when (provider) 
 }
 
 @Composable
-private fun providerDescription(provider: AiSearchProvider): String = when (provider) {
+internal fun providerDescription(provider: AiSearchProvider): String = when (provider) {
     AiSearchProvider.FIRECRAWL -> stringResource(R.string.ai_search_desc_firecrawl)
     AiSearchProvider.ANYSEARCH -> stringResource(R.string.ai_search_desc_anysearch)
     AiSearchProvider.TAVILY -> stringResource(R.string.ai_search_desc_tavily)

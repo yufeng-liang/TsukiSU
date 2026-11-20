@@ -25,6 +25,18 @@ enum class AiSearchProvider {
     /** 腾讯云元宝搜索（https://api.wsa.cloud.tencent.com/SearchPro），需要服务 API KEY。 */
     YUANBAO;
 
+    /**
+     * 是否必须自备 Key 才能调用。
+     *
+     * 实测（2026-11-20，请求走本地 7890 代理）：
+     * - Firecrawl：不带 Key 直接 POST /v1/search 返回 200，只有匿名额度更低；
+     * - AnySearch：同上，返回 200；
+     * - Tavily：返回 401 missing or invalid API key；
+     * - 腾讯元宝：HTTP 200，但响应体是 UnauthorizedOperation「未授权操作」，等于不可用。
+     * 所以后两家没 Key 就不参与搜索，前两家可以匿名跑。
+     */
+    val requiresKey: Boolean get() = this == TAVILY || this == YUANBAO;
+
     companion object {
         /** 默认尝试顺序：按枚举声明顺序，首项 [FIRECRAWL] 即默认服务商。 */
         val orderDefault: List<AiSearchProvider> = entries
@@ -61,9 +73,7 @@ data class AiSearchConfig(
 
     /** Firecrawl 与 AnySearch 允许匿名（额度更低），其余服务必须填 Key 才算可用。 */
     fun isConfigured(provider: AiSearchProvider): Boolean =
-        provider == AiSearchProvider.ANYSEARCH ||
-            provider == AiSearchProvider.FIRECRAWL ||
-            keyOf(provider).isNotBlank()
+        !provider.requiresKey || keyOf(provider).isNotBlank()
 
     /**
      * 自动故障转移的候选服务商：按 [order] 排列，跳过未启用的和缺 Key 的；

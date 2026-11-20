@@ -40,8 +40,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.automirrored.rounded.Send
-import androidx.compose.material.icons.rounded.AddComment
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Stop
@@ -51,6 +52,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -179,23 +181,8 @@ fun AiChatMiuix(
                     }
                 },
                 actions = {
-            top.yukonga.miuix.kmp.basic.TextButton(
-                text = stringResource(R.string.ai_sessions),
-                onClick = { showSessions = true },
-            )
-                    if (state.config.model.isNotBlank()) {
-                        TextButton(
-                            text = state.config.model.take(12),
-                            onClick = actions.onOpenSettings,
-                        )
-                    }
-                    IconButton(onClick = actions.onOpenSettings) {
-                        Icon(
-                            imageVector = Icons.Rounded.Tune,
-                            contentDescription = stringResource(R.string.ai_settings),
-                            tint = colorScheme.onBackground,
-                        )
-                    }
+                    // 顺序：清空聊天记录 → 会话历史 → 设置。
+                    // 模型名原先也是个文字按钮，但它只是设置的重复入口，去掉后三个图标才有固定位次。
                     IconButton(onClick = {
                         clearDialog.showConfirm(
                             title = clearTitle,
@@ -204,8 +191,22 @@ fun AiChatMiuix(
                         )
                     }) {
                         Icon(
-                            imageVector = Icons.Rounded.AddComment,
-                            contentDescription = stringResource(R.string.ai_new_chat),
+                            imageVector = Icons.Rounded.DeleteSweep,
+                            contentDescription = clearTitle,
+                            tint = colorScheme.onBackground,
+                        )
+                    }
+                    IconButton(onClick = { showSessions = true }) {
+                        Icon(
+                            imageVector = Icons.Rounded.History,
+                            contentDescription = stringResource(R.string.ai_sessions),
+                            tint = colorScheme.onBackground,
+                        )
+                    }
+                    IconButton(onClick = actions.onOpenSettings) {
+                        Icon(
+                            imageVector = Icons.Rounded.Tune,
+                            contentDescription = stringResource(R.string.ai_settings),
                             tint = colorScheme.onBackground,
                         )
                     }
@@ -251,7 +252,6 @@ fun AiChatMiuix(
                 if (state.messages.isEmpty()) {
                     item(key = "welcome") {
                         AiWelcomeMiuix(
-                            suggestions = state.suggestions,
                             loading = state.suggestionsLoading,
                             onSuggestion = { text ->
                                 actions.onInputChange(text)
@@ -540,13 +540,13 @@ private fun MiuixSuggestionChip(
             .clip(RoundedCornerShape(18.dp))
             .background(colorScheme.secondaryContainer)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = 14.dp, vertical = 6.dp),
     ) {
         Text(
             text = text,
             style = MiuixTheme.textStyles.body2,
             color = colorScheme.onSecondaryContainer,
-            maxLines = 3,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
     }
@@ -562,8 +562,8 @@ private fun AiSetupCardMiuix(
         colors = CardDefaults.defaultColors(color = colorScheme.tertiaryContainer),
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
                 text = stringResource(
@@ -572,7 +572,12 @@ private fun AiSetupCardMiuix(
                 style = MiuixTheme.textStyles.body1,
                 color = colorScheme.onTertiaryContainer,
             )
-            Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
+            Button(
+                onClick = onOpenSettings,
+                modifier = Modifier.fillMaxWidth(),
+                // 主色按钮：横幅里唯一的动作，用 primary 才够显眼。
+                colors = ButtonDefaults.buttonColorsPrimary(),
+            ) {
                 Text(stringResource(R.string.ai_open_settings))
             }
         }
@@ -937,13 +942,30 @@ private fun AiMessageBubbleMiuix(
 private fun AiCapabilityCardsMiuix(
     onSuggestion: (String) -> Unit,
     modifier: Modifier = Modifier,
+    generation: Int = 0,
 ) {
-    val cards = listOf(
-        Triple(R.string.ai_home_card_device, R.string.ai_home_card_device_prompt, "\uD83D\uDCF1"),
-        Triple(R.string.ai_home_card_troubleshoot, R.string.ai_home_card_troubleshoot_prompt, "\uD83D\uDD0D"),
-        Triple(R.string.ai_home_card_module_pick, R.string.ai_home_card_module_pick_prompt, "\uD83E\uDDE9"),
-        Triple(R.string.ai_home_card_cleanup, R.string.ai_home_card_cleanup_prompt, "\uD83D\uDCBE"),
+    // 三套预置候选：「换一批」在没配模型时也能真的换内容，不依赖网络。
+    val pages = listOf(
+        listOf(
+            Triple(R.string.ai_home_card_device, R.string.ai_home_card_device_prompt, "\uD83D\uDCF1"),
+            Triple(R.string.ai_home_card_troubleshoot, R.string.ai_home_card_troubleshoot_prompt, "\uD83D\uDD0D"),
+            Triple(R.string.ai_home_card_module_pick, R.string.ai_home_card_module_pick_prompt, "\uD83E\uDDE9"),
+            Triple(R.string.ai_home_card_cleanup, R.string.ai_home_card_cleanup_prompt, "\uD83D\uDCBE"),
+        ),
+        listOf(
+            Triple(R.string.ai_cap_status, R.string.ai_suggestion_status2, "\uD83D\uDCCA"),
+            Triple(R.string.ai_cap_troubleshoot, R.string.ai_suggestion_troubleshoot2, "\uD83E\uDDE9"),
+            Triple(R.string.ai_cap_lkm, R.string.ai_suggestion_lkm, "\u2699\uFE0F"),
+            Triple(R.string.ai_cap_modules2, R.string.ai_suggestion_modules2, "\uD83D\uDCE6"),
+        ),
+        listOf(
+            Triple(R.string.ai_cap_clean, R.string.ai_suggestion_cleanup2, "\uD83E\uDDF9"),
+            Triple(R.string.ai_cap_detect, R.string.ai_suggestion_detect, "\uD83D\uDEE1\uFE0F"),
+            Triple(R.string.ai_cap_backup, R.string.ai_suggestion_backup, "\uD83D\uDCBE"),
+            Triple(R.string.ai_cap_beginner, R.string.ai_suggestion_beginner, "\uD83C\uDF31"),
+        ),
     )
+    val cards = pages[generation.mod(pages.size)]
     FlowRow(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
@@ -957,24 +979,23 @@ private fun AiCapabilityCardsMiuix(
                 modifier = Modifier.weight(1f).clickable { onSuggestion(prompt) },
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(text = emoji, style = MiuixTheme.textStyles.title3)
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = title,
                             style = MiuixTheme.textStyles.body1,
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
+                            // 说明文案不再限行：卡片高度由文字撑开，宁可多一点纵向空间也不留省略号。
                             text = prompt,
                             style = MiuixTheme.textStyles.footnote1,
                             color = colorScheme.onSurfaceVariantSummary,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -985,17 +1006,19 @@ private fun AiCapabilityCardsMiuix(
 
 @Composable
 private fun AiWelcomeMiuix(
-    suggestions: List<String>,
     loading: Boolean,
     onSuggestion: (String) -> Unit,
     onRefresh: () -> Unit,
 ) {
+    // 每次「换一批」都递增，用来轮换下面的预置候选；即使模型不可用也有可见变化。
+    var generation by remember { mutableIntStateOf(0) }
     Column(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 28.dp),
+        // 欢迎页要在一屏内放下（含未配置横幅），因此纵向留白与间距都收紧。
+        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        AiAvatarImage(size = 64.dp)
+        AiAvatarImage(size = 48.dp)
         Text(
             text = stringResource(R.string.ai_welcome_title),
             style = MiuixTheme.textStyles.title2,
@@ -1012,42 +1035,43 @@ private fun AiWelcomeMiuix(
             color = colorScheme.onSurfaceVariantSummary,
             textAlign = TextAlign.Center,
         )
-        AiCapabilityCardsMiuix(onSuggestion = onSuggestion, modifier = Modifier.padding(horizontal = 16.dp))
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            suggestions.forEach { suggestion ->
-                MiuixSuggestionChip(
-                    text = suggestion,
-                    onClick = { onSuggestion(suggestion) },
+        // 建议 chip 与能力卡重复（卡上已有同样的问题入口），只留能力卡 + 换一批。
+        AiCapabilityCardsMiuix(
+            onSuggestion = onSuggestion,
+            modifier = Modifier.padding(horizontal = 16.dp),
+            generation = generation,
+        )
+        if (loading) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(14.dp),
+                    strokeWidth = 2.dp,
+                )
+                Text(
+                    text = stringResource(R.string.ai_suggestions_loading),
+                    style = MiuixTheme.textStyles.footnote1,
+                    color = colorScheme.onSurfaceVariantSummary,
                 )
             }
         }
         Button(
-            onClick = onRefresh,
+            onClick = {
+                generation++
+                onRefresh()
+            },
             colors = ButtonDefaults.buttonColors(),
-            insideMargin = PaddingValues(horizontal = 16.dp, vertical = 13.dp),
+            insideMargin = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
         ) {
-            if (loading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    colors = ProgressIndicatorDefaults.progressIndicatorColors(
-                        foregroundColor = colorScheme.onSecondaryVariant,
-                        backgroundColor = Color.Transparent,
-                    ),
-                    strokeWidth = 2.dp,
-                )
-                Spacer(Modifier.size(8.dp))
-            } else {
-                Icon(
-                    imageVector = Icons.Rounded.Refresh,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = colorScheme.onSecondaryVariant,
-                )
-                Spacer(Modifier.size(6.dp))
-            }
+            Icon(
+                imageVector = Icons.Rounded.Refresh,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = colorScheme.onSecondaryVariant,
+            )
+            Spacer(Modifier.size(6.dp))
             Text(
                 text = stringResource(R.string.ai_suggestions_refresh),
                 style = MiuixTheme.textStyles.button,
@@ -1124,7 +1148,7 @@ private fun AiComposerMiuix(
             IconButton(onClick = onAttachImage, enabled = !isSending) {
                 Text(
                     text = "+",
-                    style = MiuixTheme.textStyles.title3,
+                    style = MiuixTheme.textStyles.title1,
                     color = colorScheme.primary,
                 )
             }

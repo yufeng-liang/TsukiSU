@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -365,8 +366,10 @@ private fun AiSettingsMiuix(
                 .nestedScroll(scroll.nestedScrollConnection)
                 .verticalScroll(rememberScrollState())
                 .imePadding()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                // 对齐应用设置页：页面左右留 12dp，卡片自己再给 16dp 内边距。
+                .padding(horizontal = 12.dp, vertical = 8.dp)
                 .navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (AiLocalNetwork.isSupported() && AiLocalNetwork.isLanEndpoint(draft)) {
                 MiuixText(
@@ -376,16 +379,27 @@ private fun AiSettingsMiuix(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
                 )
             }
-            AiAppCard(modifier = Modifier.fillMaxWidth()) {
-                AiConfigEditorMiuix(
-                    draft = draft,
-                    onDraftChange = onDraftChange,
-                    testState = testState,
-                    onTest = onTest,
-                    fetchingModels = fetchingModels,
-                    onFetchModels = onFetchModels,
-                )
-            }
+            // 编辑器自己按分组输出卡片，这里不要再套一层，否则卡片叠卡片看不出分组。
+            AiConfigEditorMiuix(
+                draft = draft,
+                onDraftChange = onDraftChange,
+                testState = testState,
+                onTest = onTest,
+                fetchingModels = fetchingModels,
+                onFetchModels = onFetchModels,
+                beforeSystemPrompt = {
+                    AiSettingsSectionMiuix(
+                        title = stringResource(R.string.ai_search_section),
+                        subtitle = stringResource(R.string.ai_search_section_summary),
+                    ) {
+                        AiSearchSettingsSectionMiuix()
+                    }
+                    AiSettingsSectionMiuix(title = stringResource(R.string.ai_mcp_section)) {
+                        AiMcpSettingsSectionMiuix()
+                    }
+                },
+            )
+
         }
     }
 }

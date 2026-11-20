@@ -85,6 +85,8 @@ dependencies {
 
     implementation(libs.miuix.ui)
     implementation(libs.miuix.icons)
+    // 搜索服务与模块列表共用同一套拖拽排序（带位移与让位动画）。
+    implementation(libs.reorderable)
 
     implementation(platform(libs.okhttp.bom))
     implementation(libs.okhttp)

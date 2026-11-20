@@ -342,7 +342,8 @@ object AiSettings {
             apiKey = p.getString(KEY_API_KEY, "").orEmpty(),
             model = p.getString(KEY_MODEL, "").orEmpty(),
             titleModel = p.getString(KEY_TITLE_MODEL, "").orEmpty(),
-            titleEffort = AiThinkingMode.fromStored(p.getString(KEY_TITLE_EFFORT, null)),
+            // 标题生成固定关闭推理：档位不再对用户开放，旧配置里残留的值也不再读。
+            titleEffort = AiThinkingMode.OFF,
             imageModel = p.getString(KEY_IMAGE_MODEL, "").orEmpty(),
             format = AiProviderFormat.fromStored(p.getString(KEY_FORMAT, null)),
             enabled = p.getBoolean(KEY_ENABLED, true),

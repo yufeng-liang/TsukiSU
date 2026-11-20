@@ -1185,7 +1185,7 @@ private fun AiThinkingMode.titleEffortLabelRes(): Int = when (this) {
 }
 
 /** 粗略识别「可生图」的模型：只看模型 id/展示名里的关键词，文本模型不会命中。 */
-private fun AiModelInfo.looksLikeImageModel(): Boolean {
+internal fun AiModelInfo.looksLikeImageModel(): Boolean {
     val key = (id + " " + name).lowercase()
     return listOf(
         "dall-e", "dalle", "gpt-image", "image-preview", "flux", "stable-diffusion", "sdxl",

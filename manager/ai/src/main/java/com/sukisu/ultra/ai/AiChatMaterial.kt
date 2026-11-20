@@ -244,6 +244,9 @@ fun AiChatMaterial(
                 }
                 if (state.messages.isEmpty()) {
                     // 问候 + 能力卡整块在剩余可视区里居中，并再上移 10%（视觉重心更舒服）。
+                    // 这一项被钉成整屏高度：小屏、窄高比或大字号设备上内容会比可视区高，
+                    // 直接居中会把上下两端裁掉且列表滚不动，建议 chip 就永远够不着。
+                    // 所以给内容自己一圈滚动——放得下时不滚（保持居中），放不下时可上下拖。
                     item(key = "welcome") {
                         BoxWithConstraints(modifier = Modifier.fillParentMaxHeight().fillMaxWidth()) {
                             val shiftUp = maxHeight * 0.10f
@@ -259,7 +262,9 @@ fun AiChatMaterial(
                                         actions.onSend()
                                     },
                                     onRefresh = actions.onRefreshSuggestions,
-                                    modifier = Modifier.offset(y = -shiftUp),
+                                    modifier = Modifier
+                                        .offset(y = -shiftUp)
+                                        .verticalScroll(rememberScrollState()),
                                 )
                             }
                         }

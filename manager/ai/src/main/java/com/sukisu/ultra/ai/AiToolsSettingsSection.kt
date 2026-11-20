@@ -49,7 +49,7 @@ private val SettingsRowShape = RoundedCornerShape(12.dp)
  * 与 [AiMcpClient.validUrl] 保持一致的即时校验：只允许 https；
  * 本机回环地址额外允许 http，方便本地调试。`httpx://` 等非法 scheme 一律拒绝。
  */
-private fun isValidMcpUrl(raw: String): Boolean {
+internal fun isValidMcpUrl(raw: String): Boolean {
     val text = raw.trim()
     if (text.isEmpty()) return false
     val uri = runCatching { java.net.URI(text) }.getOrNull() ?: return false
