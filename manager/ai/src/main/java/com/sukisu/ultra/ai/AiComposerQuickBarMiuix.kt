@@ -196,12 +196,12 @@ internal fun AiComposerQuickBarMiuix(
             title = stringResource(R.string.ai_quick_thinking_title),
             onDismissRequest = { showThinking = false },
             content = {
-                // 档位名居中对齐，正好落在下方滑杆当前点附近，读者一眼能对上。
+                // 档位名居中对齐，正好落在下方滑杆当前点附近；底部留 16dp，把大字和滑杆分开。
                 Text(
                     text = stringResource(currentMode.labelRes()),
                     style = MiuixTheme.textStyles.title4,
                     color = colorScheme.primary,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                     textAlign = TextAlign.Center,
                 )
                 if (maxIndex > 0f) {

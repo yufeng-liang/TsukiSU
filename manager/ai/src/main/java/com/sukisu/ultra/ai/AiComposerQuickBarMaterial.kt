@@ -206,12 +206,12 @@ internal fun AiComposerQuickBarMaterial(
             title = { Text(stringResource(R.string.ai_quick_thinking_title)) },
             text = {
                 Column {
-                    // 档位名居中：和下方滑杆当前点对齐，别让读者自己去对位。
+                    // 档位名居中：和下方滑杆当前点对齐；底部留 16dp，把字和滑杆分开。
                     Text(
                         text = stringResource(currentMode.labelRes()),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                         textAlign = TextAlign.Center,
                     )
                     if (maxIndex > 0f) {
