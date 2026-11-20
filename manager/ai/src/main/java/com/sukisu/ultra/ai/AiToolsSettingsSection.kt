@@ -5,15 +5,19 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -134,8 +138,104 @@ internal fun AiMcpSettingsSection(modifier: Modifier = Modifier) {
 }
 
 /**
+ * 凭据输入：三档认证方式 + 只填密钥，自定义请求头收在可展开入口里。
+ *
+ * 两种认证方式只是请求头写法的差别（Bearer / X-API-Key），解析与拼装都交给
+ * [detectMcpAuth] / [buildMcpHeaders]，M3 与 Miuix 共用同一套规则。
+ */
+@Composable
+private fun McpAuthFieldsMaterial(
+    mode: McpAuthMode,
+    onModeChange: (McpAuthMode) -> Unit,
+    apiKey: String,
+    onApiKeyChange: (String) -> Unit,
+    extraHeaders: String,
+    onExtraHeadersChange: (String) -> Unit,
+) {
+    var keyVisible by remember { mutableStateOf(false) }
+    var headersExpanded by remember { mutableStateOf(mode == McpAuthMode.Custom) }
+    Text(
+        text = stringResource(R.string.ai_mcp_auth),
+        style = MaterialTheme.typography.labelLarge,
+    )
+    // 三档换行摆放：窄屏上「自定义」会被挤成两行，交给 FlowRow 断行更稳。
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        McpAuthMode.entries.forEach { entry ->
+            FilterChip(
+                selected = mode == entry,
+                onClick = { onModeChange(entry) },
+                label = { Text(stringResource(entry.labelRes()), maxLines = 1) },
+            )
+        }
+    }
+    if (mode == McpAuthMode.Custom) {
+        OutlinedTextField(
+            value = extraHeaders,
+            onValueChange = onExtraHeadersChange,
+            label = { Text(stringResource(R.string.ai_mcp_headers)) },
+            placeholder = { Text(stringResource(R.string.ai_mcp_custom_hint)) },
+            minLines = 2,
+            shape = MaterialTheme.shapes.large,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        return
+    }
+    OutlinedTextField(
+        value = apiKey,
+        onValueChange = onApiKeyChange,
+        label = { Text(stringResource(R.string.ai_mcp_key)) },
+        singleLine = true,
+        // 密钥默认打码，右侧眼睛临时明文核对，避免截图或旁人看到。
+        visualTransformation = if (keyVisible) {
+            VisualTransformation.None
+        } else {
+            PasswordVisualTransformation()
+        },
+        trailingIcon = {
+            IconButton(onClick = { keyVisible = !keyVisible }) {
+                Icon(
+                    imageVector = if (keyVisible) {
+                        Icons.Rounded.VisibilityOff
+                    } else {
+                        Icons.Rounded.Visibility
+                    },
+                    contentDescription = stringResource(R.string.ai_mcp_key),
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        },
+        supportingText = { Text(stringResource(mode.keyHintRes())) },
+        shape = MaterialTheme.shapes.large,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    // 其他请求头默认收起：多数服务只认一个密钥，需要时再展开。
+    if (!headersExpanded) {
+        TextButton(onClick = { headersExpanded = true }) {
+            Text(
+                text = "+ " + stringResource(R.string.ai_mcp_extra_headers),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    } else {
+        OutlinedTextField(
+            value = extraHeaders,
+            onValueChange = onExtraHeadersChange,
+            label = { Text(stringResource(R.string.ai_mcp_extra_headers)) },
+            placeholder = { Text(stringResource(R.string.ai_mcp_custom_hint)) },
+            minLines = 2,
+            shape = MaterialTheme.shapes.large,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/**
  * 新增 MCP 服务器弹窗（对齐 RikkaHub 的字段顺序，改成轻量弹窗）：
- * 名称 → 地址 → 请求头键值对（可增删） → 保存/取消。
+ * 名称 → 地址 → 认证方式与密钥（其他请求头可选） → 保存/取消。
  */
 @Composable
 private fun McpServerAddDialog(
@@ -146,7 +246,9 @@ private fun McpServerAddDialog(
     var url by remember { mutableStateOf("") }
     var enabled by remember { mutableStateOf(true) }
     var transport by remember { mutableStateOf("STREAMABLE_HTTP") }
-    var headers by remember { mutableStateOf(listOf<Pair<String, String>>()) }
+    var authMode by remember { mutableStateOf(McpAuthMode.Bearer) }
+    var apiKey by remember { mutableStateOf("") }
+    var extraHeaders by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -211,57 +313,14 @@ private fun McpServerAddDialog(
                     shape = MaterialTheme.shapes.large,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Text(
-                    text = stringResource(R.string.ai_mcp_headers),
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                headers.forEachIndexed { index, (key, value) ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        OutlinedTextField(
-                            value = key,
-                            onValueChange = { input ->
-                                headers = headers.toMutableList().also { it[index] = input to it[index].second }
-                            },
-                            label = { Text(stringResource(R.string.ai_mcp_header_name)) },
-                            singleLine = true,
-                            shape = MaterialTheme.shapes.large,
-                            modifier = Modifier.weight(1f),
-                        )
-                        OutlinedTextField(
-                            value = value,
-                            onValueChange = { input ->
-                                headers = headers.toMutableList().also { it[index] = it[index].first to input }
-                            },
-                            label = { Text(stringResource(R.string.ai_mcp_header_value)) },
-                            singleLine = true,
-                            shape = MaterialTheme.shapes.large,
-                            modifier = Modifier.weight(1f),
-                        )
-                        IconButton(onClick = { headers = headers.filterIndexed { i, _ -> i != index } }) {
-                            Icon(
-                                imageVector = Icons.Rounded.Delete,
-                                contentDescription = stringResource(R.string.ai_mcp_delete_header),
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                    }
-                }
-                TextButton(onClick = { headers = headers + ("" to "") }) {
-                    Icon(
-                        imageVector = Icons.Rounded.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Text(
-                        text = stringResource(R.string.ai_mcp_add_header),
-                        modifier = Modifier.padding(start = 4.dp),
-                    )
-                }
-            }
+                McpAuthFieldsMaterial(
+                    mode = authMode,
+                    onModeChange = { authMode = it },
+                    apiKey = apiKey,
+                    onApiKeyChange = { apiKey = it },
+                    extraHeaders = extraHeaders,
+                    onExtraHeadersChange = { extraHeaders = it },
+                )            }
         },
         confirmButton = {
             TextButton(
@@ -274,8 +333,7 @@ private fun McpServerAddDialog(
                             url = url.trim(),
                             enabled = enabled,
                             transport = transport,
-                            headers = headers.filter { it.first.isNotBlank() }
-                                .associate { it.first.trim() to it.second.trim() },
+                            headers = buildMcpHeaders(authMode, apiKey, extraHeaders),
                         )
                     )
                 },
@@ -339,11 +397,11 @@ private fun McpServerDetailDialog(
 ) {
     var name by remember { mutableStateOf(server.name) }
     var url by remember { mutableStateOf(server.url) }
-    var headersText by remember {
-        mutableStateOf(
-            server.headers.entries.joinToString("\n") { "${it.key}: ${it.value}" },
-        )
-    }
+    // 已有配置反推成「方式 + 密钥 + 其他请求头」，用户只看到密钥框。
+    val initialAuth = remember(server.id) { detectMcpAuth(server.headers) }
+    var authMode by remember(server.id) { mutableStateOf(initialAuth.mode) }
+    var apiKey by remember(server.id) { mutableStateOf(initialAuth.key) }
+    var extraHeaders by remember(server.id) { mutableStateOf(initialAuth.extraHeaders) }
     var tools by remember { mutableStateOf<List<AiMcpTool>?>(null) }
     var toolsError by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
@@ -375,13 +433,13 @@ private fun McpServerDetailDialog(
                     },
                     shape = MaterialTheme.shapes.large,
                 )
-                OutlinedTextField(
-                    value = headersText,
-                    onValueChange = { headersText = it },
-                    label = { Text(stringResource(R.string.ai_mcp_headers)) },
-                    placeholder = { Text(stringResource(R.string.ai_mcp_headers_hint)) },
-                    minLines = 2,
-                    shape = MaterialTheme.shapes.large,
+                McpAuthFieldsMaterial(
+                    mode = authMode,
+                    onModeChange = { authMode = it },
+                    apiKey = apiKey,
+                    onApiKeyChange = { apiKey = it },
+                    extraHeaders = extraHeaders,
+                    onExtraHeadersChange = { extraHeaders = it },
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(
@@ -396,7 +454,7 @@ private fun McpServerDetailDialog(
                                     url = url,
                                     enabled = server.enabled,
                                     transport = server.transport,
-                                    headers = parseHeaders(headersText),
+                                    headers = buildMcpHeaders(authMode, apiKey, extraHeaders),
                                 )
                                 val result = runCatching { AiMcpClient.listTools(target) }
                                 loading = false
@@ -457,7 +515,7 @@ private fun McpServerDetailDialog(
                         server.copy(
                             name = name.trim(),
                             url = url.trim(),
-                            headers = parseHeaders(headersText),
+                            headers = buildMcpHeaders(authMode, apiKey, extraHeaders),
                         ),
                     )
                     onUpdated()

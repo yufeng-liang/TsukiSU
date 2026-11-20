@@ -2,7 +2,6 @@ package com.sukisu.ultra.ai
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,21 +28,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -55,6 +49,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import sh.calvin.reorderable.ReorderableColumn
 
 /**
  * AI 设置页里的「联网搜索」分组。
@@ -68,7 +63,8 @@ import kotlinx.coroutines.launch
  * - 只用 Material3 控件，Material / Miuix 两套外壳共用同一个 composable；
  * - 所有改动立即写进 [AiSearchSettings]，不设「保存」按钮，避免用户改完忘了保存；
  * - 列表不堆说明与输入框，避免四家服务把设置页拉得很长；
- * - 拖拽不引入 reorderable 依赖（本模块没有），用 [detectDragGestures] + 累计位移交换相邻行。
+ * - 拖拽排序交给 reorderable 库（模块已有该依赖），拖动时行跟手、其余行自动让位；
+ * - 总开关关闭只是暂停：整组压暗但开关仍可点，点开任一服务即视为明确意图、顺手恢复总闸。
  */
 @Composable
 internal fun AiSearchSettingsSection(modifier: Modifier = Modifier) {
@@ -97,18 +93,6 @@ internal fun AiSearchSettingsSection(modifier: Modifier = Modifier) {
         AiSearchSettings.save(next)
     }
 
-    /** 与相邻行交换位置；[direction] 为 +1 下移、-1 上移。越界时什么都不做。 */
-    fun move(provider: AiSearchProvider, direction: Int) {
-        val order = config.uiOrder().toMutableList()
-        val index = order.indexOf(provider)
-        val target = index + direction
-        if (index < 0 || target !in order.indices) return
-        val neighbor = order[target]
-        order[target] = order[index]
-        order[index] = neighbor
-        persist(config.copy(order = order))
-    }
-
     /** 发起一次真实搜索测试：消耗一次调用，结果写回对应服务，在弹窗里展示。 */
     fun runTest(provider: AiSearchProvider, query: String) {
         if (testing != null) return
@@ -130,8 +114,8 @@ internal fun AiSearchSettingsSection(modifier: Modifier = Modifier) {
 
     val order = config.uiOrder()
 
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // ① 总开关：关掉后下面的服务行全部禁用（内容仍可见，方便先填 Key 再打开）。
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // ① 总开关：关掉只是暂停，服务选择与顺序都保留，下面仍可操作。
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -156,38 +140,62 @@ internal fun AiSearchSettingsSection(modifier: Modifier = Modifier) {
             )
         }
 
+        if (!config.searchEnabled) {
+            Text(
+                text = stringResource(R.string.ai_search_paused),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-        // ② 四家搜索服务：列表只留名称与开关，更多设置进二级弹窗。
-        order.forEach { provider ->
-            key(provider) {
+        // ② 四家搜索服务：拖拽排序用 reorderable 库，行内只留名称与开关。
+        ReorderableColumn(
+            list = order,
+            // 总闸关闭时整组压暗：明确「现在不参与搜索」，但开关仍可点。
+            modifier = Modifier.alpha(if (config.searchEnabled) 1f else 0.55f),
+            onSettle = { from, to -> persist(reorderSearchProviders(config, from, to)) },
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) { _, provider, isDragging ->
+            ReorderableItem(Modifier.fillMaxWidth()) {
                 SearchProviderRow(
                     provider = provider,
                     checked = config.isEnabled(provider),
-                    sectionEnabled = config.searchEnabled,
+                    keyMissing = provider.requiresKey && config.keyOf(provider).isBlank(),
+                    dragging = isDragging,
+                    // 排序只改配置，与总闸无关，永远可拖。
+                    handleModifier = Modifier.draggableHandle(),
                     onOpen = { detailProvider = provider },
                     onToggle = { enabled ->
-                        val nextEnabled = if (enabled) config.enabled + provider
-                        else config.enabled - provider
-                        // 全部关闭时总开关跟随关闭；从全关恢复出至少一个时自动打开。
-                        val nextSearchEnabled = when {
-                            nextEnabled.isEmpty() -> false
-                            config.enabled.isEmpty() -> true
-                            else -> config.searchEnabled
-                        }
-                        persist(config.copy(enabled = nextEnabled, searchEnabled = nextSearchEnabled))
+                        persist(toggleSearchProvider(config, provider, enabled))
                     },
-                    onMove = { direction -> move(provider, direction) },
+                )
+            }
+        }
+
+        // ③ 空链与缺 Key 都要明说：否则用户以为搜索在工作，其实一次请求都不会发。
+        if (config.enabled.isEmpty()) {
+            Text(
+                text = stringResource(R.string.ai_search_none_enabled),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            val missingKeys = config.enabled.count { it.requiresKey && config.keyOf(it).isBlank() }
+            if (missingKeys > 0) {
+                Text(
+                    text = stringResource(R.string.ai_search_missing_key_summary, missingKeys),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
     }
-
     detailProvider?.let { provider ->
         SearchProviderDetailDialog(
             provider = provider,
             config = config,
-            sectionEnabled = config.searchEnabled,
             testing = testing,
             result = testResults[provider],
             testQuery = testQuery,
@@ -205,87 +213,31 @@ internal fun AiSearchSettingsSection(modifier: Modifier = Modifier) {
 /**
  * 单个搜索服务行（列表态）。
  *
- * 布局： [拖柄][服务名称][启用开关]，整行可点进二级弹窗。
- *
- * @param sectionEnabled 总开关状态；关闭时本行控件禁用（名称仍可见）。
- * @param onOpen 点行打开该服务的详细设置弹窗。
- * @param onMove 请求与相邻行交换位置（+1 下移 / -1 上移）。
+ * 布局：[拖柄][服务名称（缺 Key 时带提示）][启用开关]，整行可点进二级弹窗。
  */
 @Composable
 private fun SearchProviderRow(
     provider: AiSearchProvider,
     checked: Boolean,
-    sectionEnabled: Boolean,
+    keyMissing: Boolean,
+    dragging: Boolean,
+    handleModifier: Modifier,
     onOpen: () -> Unit,
     onToggle: (Boolean) -> Unit,
-    onMove: (Int) -> Unit,
 ) {
-    // 禁用时把文字压暗；控件交给 Material3 自己的 disabled 配色。
-    val contentAlpha = if (sectionEnabled) 1f else 0.5f
-
-    // 拖拽：以整行高度为参考，累计位移超过约一行就与相邻行交换，然后扣掉阈值继续累计。
-    var rowHeightPx by remember { mutableIntStateOf(0) }
-    val minSwapPx = with(LocalDensity.current) { DragSwapMin.toPx() }
-    val swapThresholdPx = if (rowHeightPx > 0) {
-        maxOf(rowHeightPx * 0.85f, minSwapPx)
-    } else {
-        minSwapPx
-    }
-    val latestThreshold by rememberUpdatedState(swapThresholdPx)
-    val latestOnMove by rememberUpdatedState(onMove)
-    var dragging by remember { mutableStateOf(false) }
-
-    val handleModifier = if (sectionEnabled) {
-        Modifier.pointerInput(provider) {
-            var accumulated = 0f
-            detectDragGestures(
-                onDragStart = {
-                    dragging = true
-                    accumulated = 0f
-                },
-                onDragEnd = {
-                    dragging = false
-                    accumulated = 0f
-                },
-                onDragCancel = {
-                    dragging = false
-                    accumulated = 0f
-                },
-                onDrag = { change, dragAmount ->
-                    // 吃掉事件，避免拖柄上的滑动被外层设置页的滚动容器抢走。
-                    change.consume()
-                    accumulated += dragAmount.y
-                    // 用 while 处理一次事件里跨过多行的情况；guard 防止极端值下死循环。
-                    var guard = 0
-                    while (accumulated >= latestThreshold && guard < MaxSwapsPerEvent) {
-                        latestOnMove(1)
-                        accumulated -= latestThreshold
-                        guard++
-                    }
-                    while (accumulated <= -latestThreshold && guard < MaxSwapsPerEvent) {
-                        latestOnMove(-1)
-                        accumulated += latestThreshold
-                        guard++
-                    }
-                },
-            )
-        }
-    } else {
-        Modifier
-    }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .onGloballyPositioned { rowHeightPx = it.size.height }
             .clip(SearchRowShape)
             .clickable(onClick = onOpen)
             .background(
-                if (dragging) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
-                else Color.Transparent,
+                if (dragging) {
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                } else {
+                    Color.Transparent
+                },
             )
-            // 开关本身就有 48dp 触摸高度，再叠 8dp 会让每行都撑出大片空带。
-            .padding(horizontal = 4.dp, vertical = 2.dp),
+            .padding(horizontal = 4.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -298,17 +250,24 @@ private fun SearchProviderRow(
             Icon(
                 imageVector = Icons.Rounded.DragHandle,
                 contentDescription = stringResource(R.string.ai_search_drag_handle),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = contentAlpha),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(20.dp),
             )
         }
-        Text(
-            text = providerTitle(provider),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha),
-            modifier = Modifier.weight(1f),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = providerTitle(provider),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+            )
+            if (keyMissing) {
+                Text(
+                    text = stringResource(R.string.ai_search_missing_key),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         val toggleDescription = stringResource(
             R.string.ai_search_provider_enabled,
             providerTitle(provider),
@@ -316,7 +275,6 @@ private fun SearchProviderRow(
         Switch(
             checked = checked,
             onCheckedChange = onToggle,
-            enabled = sectionEnabled,
             modifier = Modifier.semantics { contentDescription = toggleDescription },
         )
     }
@@ -331,7 +289,6 @@ private fun SearchProviderRow(
 private fun SearchProviderDetailDialog(
     provider: AiSearchProvider,
     config: AiSearchConfig,
-    sectionEnabled: Boolean,
     testing: AiSearchProvider?,
     result: AiSearchTestResult?,
     testQuery: String,
@@ -374,7 +331,6 @@ private fun SearchProviderDetailDialog(
                     onValueChange = { draftKey = it },
                     label = { Text(stringResource(R.string.ai_search_api_key)) },
                     singleLine = true,
-                    enabled = sectionEnabled,
                     shape = MaterialTheme.shapes.large,
                     modifier = Modifier.fillMaxWidth(),
                     supportingText = if (
@@ -389,8 +345,7 @@ private fun SearchProviderDetailDialog(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (keyUrl != null) {
                         TextButton(
-                            enabled = sectionEnabled,
-                            onClick = { uriHandler.openUri(keyUrl) },
+                                    onClick = { uriHandler.openUri(keyUrl) },
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
@@ -415,8 +370,7 @@ private fun SearchProviderDetailDialog(
                         onValueChange = onQueryChange,
                         placeholder = { Text(stringResource(R.string.ai_search_test_query_hint)) },
                         singleLine = true,
-                        enabled = sectionEnabled,
-                        shape = MaterialTheme.shapes.large,
+                            shape = MaterialTheme.shapes.large,
                         modifier = Modifier.weight(1f),
                     )
                     IconButton(
@@ -522,14 +476,8 @@ private fun SearchProviderDetailDialog(
 /** 设置行圆角：与 MCP 行保持一致，避免同页出现多种圆角。 */
 internal val SearchRowShape = RoundedCornerShape(12.dp)
 
-/** 拖拽交换的最小位移阈值：实测行高后取更大者，手指拖动一小段不会误交换。 */
-internal val DragSwapMin = 48.dp
-
 /** 拖柄的触碰区：图标 20dp，外面留出余量，手指更容易抓到。 */
 internal val DragHandleTouchSize = 32.dp
-
-/** 单次拖动事件里最多连续交换几行，防止累计值异常时疯狂重排。 */
-internal const val MaxSwapsPerEvent = 4
 
 /** 四家服务的默认顺序：老配置里没有 order 或只有部分服务时用来补全。 */
 private val ProviderFallbackOrder = listOf(
