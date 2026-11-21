@@ -277,6 +277,7 @@ data class SettingsScreenActions(
     val onOpenTools: () -> Unit = {},
     val onOpenSusfsConfig: () -> Unit = {},
     val onOpenBackup: () -> Unit = {},
+    val onOpenPackageRename: () -> Unit = {},
     val onOpenExtensions: () -> Unit = {},
     val onOpenBuiltinZygisk: () -> Unit = {},
     val onSetProxyMode: (String) -> Unit = {},

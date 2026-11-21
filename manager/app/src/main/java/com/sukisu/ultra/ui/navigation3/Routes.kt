@@ -234,6 +234,11 @@ sealed interface Route : NavKey, Parcelable {
     @Serializable
     data object DynamicManagers : Route
 
+    /** 换包名（运行时改安装包名，避开只认包名的检测）。 */
+    @Parcelize
+    @Serializable
+    data object PackageRename : Route
+
     
     @Parcelize
     @Serializable

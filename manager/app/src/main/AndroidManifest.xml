@@ -296,6 +296,11 @@
 
         <receiver android:name=".data.repository.CiPackageInstallReceiver" android:exported="false" />
 
+        <!-- 换包名后安装新包的结果回调（装的是另一个包名，不能复用上面的自更新接收器） -->
+        <receiver
+            android:name=".core.pkgrename.PkgRenameInstallReceiver"
+            android:exported="false" />
+
         <receiver
             android:name=".data.repository.AppIconUpdateReceiver"
             android:exported="false">

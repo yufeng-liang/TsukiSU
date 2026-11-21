@@ -112,6 +112,7 @@ import com.sukisu.ultra.ui.screen.colorpalette.AdaptiveThemeBuilderScreen
 import com.sukisu.ultra.ui.screen.colorpalette.ColorPaletteScreen
 import com.sukisu.ultra.ui.screen.appearanceoverlay.AppearanceOverlayScreen
 import com.sukisu.ultra.ui.screen.dynamicmanagers.DynamicManagersScreen
+import com.sukisu.ultra.ui.screen.pkgrename.PackageRenameScreen
 import com.sukisu.ultra.ui.screen.extensions.ExtensionsScreen
 import com.sukisu.ultra.ui.screen.extensions.CpuSpoofScreen
 import com.sukisu.ultra.ui.screen.builtinzygisk.BuiltinZygiskScreen
@@ -558,6 +559,7 @@ class MainActivity : ComponentActivity() {
                                 entry<Route.UmountManager>(swipeDismiss = swipeDismiss)  { UmountManagerScreen() }
                                 entry<Route.KernelModules>(swipeDismiss = swipeDismiss)  { KernelModulesScreen() }
                                 entry<Route.DynamicManagers>(swipeDismiss = swipeDismiss) { DynamicManagersScreen() }
+                                entry<Route.PackageRename>(swipeDismiss = swipeDismiss) { PackageRenameScreen() }
                                 entry<Route.Extensions>(swipeDismiss = swipeDismiss) { ExtensionsScreen() }
                                 entry<Route.BuiltinZygisk>(swipeDismiss = swipeDismiss) { BuiltinZygiskScreen() }
                                 entry<Route.CpuSpoof>(swipeDismiss = swipeDismiss) { CpuSpoofScreen() }

@@ -2499,4 +2499,19 @@
 <string name="builtin_zygisk_opt_custom_linker_summary">Load modules with the built-in ELF loader so they never enter the system linker\'s solist. Falls back to the system linker if a module cannot be loaded.</string>
 <string name="builtin_zygisk_opt_lsplt">Use LSPLT for PLT hooks</string>
 <string name="builtin_zygisk_opt_lsplt_summary">Off uses ByteHook, on uses LSPLT.</string>
+    <string name="pkg_rename_title">Change package name</string>
+    <string name="pkg_rename_entry_summary">Disguise the manager under a random package name</string>
+    <string name="pkg_rename_current">Current package name</string>
+    <string name="pkg_rename_target">New package name</string>
+    <string name="pkg_rename_reroll">Generate another</string>
+    <string name="pkg_rename_start">Start rename</string>
+    <string name="pkg_rename_stage_building">Repackaging the APK…</string>
+    <string name="pkg_rename_stage_installing">Waiting for the system installer…</string>
+    <string name="pkg_rename_stage_registering">Registering the new manager with the kernel…</string>
+    <string name="pkg_rename_stage_done">Done</string>
+    <string name="pkg_rename_done_title">Renamed to %1$s</string>
+    <string name="pkg_rename_done_body">Uninstall %1$s once the new app is in place. A copy of the old APK is kept in the app\'s private folder so the original name can be restored.</string>
+    <string name="pkg_rename_warning">After renaming, the old and the new app coexist. Kernel access only works for the registered package name. If every feature is greyed out in the new app, start it once more.</string>
+    <string name="pkg_rename_need_install_permission">Allow installing unknown apps for this app, then try again.</string>
+    <string name="pkg_rename_uninstall_old">Uninstall the old package</string>
 </resources>

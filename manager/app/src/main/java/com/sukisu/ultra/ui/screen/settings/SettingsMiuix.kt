@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.rounded.Rule
 import androidx.compose.material.icons.rounded.Adb
 import androidx.compose.material.icons.rounded.AdminPanelSettings
 import androidx.compose.material.icons.rounded.Backup
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Publish
 import androidx.compose.material.icons.rounded.Delete
@@ -336,6 +337,27 @@ fun SettingPagerMiuix(
                                     )
                                 },
                                 onClick = actions.onOpenBackup
+                            )
+                        }
+                        AppCard(
+                            modifier = Modifier
+                                .padding(top = 12.dp)
+                                .fillMaxWidth(),
+                            colors = backgroundAwareCardColors(),
+                        ) {
+                            val renameTitle = stringResource(id = R.string.pkg_rename_title)
+                            ArrowPreference(
+                                title = renameTitle,
+                                summary = stringResource(R.string.pkg_rename_entry_summary),
+                                startAction = {
+                                    Icon(
+                                        Icons.Rounded.Edit,
+                                        modifier = Modifier.padding(end = 6.dp),
+                                        contentDescription = renameTitle,
+                                        tint = colorScheme.onBackground
+                                    )
+                                },
+                                onClick = actions.onOpenPackageRename
                             )
                         }
                         AppCard(

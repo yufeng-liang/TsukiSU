@@ -221,6 +221,16 @@ android {
         checkReleaseBuilds = false
     }
 
+    testOptions {
+        unitTests.all {
+            // 换包名全链路单测需要真实 APK，路径用 -PpkgRenameApk 传入。
+            // 不复用环境变量：Gradle 复用已有 daemon 时不会带上客户端新加的 env。
+            providers.gradleProperty("pkgRenameApk").orNull?.let { apk ->
+                it.systemProperty("pkg.rename.apk", apk)
+            }
+        }
+    }
+
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = androidSourceCompatibility

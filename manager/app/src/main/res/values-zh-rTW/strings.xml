@@ -2123,4 +2123,19 @@
     <!-- 模块页悬浮按钮扇形菜单的两枚动作 -->
     <string name="module_fab_install">模組刷入</string>
     <string name="module_fab_upload">投稿模組</string>
+    <string name="pkg_rename_title">更改套件名稱</string>
+    <string name="pkg_rename_entry_summary">以隨機套件名稱偽裝管理員，降低套件名稱偵測命中</string>
+    <string name="pkg_rename_current">目前套件名稱</string>
+    <string name="pkg_rename_target">新套件名稱</string>
+    <string name="pkg_rename_reroll">再換一個</string>
+    <string name="pkg_rename_start">開始改名</string>
+    <string name="pkg_rename_stage_building">正在重新封裝 APK…</string>
+    <string name="pkg_rename_stage_installing">等待系統安裝器確認…</string>
+    <string name="pkg_rename_stage_registering">正在向核心登記新管理員…</string>
+    <string name="pkg_rename_stage_done">完成</string>
+    <string name="pkg_rename_done_title">已改名為 %1$s</string>
+    <string name="pkg_rename_done_body">新應用裝好後請解除安裝舊套件 %1$s。舊 APK 備份已存放在應用程式私有目錄，可用來還原原名。</string>
+    <string name="pkg_rename_warning">改名後新舊應用會同時存在。核心只認已登記的那個套件名稱；若新應用功能全部變灰，請再啟動一次。</string>
+    <string name="pkg_rename_need_install_permission">請先允許本應用程式「安裝未知應用程式」，然後再試一次。</string>
+    <string name="pkg_rename_uninstall_old">解除安裝舊的包</string>
 </resources>

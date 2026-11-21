@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.Rule
 import androidx.compose.material.icons.filled.Adb
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Publish
 import androidx.compose.material.icons.filled.Delete
@@ -344,6 +345,24 @@ fun SettingPagerMaterial(
                     }
                 )
                 }
+                val renameTitle = stringResource(id = R.string.pkg_rename_title)
+                SegmentedColumn(
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
+                    content = listOf {
+                        SegmentedListItem(
+                            onClick = actions.onOpenPackageRename,
+                            headlineContent = { Text(renameTitle) },
+                            supportingContent = { Text(stringResource(id = R.string.pkg_rename_entry_summary)) },
+                            leadingContent = { IconTile(Icons.Filled.Edit, renameTitle) },
+                            trailingContent = {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    null
+                                )
+                            }
+                        )
+                    }
+                )
                 val toolsTitle = customText(CustomTextKey.PAGE_TOOLS)
                 SettingsAnchor(SettingsSection.TOOLS, anchorRequesters) {
                 SegmentedColumn(
