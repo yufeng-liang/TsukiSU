@@ -11,6 +11,15 @@ import kotlinx.serialization.json.Json
  * [url] 是 Streamable HTTP 端点（只支持 https，本机调试允许 http://127.0.0.1 与
  * http://localhost）。[headers] 会附加到每个请求上，可用于 Bearer Token 等鉴权。
  */
+/**
+ * 存进配置里的 MCP 工具条目：只保留名字和描述，够详情页展示与开关用。
+ */
+@Serializable
+data class AiMcpToolInfo(
+    val name: String,
+    val description: String = "",
+)
+
 @Serializable
 data class AiMcpServer(
     val id: String,
@@ -23,6 +32,10 @@ data class AiMcpServer(
      */
     val transport: String = "STREAMABLE_HTTP",
     val headers: Map<String, String> = emptyMap(),
+    /** 上次成功拉取到的工具；离线打开详情页时先画这一份，联网后再刷新。 */
+    val tools: List<AiMcpToolInfo> = emptyList(),
+    /** 用户在详情页关掉的工具名：列表展示和实际调用都会跳过。 */
+    val disabledTools: List<String> = emptyList(),
 )
 
 /**
@@ -88,6 +101,12 @@ object AiMcpSettings {
             current + normalized
         }
         save(next)
+    }
+
+    /** 只覆盖工具缓存，名称、地址和用户关掉的开关都保留（详情页刷新工具时用）。 */
+    fun updateTools(id: String, tools: List<AiMcpToolInfo>) {
+        val current = list().firstOrNull { it.id == id.trim() } ?: return
+        update(current.copy(tools = tools))
     }
 
     /** 按 id 删除服务器。 */

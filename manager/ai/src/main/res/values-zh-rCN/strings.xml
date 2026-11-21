@@ -354,6 +354,7 @@
     <string name="ai_mcp_save">保存</string>
     <string name="ai_mcp_cancel">取消</string>
     <string name="ai_mcp_detail_title">服务器详情</string>
+    <string name="ai_mcp_detail_basic">基本信息</string>
     <string name="ai_mcp_headers">自定义请求头</string>
     <string name="ai_mcp_headers_hint">Authorization: Bearer sk-...</string>
     <string name="ai_mcp_auth">认证方式</string>
@@ -448,4 +449,6 @@
     <string name="ai_field_required"> *</string>
     <string name="ai_field_optional">（可选）</string>
     <string name="ai_mcp_transport">传输方式</string>
+        <string name="ai_mcp_tool_count">%1$d 个工具</string>
+        <string name="ai_mcp_detail_delete">删除服务器</string>
 </resources>

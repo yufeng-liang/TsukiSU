@@ -443,11 +443,14 @@ onRemoveImage = actions.onRemoveImage,
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    actions.onDeleteSession(target.id)
-                    sessionToDelete = null
-                    showSessions = false
-                }) { Text(stringResource(R.string.ai_delete_message_confirm)) }
+                TextButton(
+                    onClick = {
+                        actions.onDeleteSession(target.id)
+                        sessionToDelete = null
+                        showSessions = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) { Text(stringResource(R.string.ai_delete_message_confirm)) }
             },
             dismissButton = {
                 TextButton(onClick = { sessionToDelete = null }) {

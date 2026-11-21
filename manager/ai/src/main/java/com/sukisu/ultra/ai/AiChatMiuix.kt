@@ -454,7 +454,9 @@ fun AiChatMiuix(
                             showSessions = false
                         },
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.textButtonColorsPrimary(),
+                        colors = ButtonDefaults.textButtonColors(
+                            textColor = colorScheme.error,
+                        ),
                     )
                 }
             },

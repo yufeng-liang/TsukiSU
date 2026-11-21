@@ -355,6 +355,7 @@
     <string name="ai_mcp_save">Save</string>
     <string name="ai_mcp_cancel">Cancel</string>
     <string name="ai_mcp_detail_title">Server details</string>
+    <string name="ai_mcp_detail_basic">Basic info</string>
     <string name="ai_mcp_headers">Custom headers</string>
     <string name="ai_mcp_headers_hint">Authorization: Bearer sk-...</string>
     <string name="ai_mcp_auth">Authentication</string>
@@ -449,4 +450,6 @@
     <string name="ai_field_required"> *</string>
     <string name="ai_field_optional">(optional)</string>
     <string name="ai_mcp_transport">Transport</string>
+        <string name="ai_mcp_tool_count">%1$d tools</string>
+        <string name="ai_mcp_detail_delete">Delete server</string>
 </resources>

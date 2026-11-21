@@ -1048,7 +1048,9 @@ internal fun AiConfigEditorMiuix(
                             providerPendingDelete = null
                         },
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.textButtonColors(color = colorScheme.error),
+                        colors = ButtonDefaults.textButtonColors(
+                            textColor = colorScheme.error,
+                        ),
                     )
                 }
             },

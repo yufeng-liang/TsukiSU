@@ -1127,7 +1127,8 @@ object AiTools {
                 buildString {
                     servers.forEach { server ->
                         appendLine("Server ${server.name} (${server.id}):")
-                        val tools = AiMcpClient.listTools(server)
+                        // 关掉的工具不列给模型，避免它调用被拒后重试。
+                        val tools = AiMcpClient.listTools(server).filter { it.name !in server.disabledTools }
                         if (tools.isEmpty()) {
                             appendLine("  (no tools or unreachable)")
                         } else {
@@ -1144,6 +1145,10 @@ object AiTools {
                 val argumentsJson = args.string("arguments")?.trim().orEmpty().ifEmpty { "{}" }
                 val server = AiMcpSettings.list().firstOrNull { it.id == serverId }
                     ?: throw IllegalArgumentException("Unknown MCP server '$serverId'")
+                // 设置页关掉的工具直接拒绝，别让它绕过开关。
+                if (toolName in server.disabledTools) {
+                    throw IllegalArgumentException("MCP tool '$toolName' is disabled in the assistant settings")
+                }
                 AiMcpClient.callTool(server, toolName, argumentsJson)
             }
 

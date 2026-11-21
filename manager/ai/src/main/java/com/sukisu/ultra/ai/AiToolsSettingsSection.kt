@@ -6,6 +6,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -81,7 +82,13 @@ internal fun isValidMcpUrl(raw: String): Boolean {
 internal fun AiMcpSettingsSection(modifier: Modifier = Modifier) {
     var servers by remember { mutableStateOf(AiMcpSettings.list()) }
     var showAddServer by remember { mutableStateOf(false) }
-    var serverDetail by remember { mutableStateOf<AiMcpServer?>(null) }
+    // 详情页只存 id：刷新过工具后，列表和详情读的都是最新记录。
+    var serverDetail by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    fun refresh() {
+        servers = AiMcpSettings.list()
+    }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (servers.isEmpty()) {
@@ -103,7 +110,7 @@ internal fun AiMcpSettingsSection(modifier: Modifier = Modifier) {
                             AiMcpSettings.remove(server.id)
                             servers = AiMcpSettings.list()
                         },
-                        onOpen = { serverDetail = server },
+                        onOpen = { serverDetail = server.id },
                     )
                 }
             }
@@ -130,17 +137,21 @@ internal fun AiMcpSettingsSection(modifier: Modifier = Modifier) {
             onDismiss = { showAddServer = false },
             onSave = { server ->
                 AiMcpSettings.add(server)
-                servers = AiMcpSettings.list()
+                refresh()
                 showAddServer = false
+                // 刚加完就把工具清单拉一遍，点进详情页时不用再等一次网络。
+                scope.launch { refreshMcpTools(server) }
             },
         )
     }
 
-    serverDetail?.let { server ->
-        McpServerDetailDialog(
-            server = server,
-            onDismiss = { serverDetail = null },
-            onUpdated = { servers = AiMcpSettings.list() },
+    serverDetail?.let { id ->
+        McpServerDetailPage(
+            serverId = id,
+            onDismiss = {
+                serverDetail = null
+                refresh()
+            },
         )
     }
 }
@@ -189,7 +200,7 @@ private fun McpAuthChip(
 }
 
 @Composable
-private fun McpAuthFieldsMaterial(
+internal fun McpAuthFieldsMaterial(
     mode: McpAuthMode,
     onModeChange: (McpAuthMode) -> Unit,
     apiKey: String,
@@ -544,170 +555,21 @@ private fun McpServerRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (server.tools.isNotEmpty()) {
+                Text(
+                    text = stringResource(R.string.ai_mcp_tool_count, server.tools.size),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         Switch(checked = server.enabled, onCheckedChange = onToggle)
-    }
-}
-
-/**
- * 服务器详情：可编辑名称 / 地址 / 自定义请求头，刷新工具列表，删除服务器。
- * 工具列表用 AiMcpClient.listTools 实时拉取，展示名称 + 描述。
- */
-@Composable
-private fun McpServerDetailDialog(
-    server: AiMcpServer,
-    onDismiss: () -> Unit,
-    onUpdated: () -> Unit,
-) {
-    var name by remember { mutableStateOf(server.name) }
-    var url by remember { mutableStateOf(server.url) }
-    // 已有配置反推成「方式 + 密钥 + 其他请求头」，用户只看到密钥框。
-    val initialAuth = remember(server.id) { detectMcpAuth(server.headers) }
-    var authMode by remember(server.id) { mutableStateOf(initialAuth.mode) }
-    var apiKey by remember(server.id) { mutableStateOf(initialAuth.key) }
-    var extraHeaders by remember(server.id) { mutableStateOf(initialAuth.extraHeaders) }
-    var tools by remember { mutableStateOf<List<AiMcpTool>?>(null) }
-    var toolsError by remember { mutableStateOf<String?>(null) }
-    var loading by remember { mutableStateOf(false) }
-    var showRemove by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.ai_mcp_detail_title)) },
-        text = {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(stringResource(R.string.ai_mcp_name) + stringResource(R.string.ai_field_required)) },
-                    singleLine = true,
-                    shape = MaterialTheme.shapes.large,
-                )
-                OutlinedTextField(
-                    value = url,
-                    onValueChange = { url = it },
-                    label = { Text(stringResource(R.string.ai_mcp_url_label) + stringResource(R.string.ai_field_required)) },
-                    singleLine = true,
-                    isError = url.isNotBlank() && !isValidMcpUrl(url),
-                    supportingText = {
-                        if (url.isNotBlank() && !isValidMcpUrl(url)) {
-                            Text(stringResource(R.string.ai_mcp_url_invalid))
-                        }
-                    },
-                    shape = MaterialTheme.shapes.large,
-                )
-                McpAuthFieldsMaterial(
-                    mode = authMode,
-                    onModeChange = { authMode = it },
-                    apiKey = apiKey,
-                    onApiKeyChange = { apiKey = it },
-                    extraHeaders = extraHeaders,
-                    onExtraHeadersChange = { extraHeaders = it },
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(
-                        enabled = !loading && isValidMcpUrl(url),
-                        onClick = {
-                            loading = true
-                            toolsError = null
-                            scope.launch {
-                                val target = AiMcpServer(
-                                    id = server.id,
-                                    name = name,
-                                    url = url,
-                                    enabled = server.enabled,
-                                    transport = server.transport,
-                                    headers = buildMcpHeaders(authMode, apiKey, extraHeaders),
-                                )
-                                val result = runCatching { AiMcpClient.listTools(target) }
-                                loading = false
-                                result.fold(
-                                    onSuccess = { tools = it },
-                                    onFailure = {
-                                        tools = emptyList()
-                                        toolsError = it.message
-                                    },
-                                )
-                            }
-                        },
-                    ) { Text(stringResource(if (loading) R.string.ai_mcp_loading else R.string.ai_mcp_refresh)) }
-                    TextButton(
-                        onClick = { showRemove = true },
-                    ) { Text(stringResource(R.string.ai_mcp_remove)) }
-                }
-                toolsError?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                }
-                tools?.let { list ->
-                    if (list.isEmpty()) {
-                        Text(
-                            stringResource(R.string.ai_mcp_tools_empty),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    } else {
-                        Text(
-                            stringResource(R.string.ai_mcp_tools_title),
-                            style = MaterialTheme.typography.titleSmall,
-                        )
-                        list.forEach { tool ->
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                            ) {
-                                Text(tool.name, style = MaterialTheme.typography.bodyMedium)
-                                if (tool.description.isNotBlank()) {
-                                    Text(
-                                        tool.description,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = name.isNotBlank() && isValidMcpUrl(url),
-                onClick = {
-                    AiMcpSettings.update(
-                        server.copy(
-                            name = name.trim(),
-                            url = url.trim(),
-                            headers = buildMcpHeaders(authMode, apiKey, extraHeaders),
-                        ),
-                    )
-                    onUpdated()
-                    onDismiss()
-                },
-            ) { Text(stringResource(R.string.ai_mcp_save)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.ai_mcp_cancel)) }
-        },
-    )
-
-    if (showRemove) {
-        AlertDialog(
-            onDismissRequest = { showRemove = false },
-            title = { Text(stringResource(R.string.ai_mcp_remove)) },
-            text = { Text(stringResource(R.string.ai_mcp_remove_confirm)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    AiMcpSettings.remove(server.id)
-                    onUpdated()
-                    showRemove = false
-                    onDismiss()
-                }) { Text(stringResource(R.string.ai_mcp_remove)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRemove = false }) { Text(stringResource(R.string.ai_mcp_cancel)) }
-            },
+        // 右箭头提示这一行能进详情页。
+        Icon(
+            imageVector = Icons.Rounded.ChevronRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 2.dp),
         )
     }
 }

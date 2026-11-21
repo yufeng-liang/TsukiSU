@@ -428,7 +428,12 @@ internal fun rememberAiConfirmDialog(
                 title = { Text(handle.title) },
                 text = { Text(handle.content) },
                 confirmButton = {
-                    TextButton(onClick = handle::confirm) { Text(handle.confirmLabel) }
+                    TextButton(
+                        onClick = handle::confirm,
+                        colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) { Text(handle.confirmLabel) }
                 },
                 dismissButton = {
                     TextButton(onClick = handle::dismiss) {
@@ -459,6 +464,9 @@ internal fun rememberAiConfirmDialog(
                         )
                         MiuixTextButton(
                             text = handle.confirmLabel,
+                            colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.textButtonColors(
+                                textColor = MiuixTheme.colorScheme.error,
+                            ),
                             onClick = handle::confirm,
                             modifier = Modifier.weight(1f),
                         )

@@ -1432,6 +1432,7 @@ private fun AiProviderRowMaterial(
                 Icon(
                     imageVector = Icons.Rounded.Delete,
                     contentDescription = stringResource(R.string.ai_provider_delete),
+                    tint = MaterialTheme.colorScheme.error,
                 )
             }
         }

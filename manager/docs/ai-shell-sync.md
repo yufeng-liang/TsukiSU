@@ -46,6 +46,12 @@ AI 助手有两套可切换的界面外壳，都由 `AiFeatureProviderImpl` 按 
     - 高度要容得下整段占位符：Miuix `minLines = 7`、Material `minLines = 7`（`maxLines = 12`）。Material 的占位符 `Text` 用 `bodySmall`，正文输入字号不变；并且**不要给 M3 那个输入框加 label**——有 label 时占位符只在聚焦后才出现，空态会看到一片空框。
     - 解析统一走 `importMcpServers()`（在 `AiMcpImport.kt`）：兼容 `mcpServers` 包裹、单个服务器对象（`url` / `serverUrl` / `endpoint`）、名称到配置的裸映射；只收 HTTP 传输，`command` 型记进 `skipped` 并 toast 提示。解析出 1 台就切到表单并预填（用户还能改名补密钥），多台直接落库并关闭整个向导。
 
+16. **MCP 服务器详情页**：列表行点进去是全屏详情页（`McpServerDetailPage*`，用 `Dialog(usePlatformDefaultWidth = false)` 全屏弹出，不新增导航路由，系统返回键天然可用），顶栏 = 返回 + 服务器名 + 红色 `DeleteOutline`（二次确认后 `AiMcpSettings.remove`）；内容是可二次编辑的名称 / 地址 / 认证字段 + 保存按钮。
+    - 打开详情页、以及新增服务器保存后，都自动 `refreshMcpTools(server)` 拉一遍 `tools/list`，结果写进 `AiMcpServer.tools`（`AiMcpToolInfo` 只存名字和描述），离线打开也先画上次的清单。
+    - 工具列表逐行一个开关，关掉的工具名记在 `AiMcpServer.disabledTools`：`mcp_list_tools` 不再列出它们，`mcp_call_tool` 直接拒绝（`MCP tool '...' is disabled in the assistant settings`）。列表行上顺带显示「N 个工具」。
+
+17. **危险操作统一红色文字，不铺红底**：Miuix 0.9.4 的 `ButtonDefaults` 只有 `buttonColors` / `buttonColorsPrimary` / `textButtonColors` / `textButtonColorsPrimary` 四个预设，**没有 danger/destructive 变体**（源码 `miuix-ui/.../basic/Button.kt` 全文无 error/danger），主题只给 `error` / `onError` / `errorContainer` / `onErrorContainer`。所以确认框里的删除类按钮写成 `ButtonDefaults.textButtonColors(textColor = colorScheme.error)`（灰底红字）；**不要**写 `textButtonColors(color = colorScheme.error)`——那个 `color` 是按钮底色，会得到一整块红底，太扎眼。M3 侧对应 `ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)`（透明底红字）。详情页里的二次确认必须自己画遮罩（`McpConfirmOverlay`），不能在 `Dialog(usePlatformDefaultWidth = false)` 里用 `OverlayDialog` / `AlertDialog`——那层窗口里两者都不绘制。
+
 ## 三、验收流程
 
 1. `cd manager && export JAVA_HOME="E:/.jdks/ms-17.0.15" && ./gradlew :ai:testDebugUnitTest :app:assembleDebug --offline`——资源错误只有 `:app:assembleDebug` 会暴露。
