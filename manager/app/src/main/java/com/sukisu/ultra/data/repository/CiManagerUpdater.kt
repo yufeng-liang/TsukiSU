@@ -13,7 +13,6 @@ import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
-import com.sukisu.ultra.BuildConfig
 import com.sukisu.ultra.R
 import com.sukisu.ultra.data.proxy.GithubProxyRouter
 import com.sukisu.ultra.data.proxy.ProxyEntry
@@ -276,7 +275,7 @@ class CiManagerUpdater(private val context: Context) {
     private fun verifyApk(apk: File, abi: String, expectedVersionCode: Long) {
         val candidate = archivePackageInfo(apk)
             ?: throw IOException(context.getString(R.string.ci_update_invalid_apk))
-        if (candidate.packageName != BuildConfig.APPLICATION_ID ||
+        if (candidate.packageName != context.packageName ||
             candidate.longVersionCodeCompat() != expectedVersionCode ||
             abi !in apkAbis(apk)) {
             throw IOException(context.getString(R.string.ci_update_invalid_apk))

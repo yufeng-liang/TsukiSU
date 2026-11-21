@@ -9,7 +9,6 @@ import androidx.core.content.FileProvider
 import androidx.core.graphics.toColorInt
 import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamiccolor.ColorSpec
-import com.sukisu.ultra.BuildConfig
 import com.sukisu.ultra.KernelSUApplication
 import com.sukisu.ultra.data.repository.SettingsRepository
 import com.sukisu.ultra.data.repository.SettingsRepositoryImpl
@@ -368,7 +367,7 @@ object AiThemeController : AiThemeService {
         ).getOrThrow()
         val uri = FileProvider.getUriForFile(
             ksuApp,
-            "${BuildConfig.APPLICATION_ID}.fileprovider",
+            "${ksuApp.packageName}.fileprovider",
             file,
         )
         val intent = Intent(Intent.ACTION_SEND).apply {

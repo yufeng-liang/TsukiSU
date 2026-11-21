@@ -6,7 +6,6 @@ import com.sukisu.ultra.ai.api.AiThemeImageService
 import android.content.Intent
 import android.graphics.BitmapFactory
 import androidx.core.content.FileProvider
-import com.sukisu.ultra.BuildConfig
 import com.sukisu.ultra.data.repository.SettingsRepositoryImpl
 import com.sukisu.ultra.ksuApp
 import com.sukisu.ultra.ui.util.ImageStorage
@@ -106,7 +105,7 @@ object AiThemeImageStore : AiThemeImageService {
                 file.copyTo(shared, overwrite = true)
                 FileProvider.getUriForFile(
                     ksuApp,
-                    "${BuildConfig.APPLICATION_ID}.fileprovider",
+                    "${ksuApp.packageName}.fileprovider",
                     shared,
                 )
             }

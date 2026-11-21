@@ -28,7 +28,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.sukisu.ultra.BuildConfig
 import com.sukisu.ultra.R
 import com.sukisu.ultra.data.backup.BackupKind
 import com.sukisu.ultra.data.backup.BackupOrigin
@@ -72,7 +71,7 @@ fun BackupScreen(viewModel: BackupViewModel = viewModel()) {
     // 分享面板同时给"发给谁"和"存到文件"，SAF 只能覆盖后一半。
     LaunchedEffect(state.pendingShare) {
         val file = state.pendingShare ?: return@LaunchedEffect
-        val uri = FileProvider.getUriForFile(context, "${BuildConfig.APPLICATION_ID}.fileprovider", file)
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
         val mime = if (file.name.endsWith(".zip", ignoreCase = true)) "application/zip" else "application/octet-stream"
         val share = Intent(Intent.ACTION_SEND).apply {
             putExtra(Intent.EXTRA_STREAM, uri)

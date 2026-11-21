@@ -41,7 +41,6 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.sukisu.ultra.BuildConfig
 import com.sukisu.ultra.R
 import com.sukisu.ultra.ui.component.dialog.rememberLoadingDialog
 import com.sukisu.ultra.ui.util.getBugreportFile
@@ -149,7 +148,7 @@ fun SendLogBottomSheet(
                                 }
 
                                 val uri: Uri = FileProvider.getUriForFile(
-                                    context, "${BuildConfig.APPLICATION_ID}.fileprovider", bugreport
+                                    context, "${context.packageName}.fileprovider", bugreport
                                 )
 
                                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
