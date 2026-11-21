@@ -1067,8 +1067,8 @@ private fun SettingsSection(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        // 设置页用无阴影、无描边的平面卡片，和 Miuix 外壳的观感保持一致。
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
@@ -1077,24 +1077,13 @@ private fun SettingsSection(
             if (title != null || subtitle != null) {
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     if (title != null) {
-                        // 分组标题：左侧短色条 + titleMedium，和卡片内部的 14sp 正文拉开层级。
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(width = 3.dp, height = 14.dp)
-                                    .clip(RoundedCornerShape(2.dp))
-                                    .background(MaterialTheme.colorScheme.primary),
-                            )
-                            Text(
-                                text = title,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
+                        // 分组标题只靠字号和主色区分层级，不再加左侧色条。
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                     }
                     if (subtitle != null) {
                         Text(

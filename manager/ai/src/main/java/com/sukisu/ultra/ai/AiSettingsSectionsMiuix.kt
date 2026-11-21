@@ -1,5 +1,6 @@
 package com.sukisu.ultra.ai
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -561,7 +563,7 @@ internal fun AiMcpSettingsSectionMiuix(modifier: Modifier = Modifier) {
     }
 
     if (showAddServer) {
-        McpServerAddDialogMiuix(
+        McpAddServerFlowMiuix(
             onDismiss = { showAddServer = false },
             onSave = { server ->
                 AiMcpSettings.add(server)
@@ -741,18 +743,196 @@ private fun McpAuthChip(
     }
 }
 
-/** 新增 MCP 服务器（Miuix）：名称 → 地址 → 认证方式/密钥 → 保存。 */
+/** 导入弹窗（Miuix）：粘贴 MCP 配置 JSON，解析成功后回填表单或直接落库。 */
+@Composable
+private fun McpImportDialogMiuix(
+    text: String,
+    failed: Boolean,
+    onTextChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    OverlayDialog(
+        show = true,
+        title = stringResource(R.string.ai_mcp_import_title),
+        onDismissRequest = onDismiss,
+        content = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                // 占位符是 7 行的示例 JSON（和用户贴的配置同形），初始高度就得容下它，
+                // 否则空态下会裁掉几行；输入变长再长到 12 行，超出交给外层滚动。
+                TextField(
+                    value = text,
+                    onValueChange = onTextChange,
+                    label = stringResource(R.string.ai_mcp_import_placeholder),
+                    useLabelAsPlaceholder = true,
+                    minLines = 7,
+                    maxLines = 12,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    text = stringResource(
+                        if (failed) R.string.ai_mcp_import_invalid else R.string.ai_mcp_import_hint,
+                    ),
+                    style = MiuixTheme.textStyles.footnote1,
+                    color = if (failed) colorScheme.error else colorScheme.onSurfaceVariantSummary,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                TextButton(
+                    text = stringResource(R.string.ai_mcp_cancel),
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(
+                    text = stringResource(R.string.ai_mcp_import_confirm),
+                    onClick = onConfirm,
+                    enabled = text.isNotBlank(),
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.textButtonColorsPrimary(),
+                )
+            }
+        },
+    )
+}
+
+/** 添加服务器先选入口：粘贴 JSON 导入，或者手动填表单。 */
+@Composable
+private fun McpAddChoiceDialogMiuix(
+    onDismiss: () -> Unit,
+    onImport: () -> Unit,
+    onForm: () -> Unit,
+) {
+    OverlayDialog(
+        show = true,
+        title = stringResource(R.string.ai_mcp_add_choose_title),
+        onDismissRequest = onDismiss,
+        content = {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                McpAddChoiceRowMiuix(
+                    title = stringResource(R.string.ai_mcp_add_import),
+                    subtitle = stringResource(R.string.ai_mcp_add_import_desc),
+                    onClick = onImport,
+                )
+                McpAddChoiceRowMiuix(
+                    title = stringResource(R.string.ai_mcp_add_form),
+                    subtitle = stringResource(R.string.ai_mcp_add_form_desc),
+                    onClick = onForm,
+                )
+            }
+            TextButton(
+                text = stringResource(R.string.ai_mcp_cancel),
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            )
+        },
+    )
+}
+
+/** 一个可点整行的入口：标题 + 一行说明，两行并排看比两个按钮更清楚。 */
+@Composable
+private fun McpAddChoiceRowMiuix(title: String, subtitle: String, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(text = title, style = MiuixTheme.textStyles.body2, color = colorScheme.primary)
+        Text(
+            text = subtitle,
+            style = MiuixTheme.textStyles.footnote1,
+            color = colorScheme.onSurfaceVariantSummary,
+        )
+    }
+}
+
+/**
+ * 「添加服务器」向导：先选入口，再进粘贴导入或手动表单。
+ *
+ * 导入只命中一台服务器时回到表单并预填，用户还能改名、补密钥；命中多台直接落库。
+ */
+@Composable
+private fun McpAddServerFlowMiuix(onDismiss: () -> Unit, onSave: (AiMcpServer) -> Unit) {
+    var mode by remember { mutableStateOf(McpAddServerMode.Choose) }
+    var prefill by remember { mutableStateOf<AiMcpServer?>(null) }
+    var importText by remember { mutableStateOf("") }
+    var importFailed by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    when (mode) {
+        McpAddServerMode.Choose -> McpAddChoiceDialogMiuix(
+            onDismiss = onDismiss,
+            onImport = { mode = McpAddServerMode.Import },
+            onForm = {
+                prefill = null
+                mode = McpAddServerMode.Form
+            },
+        )
+
+        McpAddServerMode.Import -> McpImportDialogMiuix(
+            text = importText,
+            failed = importFailed,
+            onTextChange = { importText = it; importFailed = false },
+            onDismiss = { mode = McpAddServerMode.Choose },
+            onConfirm = {
+                val imported = importMcpServers(importText)
+                if (imported == null) {
+                    importFailed = true
+                } else {
+                    if (imported.skipped.isNotEmpty()) {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.ai_mcp_import_skipped, imported.skipped.size),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                    if (imported.servers.size == 1) {
+                        importText = ""
+                        importFailed = false
+                        prefill = imported.servers.first()
+                        mode = McpAddServerMode.Form
+                    } else {
+                        imported.servers.forEach(onSave)
+                        onDismiss()
+                    }
+                }
+            },
+        )
+
+        McpAddServerMode.Form -> McpServerAddDialogMiuix(
+            prefill = prefill,
+            onDismiss = onDismiss,
+            onSave = onSave,
+        )
+    }
+}
+
+/** 新增 MCP 服务器（Miuix）：名称 → 地址 → 认证方式/密钥 → 保存。[prefill] 来自 JSON 导入。 */
 @Composable
 private fun McpServerAddDialogMiuix(
+    prefill: AiMcpServer?,
     onDismiss: () -> Unit,
     onSave: (AiMcpServer) -> Unit,
 ) {
-    var name by remember { mutableStateOf("") }
-    var url by remember { mutableStateOf("") }
-    var authMode by remember { mutableStateOf(McpAuthMode.Bearer) }
-    var apiKey by remember { mutableStateOf("") }
-    var extraHeaders by remember { mutableStateOf("") }
+    val prefilledAuth = remember(prefill) { prefill?.headers?.let { detectMcpAuth(it) } }
+    var name by remember { mutableStateOf(prefill?.name.orEmpty()) }
+    var url by remember { mutableStateOf(prefill?.url.orEmpty()) }
+    var authMode by remember { mutableStateOf(prefilledAuth?.mode ?: McpAuthMode.Bearer) }
+    var apiKey by remember { mutableStateOf(prefilledAuth?.key.orEmpty()) }
+    var extraHeaders by remember { mutableStateOf(prefilledAuth?.extraHeaders.orEmpty()) }
     var enabled by remember { mutableStateOf(true) }
+
     val urlValid = url.isBlank() || isValidMcpUrl(url)
 
     OverlayDialog(

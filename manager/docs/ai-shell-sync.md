@@ -41,6 +41,10 @@ AI 助手有两套可切换的界面外壳，都由 `AiFeatureProviderImpl` 按 
 12. **输入框快捷条**：模型名（点击换模型）、推理强度 `Speed`、联网搜索 `Language`；生效中的图标用 primary 色，关闭时回落普通色。推理强度弹窗的滑杆要按档位画刻度点（Miuix `steps` + `showKeyPoints`）并在落档时给触感；档位名居中压在滑杆正上方，底部留 16dp，别让大字贴着轨道。弹窗里的「助手设置」带落点：`AiSettingsTarget`（Model / Search）+ `AiSettingsFocus` 一次性信使，设置页用 `bringIntoViewRequester` 滚到目标分组、描边 1.4s 后淡出，别把用户丢在页面顶部。
 13. **新增图标**：`ai` 模块对 `material-icons-extended` 是 `compileOnly`，运行时图标来自 `app/libs/material-icons-custom.jar`（165 个 rounded 图标）。加图标前先 `unzip -l app/libs/material-icons-custom.jar | grep 图标名` 核对，否则编译通过、真机 `ClassNotFoundException`（踩过 `Bolt`、`Public`）。
 14. **会话列表**：只列有内容的会话 + 当前会话（空会话在弹窗里堆成一片「新对话」没法认），每行右侧红色 `DeleteOutline` 删除按钮必须先弹二次确认；当前会话已经空着时点「新对话」不新建（`AiChatViewModel.newSession` 里守卫），删掉当前会话优先退到最近一个有内容的会话，一条不剩才新建。列表过滤规则统一走 `visibleSessions()`（在 `AiSettingsLogic.kt`）。
+15. **MCP 添加服务器是两入口**：点「添加服务器」先出选择弹窗（`McpAddChoiceDialog*`，标题「添加 MCP 服务器」），两个整行可点入口——「导入 JSON 配置」和「手动填写」，底部取消。选导入进粘贴弹窗（`McpImportDialog*`），选手动进表单弹窗（`McpServerAddDialog*`，参数带 `prefill`）。三种界面由 `McpAddServerMode { Choose, Import, Form }` 驱动，统一在 `McpAddServerFlow*` 里 `when(mode)` 切换，不要再用「表单弹窗里塞一个 showImport 状态」的老结构。
+    - 导入弹窗的输入框必须有 7 行的示例占位符（`ai_mcp_import_placeholder`），排版按真实配置的缩进写：`{` → `"mcpServers"` → 服务器名 → `"url"`，每级缩进 2 个空格。XML 里普通连续空格会被 aapt 折叠，缩进必须写成 `\u0020`；示例 URL 用短的 `https://example.com`，否则窄屏会把值折到下一行。
+    - 高度要容得下整段占位符：Miuix `minLines = 7`、Material `minLines = 7`（`maxLines = 12`）。Material 的占位符 `Text` 用 `bodySmall`，正文输入字号不变；并且**不要给 M3 那个输入框加 label**——有 label 时占位符只在聚焦后才出现，空态会看到一片空框。
+    - 解析统一走 `importMcpServers()`（在 `AiMcpImport.kt`）：兼容 `mcpServers` 包裹、单个服务器对象（`url` / `serverUrl` / `endpoint`）、名称到配置的裸映射；只收 HTTP 传输，`command` 型记进 `skipped` 并 toast 提示。解析出 1 台就切到表单并预填（用户还能改名补密钥），多台直接落库并关闭整个向导。
 
 ## 三、验收流程
 

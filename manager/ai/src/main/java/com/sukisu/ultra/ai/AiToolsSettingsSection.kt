@@ -1,5 +1,6 @@
 package com.sukisu.ultra.ai
 
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.text.KeyboardOptions
@@ -47,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -124,7 +126,7 @@ internal fun AiMcpSettingsSection(modifier: Modifier = Modifier) {
     }
 
     if (showAddServer) {
-        McpServerAddDialog(
+        McpAddServerFlow(
             onDismiss = { showAddServer = false },
             onSave = { server ->
                 AiMcpSettings.add(server)
@@ -276,22 +278,141 @@ private fun McpAuthFieldsMaterial(
     }
 }
 
+/** 添加服务器先选入口：粘贴 JSON 导入，或者手动填表单。 */
+@Composable
+private fun McpAddChoiceDialog(
+    onDismiss: () -> Unit,
+    onImport: () -> Unit,
+    onForm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.ai_mcp_add_choose_title)) },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                McpAddChoiceRow(
+                    title = stringResource(R.string.ai_mcp_add_import),
+                    subtitle = stringResource(R.string.ai_mcp_add_import_desc),
+                    onClick = onImport,
+                )
+                McpAddChoiceRow(
+                    title = stringResource(R.string.ai_mcp_add_form),
+                    subtitle = stringResource(R.string.ai_mcp_add_form_desc),
+                    onClick = onForm,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.ai_mcp_cancel)) }
+        },
+    )
+}
+
+/** 一个可点整行的入口：标题 + 一行说明，两行并排看比两个按钮更清楚。 */
+@Composable
+private fun McpAddChoiceRow(title: String, subtitle: String, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(SettingsRowShape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * 「添加服务器」向导：先选入口，再进粘贴导入或手动表单。
+ *
+ * 导入只命中一台服务器时回到表单并预填，用户还能改名、补密钥；命中多台直接落库。
+ */
+@Composable
+private fun McpAddServerFlow(onDismiss: () -> Unit, onSave: (AiMcpServer) -> Unit) {
+    var mode by remember { mutableStateOf(McpAddServerMode.Choose) }
+    var prefill by remember { mutableStateOf<AiMcpServer?>(null) }
+    var importText by remember { mutableStateOf("") }
+    var importFailed by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    when (mode) {
+        McpAddServerMode.Choose -> McpAddChoiceDialog(
+            onDismiss = onDismiss,
+            onImport = { mode = McpAddServerMode.Import },
+            onForm = {
+                prefill = null
+                mode = McpAddServerMode.Form
+            },
+        )
+
+        McpAddServerMode.Import -> McpImportDialog(
+            text = importText,
+            failed = importFailed,
+            onTextChange = { importText = it; importFailed = false },
+            onDismiss = { mode = McpAddServerMode.Choose },
+            onConfirm = {
+                val imported = importMcpServers(importText)
+                if (imported == null) {
+                    importFailed = true
+                } else {
+                    if (imported.skipped.isNotEmpty()) {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.ai_mcp_import_skipped, imported.skipped.size),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                    if (imported.servers.size == 1) {
+                        importText = ""
+                        importFailed = false
+                        prefill = imported.servers.first()
+                        mode = McpAddServerMode.Form
+                    } else {
+                        imported.servers.forEach(onSave)
+                        onDismiss()
+                    }
+                }
+            },
+        )
+
+        McpAddServerMode.Form -> McpServerAddDialog(
+            prefill = prefill,
+            onDismiss = onDismiss,
+            onSave = onSave,
+        )
+    }
+}
+
 /**
  * 新增 MCP 服务器弹窗（对齐 RikkaHub 的字段顺序，改成轻量弹窗）：
  * 名称 → 地址 → 认证方式与密钥（其他请求头可选） → 保存/取消。
+ *
+ * [prefill] 来自 JSON 导入：单条命中时预填表单，而不是替用户直接落库。
  */
 @Composable
 private fun McpServerAddDialog(
+    prefill: AiMcpServer?,
     onDismiss: () -> Unit,
     onSave: (AiMcpServer) -> Unit,
 ) {
-    var name by remember { mutableStateOf("") }
-    var url by remember { mutableStateOf("") }
+    val prefilledAuth = remember(prefill) { prefill?.headers?.let { detectMcpAuth(it) } }
+    var name by remember { mutableStateOf(prefill?.name.orEmpty()) }
+    var url by remember { mutableStateOf(prefill?.url.orEmpty()) }
     var enabled by remember { mutableStateOf(true) }
     var transport by remember { mutableStateOf("STREAMABLE_HTTP") }
-    var authMode by remember { mutableStateOf(McpAuthMode.Bearer) }
-    var apiKey by remember { mutableStateOf("") }
-    var extraHeaders by remember { mutableStateOf("") }
+    var authMode by remember { mutableStateOf(prefilledAuth?.mode ?: McpAuthMode.Bearer) }
+    var apiKey by remember { mutableStateOf(prefilledAuth?.key.orEmpty()) }
+    var extraHeaders by remember { mutableStateOf(prefilledAuth?.extraHeaders.orEmpty()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -600,3 +721,52 @@ internal fun parseHeaders(raw: String): Map<String, String> = raw
     }
     .filter { it.first.isNotBlank() }
     .toMap()
+/** 导入弹窗（Material3）：粘贴 MCP 配置 JSON，解析成功后回填表单或直接落库。 */
+@Composable
+private fun McpImportDialog(
+    text: String,
+    failed: Boolean,
+    onTextChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.ai_mcp_import_title)) },
+        text = {
+            // 占位符是 7 行的示例 JSON（和用户贴的配置同形），起始高度就得容下它，别裁掉。
+            OutlinedTextField(
+                value = text,
+                onValueChange = onTextChange,
+                // 只留 placeholder：带 label 时 M3 的空态只在聚焦后显示占位符，用户会看到一片空框。
+                // 示例 JSON 行较长，用 bodySmall：占位符不换行，整段格式一眼看清；输入的文字仍是正文大小。
+                placeholder = {
+                    Text(
+                        text = stringResource(R.string.ai_mcp_import_placeholder),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                },
+                minLines = 7,
+                maxLines = 12,
+                isError = failed,
+                supportingText = {
+                    Text(
+                        text = stringResource(
+                            if (failed) R.string.ai_mcp_import_invalid else R.string.ai_mcp_import_hint,
+                        ),
+                    )
+                },
+                shape = MaterialTheme.shapes.large,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(enabled = text.isNotBlank(), onClick = onConfirm) {
+                Text(stringResource(R.string.ai_mcp_import_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.ai_mcp_cancel)) }
+        },
+    )
+}
