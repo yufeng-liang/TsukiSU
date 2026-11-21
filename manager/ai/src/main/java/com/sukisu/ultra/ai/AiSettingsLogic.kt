@@ -159,6 +159,17 @@ internal fun removeProvider(providers: List<AiProvider>, id: String): List<AiPro
     return if (remaining.isEmpty()) providers else remaining
 }
 
+// ------------------------------------------------------------- 会话列表
+
+/**
+ * 会话列表该展示哪些。
+ *
+ * 只列有内容的会话，免得空会话在弹窗里堆成一片「新对话」；当前会话即使还是空
+ * 也留着，否则用户找不到自己正待着的那一个。
+ */
+internal fun visibleSessions(all: List<AiSession>, activeId: String): List<AiSession> =
+    all.filter { it.turns.isNotEmpty() || it.id == activeId }
+
 /** 选中的提供商没了之后该回落到谁：优先第一个剩下的。 */
 internal fun fallbackProvider(providers: List<AiProvider>, currentId: String?): AiProvider? =
     providers.firstOrNull { it.id == currentId } ?: providers.firstOrNull()

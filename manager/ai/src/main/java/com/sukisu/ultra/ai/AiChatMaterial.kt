@@ -54,6 +54,7 @@ import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -119,6 +120,8 @@ fun AiChatMaterial(
     }
 
     var showSessions by remember { mutableStateOf(false) }
+    // 点删除图标先弹确认，确认后才真正删掉会话。
+    var sessionToDelete by remember { mutableStateOf<AiSession?>(null) }
     BackHandler(enabled = state.pendingQuestion != null) {
         actions.onAnswerQuestion(null)
     }
@@ -375,7 +378,13 @@ onRemoveImage = actions.onRemoveImage,
             onDismissRequest = { showSessions = false },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         ) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+            // 底部留出系统手势条与一点空隙，否则最后一行会贴着屏幕底。
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 20.dp),
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = stringResource(R.string.ai_sessions),
@@ -391,11 +400,23 @@ onRemoveImage = actions.onRemoveImage,
                     items(state.sessions, key = { it.id }) { session ->
                         NavigationDrawerItem(
                             label = {
-                                Text(
-                                    text = session.title.ifBlank { stringResource(R.string.ai_new_chat) },
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = session.title.ifBlank { stringResource(R.string.ai_new_chat) },
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    // 删除图标单独占一块，点它不会顺带切进这个会话。
+                                    IconButton(onClick = { sessionToDelete = session }) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.DeleteOutline,
+                                            contentDescription = stringResource(R.string.ai_session_delete_title),
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                    }
+                                }
                             },
                             selected = session.id == state.activeSessionId,
                             onClick = {
@@ -407,6 +428,33 @@ onRemoveImage = actions.onRemoveImage,
                 }
             }
         }
+    }
+
+    sessionToDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { sessionToDelete = null },
+            title = { Text(stringResource(R.string.ai_session_delete_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.ai_session_delete_message,
+                        target.title.ifBlank { stringResource(R.string.ai_new_chat) },
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    actions.onDeleteSession(target.id)
+                    sessionToDelete = null
+                    showSessions = false
+                }) { Text(stringResource(R.string.ai_delete_message_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { sessionToDelete = null }) {
+                    Text(stringResource(R.string.ai_cancel))
+                }
+            },
+        )
     }
 
     state.pendingApproval?.let { pending ->

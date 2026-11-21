@@ -155,25 +155,24 @@ class AiChatViewModel : ViewModel() {
         val config = AiSettings.load()
         val searchConfig = AiSearchSettings.load()
         val session = if (config.keepHistory) AiSessionStore.ensureActive() else AiSessionStore.create()
-        val restored = if (config.keepHistory) {
-            session.turns.map { turn ->
-                AiChatMessage(
-                    id = newId(),
-                    role = if (turn.role == "assistant") AiMessageRole.ASSISTANT else AiMessageRole.USER,
-                    content = turn.content,
-                )
-            }
-        } else {
-            emptyList()
-        }
+        val restored = if (config.keepHistory) restoredMessages(session.turns) else emptyList()
         return AiChatUiState(
             config = config,
             searchConfig = searchConfig,
             messages = restored,
-            sessions = if (config.keepHistory) AiSessionStore.list() else emptyList(),
+            sessions = if (config.keepHistory) AiSessionStore.visible(session.id) else emptyList(),
             activeSessionId = session.id,
             sessionTitle = if (config.keepHistory) session.title else "",
             suggestions = defaultSuggestions(),
+        )
+    }
+
+    /** 把落盘的轮次还原成界面消息，切会话与删除后回退都用这一套。 */
+    private fun restoredMessages(turns: List<AiTurn>): List<AiChatMessage> = turns.map { turn ->
+        AiChatMessage(
+            id = newId(),
+            role = if (turn.role == "assistant") AiMessageRole.ASSISTANT else AiMessageRole.USER,
+            content = turn.content,
         )
     }
 
@@ -200,7 +199,7 @@ class AiChatViewModel : ViewModel() {
                 messages = emptyList(),
                 sessionTitle = created.title,
                 activeSessionId = created.id,
-                sessions = AiSessionStore.list(),
+                sessions = AiSessionStore.visible(created.id),
             )
         }
     }
@@ -213,27 +212,40 @@ class AiChatViewModel : ViewModel() {
         AiSessionStore.setActiveId(id)
         _uiState.update {
             it.copy(
-                messages = target.turns.map { turn ->
-                    AiChatMessage(
-                        id = newId(),
-                        role = if (turn.role == "assistant") AiMessageRole.ASSISTANT else AiMessageRole.USER,
-                        content = turn.content,
-                    )
-                },
+                messages = restoredMessages(target.turns),
                 sessionTitle = target.title,
                 activeSessionId = id,
-                sessions = AiSessionStore.list(),
+                sessions = AiSessionStore.visible(id),
             )
         }
     }
 
-    /** 删除会话；删的是当前会话就顺带开一个新的。 */
+    /**
+     * 删除会话。
+     *
+     * 删的是当前会话时，优先退到最近一个还有内容的会话，一条都不剩才新建，
+     * 免得删完凭空多出一个空白会话。
+     */
     fun deleteSession(id: String) {
+        val wasActive = id == _uiState.value.activeSessionId
         AiSessionStore.delete(id)
-        if (id == _uiState.value.activeSessionId) {
+        if (!wasActive) {
+            _uiState.update { it.copy(sessions = AiSessionStore.visible(it.activeSessionId)) }
+            return
+        }
+        val fallback = AiSessionStore.list().firstOrNull { it.turns.isNotEmpty() }
+        if (fallback == null) {
             createNewSession()
-        } else {
-            _uiState.update { it.copy(sessions = AiSessionStore.list()) }
+            return
+        }
+        AiSessionStore.setActiveId(fallback.id)
+        _uiState.update {
+            it.copy(
+                messages = restoredMessages(fallback.turns),
+                sessionTitle = fallback.title,
+                activeSessionId = fallback.id,
+                sessions = AiSessionStore.visible(fallback.id),
+            )
         }
     }
 
@@ -1276,7 +1288,7 @@ class AiChatViewModel : ViewModel() {
                     title = _uiState.value.sessionTitle.ifBlank { existing.title },
                 )
             )
-            _uiState.update { it.copy(sessions = AiSessionStore.list()) }
+            _uiState.update { it.copy(sessions = AiSessionStore.visible(activeId)) }
         }
     }
 
@@ -1299,7 +1311,7 @@ class AiChatViewModel : ViewModel() {
         if (activeId.isNotEmpty()) {
             AiSessionStore.load(activeId)?.let { session ->
                 AiSessionStore.save(session.copy(title = title, updatedAt = System.currentTimeMillis()))
-                _uiState.update { it.copy(sessions = AiSessionStore.list()) }
+                _uiState.update { it.copy(sessions = AiSessionStore.visible(it.activeSessionId)) }
             }
         }
         }

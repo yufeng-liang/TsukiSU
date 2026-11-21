@@ -64,6 +64,9 @@ object AiSessionStore {
 
     fun load(id: String): AiSession? = list().firstOrNull { it.id == id }
 
+    /** 弹窗里要展示的会话，过滤规则见 [visibleSessions]。 */
+    fun visible(activeId: String): List<AiSession> = visibleSessions(list(), activeId)
+
     fun create(title: String = ""): AiSession = AiSession(
         id = "s_" + System.currentTimeMillis().toString(36) + "_" + (1000..9999).random(),
         title = title,

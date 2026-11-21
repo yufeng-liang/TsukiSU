@@ -418,6 +418,8 @@
     <string name="ai_title_model_follow_main">Follow main model</string>
     <string name="ai_provider_default_name">Provider %1$d</string>
 <string name="ai_session_default_name">Chat %1$d</string>
+    <string name="ai_session_delete_title">Delete session?</string>
+    <string name="ai_session_delete_message">Session %1$s and its chat history will be deleted permanently.</string>
     <string name="ai_provider_edit">Edit</string>
     <string name="ai_provider_add_title">Add provider</string>
     <string name="ai_provider_edit_title">Edit provider</string>

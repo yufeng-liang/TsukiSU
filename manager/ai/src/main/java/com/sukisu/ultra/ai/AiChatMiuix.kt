@@ -41,6 +41,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -113,6 +114,8 @@ fun AiChatMiuix(
         if (state.pendingQuestion != null) keyboardController?.hide()
     }
     var showSessions by remember { mutableStateOf(false) }
+    // 点删除图标先弹确认，确认后才真正删掉会话。
+    var sessionToDelete by remember { mutableStateOf<AiSession?>(null) }
     val contextLabel = remember(state.messages, state.config) {
         val used = state.messages.sumOf { it.content.length } / 3
         val window = AiSettings.activeModel(state.config)?.contextWindow ?: 0
@@ -395,6 +398,15 @@ fun AiChatMiuix(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f),
                             )
+                            // 删除图标单独占一块，点它不会顺带切进这个会话。
+                            IconButton(onClick = { sessionToDelete = session }) {
+                                Icon(
+                                    imageVector = Icons.Rounded.DeleteOutline,
+                                    contentDescription = stringResource(R.string.ai_session_delete_title),
+                                    tint = colorScheme.error,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -407,6 +419,44 @@ fun AiChatMiuix(
                     modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                     colors = ButtonDefaults.textButtonColorsPrimary(),
                 )
+            },
+        )
+    }
+
+    sessionToDelete?.let { target ->
+        OverlayDialog(
+            show = true,
+            title = stringResource(R.string.ai_session_delete_title),
+            onDismissRequest = { sessionToDelete = null },
+            content = {
+                Text(
+                    text = stringResource(
+                        R.string.ai_session_delete_message,
+                        target.title.ifBlank { stringResource(R.string.ai_new_chat) },
+                    ),
+                    style = MiuixTheme.textStyles.body2,
+                    color = colorScheme.onSurfaceVariantSummary,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    TextButton(
+                        text = stringResource(R.string.ai_cancel),
+                        onClick = { sessionToDelete = null },
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        text = stringResource(R.string.ai_delete_message_confirm),
+                        onClick = {
+                            actions.onDeleteSession(target.id)
+                            sessionToDelete = null
+                            showSessions = false
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColorsPrimary(),
+                    )
+                }
             },
         )
     }

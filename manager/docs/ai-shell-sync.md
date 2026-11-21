@@ -40,6 +40,7 @@ AI 助手有两套可切换的界面外壳，都由 `AiFeatureProviderImpl` 按 
 11. **主页「隐藏环境进行中」卡片**：和其它卡片同一套底——默认 `surfaceBright`、无描边，进度只体现在圆环与文案上（M3 在 `HomeMaterial.kt` 的 `HideEnvCard`，Miuix 在 `HomeMiuix.kt` 的 `HideEnvCardMiuix`）。
 12. **输入框快捷条**：模型名（点击换模型）、推理强度 `Speed`、联网搜索 `Language`；生效中的图标用 primary 色，关闭时回落普通色。推理强度弹窗的滑杆要按档位画刻度点（Miuix `steps` + `showKeyPoints`）并在落档时给触感；档位名居中压在滑杆正上方，底部留 16dp，别让大字贴着轨道。弹窗里的「助手设置」带落点：`AiSettingsTarget`（Model / Search）+ `AiSettingsFocus` 一次性信使，设置页用 `bringIntoViewRequester` 滚到目标分组、描边 1.4s 后淡出，别把用户丢在页面顶部。
 13. **新增图标**：`ai` 模块对 `material-icons-extended` 是 `compileOnly`，运行时图标来自 `app/libs/material-icons-custom.jar`（165 个 rounded 图标）。加图标前先 `unzip -l app/libs/material-icons-custom.jar | grep 图标名` 核对，否则编译通过、真机 `ClassNotFoundException`（踩过 `Bolt`、`Public`）。
+14. **会话列表**：只列有内容的会话 + 当前会话（空会话在弹窗里堆成一片「新对话」没法认），每行右侧红色 `DeleteOutline` 删除按钮必须先弹二次确认；当前会话已经空着时点「新对话」不新建（`AiChatViewModel.newSession` 里守卫），删掉当前会话优先退到最近一个有内容的会话，一条不剩才新建。列表过滤规则统一走 `visibleSessions()`（在 `AiSettingsLogic.kt`）。
 
 ## 三、验收流程
 

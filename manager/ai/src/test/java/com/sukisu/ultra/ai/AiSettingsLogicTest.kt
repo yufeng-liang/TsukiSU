@@ -81,6 +81,20 @@ class AiSettingsLogicTest {
     }
 
     @Test
+    fun visibleSessionsHidesBlankOnesButKeepsTheActiveOne() {
+        val filled = AiSession(id = "s1", title = "会话 1", turns = listOf(AiTurn("user", "hi")))
+        val blankOld = AiSession(id = "s2", title = "会话 2")
+        val activeBlank = AiSession(id = "s3", title = "会话 3")
+        val all = listOf(filled, blankOld, activeBlank)
+
+        // 历史空会话不展示，当前这个空的要留着
+        assertEquals(listOf("s1", "s3"), visibleSessions(all, "s3").map { it.id })
+        // 全部有内容时一个不少
+        val allFilled = all.map { it.copy(turns = listOf(AiTurn("user", "hi"))) }
+        assertEquals(listOf("s1", "s2", "s3"), visibleSessions(allFilled, "s3").map { it.id })
+    }
+
+    @Test
     fun upsertUpdatesInPlaceAndAppendsNewOnes() {
         val first = AiProvider(id = "p1", name = "A", endpoint = "https://a.example.com")
         val second = AiProvider(id = "p2", name = "B", endpoint = "https://b.example.com")

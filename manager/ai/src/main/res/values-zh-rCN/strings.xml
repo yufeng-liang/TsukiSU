@@ -417,6 +417,8 @@
     <string name="ai_title_model_follow_main">跟随主模型</string>
     <string name="ai_provider_default_name">提供商 %1$d</string>
 <string name="ai_session_default_name">会话 %1$d</string>
+    <string name="ai_session_delete_title">删除会话？</string>
+    <string name="ai_session_delete_message">会话「%1$s」和它的聊天记录会一起删掉，无法恢复。</string>
     <string name="ai_provider_edit">编辑</string>
     <string name="ai_provider_add_title">添加提供商</string>
     <string name="ai_provider_edit_title">编辑提供商</string>
