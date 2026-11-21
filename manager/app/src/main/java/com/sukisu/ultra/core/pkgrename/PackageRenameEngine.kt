@@ -16,14 +16,15 @@ internal data class PackageRenameResult(
 )
 
 /**
- * 运行时换包名：把当前正在运行的 APK 复制一份、改掉 AndroidManifest 里的包名、用内置密钥重签。
+ * 运行时换包名：把当前正在运行的 APK 复制一份、改掉 AndroidManifest 里的包名、用本机密钥重签。
  *
  * 为什么改完的 APK 还能跑：Android 里包名是清单里的一个字符串，
  * 代码里的 R 类、资源引用全部基于编译期命名空间（`com.sukisu.ultra`），与安装包名无关，
  * 所以只换清单字符串就够了，不需要重新编译，也不需要 aapt2。
  *
- * 代价：新包名与内核里编译期写死的 `KSU_PACKAGE_NAME` 不一致，内核凭包名认不出它。
- * 两条后路见 [ManagerKeyMaterial] 的注释。
+ * 代价：新包名与内核里编译期写死的 `KSU_PACKAGE_NAME` 不一致，内核凭包名认不出它，
+ * 改名后必须靠动态管理器白名单（按 uid）授权，见 [ManagerKeyMaterial] 的注释。
+ * 新包名是一次全新安装，签名只需要自洽，因此用每台设备现场生成的密钥即可。
  */
 internal object PackageRenameEngine {
 
@@ -65,8 +66,8 @@ internal object PackageRenameEngine {
                     )
                 }
                 val patched = ManifestPackageRewriter.rewrite(manifest, oldPackage, newPackage)
-                if (!ManifestPackageRewriter.verifyReplaced(patched, oldPackage, newPackage)) {
-                    throw PackageRenameException("清单替换后校验失败：旧包名仍有残留或新包名缺失")
+                ManifestPackageRewriter.verifyReplaced(patched, oldPackage, newPackage)?.let {
+                    throw PackageRenameException("清单替换后校验失败：$it")
                 }
                 patched
             }
@@ -95,5 +96,15 @@ internal object PackageRenameEngine {
     /** 清掉所有改名产物（回退或清理时用）。 */
     fun clearOutputs(context: Context) {
         outputDir(context).listFiles()?.forEach { it.delete() }
+    }
+
+    /**
+     * 每次改名之前先清掉上一次的产物。
+     *
+     * 每换一次包名就是一个新随机名，产物与备份都是 39MB 级别，
+     * 不清的话点几次就吃掉几百 MB 私有空间。
+     */
+    fun pruneOutputs(context: Context) {
+        runCatching { clearOutputs(context) }
     }
 }

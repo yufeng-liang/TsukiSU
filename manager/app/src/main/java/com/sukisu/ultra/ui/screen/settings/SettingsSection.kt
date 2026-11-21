@@ -10,6 +10,7 @@ object SettingsSection {
     const val GENERAL = "general"
     const val PROFILE_TEMPLATES = "profile_templates"
     const val EXTENSIONS = "extensions"
+    const val PACKAGE_RENAME = "package_rename"
     const val TOOLS = "tools"
     const val TEMPORARY_ROOT = "temporary_root"
     const val SECURITY = "security"
@@ -40,7 +41,7 @@ object SettingsSection {
 
     
     val ALL: Set<String> = setOf(
-        GENERAL, PROFILE_TEMPLATES, EXTENSIONS, TOOLS, TEMPORARY_ROOT, SECURITY,
+        GENERAL, PROFILE_TEMPLATES, EXTENSIONS, PACKAGE_RENAME, TOOLS, TEMPORARY_ROOT, SECURITY,
         MODULE_BEHAVIOUR, UNINSTALL, DIAGNOSTICS,
         SU_COMPAT, KERNEL_UMOUNT, SELINUX_HIDE, AVC_SPOOF, MOUNT_HIDE, SULOG,
         ADB_ROOT, SHELL_SU_ADB_ONLY, SOFT_REBOOT,
@@ -53,6 +54,7 @@ object SettingsSection {
         UI_MODE, LANGUAGE, THEME -> GENERAL
         PROFILE_TEMPLATES -> PROFILE_TEMPLATES
         EXTENSIONS -> EXTENSIONS
+        PACKAGE_RENAME -> PACKAGE_RENAME
         TOOLS -> TOOLS
         TEMPORARY_ROOT -> TEMPORARY_ROOT
         SU_COMPAT, KERNEL_UMOUNT, SELINUX_HIDE, AVC_SPOOF, MOUNT_HIDE, SULOG,

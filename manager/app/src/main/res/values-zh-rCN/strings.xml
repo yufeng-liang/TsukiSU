@@ -2491,7 +2491,7 @@
 <string name="builtin_zygisk_opt_custom_linker_summary">使用内置 ELF 加载器加载模块，使其不进入系统链接器的 solist。模块无法这样加载时会回退到系统链接器。</string>
 <string name="builtin_zygisk_opt_lsplt">使用 LSPLT 进行 PLT Hook</string>
 <string name="builtin_zygisk_opt_lsplt_summary">关闭时使用 ByteHook，开启时使用 LSPLT。</string>
-    <string name="pkg_rename_title">修改包名</string>
+    <string name="pkg_rename_title">更换包名</string>
     <string name="pkg_rename_entry_summary">用随机包名伪装管理器，降低包名检测命中</string>
     <string name="pkg_rename_current">当前包名</string>
     <string name="pkg_rename_target">新包名</string>
@@ -2502,8 +2502,19 @@
     <string name="pkg_rename_stage_registering">正在向内核登记新管理器…</string>
     <string name="pkg_rename_stage_done">完成</string>
     <string name="pkg_rename_done_title">已换名为 %1$s</string>
-    <string name="pkg_rename_done_body">新应用装好后请卸载旧包 %1$s。旧包 APK 副本已保存在应用私有目录，可用于恢复原名。</string>
-    <string name="pkg_rename_warning">换名后新旧两个应用会同时存在。内核只认已登记的那个包名；若新应用里功能全部置灰，请再启动一次。</string>
+    <string name="pkg_rename_done_body">新应用已装好并完成登记。确认新应用能用内核功能之后，再卸载旧包 %1$s：旧包还装着的时候，内核可能继续把它当作管理器。</string>
+    <string name="pkg_rename_data_warning">换名等于全新安装：新包不会继承旧包的数据和设置，旧包的数据要等卸载旧APK时才会清除。</string>
+    <string name="pkg_rename_warning">换名后新旧两个应用会共存。旧包还装着时内核仍可能按包名把它认成管理器，所以要先确认新应用能用内核功能，再卸载旧APK。新应用里功能置灰的话，先去「动态管理器」核对是否已登记，再重试登记。</string>
     <string name="pkg_rename_need_install_permission">请先允许本应用「安装未知应用」，然后重试。</string>
-    <string name="pkg_rename_uninstall_old">卸载旧的包</string>
+    <string name="pkg_rename_uninstall_old">卸载旧APK</string>
+    <string name="pkg_rename_uninstall_failed">打不开系统卸载界面（%1$s），请在系统设置里手动卸载旧应用。</string>
+    <string name="pkg_rename_open_new">打开新的管理器</string>
+    <string name="pkg_rename_open_new_failed">打不开 %1$s，请从桌面图标启动。</string>
+    <string name="pkg_rename_registered_managers">查看已登记的管理器</string>
+    <string name="pkg_rename_restart">重新开始</string>
+    <string name="pkg_rename_register_failed_after_install">新包 %1$s 已经装好，但没能登记到内核。它现在还没有内核权限，修好之前不要卸载旧APK。</string>
+    <string name="pkg_rename_retry_register">重试登记</string>
+    <string name="pkg_rename_revoke_register">撤销登记并放弃</string>
+    <string name="pkg_rename_enabled_by_us">本次换名打开了动态管理器总开关，之后可以在动态管理器页里关掉。</string>
+    <string name="pkg_rename_back">返回</string>
 </resources>

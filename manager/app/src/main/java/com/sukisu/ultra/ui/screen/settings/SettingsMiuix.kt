@@ -341,6 +341,7 @@ fun SettingPagerMiuix(
                         }
                         AppCard(
                             modifier = Modifier
+                                .bringIntoViewRequester(requester(SettingsSection.PACKAGE_RENAME))
                                 .padding(top = 12.dp)
                                 .fillMaxWidth(),
                             colors = backgroundAwareCardColors(),

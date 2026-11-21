@@ -1181,6 +1181,22 @@ fun runCmd(shell: Shell, cmd: String): String {
         .joinToString("\n")
 }
 
+/**
+ * 同 [runCmd]，但把 stderr 也拼进结果。
+ *
+ * ksud 失败时把原因写在 stderr（内核 errno、找不到包名、扩展不支持等），
+ * 只留 stdout 上层就只剩一句「ksud command failed」，没法判断该重试还是该放弃。
+ */
+fun runCmdWithErr(shell: Shell, cmd: String): String {
+    val out = mutableListOf<String>()
+    val err = mutableListOf<String>()
+    shell.newJob()
+        .add(cmd)
+        .to(out, err)
+        .exec()
+    return (out + err).filter { it.isNotBlank() }.joinToString("\n")
+}
+
 suspend fun streamFile(path: String): List<String> = withContext(Dispatchers.IO) {
     val shell = getRootShell()
     val outLines = mutableListOf<String>()
@@ -1419,7 +1435,7 @@ data class DynamicManagerSignature(val certSize: Int, val hash: String)
 
 private suspend fun runDynamicManagerCommand(vararg args: String): String = withContext(Dispatchers.IO) {
     val command = "${getKsuDaemonPath()} " + args.joinToString(" ") { it.ksudShellArg() }
-    val output = runCmd(getRootShell(), "$command; printf '\\n__KSUD_EXIT_CODE__:%s' $? ")
+    val output = runCmdWithErr(getRootShell(), "$command; printf '\\n__KSUD_EXIT_CODE__:%s' $? ")
     val marker = Regex("\\n__KSUD_EXIT_CODE__:(\\d+)$").find(output)
         ?: error("ksud command did not return an exit status")
     check(marker.groupValues[1] == "0") { output.substringBefore(marker.value).ifBlank { "ksud command failed" } }
@@ -1432,7 +1448,8 @@ suspend fun getDynamicManagers(): DynamicManagerState {
     val lines = runDynamicManagerCommand("manager", "list").lines()
     val enabled = lines.firstOrNull { it.startsWith("enabled:") }
         ?.substringAfter(':')?.trim()?.toBooleanStrictOrNull() ?: false
-    val entries = lines.drop(1).filter { it.isNotBlank() }.mapNotNull { line ->
+    // 不按位置丢首行：多印一行警告就会连第一条真实条目一起丢掉。
+    val entries = lines.filter { it.isNotBlank() && !it.startsWith("enabled:") }.mapNotNull { line ->
         val fields = line.split('\t')
         if (fields.size < 4) return@mapNotNull null
         DynamicManagerEntry(

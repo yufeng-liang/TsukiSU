@@ -346,6 +346,7 @@ fun SettingPagerMaterial(
                 )
                 }
                 val renameTitle = stringResource(id = R.string.pkg_rename_title)
+                SettingsAnchor(SettingsSection.PACKAGE_RENAME, anchorRequesters) {
                 SegmentedColumn(
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
                     content = listOf {
@@ -363,6 +364,7 @@ fun SettingPagerMaterial(
                         )
                     }
                 )
+                }
                 val toolsTitle = customText(CustomTextKey.PAGE_TOOLS)
                 SettingsAnchor(SettingsSection.TOOLS, anchorRequesters) {
                 SegmentedColumn(

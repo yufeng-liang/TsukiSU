@@ -27,6 +27,12 @@
 -->
     <exclude domain="file" path="module_zips/"/>
     <!--
+   换包名留下的两份 APK（filesDir/pkgrename/ 与 filesDir/pkgrename-original/）同样排除：
+   各自 39MB，且是本机自签的管理器安装包，没有任何进云端/换机传输的理由。
+-->
+    <exclude domain="file" path="pkgrename/"/>
+    <exclude domain="file" path="pkgrename-original/"/>
+    <!--
    <include domain="sharedpref" path="."/>
    <exclude domain="sharedpref" path="device.xml"/>
 -->

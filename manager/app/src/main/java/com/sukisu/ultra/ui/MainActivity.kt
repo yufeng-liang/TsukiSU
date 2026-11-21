@@ -321,6 +321,9 @@ class MainActivity : ComponentActivity() {
                     // Read here, not inside the NavDisplay builder: NavDisplay only rebuilds its entries
                     // (and their swipeDismiss) when the builder lambda changes, so it must capture the value.
                     val scriptRunSwipeDismiss = if (scriptRunBackEnabled) swipeDismiss else NavSwipeDirection.None
+                    val renameRoute = navigator.current() as? Route.PackageRename
+                    var renameBackEnabled by remember(renameRoute) { mutableStateOf(true) }
+                    val renameSwipeDismiss = if (renameBackEnabled) swipeDismiss else NavSwipeDirection.None
                     val mainScreenEntry = @Composable {
                         MainScreen(
                             initialPage = selectedMainPage,
@@ -559,7 +562,9 @@ class MainActivity : ComponentActivity() {
                                 entry<Route.UmountManager>(swipeDismiss = swipeDismiss)  { UmountManagerScreen() }
                                 entry<Route.KernelModules>(swipeDismiss = swipeDismiss)  { KernelModulesScreen() }
                                 entry<Route.DynamicManagers>(swipeDismiss = swipeDismiss) { DynamicManagersScreen() }
-                                entry<Route.PackageRename>(swipeDismiss = swipeDismiss) { PackageRenameScreen() }
+                                entry<Route.PackageRename>(swipeDismiss = renameSwipeDismiss) {
+                                    PackageRenameScreen(onBackEnabledChange = { renameBackEnabled = it })
+                                }
                                 entry<Route.Extensions>(swipeDismiss = swipeDismiss) { ExtensionsScreen() }
                                 entry<Route.BuiltinZygisk>(swipeDismiss = swipeDismiss) { BuiltinZygiskScreen() }
                                 entry<Route.CpuSpoof>(swipeDismiss = swipeDismiss) { CpuSpoofScreen() }

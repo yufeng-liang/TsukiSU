@@ -6,8 +6,8 @@ import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.os.Build
 import java.io.File
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CompletableDeferred
 
 /** 一次安装的结果。 */
 internal sealed class InstallOutcome {
@@ -16,24 +16,29 @@ internal sealed class InstallOutcome {
 }
 
 /**
- * 安装结果的中转站。
+ * 安装结果的中转站，按会话号（sessionId）对号入座。
  *
- * `PackageInstaller` 的结果只能通过 PendingIntent 广播拿回来，而广播接收器是系统实例化的，
- * 没法直接拿到协程；所以这里用一个进程内单播把结果交回 [PackageRenameCoordinator]。
+ * `PackageInstaller` 的结果只能靠 PendingIntent 广播拿回来，而广播接收器由系统实例化，
+ * 拿不到协程；所以这里用「会话号 → 一次性等待点」的表把结果交回协调器。
+ *
+ * 按会话号而不是单播流：即使收到的是上一次会话的陈旧回调，也不会被当成本次成功。
  */
 internal object PackageRenameInstallBridge {
-    // replay = 1：安装回调可能在协调器开始收集之前就到达（commit 与 first() 之间没有原子性），
-    // 留一格重放缓存才不会漏掉结果。
-    private val _outcomes = MutableSharedFlow<InstallOutcome>(replay = 1, extraBufferCapacity = 4)
-    val outcomes = _outcomes.asSharedFlow()
 
-    fun publish(outcome: InstallOutcome) {
-        _outcomes.tryEmit(outcome)
+    private val pending = ConcurrentHashMap<Int, CompletableDeferred<InstallOutcome>>()
+
+    /** 取（必要时创建）某个会话的等待点。 */
+    fun await(sessionId: Int): CompletableDeferred<InstallOutcome> =
+        pending.computeIfAbsent(sessionId) { CompletableDeferred() }
+
+    fun publish(sessionId: Int, outcome: InstallOutcome) {
+        if (sessionId < 0) return
+        pending.computeIfAbsent(sessionId) { CompletableDeferred() }.complete(outcome)
     }
 
-    /** 每次提交新会话前清掉上一次的结果，避免读到陈旧结论。 */
-    fun reset() {
-        _outcomes.resetReplayCache()
+    /** 会话结束（成功或失败）后清掉等待点，避免表越积越大。 */
+    fun discard(sessionId: Int) {
+        pending.remove(sessionId)
     }
 }
 
@@ -47,10 +52,11 @@ class PkgRenameInstallReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION_INSTALL_RESULT) return
 
+        val sessionId = intent.getIntExtra(EXTRA_SESSION_ID, -1)
         when (intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
             PackageInstaller.STATUS_SUCCESS -> {
                 val pkg = intent.getStringExtra(EXTRA_TARGET_PACKAGE).orEmpty()
-                PackageRenameInstallBridge.publish(InstallOutcome.Success(pkg))
+                PackageRenameInstallBridge.publish(sessionId, InstallOutcome.Success(pkg))
             }
 
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
@@ -67,7 +73,7 @@ class PkgRenameInstallReceiver : BroadcastReceiver() {
             else -> {
                 val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
                     ?: "安装失败（未知原因）"
-                PackageRenameInstallBridge.publish(InstallOutcome.Failure(message))
+                PackageRenameInstallBridge.publish(sessionId, InstallOutcome.Failure(message))
             }
         }
     }
@@ -75,6 +81,7 @@ class PkgRenameInstallReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_INSTALL_RESULT = "com.sukisu.ultra.action.PKG_RENAME_INSTALL_RESULT"
         const val EXTRA_TARGET_PACKAGE = "com.sukisu.ultra.extra.TARGET_PACKAGE"
+        const val EXTRA_SESSION_ID = "com.sukisu.ultra.extra.SESSION_ID"
     }
 }
 
@@ -107,6 +114,7 @@ internal object PackageRenameInstaller {
                 val callback = Intent(context, PkgRenameInstallReceiver::class.java)
                     .setAction(PkgRenameInstallReceiver.ACTION_INSTALL_RESULT)
                     .putExtra(PkgRenameInstallReceiver.EXTRA_TARGET_PACKAGE, targetPackage)
+                    .putExtra(PkgRenameInstallReceiver.EXTRA_SESSION_ID, sessionId)
                 val mutable = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     android.app.PendingIntent.FLAG_MUTABLE
                 } else {

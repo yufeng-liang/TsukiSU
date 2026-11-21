@@ -2123,7 +2123,7 @@
     <!-- 模块页悬浮按钮扇形菜单的两枚动作 -->
     <string name="module_fab_install">模組刷入</string>
     <string name="module_fab_upload">投稿模組</string>
-    <string name="pkg_rename_title">更改套件名稱</string>
+    <string name="pkg_rename_title">更換套件名稱</string>
     <string name="pkg_rename_entry_summary">以隨機套件名稱偽裝管理員，降低套件名稱偵測命中</string>
     <string name="pkg_rename_current">目前套件名稱</string>
     <string name="pkg_rename_target">新套件名稱</string>
@@ -2134,8 +2134,19 @@
     <string name="pkg_rename_stage_registering">正在向核心登記新管理員…</string>
     <string name="pkg_rename_stage_done">完成</string>
     <string name="pkg_rename_done_title">已改名為 %1$s</string>
-    <string name="pkg_rename_done_body">新應用裝好後請解除安裝舊套件 %1$s。舊 APK 備份已存放在應用程式私有目錄，可用來還原原名。</string>
-    <string name="pkg_rename_warning">改名後新舊應用會同時存在。核心只認已登記的那個套件名稱；若新應用功能全部變灰，請再啟動一次。</string>
+    <string name="pkg_rename_done_body">新應用已裝好並完成登記。確認新應用可以用核心功能之後，再解除安裝舊套件 %1$s：舊套件還裝著的時候，核心可能繼續把它當作管理員。</string>
+    <string name="pkg_rename_data_warning">改名等於全新安裝：新套件不會繼承舊套件的資料和設定，舊套件的資料要等解除安裝舊APK時才會清除。</string>
+    <string name="pkg_rename_warning">改名後新舊應用會共存。舊套件還裝著時核心仍可能按套件名稱把它認成管理員，所以要先確認新應用可以用核心功能，再解除安裝舊APK。新應用功能變灰的話，先去「動態管理員」核對是否已登記，再重試登記。</string>
     <string name="pkg_rename_need_install_permission">請先允許本應用程式「安裝未知應用程式」，然後再試一次。</string>
-    <string name="pkg_rename_uninstall_old">解除安裝舊的包</string>
+    <string name="pkg_rename_uninstall_old">解除安裝舊APK</string>
+    <string name="pkg_rename_uninstall_failed">打不開系統解除安裝介面（%1$s），請在系統設定裡手動解除安裝舊應用。</string>
+    <string name="pkg_rename_open_new">開啟新的管理員</string>
+    <string name="pkg_rename_open_new_failed">打不開 %1$s，請從桌面圖示啟動。</string>
+    <string name="pkg_rename_registered_managers">查看已登記的管理員</string>
+    <string name="pkg_rename_restart">重新開始</string>
+    <string name="pkg_rename_register_failed_after_install">新套件 %1$s 已經裝好，但沒能登記到核心。它現在還沒有核心權限，修好之前不要解除安裝舊APK。</string>
+    <string name="pkg_rename_retry_register">重試登記</string>
+    <string name="pkg_rename_revoke_register">撤銷登記並放棄</string>
+    <string name="pkg_rename_enabled_by_us">本次改名開啟了動態管理員總開關，之後可以在動態管理員頁裡關掉。</string>
+    <string name="pkg_rename_back">返回</string>
 </resources>

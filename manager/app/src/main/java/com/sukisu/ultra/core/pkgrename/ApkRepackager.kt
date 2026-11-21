@@ -3,7 +3,6 @@ package com.sukisu.ultra.core.pkgrename
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.RandomAccessFile
-import java.nio.channels.FileChannel
 import java.util.zip.CRC32
 import java.util.zip.Deflater
 import java.util.zip.Inflater
@@ -52,6 +51,10 @@ internal object ApkRepackager {
             val cdSize = u32(eocd, 12)
             val cdOffset = u32(eocd, 16)
             if (cdOffset <= 0 || cdSize <= 0) throw ApkRepackagerException("中央目录位置异常")
+            // 本实现的偏移全程用 Int，超过 2GB 会静默截断；Zip64 的 0xFFFFFFFF 标记也走不到正常分支。
+            if (fileLen >= 0x7FFF_FFFFL) throw ApkRepackagerException("APK 超过 2GB，本实现不支持")
+            if (cdOffset == -1 || cdSize == -1) throw ApkRepackagerException("不支持的 Zip64 中央目录")
+            if (hasZip64Locator(raf, eocdAbs)) throw ApkRepackagerException("不支持的 Zip64 结尾记录")
 
             val entryStart = signingBlockStart(raf, cdOffset)
 
@@ -86,23 +89,42 @@ internal object ApkRepackager {
             writeU32(eocdOut, 16, newCdOffset.toInt())
             writeU16(eocdOut, 20, 0)
 
+            if (kept.size > 0xFFFF) throw ApkRepackagerException("条目数超出 16 位上限：${kept.size}")
+
             dest.parentFile?.mkdirs()
-            RandomAccessFile(dest, "rw").use { out ->
-                out.setLength(0)
-                FileChannel.open(src.toPath(), java.nio.file.StandardOpenOption.READ).use { srcCh ->
-                    FileChannel.open(dest.toPath(), java.nio.file.StandardOpenOption.WRITE).use { dstCh ->
-                        var pos = 0L
-                        while (pos < entryStart) {
-                            val n = srcCh.transferTo(pos, entryStart - pos, dstCh)
-                            if (n <= 0L) throw ApkRepackagerException("拷贝条目区失败 @ $pos")
-                            pos += n
-                        }
-                        dstCh.position(entryStart)
-                        dstCh.write(java.nio.ByteBuffer.wrap(newEntry))
-                        dstCh.write(java.nio.ByteBuffer.wrap(cd))
-                        dstCh.write(java.nio.ByteBuffer.wrap(eocdOut))
+            // 先写 .tmp 再改名：中途异常/进程被杀只留一个临时文件，不会产生「长度非 0 的半截 APK」
+            // 被安装器当成成品拿去装。
+            val tmp = File(dest.parentFile, dest.name + ".tmp")
+            tmp.delete()
+            val expectedLen = entryStart + newEntry.size + cd.size + eocdOut.size
+            try {
+                RandomAccessFile(tmp, "rw").use { out ->
+                    out.setLength(0)
+                    // 用 RandomAccessFile 的 channel（java.nio.channels，API 1 起可用）：
+                    // FileChannel.open(...Path...) 属于 java.nio.file（API 26+），minSdk 24 上会抛
+                    // NoClassDefFoundError，那是 Error，上层的 catch(Exception) 抓不住。
+                    var pos = 0L
+                    while (pos < entryStart) {
+                        val n = raf.channel.transferTo(pos, entryStart - pos, out.channel)
+                        if (n <= 0L) throw ApkRepackagerException("拷贝条目区失败 @ $pos")
+                        pos += n
+                    }
+                    out.seek(entryStart)
+                    out.write(newEntry)
+                    out.write(cd)
+                    out.write(eocdOut)
+                    out.channel.force(true)
+                }
+                verifyWritten(tmp, expectedLen, newCdOffset.toLong(), kept.size)
+                if (!tmp.renameTo(dest)) {
+                    // 部分文件系统（含 FAT/exFAT 的某些实现）不允许覆盖已存在的目标。
+                    if (!dest.delete() || !tmp.renameTo(dest)) {
+                        throw ApkRepackagerException("输出文件重命名失败")
                     }
                 }
+            } catch (t: Throwable) {
+                tmp.delete()
+                throw t
             }
         }
     }
@@ -124,7 +146,18 @@ internal object ApkRepackager {
             val entry = parseCentralDirectory(cdBytes, totalEntries)
                 .firstOrNull { it.name == MANIFEST }
                 ?: throw ApkRepackagerException("APK 里没有 $MANIFEST")
-            return readEntryPayload(raf, entry)
+            val payload = readEntryPayload(raf, entry)
+            // 用中央目录里的 CRC 与解压长度交叉验证；压缩流被截断时 inflate 可能仍「成功」。
+            val crc = u32(entry.record, 16).toLong() and 0xFFFFFFFFL
+            val uncomp = u32(entry.record, 24).toLong() and 0xFFFFFFFFL
+            if (uncomp != 0L && payload.size.toLong() != uncomp) {
+                throw ApkRepackagerException("清单解压长度不符：${payload.size} != $uncomp")
+            }
+            if (crc != 0L) {
+                val actual = java.util.zip.CRC32().apply { update(payload) }.value
+                if (actual != crc) throw ApkRepackagerException("清单 CRC 不符：$actual != $crc")
+            }
+            return payload
         }
     }
 
@@ -166,6 +199,14 @@ internal object ApkRepackager {
         val compSize = u32(lfh, 18)
         val nameLen = u16(lfh, 26)
         val extraLen = u16(lfh, 28)
+        val lfhName = ByteArray(nameLen)
+        raf.readFully(lfhName)
+        if (lfhName.toString(Charsets.UTF_8) != MANIFEST) {
+            throw ApkRepackagerException("本地头名字不符：${lfhName.toString(Charsets.UTF_8)}")
+        }
+        if (compSize.toLong() != (entry.record.size.let { u32(entry.record, 20).toLong() and 0xFFFFFFFFL })) {
+            throw ApkRepackagerException("本地头与中央目录的压缩长度不一致")
+        }
         if (flags and 0x08 != 0 || compSize == 0) {
             // 带 data descriptor 的条目长度写在数据后面，这里不做支持
             throw ApkRepackagerException("清单条目带 data descriptor，本实现不支持")
@@ -201,13 +242,20 @@ internal object ApkRepackager {
         val buf = ByteArray(scanLen)
         raf.seek(fileLen - scanLen)
         raf.readFully(buf)
+        var fallback = -1L
         for (i in scanLen - 22 downTo 0) {
             if (buf[i] == 0x50.toByte() && buf[i + 1] == 0x4b.toByte() &&
                 buf[i + 2] == 0x05.toByte() && buf[i + 3] == 0x06.toByte()
             ) {
-                return fileLen - scanLen + i
+                // 只有「注释长度刚好补齐到文件尾」的候选才是真 EOCD：注释里也可能出现同样的
+                // 签名，取错会一路报「中央目录记录签名不符」，把排查方向带偏。
+                val commentLen = u16(buf, i + 20)
+                val abs = fileLen - scanLen + i
+                if (i + 22 + commentLen == scanLen) return abs
+                if (fallback < 0) fallback = abs
             }
         }
+        if (fallback >= 0) return fallback
         throw ApkRepackagerException("找不到 zip 结尾记录")
     }
 
@@ -234,7 +282,13 @@ internal object ApkRepackager {
         return out.toByteArray()
     }
 
-    /** 重写中央目录：只有清单那一条的 CRC / 长度 / 偏移需要改，其余原样保留。 */
+    /**
+     * 重写中央目录：非清单条目原样保留，清单那一条**整条重生成**。
+     *
+     * 只回填 CRC / 长度会留下原记录里的 method、flags、extra 字段，而新本地头固定是
+     * `flags=0 / deflate / extraLen=0`；两者一旦不一致（典型：zipalign -p 或非常规打包器
+     * 产出 stored 清单），结果是签名合法、包却解析不出来，安装时报「解析软件包时出现问题」。
+     */
     private fun buildCentralDirectory(
         entries: List<CdEntry>,
         manifestName: String,
@@ -245,16 +299,79 @@ internal object ApkRepackager {
     ): ByteArray {
         val out = ByteArrayOutputStream()
         for (e in entries) {
-            val rec = e.record.copyOf()
             if (e.name == manifestName) {
-                writeU32(rec, 16, crc.toInt())
-                writeU32(rec, 20, compSize)
-                writeU32(rec, 24, uncompSize)
-                writeU32(rec, 42, newLocalOffset.toInt())
+                out.write(rebuildManifestRecord(e.record, crc, compSize, uncompSize, newLocalOffset))
+            } else {
+                out.write(e.record)
             }
-            out.write(rec)
         }
         return out.toByteArray()
+    }
+
+    /** 按新本地头的真实参数重生成清单的中央目录记录（46 字节固定头 + 名字，无 extra / comment）。 */
+    private fun rebuildManifestRecord(
+        old: ByteArray,
+        crc: Long,
+        compSize: Int,
+        uncompSize: Int,
+        newLocalOffset: Long,
+    ): ByteArray {
+        val nameLen = u16(old, 28)
+        val name = old.copyOfRange(46, 46 + nameLen)
+        val rec = ByteArray(46 + nameLen)
+        writeU32(rec, 0, SIG_CD)
+        writeU16(rec, 4, 20)              // version made by
+        writeU16(rec, 6, 20)              // version needed：stored→deflate 必须抬到 2.0
+        writeU16(rec, 8, 0)               // flags：与本地头一致
+        writeU16(rec, 10, METHOD_DEFLATE)
+        writeU16(rec, 12, 0)              // mod time：本地头写的是 0，保持一致
+        writeU16(rec, 14, 0)              // mod date
+        writeU32(rec, 16, crc.toInt())
+        writeU32(rec, 20, compSize)
+        writeU32(rec, 24, uncompSize)
+        writeU16(rec, 28, nameLen)
+        writeU16(rec, 30, 0)              // extra len
+        writeU16(rec, 32, 0)              // comment len
+        writeU16(rec, 34, 0)              // disk number start
+        writeU16(rec, 36, u16(old, 36))   // internal attrs
+        writeU32(rec, 38, u32(old, 38))   // external attrs
+        writeU32(rec, 42, newLocalOffset.toInt())
+        name.copyInto(rec, 46)
+        return rec
+    }
+
+    /** 写后自检：不重算摘要，只确认结构能对上，避免半成品被交付出去。 */
+    private fun verifyWritten(file: File, expectedLen: Long, expectedCdOffset: Long, expectedEntries: Int) {
+        RandomAccessFile(file, "r").use { out ->
+            if (out.length() != expectedLen) {
+                throw ApkRepackagerException("写后自检失败：文件长度 ${out.length()} != $expectedLen")
+            }
+            val eocdAbs = findEocd(out, expectedLen)
+            val eocd = ByteArray(22)
+            out.seek(eocdAbs)
+            out.readFully(eocd)
+            val entries = u16(eocd, 10)
+            val cdSize = u32(eocd, 12)
+            val cdOffset = u32(eocd, 16)
+            if (cdOffset.toLong() != expectedCdOffset) {
+                throw ApkRepackagerException("写后自检失败：中央目录偏移 $cdOffset != $expectedCdOffset")
+            }
+            if (entries != expectedEntries) {
+                throw ApkRepackagerException("写后自检失败：条目数 $entries != $expectedEntries")
+            }
+            if (cdOffset.toLong() + cdSize + 22L != expectedLen) {
+                throw ApkRepackagerException("写后自检失败：中央目录长度与文件长度不符")
+            }
+        }
+    }
+
+    /** Zip64 结尾定位器紧挨在 EOCD 之前；有它说明包里有 Zip64 字段，本实现会写坏。 */
+    private fun hasZip64Locator(raf: RandomAccessFile, eocdAbs: Long): Boolean {
+        if (eocdAbs < 20) return false
+        val buf = ByteArray(4)
+        raf.seek(eocdAbs - 20)
+        raf.readFully(buf)
+        return u32(buf, 0) == 0x07064b50
     }
 
     private fun inflateRaw(data: ByteArray): ByteArray {
@@ -271,6 +388,7 @@ internal object ApkRepackager {
                     out.write(buf, 0, n)
                 }
             }
+            if (!inf.finished()) throw ApkRepackagerException("清单 deflate 流不完整")
             out.toByteArray()
         } finally {
             inf.end()

@@ -15,6 +15,7 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import com.sukisu.ultra.ai.api.AiFeatureBridge
 import com.sukisu.ultra.ai.host.ManagerAiHost
+import com.sukisu.ultra.core.pkgrename.PackageRenameRecovery
 import com.sukisu.ultra.data.repository.SettingsRepositoryImpl
 import com.sukisu.ultra.data.repository.SuperUserRepositoryImpl
 import com.sukisu.ultra.ui.util.BuiltinAppIcons
@@ -58,6 +59,9 @@ class KernelSUApplication : Application(), ViewModelStoreOwner {
         if (!isUserUnlocked()) {
             return
         }
+
+        // 上次换包名如果死在「已提交安装、还没内核登记」这一步，这里幂等补做。
+        PackageRenameRecovery.recoverAsync(this)
 
         SettingsRepositoryImpl().let { settings ->
             // Only touch launcher components when the state actually drifted; re-applying an

@@ -3,9 +3,6 @@ package com.sukisu.ultra.core.pkgrename
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.RandomAccessFile
-import java.nio.ByteBuffer
-import java.nio.channels.FileChannel
-import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
 import java.security.PrivateKey
 import java.security.Signature
@@ -49,6 +46,12 @@ internal object ApkV2Signer {
     /** 给 [unsigned] 签上 v2 签名，写出到 [out]。 */
     fun sign(unsigned: File, out: File, key: PrivateKey, certs: List<X509Certificate>) {
         if (certs.isEmpty()) throw ApkSigningException("缺少签名证书")
+        // 证书与私钥不匹配时产出的包能装上、却永远过不了内核验签，早报比装完再排查省事。
+        val keyModulus = (key as? RSAKey)?.modulus
+        val certModulus = (certs[0].publicKey as? RSAKey)?.modulus
+        if (keyModulus == null || certModulus == null || keyModulus != certModulus) {
+            throw ApkSigningException("签名证书与私钥不匹配")
+        }
 
         val (cdOffset, cdSize, eocdAbs) = readLayout(unsigned)
         val eocdLen = (unsigned.length() - eocdAbs).toInt()
@@ -75,30 +78,46 @@ internal object ApkV2Signer {
             throw ApkSigningException("签名块长度不稳定：${block.size} != $blockTotal")
         }
 
+        if (cdSize > 0x7FFF_FFFFL) throw ApkSigningException("中央目录超过 2GB，本实现不支持")
+
         out.parentFile?.mkdirs()
-        FileChannel.open(unsigned.toPath(), StandardOpenOption.READ).use { src ->
-            FileChannel.open(
-                out.toPath(),
-                StandardOpenOption.CREATE,
-                StandardOpenOption.WRITE,
-                StandardOpenOption.TRUNCATE_EXISTING,
-            ).use { dst ->
-                var pos = 0L
-                while (pos < cdOffset) {
-                    val n = src.transferTo(pos, cdOffset - pos, dst)
-                    if (n <= 0L) throw ApkSigningException("拷贝条目区失败 @ $pos")
-                    pos += n
+        // 用 RandomAccessFile 的 channel：FileChannel.open(Path, ...) 属 java.nio.file（API 26+），
+        // minSdk 24 上会抛 NoClassDefFoundError —— 那是 Error，上层的 catch(Exception) 抓不住。
+        // 同时写 .tmp 再改名，避免中途失败留下一个「看起来能用」的半截 APK。
+        val tmp = File(out.parentFile, out.name + ".tmp")
+        tmp.delete()
+        val expectedLen = cdOffset + block.size + cdSize + patchedEocd.size
+        try {
+            RandomAccessFile(unsigned, "r").use { src ->
+                RandomAccessFile(tmp, "rw").use { dst ->
+                    dst.setLength(0)
+                    var pos = 0L
+                    while (pos < cdOffset) {
+                        val n = src.channel.transferTo(pos, cdOffset - pos, dst.channel)
+                        if (n <= 0L) throw ApkSigningException("拷贝条目区失败 @ $pos")
+                        pos += n
+                    }
+                    dst.seek(cdOffset)
+                    dst.write(block)
+                    val cd = ByteArray(cdSize.toInt())
+                    src.seek(cdOffset)
+                    src.readFully(cd)
+                    dst.write(cd)
+                    dst.write(patchedEocd)
+                    dst.channel.force(true)
                 }
-                dst.position(cdOffset)
-                dst.write(ByteBuffer.wrap(block))
-                var cdPos = 0L
-                while (cdPos < cdSize) {
-                    val n = src.transferTo(cdOffset + cdPos, cdSize - cdPos, dst)
-                    if (n <= 0L) throw ApkSigningException("拷贝中央目录失败 @ $cdPos")
-                    cdPos += n
-                }
-                dst.write(ByteBuffer.wrap(patchedEocd))
             }
+            if (tmp.length() != expectedLen) {
+                throw ApkSigningException("写后自检失败：文件长度 ${tmp.length()} != $expectedLen")
+            }
+            if (!tmp.renameTo(out)) {
+                if (!out.delete() || !tmp.renameTo(out)) {
+                    throw ApkSigningException("输出文件重命名失败")
+                }
+            }
+        } catch (t: Throwable) {
+            tmp.delete()
+            throw t
         }
     }
 
@@ -239,7 +258,7 @@ internal object ApkV2Signer {
     private fun sigAlgId(key: PrivateKey): Int {
         val bits = (key as? RSAKey)?.modulus?.bitLength() ?: 0
         if (bits == 0 || bits > 3072) {
-            throw ApkSigningException("只支持 RSA 2048 位（及以下）密钥签名，当前 $bits 位")
+            throw ApkSigningException("只支持 RSA 1024/2048/3072 位密钥签名，当前 $bits 位")
         }
         return SIG_ALG_RSA_PKCS1_SHA256
     }
@@ -247,6 +266,18 @@ internal object ApkV2Signer {
     // ---------------- 布局读取 ----------------
 
     private data class Layout(val cdOffset: Long, val cdSize: Long, val eocdAbs: Long)
+
+    /** 签名块紧贴在中央目录之前，magic 就在 CD 起点往前 16 字节处；[tailStart] 是 tail[0] 的绝对偏移。 */
+    private fun hasSigningBlock(tail: ByteArray, cdOffset: Long, tailStart: Long): Boolean {
+        val magicStart = cdOffset - 16
+        if (magicStart < 0 || magicStart < tailStart) return false
+        val rel = (magicStart - tailStart).toInt()
+        if (rel + SIG_BLOCK_MAGIC.size > tail.size) return false
+        for (i in SIG_BLOCK_MAGIC.indices) {
+            if (tail[rel + i] != SIG_BLOCK_MAGIC[i]) return false
+        }
+        return true
+    }
 
     private fun readLayout(file: File): Layout {
         val fileLen = file.length()
@@ -260,8 +291,22 @@ internal object ApkV2Signer {
             if (tail[i] == 0x50.toByte() && tail[i + 1] == 0x4b.toByte() &&
                 tail[i + 2] == 0x05.toByte() && tail[i + 3] == 0x06.toByte()
             ) {
+                // 注释里可能出现 PK\x05\x06 字节，只有「注释长度正好到尾」的才是真结尾记录。
+                // 注释长度只有 2 字节，用 u32 会在最后一个候选位上越界读。
+                val commentLen = (tail[i + 20].toInt() and 0xFF) or ((tail[i + 21].toInt() and 0xFF) shl 8)
+                if (i + 22 + commentLen != scanLen) continue
                 val cdSize = u32(tail, i + 12).toLong() and 0xFFFFFFFFL
                 val cdOffset = u32(tail, i + 16).toLong() and 0xFFFFFFFFL
+                if (cdOffset == 0xFFFFFFFFL || cdSize == 0xFFFFFFFFL) {
+                    throw ApkSigningException("不支持的 Zip64 中央目录")
+                }
+                if (cdOffset + cdSize + 22L > fileLen) {
+                    throw ApkSigningException("中央目录越界：offset=$cdOffset size=$cdSize 文件=$fileLen")
+                }
+                // 已带签名块时再插一个会写出双块，校验方读哪一块都可能，必须先让调用方剥离。
+                if (hasSigningBlock(tail, cdOffset, fileLen - scanLen)) {
+                    throw ApkSigningException("输入已含 APK Signing Block，请先剥离再签名")
+                }
                 return Layout(cdOffset, cdSize, fileLen - scanLen + i)
             }
         }

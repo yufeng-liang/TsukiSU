@@ -1,7 +1,7 @@
 # 运行时换包名（方案 A）设计文档
 
 日期：2026-11-21
-状态：待确认
+状态：已实施（2026-11-22）。T1/T2 已提交，核心与界面全部落盘并通过单测 + 桌面复核；真机安装验证待补（本机无设备）。
 前置 spike：已完成并通过（见第 3 节）
 
 ## 0. 一页结论
@@ -12,7 +12,7 @@
 | --- | --- |
 | 改写 AndroidManifest.xml 的包名 | 可行，AXML 字符串池就地替换，aapt2 正常解析 |
 | 重打包不重压缩 | 可行，449 ms（PC），对齐零破坏 |
-| 重签 v2/v3 | 可行，apksig/bundletool 级别工具链现成 |
+| 重签 v2 | 可行，但**自实现**：apksig 9.x 的部分路径依赖 `java.nio.file`（API 26+），本工程 minSdk 24 用不了 |
 | 内核认主 | **需要一次性登记**，不能靠包名 |
 
 **唯一的架构性代价**：改名后的 App 不再匹配内核烧入的包名，必须走仓库已有的「动态管理器」白名单（包名 + 证书哈希 + uid）把新包登记成合法管理器。这条通道在仓库里三件套齐全（内核扩展 + ksud 命令 + 管理器 UI），不是新造的机制。
@@ -225,19 +225,19 @@ C 的优点：
 3. `cmd->uid` 由调用方提供，只校验 `!= KSU_INVALID_APPID`（`:200`）。旧管理器可以在新包装好后查到它的 uid 再登记——这正好解决 bootstrap。
 4. 需要在真机上确认「谁能调 `KSU_MANAGER_ADD`」的权限门。若非当前管理器不可调，则必须由旧管理器完成登记（当前设计正是这样）。
 
-**通道 B 仍然值得顺手一试**：ADD 之后再无成本地试一次签名兜底，若设备内核槽 1/槽 2 恰好匹配，就等于双保险。但要作为「可选加速」而不是依赖。
+**通道 B 不再参与**（2026-11-22 变更）：签名兜底的语义是「任何用这张证书签过的 APK 都是管理器」，要让它在设备上生效就得把对应私钥放进设备、甚至随包分发；而我们真正需要的只是「新包名的 APK 能装上 + 内核按 uid 授权」，这两件事都不依赖任何特定证书。详见 §4.3。
 
-### 4.3 密钥策略（实现时定稿）
+### 4.3 密钥策略：每台设备现场生成（2026-11-22 定稿）
 
-**不自生成密钥，直接内置官方签名密钥**（`sukisu-custom.jks` 导出）：
+**私钥不随 APK 分发。** 首次换名时在设备上生成一对 RSA 2048 密钥，并现场签一张自签名 X.509 证书：
 
-- 私钥 `pkgrename/manager-key.pk8`（PKCS#8 DER，1219 字节，RSA 2048）；
-- 证书 `pkgrename/manager-cert.der`（X.509 DER，745 字节，SHA-256 `2a7ec59c…e23f`）；
-- 两者都在 `manager/app/src/main/assets/`，运行时由 `ManagerKeyProvider.get(context)` 读一次并缓存。
+- 生成：`LocalSigningKeyProvider.get(context)`（首次调用，必须在 IO 线程）；
+- 证书：`X509SelfSigned.build(keyPair, cn)`，手写 DER（Android 平台只带 bouncycastle 的加密原语，没有 `bcpkix` 那套证书构造器，为一个自签证书引依赖不划算）；
+- 存放：`filesDir/pkgrename-keys/signing-key.bin`，AES-GCM 加密，包装密钥是 Android Keystore 里**不可导出**的 AES-256（别名 `pkgrename_key_wrap`）；Keystore 不可用时退化为 App 私有目录明文（文件头版本号 0 区分）。
 
-理由：只有用官方证书重签，通道 B（内核签名兜底）才有机会命中；自生成密钥虽然能走通道 C，但会白白丢掉 B 这条免登记路径，且 `KSU_MAX_DYNAMIC_MANAGERS` 的槽位会随改名次数累积。
+为什么自生成就够：**新包名是一次全新安装**，Android 只要求签名自洽，不要求与任何既有证书相同；内核那边走动态管理器白名单，按 uid 授权（`dynamic_manager.c:134-141`），条目里的证书哈希只做记录、不参与判定。所以官方证书带来的唯一「好处」是被签名兜底加冕，而那条路的代价是把管理器印章公开，收益与风险不成比例。
 
-**明文存储是已知事实**：assets 里的私钥可以用 `unzip` + `openssl` 直接导出。加密存放（设备绑定密钥 + `EncryptedSharedPreferences`）与「关闭通道 B」的开关都还没做，属于后续工作。
+代价：改名后的包无法用原密钥升级（升级必须同签名），密钥文件随 App 数据一起丢；这一点在 §5 风险里列出。
 
 与内核参数的对应关系：登记动态管理器时填的 `hash` 就是 `certSha256Hex`、`certSize` 就是证书 DER 长度；签名算法固定 RSA PKCS#1 v1.5 + SHA-256（算法 id `0x0103`），因为内置密钥是 RSA 2048。
 
@@ -285,12 +285,13 @@ C 的优点：
 
 ### 4.6 UI
 
-放在「设置 → 关于 / 管理器」一栏，新增一项「修改包名」：
-- 输入框 + 「随机生成」按钮（生成形如 `com.a1b2c3d4.e5f6g7` 的名字）；
-- 前置提示：改名 = 换 App，当前设置与数据不会带过去；建议先导出备份；
-- 执行中显示进度（读 APK / 改写 / 重签 / 安装 / 登记）；
-- 完成后显示：新 App 名称与包名、「打开新管理器」、「卸载当前管理器」两个动作；
-- 底部常驻一个「已登记的管理器」列表入口，复用现有 `DynamicManagers` 页面。
+实际实现（与本节原计划的差异已按实现订正）：
+- 入口：设置页内独立一项「更换包名」，在 `SettingsSection.PACKAGE_RENAME` 锚点下（Material 用 `SettingsAnchor`，Miuix 用 `bringIntoViewRequester`）。
+- **没有自由输入框**：只显示当前包名与随机目标包名，另有「换一个」重掷按钮。
+- 前置提示两条：改名 = 全新安装、不继承数据（`pkg_rename_data_warning`）；旧包还装着时内核仍可能按包名把它认成管理器（`pkg_rename_warning`）。
+- 执行中显示进度条 + 阶段文案（构建 / 安装 / 登记 / 完成），并拦截返回与侧滑。
+- 完成后显示：「打开新管理器」、「查看已登记的管理器」（跳 `Route.DynamicManagers`）、「卸载旧APK」；「卸载旧APK」只在登记回读全部通过后出现。
+- 「已登记的管理器」入口只在结果卡里，**不是**底部常驻；`ksud manager list` 也没有 verified 列。
 
 字符串全部走 `stringResource`，按项目已有语言补齐。
 
@@ -302,16 +303,16 @@ C 的优点：
 | 重签失败 | 只有 cacheDir 里的临时 APK | 清理临时文件 |
 | 用户取消安装 | 同上 | 清理临时文件，白名单未动 |
 | 安装成功但登记失败 | 新包在，但未认主 | **最高优先级告警**：明确告知「新 App 暂时不能管理内核，请回到当前管理器重试登记」，并提供一键重试 |
-| 登记成功但 verified 未置真 | 新包未认主 | 提示用户打开一次新 App（触发安装广播 → track_throne 重扫） |
+| ~~登记成功但 verified 未置真~~ | —— | **该行已作废**：内核里 `ksu_dynamic_manager_verify_apk()` 全仓无调用点，`verified` 恒为 false，证书哈希只做记录；授权只看 uid（见 §8.5） |
 | 想撤回 | 白名单里有条目 | 提供「撤销登记」= `KSU_MANAGER_REMOVE(新包名)` |
 
-旧 APK 通过 `sourceDir` 复制一份到私有目录保留，用于「恢复原名」。
+旧 APK 通过 `sourceDir` 复制一份到私有目录保留（`PackageRenameCoordinator.backupOriginalApk()`）。**注意：目前只有备份，没有「恢复原名」的入口**；且该副本位于旧包私有目录，卸载旧包即随之删除。UI 文案不得承诺「可随时恢复原名」。
 
 ---
 
 ## 5. 风险
 
-1. **签名兜底被滥用**：如果最终决定内置官方私钥走通道 B，等于把「被内核自动加冕」的能力公开。本设计明确走 C 来规避。
+1. ~~签名兜底被滥用~~（已消除）：2026-11-22 起不再内置官方私钥，改为每台设备现场生成密钥，通道 B 不参与（§4.3）。**新增风险**：本机密钥文件随 App 数据丢失后，改名后的包无法再用同一签名升级，只能卸载重装；Keystore 不可用时密钥退化为私有目录明文，只有 root 可读。
 2. **bootstrap 窗口**：步骤 6–9 之间新包未认主。UI 必须拦住「此时卸载旧包」。
 3. **数据不迁移**：`/data/data/<包名>` 换名即换目录。模块数据在 `/data/adb/ksu/` 不受影响，但 App 设置、白名单本地缓存会丢。需要引导用备份功能导出/导入。
 4. **白名单条目累积**：反复改名会占满 `KSU_MAX_DYNAMIC_MANAGERS`，需要在 UI 里可见可删。
@@ -327,7 +328,7 @@ C 的优点：
 | T2 ksud 运行时包名真源 | Rust + 管理器写文件 |
 | T3 AXML 改写器（Kotlin 移植） | 从 `axml.py` 移植，含逐字节自检 |
 | T4 zip 字节手术（Kotlin） | 核心，含签名块识别与中央目录重写 |
-| T5 签名（接入 apksig） | Gradle 加依赖 + 封装 |
+| T5 签名（自实现 v2） | 不引入 apksig：其部分路径需 API 26+；只实现内核会读的 v2 块 |
 | T6 密钥生成与持久化 | |
 | T7 认主登记流程 | 复用现有 `AiExtensionsController.addDynamicManager` 通路 |
 | T8 UI + 字符串 | 两套主题（Material / Miuix） |
@@ -337,15 +338,12 @@ C 的优点：
 
 ## 7. 已决策（2026-11-21 确认）
 
-1. **认主通道：C + B 双保险。**
-   - 主通道 C：动态管理器白名单登记（包名 + 证书哈希 + uid），任何情况下都做。
-   - 副通道 B：APK 内置官方密钥库（`sukisu-custom.jks`），重签后若设备内核槽 1/槽 2 恰好匹配，内核会直接按签名加冕，连登记都不需要。
-   - **已明确接受的风险**：官方私钥随 APK 分发，任何拿到安装包的人都能提取并签出「会被内核自动加冕」的 APK（通道 B 不看包名）。这是为了「装上即用」体验付出的代价。
-   - 现状（2026-11-22）：私钥**就是明文 asset**，未加密。原计划的「加密存放 + 关闭通道 B 开关」都还没实现，属于后续工作；文档与 UI 不得宣称已加密。
-   - 已落地的缓解只有一条：认主主通道始终是 C（动态管理器登记），B 只是同一份 APK 顺带的加分项。
+1. **认主通道：只走 C（动态管理器白名单）。** 2026-11-21 曾定为 C+B 并接受「私钥随包分发」的代价；2026-11-22 用户明确要求「装了这个 App 的用户都能用一键换包名」，随包私钥在全量分发下等于公开管理器签名能力，因此改为**每台设备现场生成密钥**（§4.3），B 通道不参与、内置密钥资产已删除。
+   - 主通道 C：动态管理器登记（包名 + 证书哈希 + uid），内核按 uid 授权，改名后即可用。
+   - 用户不需要做任何额外操作：流程自动装新包、自动登记、自动打开总开关（原本关着时）。
 2. **T1（7 处 `BuildConfig.APPLICATION_ID`）单独提交。** 与主功能正交，先合入。
 3. **包名随机生成。** 形如 `com.<8位小写随机>.<8位小写随机>`，系统自动生成，不提供自由输入框（避免被用来伪装成他人的包名）。
-4. **改名后提示卸载旧包。** 新包认主成功后弹确认框，引导卸载当前管理器；旧 APK 副本保留在私有目录，可随时恢复原名。
+4. **改名后提示卸载旧包。** 新包登记回读通过后，在结果卡显示「卸载旧APK」。旧 APK 副本保留在私有目录，但**恢复原名的入口尚未实现**，且副本随旧包卸载而消失。
 
 ## 8. 实现备注（2026-11-22）
 
@@ -356,13 +354,17 @@ C 的优点：
 | `core/pkgrename/AxmlEditor.kt` | AXML 字符串池改写（重建后逐字节自检，不通过就拒绝改写） |
 | `core/pkgrename/ApkRepackager.kt` | 零重压缩 zip 手术：原文件条目区原样拷贝，新清单追加在末尾，只改中央目录 |
 | `core/pkgrename/ApkV2Signer.kt` | 自实现 v2 签名（不依赖 apksig，避开 `java.nio.file` 的 API 26 门槛） |
-| `core/pkgrename/ManagerKeyProvider.kt` | 读 assets 里的内置私钥与证书 |
+| `core/pkgrename/LocalSigningKey.kt` | 首次换名现场生成 RSA 2048，存 `filesDir/pkgrename-keys/signing-key.bin`（AES-GCM + Keystore 不可导出的包装密钥） |
+| `core/pkgrename/X509SelfSigned.kt` | 手写 DER 的自签名 X.509 证书（平台没有 bcpkix 那套构造器） |
+| `core/pkgrename/ManagerKeyProvider.kt` | 密钥门面：`get(context)` 委派本机密钥，`parse(pk8, certDer)` 留给单测 |
 | `core/pkgrename/PackageNameUtils.kt` | 包名校验/随机生成；`ManifestPackageRewriter` 前缀替换与校验 |
 | `core/pkgrename/PackageRenameEngine.kt` | 串起「读清单 → 改包名 → 重打包 → 重签」，产物落 `filesDir/pkgrename/` |
 | `core/pkgrename/PackageRenameInstaller.kt` | PackageInstaller 会话提交 + 结果回调桥（`PkgRenameInstallReceiver` 也在此文件） |
 | `core/pkgrename/PackageRenameCoordinator.kt` | 阶段编排：备份原 APK → 构建 → 安装 → 登记动态管理器（重试 5 次） |
 | `ui/screen/pkgrename/PackageRename{Screen,Material,Miuix}.kt` | 设置页入口 + Material/Miuix 双套界面 |
-| `res/values` + `values-zh-rCN/zh-rHK/zh-rTW` | 14 个字符串键 × 4 语言 |
+| `ui/screen/pkgrename/PackageRenameController.kt` | 应用级状态单例（`SupervisorJob + Main.immediate`），页面退出不中断流程；`job?.isActive` 同步防重入 |
+| `core/pkgrename/RenameJournal.kt` + `PackageRenameRecovery.kt` | 待登记记录（fsync 落盘）与启动续登记 |
+| `res/values` + `values-zh-rCN/zh-rHK/zh-rTW` | 26 个 `pkg_rename_*` 键 × 4 语言 |
 
 ### 8.2 v2 签名器：三个必须做对的细节
 
@@ -374,18 +376,57 @@ C 的优点：
 
 ### 8.3 验证结果（桌面复核单测产物）
 
-对 `app/build/tmp/pkgrename-test/signed-com.etpnhktc.feebxafy.apk`（单测每跑一次随机新包名）：
+单测每跑一次都会用**新的随机包名 + 新的现场生成密钥**，复核时取最新时间戳那个文件。以 `signed-com.jebrntee.zyejqgsg.apk`（40,713,414 字节，输入为 `TsukiSU_mod_41567-debug.apk`）为例：
 
-- `apksigner verify --verbose`：`Verifies`，v2 = true，v1/v3 = false；证书 `CN=SukiSU Custom Manager`、SHA-256 `2a7ec59c…e23f`、RSA 2048
-- `aapt2 dump badging`：`package: name='com.etpnhktc.feebxafy'`，minSdk 24 / targetSdk 37 保持不变
-- `zipalign -c -p -v 4`：`Verification successful`
-- 单元测试 `PackageRenamePipelineTest`：`BUILD SUCCESSFUL`（三个用例全过）
+- `apksigner verify --verbose --print-certs`：`Verifies`，v2 = true，v1/v3/v3.1/v4 = false；证书 `CN=SukiSU Test`（App 里是 `CN=SukiSU Manager Local XXXXXXXX`）、SHA-256 `91415ec7…468c`、RSA 2048 —— 每次都不一样，正好证明签名来自本机生成而非固定密钥
+- `aapt2 dump badging`：`package: name='com.jebrntee.zyejqgsg'`，versionCode 41567，minSdk 24 / targetSdk 37 保持不变
+- `zipalign -c -p -v 4`：`Verification successful`（40MB 资源表条目仍对齐）
+- 单元测试 `PackageRenamePipelineTest`：`BUILD SUCCESSFUL`（第三个用例受 `-PpkgRenameApk` 门控，不传则 `assumeTrue` 跳过）
 
 ### 8.4 已知残留与未验证项
 
 - 6 个 dex 里各有 1 处旧包名字面量（`com.yufeng.sukisu.ultra`）。它们是编译期常量池残留，运行时不参与任何包名判定（7 处 `BuildConfig.APPLICATION_ID` 已改成运行时包名），也不影响 v2 签名。dex 内的字符串运行时无法改写，接受。
 - 真机安装未验证：本机 `adb devices` 为空，模拟器 system-image 缺失（`H:/android/Sdk/system-images` 下没有 `system.img`）。安装链路（PackageInstaller 会话、未知来源权限、认主后提示卸载）只有代码级正确性，需要真机跑一遍。
 - 旧 v1 签名残留不需要额外处理：`ApkRepackager` 在重建中央目录时就按 `V1_LEFTOVERS` 正则（`META-INF/MANIFEST.MF` 与 `META-INF/*.SF|*.RSA|*.DSA|*.EC`）跳过这些条目，并把 EOCD 的条目数改成剩余条数。产物里查不到这些条目，v1 因而完全不存在。
+
+### 8.5 团队审查与修复（2026-11-22）
+
+四路只读审查（核心二进制 / 流程与内核契约 / 界面与文案 / UI 改动复核）的结论与处置：
+
+| 编号 | 问题 | 处置 |
+| --- | --- | --- |
+| P0-1 | 内核只按 **appid** 授权（`ksu_dynamic_manager_uid_registered`），而登记回读只看「包名 + 证书」，两者不等价 | 回读追加 `entry.uid != 0 && entry.uid != 旧包 appid` 断言；仍无法自证新包进程被授权（跨进程 uid 不可查），已在 §8.6 记为本轮未解 |
+| P0-2 | `ksud manager add` 是「ioctl 写内核内存 → persist 写文件」两步，persist 失败时内核其实已生效，当成失败会诱导用户卸载旧包 | 失败后先 `isRegisteredInKernel()` 回读；条目在就再 add 一次补 persist，仍失败则明确报「内核已接受、状态文件未写入、先别卸载旧包」 |
+| P0-3 | 「已装未登记」状态也渲染「卸载旧包」按钮 | `RegistrationFailed` 分支不再设 `previousPackage`；两套皮肤都要求 `unregisteredPackage == null` 才显示卸载 |
+| P0-4 | 内置官方私钥是明文 asset，而内核验签不看包名，分发即公开「管理器签名能力」 | **已解决（2026-11-22，方案 D）**：不再分发任何私钥，改为每台设备现场生成 RSA 2048 + 自签证书（§4.3）。新包名是全新安装，签名只需自洽；内核授权走动态管理器按 uid，证书哈希只记录不判定。内置 `assets/pkgrename/` 两个文件已删除 |
+| P1-1 | 打开动态管理器总开关会连带激活表内所有历史条目 | 未修。开关语义在内核侧，App 侧最多做「打开前确认」，见 §8.6 |
+| P1-2 | 启动续登记（`RenameJournal`）静默失败、成功判据比主流程弱 | 已部分修：进入换包名页时 `PackageRenameController.refreshJournal()` 会把遗留记录摆成「已装未登记」卡片，用户可自行重试/撤销。仍缺：从不打开该页的用户看不到任何提示 |
+| P1-3 | journal 写盘无 fsync，掉电会留下空文件 | 已修：`FileOutputStream.store` + `fd.sync()` |
+| P1-4 | 安装回调里比对「回调包名 == 目标包名」是自证自答 | 已删，改注释说明身份靠 sessionId 路由 |
+| 新 P0 | `NavigationBackHandler` 的 `isBackEnabled` 用反：空闲时吞返回、busy 时放行 | 已修：`isBackEnabled = state.busy`，顶栏返回也加 `if (!state.busy)` 守卫 |
+| 新 P1 | 撤销 / 重试成功 / 重新开始都没清 journal，下次启动会被恢复流程重新登记 | 已修：三条路径都调 `RenameJournal.clear` |
+| 新 P1 | 登记失败时`entries.isEmpty()` 才回滚总开关，别人有条目时开关被留在开启状态 | 已修：只要 `enabledByUs` 就恢复为关闭（即用户原状态） |
+| P2 | Miuix「卸载旧APK」无危险色（Material 有） | 已修：改用 `TextButton(colors = ButtonDefaults.textButtonColors(textColor = colorScheme.error))`（`ArrowPreference` 的 `titleColor` 要的是 `BasicComponentColors`，不能直接给 `Color`） |
+| P2 | 英文按钮 `Registered managers` 是名词短语 | 已改为 `View registered managers` |
+
+**第二轮（rev-core，二进制核心）**：
+
+| 问题 | 处置 |
+| --- | --- |
+| `AxmlEditor.listStrings` 逐块前进没有长度守卫，损坏清单会死循环 | 已修：`off + 8 > size` 或 `chunkSize <= 0` 或越界即抛带偏移的异常 |
+| `ApkV2Signer.readLayout` 倒扫 `PK\x05\x06` 不校验注释长度，ZIP 注释里的假签名会被当真 | 已修：要求 `i + 22 + commentLen == scanLen`，并校验 `cdOffset + cdSize + 22 <= fileLen` |
+| `readManifest` 只按 LFH 的 compSize 解压，不校验 CRC / 解压长度 / 名字 | 已修：LFH 名必须等于 `AndroidManifest.xml`、LFH 与 CD 的压缩长度必须一致、解压后用 CD 的 CRC32 与 uncompSize 交叉验证 |
+| `inflateRaw` 截断时静默 break | 已修：结束必须 `Inflater.finished()`，否则抛「清单 deflate 流不完整」 |
+| `PackageNameUtils.isValid` 用 Kotlin 的字符长度，内核用 `strnlen` 字节长度 | 已修：补 UTF-8 字节长度上限判断 |
+
+未修的 P2（记在此处便于后续排期）：split APK 未支持（`splitSourceDirs` 非空时重打包只含 base）；临时文件用固定名且无进程内锁；签名后无自校验（不重新验签）；Zip64 诊断顺序与死代码；带 style 的字符串池直接拒绝；`verifyReplaced` 与 `isRewritable` 的白名单口径不完全一致；目标包名已安装未预检；CD/清单整段分配的尺寸上限。
+
+### 8.6 本轮未解决、需要决策的事项
+
+1. ~~P0-4 私钥分发边界~~（**已解决**，2026-11-22）：最终采用「每台设备现场生成密钥」，三条折中方案（A 构建期注入 / B 内核三因子 / C UI 明示）全部不再需要。附带收益是 B 通道彻底退出，内核侧无需任何改动。
+2. **P1-1 总开关连带激活历史条目**：需要「打开前确认 + 列出将生效条目」的交互设计，属于新 UI 工作。
+3. **P1-2 续登记可观测性（部分解决）**：页面内已有「已装未登记」卡片兜底；仍缺系统通知，覆盖「用户压根不打开换包名页」的情况。
+4. **P0-1 的自证缺口**：跨进程无法查新包 uid 是否被内核认主；只能在新包进程内自证（`Process.myUid() % 100000` 与 `manager list` 比对），需要给新包加一次性自检逻辑。
 
 ---
 

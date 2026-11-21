@@ -65,8 +65,13 @@ internal object AxmlEditor {
         val fileSize = u32(data, 4)
         var off = fileHeaderSize
         while (off < fileSize) {
+            if (off + 8 > data.size) throw AxmlException("AXML 块头越界 @ $off")
             val chunkType = u16(data, off)
             val chunkSize = u32(data, off + 4)
+            // 损坏的清单可能给 0 或超出文件的长度，不拦住就会在这里死循环。
+            if (chunkSize <= 0 || off + chunkSize > data.size) {
+                throw AxmlException("AXML 块长度异常 @ $off：$chunkSize")
+            }
             if (chunkType == RES_STRING_POOL_TYPE) return StringPool.parse(data, off).first.strings
             off += chunkSize
         }

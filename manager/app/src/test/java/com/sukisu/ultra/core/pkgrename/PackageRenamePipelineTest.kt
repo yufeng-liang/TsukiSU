@@ -30,23 +30,28 @@ class PackageRenamePipelineTest {
         System.getProperty("pkg.rename.apk")?.takeIf { it.isNotBlank() }
             ?: System.getenv("PKG_RENAME_APK")?.takeIf { it.isNotBlank() }
 
-    private fun keyMaterial(): ManagerKeyMaterial {
-        val dir = File("src/main/assets/pkgrename")
-        return ManagerKeyProvider.parse(
-            File(dir, "manager-key.pk8").readBytes(),
-            File(dir, "manager-cert.der").readBytes(),
-        )
+    /** 现场生成一对 RSA 密钥与自签证书，等价于设备首次换名时做的事。 */
+    private fun generatedKey(): ManagerKeyMaterial {
+        val pair = java.security.KeyPairGenerator.getInstance("RSA")
+            .apply { initialize(2048) }
+            .generateKeyPair()
+        val der = X509SelfSigned.build(pair, "SukiSU Test")
+        return ManagerKeyProvider.parse(pair.private.encoded, der)
     }
 
     @Test
-    fun 内置密钥可以解析且指纹正确() {
-        val key = keyMaterial()
-        assertEquals(745, key.certSize)
-        assertEquals(
-            "2a7ec59cb1cccf96ab2b8686d632356e5f4ac66e9188dbd5b0c24e7cc203e23f",
-            key.certSha256Hex,
-        )
+    fun 现场生成的密钥与自签证书自洽() {
+        val pair = java.security.KeyPairGenerator.getInstance("RSA")
+            .apply { initialize(2048) }
+            .generateKeyPair()
+        val der = X509SelfSigned.build(pair, "SukiSU Test")
+        val key = ManagerKeyProvider.parse(pair.private.encoded, der)
         assertEquals("RSA", key.privateKey.algorithm)
+        assertEquals(2048, (key.privateKey as java.security.interfaces.RSAPrivateKey).modulus.bitLength())
+        // verify 返回 void，抛 CertificateException 即算失败，JUnit 会直接判红
+        key.certificate.verify(pair.public)
+        assertEquals(64, key.certSha256Hex.length)
+        assertTrue("证书 DER 应当是合法 X.509", key.certSize > 600)
     }
 
     @Test
@@ -59,8 +64,9 @@ class PackageRenamePipelineTest {
         assertFalse(PackageNameUtils.isValid("com.a-b"))
         assertFalse(PackageNameUtils.isValid("com.a.b."))
         assertFalse(PackageNameUtils.isValid("a".repeat(PackageNameUtils.KERNEL_MAX_LENGTH + 1)))
-        // 内核 package_valid() 的上限是 128，正好等于边界
-        assertTrue(PackageNameUtils.isValid("com." + "a".repeat(PackageNameUtils.KERNEL_MAX_LENGTH - 4)))
+        // 内核是 strnlen >= 128 即拒，所以 128 长度必须被判非法、127 才是上限
+        assertFalse(PackageNameUtils.isValid("com." + "a".repeat(PackageNameUtils.KERNEL_MAX_LENGTH - 4)))
+        assertTrue(PackageNameUtils.isValid("com." + "a".repeat(PackageNameUtils.KERNEL_MAX_LENGTH - 5)))
     }
 
     @Test
@@ -69,7 +75,7 @@ class PackageRenamePipelineTest {
         val apk = File(apkPath!!)
         assumeTrue("被测 APK 不存在：$apkPath", apk.isFile)
 
-        val key = keyMaterial()
+        val key = generatedKey()
         val oldPackage = "com.yufeng.sukisu.ultra"
         val newPackage = PackageNameUtils.random()
 
@@ -94,10 +100,9 @@ class PackageRenamePipelineTest {
         assertTrue("产物不该是空文件", signed.length() > apk.length() / 2)
 
         val outManifest = ApkRepackager.readManifest(signed)
-        assertTrue(
-            "改名后清单应彻底换掉旧包名",
-            ManifestPackageRewriter.verifyReplaced(outManifest, oldPackage, newPackage),
-        )
+        // verifyReplaced 返回 null 表示通过，否则是残留描述
+        val leftover = ManifestPackageRewriter.verifyReplaced(outManifest, oldPackage, newPackage)
+        org.junit.Assert.assertNull("改名后清单应彻底换掉旧包名，残留：$leftover", leftover)
         val strings = AxmlEditor.listStrings(outManifest)
         assertFalse("旧包名不应有任何残留", strings.any { it == oldPackage || it.startsWith("$oldPackage.") })
 
