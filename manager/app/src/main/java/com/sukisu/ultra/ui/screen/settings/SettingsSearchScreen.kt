@@ -7,6 +7,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sukisu.ultra.ui.LocalUiMode
 import com.sukisu.ultra.ui.UiMode
 import com.sukisu.ultra.ui.navigation3.Navigator
+import com.sukisu.ultra.ui.navigation3.Route
 import com.sukisu.ultra.ui.viewmodel.MainActivityViewModel
 import com.sukisu.ultra.ui.viewmodel.MainPagerConfig
 
@@ -23,7 +24,10 @@ fun SettingsSearchScreen(navigator: Navigator) {
         viewModel()
     }
     val onPick: (SettingsSearchEntry) -> Unit = { entry ->
-        if (entry.page == SettingsPage.APPEARANCE) {
+        if (entry.anchor == SettingsSection.AUTO_DELETE_UPDATE_APK) {
+            // 这一项已搬进「关于」页，直接 replace 过去，返回栈是「设置 → 关于」
+            navigator.replace(Route.About)
+        } else if (entry.page == SettingsPage.APPEARANCE) {
             mainViewModel.openMainPage(MainPagerConfig.LAST_PAGE_INDEX, entry.anchor)
             navigator.pop()
         } else {

@@ -42,7 +42,7 @@ object SettingsSearchIndex {
             titleRes = R.string.theme_store_title,
             groupRes = R.string.settings_section_appearance,
             page = SettingsPage.APPEARANCE,
-            anchor = SettingsSection.THEME,
+            anchor = SettingsSection.THEME_STORE,
         ),
         SettingsSearchEntry(
             id = "ui_mode",
@@ -109,18 +109,12 @@ object SettingsSearchIndex {
             page = SettingsPage.MODULE,
             anchor = SettingsSection.DEFAULT_UMOUNT_MODULES,
         ),
-        SettingsSearchEntry(
-            id = "auto_delete_module_zip",
-            titleRes = R.string.settings_auto_delete_module_zip,
-            groupRes = R.string.settings_group_module,
-            page = SettingsPage.MODULE,
-            anchor = SettingsSection.AUTO_DELETE_MODULE_ZIP,
-        ),
+        // 这一行已经搬进「关于」页，搜索命中后由搜索页特殊处理跳到关于页
         SettingsSearchEntry(
             id = "auto_delete_update_apk",
             titleRes = R.string.settings_auto_delete_update_apk,
-            groupRes = R.string.settings_group_module,
-            page = SettingsPage.MODULE,
+            groupRes = R.string.settings_group_maintenance,
+            page = SettingsPage.MAINTENANCE,
             anchor = SettingsSection.AUTO_DELETE_UPDATE_APK,
         ),
 

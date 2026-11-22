@@ -1,31 +1,55 @@
 package com.sukisu.ultra.ui.screen.settings
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.add
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.sukisu.ultra.R
 import com.sukisu.ultra.ui.component.miuix.AppCard
 import com.sukisu.ultra.ui.component.miuix.AppScaffold
@@ -36,13 +60,11 @@ import com.sukisu.ultra.ui.theme.backgroundAwareColor
 import com.sukisu.ultra.ui.util.BlurredBar
 import com.sukisu.ultra.ui.util.rememberBlurBackdrop
 import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.basic.TextFieldDefaults
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -51,7 +73,6 @@ import top.yukonga.miuix.kmp.icon.basic.SearchCleanup
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
-import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
@@ -60,8 +81,11 @@ import top.yukonga.miuix.kmp.utils.scrollEndHaptic
  *
  * 骨架与设置页其它兄弟页一致：AppScaffold + BlurredBar + TopAppBar，列表接
  * scrollBehavior 的 nestedScroll，自定义背景时整页透明并把背景铺在列表底下。
- * 关键字状态留在本页内部（rememberSaveable），空关键字看全量并按一级页分组，
- * 有关键字时拍平，每行左侧仍挂着来源分组标签。
+ *
+ * 结果排版按用户定的形态：同一个一级页分组的命中项合成一张 AppCard，组内行之间用
+ * 0.5dp 分隔线（与模块页「模块信息 / 操作按钮」之间的分隔线同款），组与组之间是不同
+ * 卡片。这里刻意在 item 里一次组合多行卡片 —— AGENTS 第 9 条针对的是长列表，而本页
+ * 是静态索引（31 项、单卡最多 14 行），分组卡片才是要的视觉。
  */
 @Composable
 internal fun SettingsSearchMiuix(
@@ -75,28 +99,38 @@ internal fun SettingsSearchMiuix(
     val enableBlur = LocalEnableBlur.current
     val backdrop = rememberBlurBackdrop(enableBlur)
     val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
-    // 有模糊背景或自定义背景时顶栏必须透明，否则会把背后的图切出一条硬边
-    // 设备若不支持实时模糊，透明顶栏会把滚动内容露在标题底下；
-    // 因此只在有自定义背景图（确实期望透明）时才透明，其余用不透明 surface
-    val barColor = if (hasCustomBackground) Color.Transparent else colorScheme.surface
+    // 跟设置页一级页同一套判断：开了背景模糊或自定义背景时顶栏透明交给 BlurredBar，
+    // 其余用不透明 surface，免得滚动内容露到标题底下
+    val barColor = if (backdrop != null || hasCustomBackground) Color.Transparent else colorScheme.surface
     val keyword = query.trim()
     // 每次重组重算过滤结果：索引只有几十项，比缓存一张会随语言变化失效的表更省心
     val matched = matchedSettingsEntriesMiuix(entries, keyword)
-    // 清空按钮只在有输入时出现，空搜索框右侧不挂无效图标
-    val clearAction: @Composable () -> Unit = {
-        IconButton(onClick = { query = "" }) {
-            Icon(
-                imageVector = MiuixIcons.Basic.SearchCleanup,
-                contentDescription = null,
-                tint = colorScheme.onSurfaceVariantSummary,
-            )
-        }
+    // 命中项按一级页分组；组内保持索引里的原始顺序
+    val groups = matched.groupBy { it.groupRes }
+    // 分组名长短不一，直接排会让右侧设置项左起点参差；这里量出最长的那个，
+    // 所有卡片共用同一列宽，标题就落在同一条竖线上。
+    // 量算范围取全量索引而不是当前命中结果，否则边打字边变列宽，标题会横向跳
+    val groupLabels = entries.map { it.groupRes }.distinct().associateWith { stringResource(it) }
+    val labelStyle = MiuixTheme.textStyles.body2
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val labelColumnWidth: Dp = remember(groupLabels, labelStyle, density, textMeasurer) {
+        val maxPx = groupLabels.values.maxOfOrNull {
+            textMeasurer.measure(AnnotatedString(it), labelStyle).size.width
+        } ?: 0
+        // +2px 余量防止取整后把最长的那个标签挤掉最后一个字形；
+        // 再留 20dp 白：标签在「卡片左边框 → 标题」这段空间里居中，两侧各 10dp
+        with(density) { (maxPx + 2).toDp() } + 20.dp
     }
 
     AppScaffold(
         containerColor = if (hasCustomBackground) Color.Transparent else colorScheme.surface,
         topBar = {
             BlurredBar(backdrop = backdrop, scrollBehavior = scrollBehavior) {
+                // 搜索框直接在顶栏里：miuix 的列表是往顶栏底下滚的，用 LazyColumn 的
+                // stickyHeader 会被折叠后的顶栏盖住；放进顶栏后它天然吸顶，
+                // Scaffold 也会把它的高度算进内容内边距，卡片不会钻到胶囊底下
+                Column {
                 TopAppBar(
                     color = barColor,
                     title = stringResource(R.string.settings_search_title),
@@ -116,6 +150,14 @@ internal fun SettingsSearchMiuix(
                         }
                     },
                 )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp),
+                ) {
+                    SettingsSearchFieldMiuix(query = query, onQueryChange = { query = it })
+                }
+                }
             }
         },
         popupHost = { },
@@ -132,33 +174,10 @@ internal fun SettingsSearchMiuix(
                 contentPadding = innerPadding,
                 overscrollEffect = null,
             ) {
-                item(key = "search-field") {
-                    TextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 12.dp, bottom = 12.dp),
-                        label = stringResource(R.string.settings_search_hint),
-                        // 搜索框没有浮动标签：提示文案一直当占位符用，输入后让位给关键字
-                        useLabelAsPlaceholder = true,
-                        singleLine = true,
-                        colors = TextFieldDefaults.textFieldColors(
-                            backgroundColor = backgroundAwareColor(colorScheme.secondaryContainer),
-                        ),
-                        leadingIcon = {
-                            Icon(
-                                imageVector = MiuixIcons.Basic.Search,
-                                contentDescription = null,
-                                tint = colorScheme.onSurfaceVariantSummary,
-                            )
-                        },
-                        trailingIcon = if (query.isEmpty()) null else clearAction,
-                    )
-                }
-                when {
+
+                if (matched.isEmpty()) {
                     // 一条都不命中：明确给一句空态，别留一片空白让人以为是没加载完
-                    matched.isEmpty() -> item(key = "empty") {
+                    item(key = "empty") {
                         Text(
                             text = stringResource(R.string.settings_search_empty),
                             style = MiuixTheme.textStyles.body2,
@@ -169,19 +188,50 @@ internal fun SettingsSearchMiuix(
                                 .padding(horizontal = 12.dp, vertical = 48.dp),
                         )
                     }
-                    // 空关键字：按一级页分组。SmallTitle 自带上下留白，这里不再补 Spacer
-                    keyword.isEmpty() -> entries.groupBy { it.groupRes }.forEach { (groupRes, groupEntries) ->
-                        item(key = "header-" + groupRes) {
-                            SmallTitle(text = stringResource(groupRes))
-                        }
-                        items(items = groupEntries, key = { entry -> "entry-" + entry.id }) { entry ->
-                            SettingsSearchRowMiuix(entry = entry, onPick = onPick)
+                } else {
+                    groups.forEach { (groupRes, groupEntries) ->
+                        item(key = "group-" + groupRes) {
+                            // 分组标题不再挂在卡片上方，改为每行左侧的小字标签
+                            val groupLabel = groupLabels.getValue(groupRes)
+                            AppCard(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 12.dp),
+                                colors = backgroundAwareCardColors(),
+                            ) {
+                                groupEntries.forEachIndexed { index, entry ->
+                                    if (index > 0) {
+                                        // 模块页同款分隔线：0.5dp + outline 半透明
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(vertical = 8.dp),
+                                            thickness = 0.5.dp,
+                                            color = colorScheme.outline.copy(alpha = 0.5f),
+                                        )
+                                    }
+                                    BasicComponent(
+                                        title = stringResource(entry.titleRes),
+                                        startAction = {
+                                            // 各分组名字长短不一，统一放到等宽列里居中，
+                                            // 右侧标题的左起点才不会跟着分组名抖
+                                            Box(
+                                                modifier = Modifier.width(labelColumnWidth),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                Text(
+                                                    text = groupLabel,
+                                                    style = labelStyle,
+                                                    color = colorScheme.onSurfaceVariantSummary,
+                                                    maxLines = 1,
+                                                )
+                                            }
+                                        },
+                                        onClick = { onPick(entry) },
+                                    )
+                                }
+                            }
                         }
                     }
-                    // 有关键字：拍平展示，分组标签改挂在每行左侧
-                    else -> items(items = matched, key = { entry -> "entry-" + entry.id }) { entry ->
-                        SettingsSearchRowMiuix(entry = entry, onPick = onPick)
-                    }
+                    item(key = "tail") { Spacer(modifier = Modifier.height(12.dp)) }
                 }
             }
         }
@@ -189,37 +239,77 @@ internal fun SettingsSearchMiuix(
 }
 
 /**
- * 一行搜索结果：整张卡片可点，内部是 miuix 的 [BasicComponent]，左侧挂来源分组标签。
+ * 页面内搜索框：照抄 SuperSearchBar 里 SearchBar 的视觉（44dp 图标位、CircleShape 胶囊、
+ * surfaceContainerHigh 底色），只是底色跟着背景图走、并去掉了 popup 展开态。
  *
- * 每行单独一张卡片而不是把多行塞进同一张卡，是 AGENTS 第 9 条的要求：
- * item 里一次组合多行会让长列表掉帧。
+ * 横向不加内边距：外层 LazyColumn 已经有 12dp，胶囊左边正好和下面的卡片对齐。
  */
 @Composable
-private fun SettingsSearchRowMiuix(
-    entry: SettingsSearchEntry,
-    onPick: (SettingsSearchEntry) -> Unit,
+private fun SettingsSearchFieldMiuix(
+    query: String,
+    onQueryChange: (String) -> Unit,
 ) {
-    AppCard(
+    val focusManager = LocalFocusManager.current
+    BasicTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        singleLine = true,
+        textStyle = TextStyle(
+            fontWeight = FontWeight.Medium,
+            fontSize = 17.sp,
+            color = colorScheme.onSurface,
+        ),
+        cursorBrush = SolidColor(colorScheme.primary),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+            onSearch = { focusManager.clearFocus() },
+        ),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 12.dp),
-        colors = backgroundAwareCardColors(),
-        pressFeedbackType = PressFeedbackType.Sink,
-        showIndication = true,
-        onClick = { onPick(entry) },
-    ) {
-        BasicComponent(
-            title = stringResource(entry.titleRes),
-            startAction = {
-                Text(
-                    text = stringResource(entry.groupRes),
-                    style = MiuixTheme.textStyles.body2,
-                    color = colorScheme.onSurfaceVariantSummary,
-                    modifier = Modifier.padding(end = 12.dp),
+            .padding(top = 12.dp, bottom = 12.dp)
+            .heightIn(min = 45.dp)
+            .background(backgroundAwareColor(colorScheme.surfaceContainerHigh), CircleShape),
+        decorationBox = { innerTextField ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = MiuixIcons.Basic.Search,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .padding(start = 16.dp, end = 8.dp),
+                    tint = colorScheme.onSurfaceContainerHigh,
                 )
-            },
-        )
-    }
+                Box(modifier = Modifier.weight(1f)) {
+                    if (query.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.settings_search_hint),
+                            style = MiuixTheme.textStyles.body1,
+                            color = colorScheme.onSurfaceVariantSummary,
+                            maxLines = 1,
+                        )
+                    }
+                    innerTextField()
+                }
+                if (query.isNotEmpty()) {
+                    Icon(
+                        imageVector = MiuixIcons.Basic.SearchCleanup,
+                        contentDescription = null,
+                        tint = colorScheme.onSurface,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .padding(start = 8.dp, end = 16.dp)
+                            .clickable(
+                                interactionSource = null,
+                                indication = null,
+                            ) { onQueryChange("") },
+                    )
+                }
+            }
+        },
+    )
 }
 
 /**

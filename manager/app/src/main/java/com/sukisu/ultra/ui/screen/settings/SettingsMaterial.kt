@@ -111,10 +111,11 @@ fun SettingPagerMaterial(
                 .verticalScroll(rememberScrollState())
         ) {
             SettingsAnchor(SettingsSection.APPEARANCE, anchorRequesters) {
-                AppearanceColumn(uiState = uiState, actions = actions)
+                AppearanceColumn(uiState = uiState, actions = actions, registry = anchorRequesters)
             }
+            ModuleUploadColumn(actions = actions, registry = anchorRequesters)
             GroupEntryColumn(actions = actions)
-            ExtraEntryColumn(actions = actions, registry = anchorRequesters)
+            AboutColumn(actions = actions, registry = anchorRequesters)
             Spacer(modifier = Modifier.height(bottomInnerPadding))
         }
     }
@@ -125,7 +126,12 @@ fun SettingPagerMaterial(
 private fun AppearanceColumn(
     uiState: SettingsUiState,
     actions: SettingsScreenActions,
+    registry: MutableMap<String, BringIntoViewRequester>,
 ) {
+    // 四行各自注册行级 requester：搜索/AI 跳到「语言」时只滚到那一行，而不是整张卡
+    fun requester(anchor: String): BringIntoViewRequester =
+        registry.getOrPut(anchor) { BringIntoViewRequester() }
+
     val languageSystemLabel = stringResource(id = R.string.settings_language_system)
     val languageTags = remember { listOf(LocaleHelper.SYSTEM) + LocaleHelper.SUPPORTED_TAGS }
     val languageNames = remember(languageSystemLabel) {
@@ -137,28 +143,34 @@ private fun AppearanceColumn(
     SegmentedColumn(
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
         content = listOf(
+            // 下拉项没有 modifier 参数，用 SettingsAnchor 包一层挂行级锚点
             {
-                SegmentedDropdownItem(
-                    icon = Icons.Filled.DisplaySettings,
-                    title = customText(CustomTextKey.SETTING_UI_MODE),
-                    summary = stringResource(id = R.string.settings_ui_mode_summary),
-                    items = UiMode.entries.map { it.name },
-                    selectedIndex = if (uiState.uiMode == UiMode.Material.value) 1 else 0,
-                    onItemSelected = actions.onSetUiModeIndex
-                )
+                SettingsAnchor(SettingsSection.UI_MODE, registry) {
+                    SegmentedDropdownItem(
+                        icon = Icons.Filled.DisplaySettings,
+                        title = customText(CustomTextKey.SETTING_UI_MODE),
+                        summary = stringResource(id = R.string.settings_ui_mode_summary),
+                        items = UiMode.entries.map { it.name },
+                        selectedIndex = if (uiState.uiMode == UiMode.Material.value) 1 else 0,
+                        onItemSelected = actions.onSetUiModeIndex
+                    )
+                }
             },
             {
-                SegmentedDropdownItem(
-                    icon = Icons.Rounded.Language,
-                    title = customText(CustomTextKey.SETTING_LANGUAGE),
-                    summary = stringResource(id = R.string.settings_language_summary),
-                    items = languageNames,
-                    selectedIndex = languageTags.indexOf(uiState.appLanguage).coerceAtLeast(0),
-                    onItemSelected = { index -> actions.onSetLanguage(languageTags[index]) }
-                )
+                SettingsAnchor(SettingsSection.LANGUAGE, registry) {
+                    SegmentedDropdownItem(
+                        icon = Icons.Rounded.Language,
+                        title = customText(CustomTextKey.SETTING_LANGUAGE),
+                        summary = stringResource(id = R.string.settings_language_summary),
+                        items = languageNames,
+                        selectedIndex = languageTags.indexOf(uiState.appLanguage).coerceAtLeast(0),
+                        onItemSelected = { index -> actions.onSetLanguage(languageTags[index]) }
+                    )
+                }
             },
             {
                 SegmentedListItem(
+                    modifier = Modifier.bringIntoViewRequester(requester(SettingsSection.THEME)),
                     onClick = actions.onOpenTheme,
                     headlineContent = { Text(themeTitle) },
                     supportingContent = { Text(stringResource(id = R.string.settings_theme_summary)) },
@@ -168,6 +180,7 @@ private fun AppearanceColumn(
             },
             {
                 SegmentedListItem(
+                    modifier = Modifier.bringIntoViewRequester(requester(SettingsSection.THEME_STORE)),
                     onClick = actions.onOpenThemeStore,
                     headlineContent = { Text(themeStoreTitle) },
                     supportingContent = { Text(stringResource(id = R.string.theme_store_summary)) },
@@ -226,43 +239,51 @@ private fun GroupEntryColumn(actions: SettingsScreenActions) {
 }
 
 /**
- * 单独提到一级页的两行：模块投稿与关于。
- * 二级页里的对应行已删除，避免同一条目两处入口；投稿被暂停时只隐藏模块投稿。
+ * 模块投稿：单独一张卡，压在「模块与扩展」分组上面。
+ * 二级页里已删掉这一行，避免同一条目两处入口；投稿被暂停时整卡隐藏。
  */
 @Composable
-private fun ExtraEntryColumn(
+private fun ModuleUploadColumn(
     actions: SettingsScreenActions,
     registry: MutableMap<String, BringIntoViewRequester>,
 ) {
+    if (ModuleContributionPrefs.SUSPENDED) return
     val uploadTitle = stringResource(R.string.module_upload_entry_title)
+    SegmentedColumn(
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
+        content = listOf {
+            SettingsAnchor(SettingsSection.MODULE_UPLOAD, registry) {
+                SegmentedListItem(
+                    onClick = actions.onOpenModuleUpload,
+                    headlineContent = { Text(uploadTitle) },
+                    supportingContent = {
+                        Text(stringResource(R.string.module_upload_entry_summary))
+                    },
+                    leadingContent = { IconTile(Icons.Filled.Publish, uploadTitle) },
+                    trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) }
+                )
+            }
+        }
+    )
+}
+
+/** 关于：单独一张卡放在一级页最末，跟其它分组区分开。 */
+@Composable
+private fun AboutColumn(
+    actions: SettingsScreenActions,
+    registry: MutableMap<String, BringIntoViewRequester>,
+) {
     val aboutTitle = customText(CustomTextKey.PAGE_ABOUT)
     SegmentedColumn(
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
-        content = buildList {
-            if (!ModuleContributionPrefs.SUSPENDED) {
-                add {
-                    SettingsAnchor(SettingsSection.MODULE_UPLOAD, registry) {
-                    SegmentedListItem(
-                        onClick = actions.onOpenModuleUpload,
-                        headlineContent = { Text(uploadTitle) },
-                        supportingContent = {
-                            Text(stringResource(R.string.module_upload_entry_summary))
-                        },
-                        leadingContent = { IconTile(Icons.Filled.Publish, uploadTitle) },
-                        trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) }
-                    )
-                    }
-                }
-            }
-            add {
-                SettingsAnchor(SettingsSection.ABOUT, registry) {
+        content = listOf {
+            SettingsAnchor(SettingsSection.ABOUT, registry) {
                 SegmentedListItem(
                     onClick = actions.onOpenAbout,
                     headlineContent = { Text(aboutTitle) },
                     leadingContent = { IconTile(Icons.Filled.Info, aboutTitle) },
                     trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) }
                 )
-                }
             }
         }
     )

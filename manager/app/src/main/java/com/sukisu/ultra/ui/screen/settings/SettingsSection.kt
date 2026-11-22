@@ -26,6 +26,7 @@ object SettingsSection {
     const val UI_MODE = "ui_mode"
     const val LANGUAGE = "language"
     const val THEME = "theme"
+    const val THEME_STORE = "theme_store"
 
     // 一级页：三个入口行
     const val APPEARANCE = "appearance"
@@ -71,7 +72,7 @@ object SettingsSection {
     const val ABOUT = "about"
 
     val ALL: Set<String> = setOf(
-        GENERAL, UI_MODE, LANGUAGE, THEME,
+        GENERAL, UI_MODE, LANGUAGE, THEME, THEME_STORE,
         APPEARANCE, MODULE_SETTINGS_ENTRY, ROOT_SECURITY_ENTRY, MAINTENANCE_ENTRY,
         MODULE_UPLOAD, MODULE_SHARE, PROFILE_TEMPLATES, EXTENSIONS, TOOLS,
         DEFAULT_UMOUNT_MODULES, AUTO_DELETE_MODULE_ZIP, AUTO_DELETE_UPDATE_APK,
@@ -86,7 +87,7 @@ object SettingsSection {
      * 锚点 → 页面。未知锚点归到一级页，与 [normalize] 的兜底一致。
      */
     fun pageFor(anchor: String): SettingsPage = when (normalize(anchor)) {
-        GENERAL, UI_MODE, LANGUAGE, THEME, APPEARANCE -> SettingsPage.APPEARANCE
+        GENERAL, UI_MODE, LANGUAGE, THEME, THEME_STORE, APPEARANCE -> SettingsPage.APPEARANCE
         MODULE_SETTINGS_ENTRY, MODULE_UPLOAD, MODULE_SHARE, PROFILE_TEMPLATES,
         EXTENSIONS, TOOLS, DEFAULT_UMOUNT_MODULES, AUTO_DELETE_MODULE_ZIP,
         AUTO_DELETE_UPDATE_APK,
@@ -106,7 +107,8 @@ object SettingsSection {
      * 锚点 → 卡片。页面拆分后一级页只剩外观与语言，卡片粒度仅供页内分组使用。
      */
     fun cardFor(anchor: String): String = when (anchor.trim().lowercase().replace('-', '_')) {
-        UI_MODE, LANGUAGE, THEME -> GENERAL
+        // 一级页的四行各自注册了行级 requester，跳转要命中那一行而不是整张卡
+        UI_MODE, LANGUAGE, THEME, THEME_STORE -> normalize(anchor)
         PROFILE_TEMPLATES -> PROFILE_TEMPLATES
         EXTENSIONS -> EXTENSIONS
         PACKAGE_RENAME -> PACKAGE_RENAME

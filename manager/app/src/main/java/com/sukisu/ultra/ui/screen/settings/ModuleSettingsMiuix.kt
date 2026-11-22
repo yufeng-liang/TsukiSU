@@ -449,26 +449,7 @@ internal fun ModuleSettingsMiuix(
                         onCheckedChange = actions.onSetDefaultUmountModules,
                     )
                 },
-                SettingsSection.AUTO_DELETE_MODULE_ZIP to {
-                    val title = customText(CustomTextKey.SETTING_AUTO_DELETE_MODULE_ZIP)
-                    SwitchPreference(
-                        title = title,
-                        summary = stringResource(R.string.settings_auto_delete_module_zip_summary),
-                        startAction = { MiuixSettingsRowIcon(Icons.Rounded.Delete, title) },
-                        checked = uiState.autoDeleteModuleZip,
-                        onCheckedChange = actions.onSetAutoDeleteModuleZip,
-                    )
-                },
-                SettingsSection.AUTO_DELETE_UPDATE_APK to {
-                    val title = customText(CustomTextKey.SETTING_AUTO_DELETE_UPDATE_APK)
-                    SwitchPreference(
-                        title = title,
-                        summary = stringResource(R.string.settings_auto_delete_update_apk_summary),
-                        startAction = { MiuixSettingsRowIcon(Icons.Rounded.Delete, title) },
-                        checked = uiState.autoDeleteUpdateApk,
-                        onCheckedChange = actions.onSetAutoDeleteUpdateApk,
-                    )
-                },
+
             )
         }
     }

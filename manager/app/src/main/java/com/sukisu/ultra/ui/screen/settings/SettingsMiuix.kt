@@ -109,10 +109,9 @@ fun SettingPagerMiuix(
                     title = customText(CustomTextKey.PAGE_SETTINGS),
                     scrollBehavior = scrollBehavior,
                     actions = {
-                        IconButton(
-                            modifier = Modifier.padding(end = 12.dp),
-                            onClick = actions.onOpenSearch,
-                        ) {
+                        // 不加额外 end padding：miuix TopAppBar 的 actions 槽自带右边距，
+                        // 模块 tab 顶栏的排序按钮就是这么写的
+                        IconButton(onClick = actions.onOpenSearch) {
                             Icon(
                                 imageVector = MiuixIcons.Basic.Search,
                                 contentDescription = stringResource(R.string.settings_search_title),
@@ -145,7 +144,19 @@ fun SettingPagerMiuix(
                             .fillMaxWidth(),
                         colors = backgroundAwareCardColors(),
                     ) {
-                        AppearancePreferences(uiState = uiState, actions = actions)
+                        AppearancePreferences(uiState = uiState, actions = actions, registry = anchorRequesters)
+                    }
+                }
+                // 模块投稿：单独一张卡，压在「模块与扩展」分组上面
+                item {
+                    AppCard(
+                        modifier = Modifier
+                            .padding(top = 12.dp)
+                            .fillMaxWidth()
+                            .bringIntoViewRequester(requester(SettingsSection.MODULE_UPLOAD)),
+                        colors = backgroundAwareCardColors(),
+                    ) {
+                        ModuleUploadPreference(actions = actions)
                     }
                 }
                 item {
@@ -158,17 +169,16 @@ fun SettingPagerMiuix(
                         GroupEntryPreferences(actions = actions)
                     }
                 }
+                // 关于：独立成组，放在一级页最末
                 item {
                     AppCard(
                         modifier = Modifier
                             .padding(top = 12.dp)
                             .fillMaxWidth()
-                            // 两行各挂一个锚点，搜索跳过来时能滚到这张卡
-                            .bringIntoViewRequester(requester(SettingsSection.MODULE_UPLOAD))
                             .bringIntoViewRequester(requester(SettingsSection.ABOUT)),
                         colors = backgroundAwareCardColors(),
                     ) {
-                        ExtraEntryPreferences(actions = actions)
+                        AboutPreference(actions = actions)
                     }
                 }
                 item { Spacer(Modifier.height(bottomInnerPadding)) }
@@ -182,7 +192,12 @@ fun SettingPagerMiuix(
 private fun AppearancePreferences(
     uiState: SettingsUiState,
     actions: SettingsScreenActions,
+    registry: MutableMap<String, BringIntoViewRequester>,
 ) {
+    // 四行各自注册行级 requester：搜索/AI 跳到「语言」时只滚到那一行，而不是整张卡
+    fun requester(anchor: String): BringIntoViewRequester =
+        registry.getOrPut(anchor) { BringIntoViewRequester() }
+
     OverlayDropdownPreference(
         title = customText(CustomTextKey.SETTING_UI_MODE),
         summary = stringResource(id = R.string.settings_ui_mode_summary),
@@ -196,7 +211,8 @@ private fun AppearancePreferences(
             )
         },
         selectedIndex = if (uiState.uiMode == UiMode.Material.value) 1 else 0,
-        onSelectedIndexChange = actions.onSetUiModeIndex
+        onSelectedIndexChange = actions.onSetUiModeIndex,
+        modifier = Modifier.bringIntoViewRequester(requester(SettingsSection.UI_MODE))
     )
     val languageSystemLabel = stringResource(id = R.string.settings_language_system)
     val languageTags = remember { listOf(LocaleHelper.SYSTEM) + LocaleHelper.SUPPORTED_TAGS }
@@ -216,7 +232,8 @@ private fun AppearancePreferences(
             )
         },
         selectedIndex = languageTags.indexOf(uiState.appLanguage).coerceAtLeast(0),
-        onSelectedIndexChange = { index -> actions.onSetLanguage(languageTags[index]) }
+        onSelectedIndexChange = { index -> actions.onSetLanguage(languageTags[index]) },
+        modifier = Modifier.bringIntoViewRequester(requester(SettingsSection.LANGUAGE))
     )
     val themeTitle = customText(CustomTextKey.PAGE_APPEARANCE)
     ArrowPreference(
@@ -230,7 +247,8 @@ private fun AppearancePreferences(
                 tint = colorScheme.onBackground
             )
         },
-        onClick = actions.onOpenTheme
+        onClick = actions.onOpenTheme,
+        modifier = Modifier.bringIntoViewRequester(requester(SettingsSection.THEME))
     )
     val themeStoreTitle = customText(CustomTextKey.PAGE_THEME_STORE)
     ArrowPreference(
@@ -244,33 +262,38 @@ private fun AppearancePreferences(
                 tint = colorScheme.onBackground
             )
         },
-        onClick = actions.onOpenThemeStore
+        onClick = actions.onOpenThemeStore,
+        modifier = Modifier.bringIntoViewRequester(requester(SettingsSection.THEME_STORE))
     )
 }
 
 /** 三个分组入口：一级页只做索引，具体开关都沉到二级页。 */
 /**
- * 单独提到一级页的两行：模块投稿与关于。
- * 二级页里的对应行已删除，避免同一条目两处入口；投稿被暂停时只隐藏模块投稿。
+ * 模块投稿：单独一张卡，压在「模块与扩展」分组上面。
+ * 二级页里已删掉这一行；投稿被暂停时整卡不显示。
  */
 @Composable
-private fun ExtraEntryPreferences(actions: SettingsScreenActions) {
-    if (!ModuleContributionPrefs.SUSPENDED) {
-        val uploadTitle = stringResource(R.string.module_upload_entry_title)
-        ArrowPreference(
-            title = uploadTitle,
-            summary = stringResource(R.string.module_upload_entry_summary),
-            startAction = {
-                Icon(
-                    Icons.Rounded.Publish,
-                    modifier = Modifier.padding(end = 6.dp),
-                    contentDescription = uploadTitle,
-                    tint = colorScheme.onBackground
-                )
-            },
-            onClick = actions.onOpenModuleUpload
-        )
-    }
+private fun ModuleUploadPreference(actions: SettingsScreenActions) {
+    if (ModuleContributionPrefs.SUSPENDED) return
+    val uploadTitle = stringResource(R.string.module_upload_entry_title)
+    ArrowPreference(
+        title = uploadTitle,
+        summary = stringResource(R.string.module_upload_entry_summary),
+        startAction = {
+            Icon(
+                Icons.Rounded.Publish,
+                modifier = Modifier.padding(end = 6.dp),
+                contentDescription = uploadTitle,
+                tint = colorScheme.onBackground
+            )
+        },
+        onClick = actions.onOpenModuleUpload
+    )
+}
+
+/** 关于：独立成组，放在一级页最末。 */
+@Composable
+private fun AboutPreference(actions: SettingsScreenActions) {
     val aboutTitle = customText(CustomTextKey.PAGE_ABOUT)
     ArrowPreference(
         title = aboutTitle,

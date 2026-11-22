@@ -231,38 +231,7 @@ internal fun ModuleSettingsMaterial(
                                 )
                             }
                         },
-                        {
-                            AnchorHighlight(
-                                anchor = SettingsSection.AUTO_DELETE_MODULE_ZIP,
-                                highlightAnchor = highlightAnchor,
-                                onHighlightConsumed = onHighlightConsumed,
-                            ) { highlighted ->
-                                SegmentedSwitchItem(
-                                    icon = Icons.Filled.Delete,
-                                    title = customText(CustomTextKey.SETTING_AUTO_DELETE_MODULE_ZIP),
-                                    summary = stringResource(R.string.settings_auto_delete_module_zip_summary),
-                                    colors = rowColors(highlighted),
-                                    checked = uiState.autoDeleteModuleZip,
-                                    onCheckedChange = actions.onSetAutoDeleteModuleZip,
-                                )
-                            }
-                        },
-                        {
-                            AnchorHighlight(
-                                anchor = SettingsSection.AUTO_DELETE_UPDATE_APK,
-                                highlightAnchor = highlightAnchor,
-                                onHighlightConsumed = onHighlightConsumed,
-                            ) { highlighted ->
-                                SegmentedSwitchItem(
-                                    icon = Icons.Filled.Delete,
-                                    title = customText(CustomTextKey.SETTING_AUTO_DELETE_UPDATE_APK),
-                                    summary = stringResource(R.string.settings_auto_delete_update_apk_summary),
-                                    colors = rowColors(highlighted),
-                                    checked = uiState.autoDeleteUpdateApk,
-                                    onCheckedChange = actions.onSetAutoDeleteUpdateApk,
-                                )
-                            }
-                        },
+
                     ),
                 )
             }
