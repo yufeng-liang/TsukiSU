@@ -5,6 +5,7 @@
     <string name="home_kernel">Kernel-version</string>
     <string name="home_unsupported_reason">SukiSU understøtter nu kun GKI-kerner.</string>
     <string name="home_manager_version">Manager version</string>
+    <string name="home_manager_package">Administratorpakke</string>
     <string name="home_selinux_status">SELinux-status</string>
     <string name="selinux_status_disabled">Deaktiveret</string>
     <string name="selinux_status_permissive">Tilladende</string>

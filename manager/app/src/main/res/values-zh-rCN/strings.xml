@@ -2512,7 +2512,6 @@
     <string name="pkg_rename_open_new">打开新的管理器</string>
     <string name="pkg_rename_open_new_failed">打不开 %1$s，请从桌面图标启动。</string>
     <string name="pkg_rename_registered_managers">查看已登记的管理器</string>
-    <string name="pkg_rename_restart">重新开始</string>
     <string name="pkg_rename_register_failed_after_install">新包 %1$s 已经装好，但没能登记到内核。它现在还没有内核权限，修好之前不要卸载旧APK。</string>
     <string name="pkg_rename_retry_register">重试登记</string>
     <string name="pkg_rename_revoke_register">撤销登记并放弃</string>
@@ -2525,8 +2524,7 @@
     <string name="settings_search_hint">搜索设置项</string>
     <string name="settings_search_empty">没有匹配的设置项</string>
     <string name="settings_section_spoof">伪装 / 反检测</string>
-    <string name="settings_section_network">网络</string>
-    <string name="settings_group_module_summary">模块投稿、App Profile 模板、拓展功能与模块行为</string>
-    <string name="settings_group_root_security_summary">临时 Root、SU 兼容、伪装与 Zygisk</string>
-    <string name="settings_group_maintenance_summary">GitHub 加速、备份与恢复、日志与卸载</string>
+    <string name="settings_group_module_summary">App Profile 模板、扩展功能与模块行为</string>
+    <string name="settings_group_root_security_summary">临时 Root、SU 兼容、换包名、伪装与 Zygisk</string>
+    <string name="settings_group_maintenance_summary">GitHub 加速、备份与恢复、日志、WebView 调试与卸载</string>
 </resources>

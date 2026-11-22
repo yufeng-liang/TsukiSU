@@ -18,4 +18,5 @@
     <string name="require_manager_version">Потребно је ажурирати менаџер.</string>
     <string name="require_kernel_version">Потребно је ажурирати кернел. Додирните за инсталирање.</string>
     <string name="require_kernel_version_gki">Потребно је ажурирати кернел.</string>
+    <string name="home_manager_package">Пакет управника</string>
 </resources>

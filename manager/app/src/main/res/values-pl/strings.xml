@@ -9,6 +9,7 @@
     <string name="home_unsupported_reason">SukiSU obsługuje obecnie tylko jądra GKI.</string>
     <string name="home_kernel">Wersja jądra</string>
     <string name="home_manager_version">Wersja menedżera</string>
+    <string name="home_manager_package">Pakiet menedżera</string>
     <string name="home_fingerprint">Odcisk</string>
     <string name="home_selinux_status">Status SELinux</string>
     <string name="selinux_status_disabled">Wyłączony</string>

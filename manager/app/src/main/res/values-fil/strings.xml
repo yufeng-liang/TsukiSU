@@ -58,6 +58,7 @@
     <string name="restart_app">I-restart</string>
     <string name="failed_to_update_sepolicy">Nabigong i-update ang mga panuntunan ng SELinux para sa: %s</string>
     <string name="home_manager_version">Bersyon ng manager</string>
+    <string name="home_manager_package">Package ng manager</string>
     <string name="settings">Mga setting</string>
     <string name="reboot_recovery">I-reboot sa Recovery</string>
     <string name="reboot_bootloader">I-reboot sa Bootloader</string>

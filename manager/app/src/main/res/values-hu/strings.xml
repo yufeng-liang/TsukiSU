@@ -5,6 +5,7 @@
     <string name="home_unsupported_reason">A SukiSU jelenleg csak GKI kerneleket támogat</string>
     <string name="home_kernel">Kernel</string>
     <string name="home_manager_version">Alkalmazás verziója</string>
+    <string name="home_manager_package">Kezelő csomagneve</string>
     <string name="home_fingerprint">Ujjlenyomat</string>
     <string name="selinux_status_disabled">Letiltva</string>
     <string name="reboot_download">Újraindítás letöltő módba</string>

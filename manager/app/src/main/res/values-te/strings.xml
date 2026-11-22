@@ -28,4 +28,5 @@
     <string name="require_manager_version">మేనేజర్‌ను అప్‌డేట్ చేయడం అవసరం.</string>
     <string name="require_kernel_version">కెర్నల్‌ను అప్‌డేట్ చేయడం అవసరం. ఇన్‌స్టాల్ చేయడానికి నొక్కండి.</string>
     <string name="require_kernel_version_gki">కెర్నల్‌ను అప్‌డేట్ చేయడం అవసరం.</string>
+    <string name="home_manager_package">మేనేజర్ ప్యాకేజీ</string>
 </resources>

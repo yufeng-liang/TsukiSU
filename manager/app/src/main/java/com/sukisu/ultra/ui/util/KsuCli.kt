@@ -1508,7 +1508,9 @@ private suspend fun lookupAppId(packageName: String): Int? = withContext(Dispatc
         ?.split(' ')
         ?.getOrNull(1)
         ?.toIntOrNull()
-    (fromStat ?: fromList)?.let { it % 100000 }
+    // 普通应用（含分身）的 uid 落在 10000..99999；stat 读错、读到系统进程或残片时宁可当查不到，
+    // 也不要把垃圾 appid 送进内核（内核只校验「不是 KSU_INVALID_APPID」）。
+    (fromStat ?: fromList)?.takeIf { it in 10000..99999 }?.let { it % 100000 }
 }
 
 private suspend fun runDynamicManagerCommand(vararg args: String): String = withContext(Dispatchers.IO) {

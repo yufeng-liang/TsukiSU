@@ -10,6 +10,7 @@
     <string name="home_device_model">Model perangkat</string>
     <string name="home_kernel">Versi kernel</string>
     <string name="home_manager_version">Versi manajer</string>
+    <string name="home_manager_package">Paket pengelola</string>
     <string name="home_fingerprint">Fingerprint</string>
     <string name="home_selinux_status">Status SELinux</string>
     <string name="selinux_status_disabled">Nonaktif</string>

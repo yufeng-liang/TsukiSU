@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -235,7 +236,10 @@ internal fun SettingsSearchMiuix(
                             }
                         }
                     }
-                    item(key = "tail") { Spacer(modifier = Modifier.height(12.dp)) }
+                    // 底部导航栏/手势条的安全区：miuix 列表没有底部 bar，innerPadding 里只有顶栏高度
+                    item(key = "tail") {
+                        Spacer(modifier = Modifier.height(12.dp).navigationBarsPadding())
+                    }
                 }
             }
         }

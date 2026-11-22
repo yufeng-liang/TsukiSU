@@ -9,6 +9,7 @@
     <string name="home_unsupported_reason">SukiSU само поддържа GKI кернели за сега.</string>
     <string name="home_kernel">Версия на кернела</string>
     <string name="home_manager_version">Версия на мениджъра</string>
+    <string name="home_manager_package">Пакет на мениджъра</string>
     <string name="home_fingerprint">Пръстов отпечатък</string>
     <string name="home_selinux_status">SELinux статус</string>
     <string name="selinux_status_disabled">Деактивиран</string>

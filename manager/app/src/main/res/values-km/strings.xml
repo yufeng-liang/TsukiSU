@@ -15,4 +15,5 @@
     <string name="require_manager_version">តម្រូវឱ្យធ្វើបច្ចុប្បន្នភាពកម្មវិធីគ្រប់គ្រង។</string>
     <string name="require_kernel_version">តម្រូវឱ្យធ្វើបច្ចុប្បន្នភាពខឺណែល។ ប៉ះដើម្បីដំឡើង។</string>
     <string name="require_kernel_version_gki">តម្រូវឱ្យធ្វើបច្ចុប្បន្នភាពខឺណែល។</string>
+    <string name="home_manager_package">កញ្ចប់អ្នកគ្រប់គ្រង</string>
 </resources>

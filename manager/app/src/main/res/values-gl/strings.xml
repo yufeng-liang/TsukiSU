@@ -13,4 +13,5 @@
     <string name="require_manager_version">É necesario actualizar o xestor.</string>
     <string name="require_kernel_version">É necesario actualizar o núcleo. Toca para instalar.</string>
     <string name="require_kernel_version_gki">É necesario actualizar o núcleo.</string>
+    <string name="home_manager_package">Paquete do xestor</string>
 </resources>

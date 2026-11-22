@@ -10,6 +10,7 @@
     <string name="home_kernel">कर्नल</string>
     <string name="home_fingerprint">फिंगरप्रिंट</string>
     <string name="home_manager_version">व्यवस्थापक आवृत्ती</string>
+    <string name="home_manager_package">व्यवस्थापक पॅकेज</string>
     <string name="home_selinux_status">SELinux स्थिती</string>
     <string name="selinux_status_disabled">अक्षम</string>
     <string name="selinux_status_enforcing">एनफोर्सिंग</string>

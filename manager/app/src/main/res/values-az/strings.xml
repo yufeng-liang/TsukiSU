@@ -13,6 +13,7 @@
     <string name="selinux_status_unknown">Naməlum</string>
     <string name="home_fingerprint">Barmaq izi</string>
     <string name="home_manager_version">Menecer versiyası</string>
+    <string name="home_manager_package">Menecer paketi</string>
     <string name="selinux_status_disabled">Qeyri-aktiv</string>
     <string name="home_selinux_status">SELinux vəziyyəti</string>
     <string name="selinux_status_permissive">Sərbəst</string>

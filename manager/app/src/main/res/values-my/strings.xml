@@ -12,4 +12,5 @@
     <string name="require_manager_version">မန်နေဂျာကို အပ်ဒိတ်လုပ်ရန် လိုအပ်သည်။</string>
     <string name="require_kernel_version">Kernel ကို အပ်ဒိတ်လုပ်ရန် လိုအပ်သည်။ ထည့်သွင်းရန် တို့ပါ။</string>
     <string name="require_kernel_version_gki">Kernel ကို အပ်ဒိတ်လုပ်ရန် လိုအပ်သည်။</string>
+    <string name="home_manager_package">မန်နေဂျာ ပက်ကေ့ချ်</string>
 </resources>

@@ -70,7 +70,8 @@ object SettingsSearchIndex {
         SettingsSearchEntry(
             id = "module_upload",
             titleRes = R.string.module_upload_entry_title,
-            groupRes = R.string.settings_group_module,
+            // 这一行已经搬到一级页，分组标签不能再写「模块与扩展」，否则搜到的人会被指去页外
+            groupRes = R.string.settings,
             page = SettingsPage.APPEARANCE,
             anchor = SettingsSection.MODULE_UPLOAD,
         ),
@@ -266,7 +267,8 @@ object SettingsSearchIndex {
         SettingsSearchEntry(
             id = "about",
             titleRes = R.string.about,
-            groupRes = R.string.settings_group_maintenance,
+            // 同上：关于是一级页末尾的独立卡片
+            groupRes = R.string.settings,
             page = SettingsPage.APPEARANCE,
             anchor = SettingsSection.ABOUT,
         ),

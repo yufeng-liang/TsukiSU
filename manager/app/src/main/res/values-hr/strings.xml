@@ -14,6 +14,7 @@
     <string name="home_unsupported_reason">SukiSU sada samo podržava GKI kernele.</string>
     <string name="home_kernel">Verzija kernela</string>
     <string name="home_manager_version">Verzija voditelja</string>
+    <string name="home_manager_package">Paket upravitelja</string>
     <string name="home_fingerprint">Otisak prsta</string>
     <string name="selinux_status_disabled">Isključeno</string>
     <string name="selinux_status_enforcing">U Provođenju</string>

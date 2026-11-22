@@ -303,36 +303,3 @@ private fun AnchorHighlight(
     }
 }
 
-/**
- * 行底色。默认与 [SegmentedColumn] 自带的行底色一致；被锚点命中时换成强调色。
- *
- * 组件里的 defaultSegmentedColors() 是 private，这里按同样的配方自己拼一份，
- * 这样高亮只改底色，不动文字/勾选框的配色。
- */
-@Composable
-private fun rowColors(highlighted: Boolean): ListItemColors {
-    val base = backgroundAwareColor(MaterialTheme.colorScheme.surfaceBright)
-    val container by animateColorAsState(
-        targetValue = if (highlighted) MaterialTheme.colorScheme.secondaryContainer else base,
-        animationSpec = tween(durationMillis = 220),
-        label = "settingsRowHighlight",
-    )
-    val colors = ListItemDefaults.segmentedColors(
-        containerColor = container,
-        disabledContainerColor = container,
-        // 勾选状态不换底色：勾选框本身已经在说「选中了」，与组件默认行为保持一致。
-        selectedContainerColor = container,
-        selectedContentColor = MaterialTheme.colorScheme.onSurface,
-        selectedSupportingContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        supportingContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    if (LocalBackgroundImagePath.current.isEmpty()) return colors
-    // 自定义背景图上卡片是半透明的，组件默认的禁用态前景太淡，抬一点对比度。
-    return colors.copy(
-        disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
-        disabledLeadingContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
-        disabledTrailingContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
-        disabledOverlineContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
-        disabledSupportingContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
-    )
-}

@@ -8,4 +8,5 @@
     <string name="require_manager_version">Kailangang i-update ang manager.</string>
     <string name="require_kernel_version">Kailangang i-update ang kernel. I-tap para i-install.</string>
     <string name="require_kernel_version_gki">Kailangang i-update ang kernel.</string>
+    <string name="home_manager_package">Pakete ng manager</string>
 </resources>

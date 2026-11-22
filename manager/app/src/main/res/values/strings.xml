@@ -2520,7 +2520,6 @@
     <string name="pkg_rename_open_new">Open the new manager</string>
     <string name="pkg_rename_open_new_failed">Could not launch %1$s. Start it from its home screen icon.</string>
     <string name="pkg_rename_registered_managers">View registered managers</string>
-    <string name="pkg_rename_restart">Start over</string>
     <string name="pkg_rename_register_failed_after_install">The new package %1$s is installed but could not be registered with the kernel. It has no kernel access yet, so do not uninstall the old APK before this is fixed.</string>
     <string name="pkg_rename_retry_register">Retry registration</string>
     <string name="pkg_rename_revoke_register">Revoke and give up</string>
@@ -2533,7 +2532,6 @@
     <string name="settings_search_hint">Search settings…</string>
     <string name="settings_search_empty">No matching settings</string>
     <string name="settings_section_spoof">Spoofing &amp; detection evasion</string>
-    <string name="settings_section_network">Network</string>
     <string name="settings_group_module_summary">App Profile templates, extensions and module behaviour</string>
     <string name="settings_group_root_security_summary">Temporary root, SU compatibility, spoofing and Zygisk</string>
     <string name="settings_group_maintenance_summary">GitHub acceleration, backup, logs and uninstall</string>

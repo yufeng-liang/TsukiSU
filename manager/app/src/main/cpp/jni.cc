@@ -410,21 +410,39 @@ Java_com_sukisu_ultra_Natives_dynamicManagerCall(JNIEnv *env, jobject, jint op, 
     cmd.enabled = enabled ? 1 : 0;
     cmd.cert_size = static_cast<uint32_t>(certSize);
     cmd.uid = static_cast<uint32_t>(uid);
+    // 超长参数直接判 EINVAL，绝不截断：strncpy 会把 65 位以上的 hash 截成 64 位，
+    // 而截断结果恰好满足内核 hash_valid() 的「64 个十六进制字符」判定，等于把错参数洗成合法参数。
+    bool argTooLong = false;
     if (pkg != nullptr) {
         const char *s = env->GetStringUTFChars(pkg, nullptr);
         if (s != nullptr) {
-            strncpy(cmd.package, s, sizeof(cmd.package) - 1);
+            const size_t len = strlen(s);
+            if (len >= sizeof(cmd.package)) {
+                argTooLong = true;
+            } else {
+                memcpy(cmd.package, s, len);
+                cmd.package[len] = '\0';
+            }
             env->ReleaseStringUTFChars(pkg, s);
         }
     }
     if (hash != nullptr) {
         const char *s = env->GetStringUTFChars(hash, nullptr);
         if (s != nullptr) {
-            strncpy(cmd.hash, s, sizeof(cmd.hash) - 1);
+            const size_t len = strlen(s);
+            if (len >= sizeof(cmd.hash)) {
+                argTooLong = true;
+            } else {
+                memcpy(cmd.hash, s, len);
+                cmd.hash[len] = '\0';
+            }
             env->ReleaseStringUTFChars(hash, s);
         }
     }
-    int rc = (op == KSU_MANAGER_GET) ? dynamic_manager_get(&cmd) : dynamic_manager_set(&cmd);
+    // -22 = -EINVAL，与内核参数校验失败的返回码一致，上层按「参数错误」处理
+    int rc = argTooLong
+                 ? -22
+                 : ((op == KSU_MANAGER_GET) ? dynamic_manager_get(&cmd) : dynamic_manager_set(&cmd));
     std::string out = "rc:" + std::to_string(rc) + "\n";
     if (rc == 0 && op == KSU_MANAGER_GET) {
         out += "enabled:" + std::string(cmd.enabled ? "1" : "0") + "\n";

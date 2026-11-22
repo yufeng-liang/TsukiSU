@@ -26,8 +26,6 @@ internal data class RenameOutcome(
     val newPackage: String,
     val oldPackage: String,
     val apkFile: File,
-    /** 改名前那份 APK 的备份：万一新包用不了，靠它装回原名。 */
-    val backupApk: File,
     val dynamicManagerEnabledByUs: Boolean,
 )
 
@@ -51,46 +49,6 @@ internal class RegistrationFailed(
  * 条目里的证书哈希目前只做记录，不参与授权判定。
  */
 internal class PackageRenameCoordinator(private val context: Context) {
-
-    /** 改名前的原版 APK 备份目录。 */
-    private fun backupDir(): File = File(context.filesDir, "pkgrename-original").apply { mkdirs() }
-
-    /**
-     * 备份当前 APK，便于用户想还原时重新装回原名。
-     *
-     * 先写 `.tmp` 再改名，避免上次写到一半留下的同长度残片被当成有效备份。
-     *
-     * @return 备份文件；已存在且长度一致则直接复用
-     */
-    fun backupOriginalApk(): File {
-        val src = File(context.applicationInfo.sourceDir)
-        val dest = File(backupDir(), "${context.packageName}.apk")
-        if (dest.isFile && dest.length() == src.length()) return dest
-
-        dest.parentFile?.mkdirs()
-        val tmp = File(dest.parentFile, dest.name + ".tmp")
-        tmp.delete()
-        src.inputStream().use { input -> tmp.outputStream().use { output -> input.copyTo(output) } }
-        if (tmp.length() != src.length()) {
-            tmp.delete()
-            throw PackageRenameException("备份当前 APK 失败：写入长度与源文件不一致")
-        }
-        if (dest.exists() && !dest.delete()) {
-            tmp.delete()
-            throw PackageRenameException("备份当前 APK 失败：无法替换旧备份")
-        }
-        if (!tmp.renameTo(dest)) {
-            tmp.delete()
-            throw PackageRenameException("备份当前 APK 失败：无法重命名备份文件")
-        }
-        return dest
-    }
-
-    /** 备份目录里只保留当前包名那一份。 */
-    private fun pruneBackups() {
-        val keep = "${context.packageName}.apk"
-        backupDir().listFiles()?.forEach { if (it.name != keep) it.delete() }
-    }
 
     /**
      * 执行一次换包名。
@@ -119,14 +77,12 @@ internal class PackageRenameCoordinator(private val context: Context) {
             )
         }
 
-        // 每次改名都是一个新随机名，产物与备份都是 39MB 级别，先清掉上一次的。
+        // 每次改名都是一个新随机名，产物是 39MB 级别，先清掉上一次的。
         withContext(Dispatchers.IO) {
             PackageRenameEngine.pruneOutputs(context)
-            pruneBackups()
         }
 
         onStage(RenameStage.BUILDING)
-        val backup = withContext(Dispatchers.IO) { backupOriginalApk() }
         val result = withContext(Dispatchers.IO) {
             PackageRenameEngine.buildRenamedApk(
                 context = context,
@@ -198,7 +154,6 @@ internal class PackageRenameCoordinator(private val context: Context) {
             newPackage = newPackage,
             oldPackage = oldPackage,
             apkFile = result.apkFile,
-            backupApk = backup,
             dynamicManagerEnabledByUs = enabledByUs,
         )
     }

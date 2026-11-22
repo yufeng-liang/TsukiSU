@@ -11,6 +11,7 @@
     <string name="home_unsupported_reason">SukiSU suporta apenas kernels GKI agora</string>
     <string name="home_selinux_status">Status do SELinux</string>
     <string name="home_manager_version">Versão do aplicativo</string>
+    <string name="home_manager_package">Pacote do gerenciador</string>
     <string name="module_failed_to_disable">Falha ao desativar o módulo: %s</string>
     <string name="home_fingerprint">Impressão digital</string>
     <string name="selinux_status_disabled">Desabilitado</string>

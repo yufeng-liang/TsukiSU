@@ -42,6 +42,7 @@ import com.sukisu.ultra.Natives
 import com.sukisu.ultra.R
 import com.sukisu.ultra.ui.component.miuix.AppScaffold
 import com.sukisu.ultra.ui.component.profile.TemporaryRootPreferences
+import com.sukisu.ultra.ui.component.rememberKsuReady
 import com.sukisu.ultra.ui.theme.LocalBackgroundImagePath
 import com.sukisu.ultra.ui.theme.LocalEnableBlur
 import com.sukisu.ultra.ui.util.BlurredBar
@@ -104,8 +105,9 @@ internal fun RootSecurityMiuix(
     val translucentBar = backdrop != null || hasCustomBackground
     val barColor = if (translucentBar) Color.Transparent else colorScheme.surface
     val listState = rememberLazyListState()
-    // 这一页全是内核功能，没有管理器身份就一行都不显示（等价于 Material 版的 KsuIsValid 包裹）
-    val ksuReady = Natives.isManager
+    // 这一页全是内核功能，没有管理器身份就一行都不显示（等价于 Material 版的 KsuIsValid 包裹）。
+    // 走 rememberKsuReady：回到前台时重读一次，用户刚在别处授权/撤销后不用杀进程重进
+    val ksuReady = rememberKsuReady()
 
     // 行序即 item 下标：页面级跳转按锚点反查下标，所以生成顺序必须稳定
     val slots: List<MiuixSettingsSlot> = buildList {

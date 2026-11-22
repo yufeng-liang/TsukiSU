@@ -9,6 +9,7 @@
     <string name="home_unsupported">অমূলক</string>
     <string name="home_kernel">কর্নেল</string>
     <string name="home_manager_version">ম্যানেজার ভারসন</string>
+    <string name="home_manager_package">ম্যানেজার প্যাকেজ</string>
     <string name="home_fingerprint">ফিঙ্গারপ্রিন্ট</string>
     <string name="selinux_status_disabled">ডিসেবল</string>
     <string name="selinux_status_enforcing">এনফোর্সিং</string>
