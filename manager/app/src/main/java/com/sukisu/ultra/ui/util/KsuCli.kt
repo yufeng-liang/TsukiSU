@@ -1455,9 +1455,14 @@ private fun nativeDynamicManagerCall(
 ): Pair<Int, List<String>>? {
     val raw = runCatching {
         Natives.dynamicManagerCall(op, enabled, packageName, certSize, appid, hash)
-    }.getOrNull() ?: return null
+    }.onFailure { android.util.Log.w("PkgRenameDM", "native op=$op 抛异常", it) }
+        .getOrNull() ?: return null.also { android.util.Log.w("PkgRenameDM", "native op=$op 返回 null") }
     val lines = raw.split('\n')
-    val rc = lines.firstOrNull()?.removePrefix("rc:")?.toIntOrNull() ?: return null
+    val rc = lines.firstOrNull()?.removePrefix("rc:")?.toIntOrNull()
+    if (rc != 0) {
+        android.util.Log.w("PkgRenameDM", "op=$op pkg=$packageName uid=$appid rc=$rc raw=${raw.take(200)}")
+    }
+    if (rc == null) return null
     return rc to lines.drop(1)
 }
 
@@ -1478,8 +1483,30 @@ private fun parseDynamicManagerState(lines: List<String>): DynamicManagerState {
 
 /** 用 root 查目标包的 appid（uid % 100000）：原生 ADD 需要调用方给出 uid。 */
 private suspend fun lookupAppId(packageName: String): Int? = withContext(Dispatchers.IO) {
-    val cmd = "stat -c %u " + ("/data/data/" + packageName).ksudShellArg()
-    runCmd(getRootShell(), cmd).trim().toIntOrNull()?.let { it % 100000 }
+    // 设备上 su 环境里的 PATH 未必含 stat/grep，所以一律走 /system/bin 绝对路径；
+    // 再退一步直接读系统维护的 packages.list（内核自己也是从这份文件查 uid 的）。
+    val shell = getRootShell()
+    val dataDir = "/data/data/" + packageName
+    val viaStat = runCmdWithErr(shell, "/system/bin/stat -c %u " + dataDir.ksudShellArg())
+    val viaList = if (viaStat.trim().toIntOrNull() == null) {
+        runCmdWithErr(
+            shell,
+            "/system/bin/grep -m1 " + ("\"^" + packageName + " \"") + " /data/system/packages.list",
+        )
+    } else {
+        ""
+    }
+    if (viaStat.trim().toIntOrNull() == null && viaList.isBlank()) {
+        android.util.Log.w("PkgRenameDM", "查不到 " + packageName + " 的 appid：" + viaStat.take(160))
+    }
+    val fromStat = viaStat.trim().toIntOrNull()
+    val fromList = viaList.lineSequence()
+        .map { it.trim() }
+        .firstOrNull { it.startsWith(packageName + " ") }
+        ?.split(' ')
+        ?.getOrNull(1)
+        ?.toIntOrNull()
+    (fromStat ?: fromList)?.let { it % 100000 }
 }
 
 private suspend fun runDynamicManagerCommand(vararg args: String): String = withContext(Dispatchers.IO) {
@@ -1497,6 +1524,63 @@ private suspend fun runDynamicManagerCommand(vararg args: String): String = with
 
 private fun String.ksudShellArg(): String = "'${replace("'", "'\\''")}'"
 
+private const val DM_STATE_FILE = "/data/adb/ksu/.dynamic_managers"
+
+/** 内核 struct ksu_manager_entry 的对齐后大小：4 + 4 + 128 + 65 = 201，按 4 字节对齐补到 204。 */
+private const val DM_ENTRY_SIZE = 204
+
+/**
+ * 把内存里的动态管理器状态写回 [/data/adb/ksu/.dynamic_managers]。
+ *
+ * 内核的 ksu_dynamic_manager_set 只改内存、从不落盘（kernel/ 里对该文件只有 O_RDONLY 的读），
+ * 写盘原本是 ksud 的 `manager` 子命令干的活；设备上的老 ksud 没有这个子命令，
+ * 所以登记完必须由 App 自己按 struct dynamic_manager_state 的布局写一次，否则重启后条目消失。
+ */
+private suspend fun persistDynamicManagers(): Boolean = withContext(Dispatchers.IO) {
+    val state = runCatching { getDynamicManagers() }.getOrNull() ?: return@withContext false
+    val blob = encodeDynamicManagerState(state)
+    val app = com.sukisu.ultra.ksuApp
+    val tmp = java.io.File(app.cacheDir, "dynamic_managers.bin")
+    tmp.writeBytes(blob)
+    val cmd = "/system/bin/cp " + tmp.absolutePath.ksudShellArg() + " " + DM_STATE_FILE +
+        " && /system/bin/chmod 600 " + DM_STATE_FILE +
+        " && /system/bin/stat -c %s " + DM_STATE_FILE
+    val written = runCmdWithErr(getRootShell(), cmd).trim().toIntOrNull()
+    if (written != blob.size) {
+        android.util.Log.w("PkgRenameDM", "状态文件写盘失败，期望 ${blob.size} 字节，实际 " + written)
+        return@withContext false
+    }
+    true
+}
+
+/**
+ * 按 struct dynamic_manager_state 打包：magic("DKSM") / version / enabled / count / entries[16]。
+ * 固定写满 16 条，内核读盘时按定长 struct 一次读完，尾巴必须补零。
+ */
+private fun encodeDynamicManagerState(state: DynamicManagerState): ByteArray {
+    val out = java.nio.ByteBuffer.allocate(16 + DM_ENTRY_SIZE * 16)
+        .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+    out.putInt(0x4d534b44) // 内核里的 DYNAMIC_MANAGER_MAGIC
+    out.putInt(1) // DYNAMIC_MANAGER_VERSION
+    out.putInt(if (state.enabled) 1 else 0)
+    out.putInt(state.entries.size.coerceAtMost(16))
+    state.entries.take(16).forEach { entry ->
+        out.putInt(entry.certSize)
+        out.putInt(entry.uid)
+        putFixedAscii(out, entry.packageName, 128)
+        putFixedAscii(out, entry.hash, 65)
+        out.put(ByteArray(3)) // 结构体 4 字节对齐的填充
+    }
+    return out.array()
+}
+
+/** 写定长字符串，超出截断、不足补零；末尾至少留一个 0 给内核的 strnlen。 */
+private fun putFixedAscii(out: java.nio.ByteBuffer, value: String, size: Int) {
+    val bytes = value.toByteArray(Charsets.UTF_8)
+    val n = bytes.size.coerceAtMost(size - 1)
+    out.put(bytes, 0, n)
+    out.put(ByteArray(size - n))
+}
 suspend fun getDynamicManagers(): DynamicManagerState {
     nativeDynamicManagerCall(DM_OP_GET)?.let { (rc, lines) ->
         if (rc == 0) return parseDynamicManagerState(lines)
@@ -1520,13 +1604,19 @@ suspend fun getDynamicManagers(): DynamicManagerState {
 
 suspend fun setDynamicManagersEnabled(enabled: Boolean) {
     val native = nativeDynamicManagerCall(DM_OP_SET_ENABLED, enabled = enabled)
-    if (native != null && native.first == 0) return
+    if (native != null && native.first == 0) {
+        persistDynamicManagers()
+        return
+    }
     runDynamicManagerCommand("manager", "set-enabled", enabled.toString())
 }
 
 suspend fun removeDynamicManager(packageName: String) {
     val native = nativeDynamicManagerCall(DM_OP_REMOVE, packageName = packageName)
-    if (native != null && native.first == 0) return
+    if (native != null && native.first == 0) {
+        persistDynamicManagers()
+        return
+    }
     runDynamicManagerCommand("manager", "remove", packageName)
 }
 
@@ -1551,7 +1641,10 @@ suspend fun addDynamicManager(packageName: String, signature: DynamicManagerSign
             appid = appid,
             hash = signature.hash,
         )
-        if (native != null && native.first == 0) return
+        if (native != null && native.first == 0) {
+            persistDynamicManagers()
+            return
+        }
     }
     runDynamicManagerCommand("manager", "add", packageName, signature.certSize.toString(), signature.hash)
 }
