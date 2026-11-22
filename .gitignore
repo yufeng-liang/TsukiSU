@@ -1,5 +1,6 @@
 .idea
 AGENTS.md
+CLAUDE.md
 .DS_Store
 /target
 .cargo/config.toml
