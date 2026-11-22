@@ -12,6 +12,7 @@ data class AboutUiState(
     val links: List<LinkInfo>,
     val checkUpdate: Boolean = true,
     val checkModuleUpdate: Boolean = true,
+    val autoDeleteUpdateApk: Boolean = false,
 )
 
 @Immutable
@@ -20,4 +21,5 @@ data class AboutScreenActions(
     val onOpenLink: (String) -> Unit,
     val onSetCheckUpdate: (Boolean) -> Unit = {},
     val onSetCheckModuleUpdate: (Boolean) -> Unit = {},
+    val onSetAutoDeleteUpdateApk: (Boolean) -> Unit = {},
 )

@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.SystemUpdateAlt
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -41,6 +42,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.sukisu.ultra.Natives
 import com.sukisu.ultra.R
+import com.sukisu.ultra.ui.util.CustomTextKey
+import com.sukisu.ultra.ui.util.customText
 import com.sukisu.ultra.ui.component.ModuleEcoBadge
 import com.sukisu.ultra.ui.component.material.ExpressiveScaffold
 import com.sukisu.ultra.ui.component.material.SegmentedColumn
@@ -149,6 +152,16 @@ fun AboutScreenMaterial(
                             summary = stringResource(id = R.string.settings_check_update_summary),
                             checked = state.checkModuleUpdate,
                             onCheckedChange = actions.onSetCheckModuleUpdate,
+                        )
+                    }
+                    // 管理器自更新后是否删掉下载的 APK：与更新检查放一起，用户能一处配完
+                    item {
+                        SegmentedSwitchItem(
+                            icon = Icons.Filled.Delete,
+                            title = customText(CustomTextKey.SETTING_AUTO_DELETE_UPDATE_APK),
+                            summary = stringResource(id = R.string.settings_auto_delete_update_apk_summary),
+                            checked = state.autoDeleteUpdateApk,
+                            onCheckedChange = actions.onSetAutoDeleteUpdateApk,
                         )
                     }
                 }

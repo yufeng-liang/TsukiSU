@@ -50,12 +50,14 @@ fun AboutScreen() {
         links = extractLinks(htmlString),
         checkUpdate = settingsState.checkUpdate,
         checkModuleUpdate = settingsState.checkModuleUpdate,
+        autoDeleteUpdateApk = settingsState.autoDeleteUpdateApk,
     )
     val actions = AboutScreenActions(
         onBack = dropUnlessResumed { navigator.pop() },
         onOpenLink = uriHandler::openUri,
         onSetCheckUpdate = viewModel::setCheckUpdate,
         onSetCheckModuleUpdate = viewModel::setCheckModuleUpdate,
+        onSetAutoDeleteUpdateApk = viewModel::setAutoDeleteUpdateApk,
     )
 
     when (LocalUiMode.current) {

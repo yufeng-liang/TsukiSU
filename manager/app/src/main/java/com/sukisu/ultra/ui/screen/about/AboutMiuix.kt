@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.SystemUpdateAlt
 import androidx.compose.material3.MaterialTheme
@@ -64,6 +65,8 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.flow.onEach
 import com.sukisu.ultra.Natives
 import com.sukisu.ultra.R
+import com.sukisu.ultra.ui.util.CustomTextKey
+import com.sukisu.ultra.ui.util.customText
 import com.sukisu.ultra.ui.component.ModuleEcoBadge
 import com.sukisu.ultra.ui.component.miuix.effect.BgEffectBackground
 import com.sukisu.ultra.ui.component.miuix.effect.ColorBlendToken
@@ -480,6 +483,21 @@ private fun AboutContent(
                             onCheckedChange = actions.onSetCheckModuleUpdate,
                         )
                     }
+                    // 管理器自更新后是否删掉下载的 APK：与更新检查放一起，用户能一处配完
+                    SwitchPreference(
+                        title = customText(CustomTextKey.SETTING_AUTO_DELETE_UPDATE_APK),
+                        summary = stringResource(R.string.settings_auto_delete_update_apk_summary),
+                        startAction = {
+                            Icon(
+                                Icons.Rounded.Delete,
+                                modifier = Modifier.padding(end = 6.dp),
+                                contentDescription = null,
+                                tint = colorScheme.onBackground,
+                            )
+                        },
+                        checked = state.autoDeleteUpdateApk,
+                        onCheckedChange = actions.onSetAutoDeleteUpdateApk,
+                    )
                 }
             }
 
