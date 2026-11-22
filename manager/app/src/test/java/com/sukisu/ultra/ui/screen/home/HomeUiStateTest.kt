@@ -51,6 +51,7 @@ class HomeUiStateTest {
         systemInfo = SystemInfo(
             kernelVersion = "6.1.0",
             managerVersion = "mod",
+            managerPackageName = "com.sukisu.ultra",
             deviceModel = "23116PN5BC",
             kernelFullVersion = "v4.2.1-r2-20437a36@ci",
             fingerprint = "test",
