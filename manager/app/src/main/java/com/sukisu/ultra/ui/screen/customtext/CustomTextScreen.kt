@@ -564,5 +564,6 @@ private fun ResetAllConfirmDialog(
     confirmDialog.showConfirm(
         title = stringResource(R.string.custom_text_restore_all),
         content = stringResource(R.string.custom_text_restore_all_confirm),
+        destructive = true,
     )
 }

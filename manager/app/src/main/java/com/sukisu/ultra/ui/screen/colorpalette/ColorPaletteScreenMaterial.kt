@@ -1991,6 +1991,7 @@ fun ColorPaletteScreenMaterial(
                 actions.onResetBackgroundAppearance()
             },
             onDismiss = { showResetThemeDialog = false },
+            destructive = true,
         )
     }
 
@@ -2005,6 +2006,7 @@ fun ColorPaletteScreenMaterial(
                 actions.onClearAllAppearance()
             },
             onDismiss = { showClearAllDialog = false },
+            destructive = true,
         )
     }
 

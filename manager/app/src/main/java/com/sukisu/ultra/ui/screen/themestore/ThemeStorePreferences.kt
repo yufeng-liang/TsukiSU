@@ -276,6 +276,7 @@ internal fun ThemeStorePreferencesScreen(
                 onRevokeConsent()
             },
             onDismiss = { showRevokeConfirm = false },
+            destructive = true,
         )
     }
 }

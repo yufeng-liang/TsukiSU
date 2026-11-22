@@ -2,6 +2,7 @@ package com.sukisu.ultra.ui.component.dialog
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -78,6 +79,12 @@ fun ConfirmDialogMaterial(
                     onClick = {
                         confirm()
                         showDialog.value = false
+                    },
+                    colors = if (visuals.isDestructive) {
+                        // 删除 / 卸载 / 清空类确认：红字，别用主色
+                        ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    } else {
+                        ButtonDefaults.textButtonColors()
                     }
                 ) {
                     Text(visuals.confirm ?: stringResource(id = android.R.string.ok))

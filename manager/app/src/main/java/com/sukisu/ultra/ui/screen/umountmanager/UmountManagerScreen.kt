@@ -88,7 +88,8 @@ fun UmountManagerScreen() {
             scope.launch {
                 if (confirmDialog.awaitConfirm(
                         title = confirmDelete,
-                        content = context.getString(R.string.confirm_delete_umount_path, pathEntry.path)
+                        content = context.getString(R.string.confirm_delete_umount_path, pathEntry.path),
+                        destructive = true
                     ) == ConfirmResult.Confirmed) {
                     scope.launch(Dispatchers.IO) {
                         val success = removeUmountPath(pathEntry.path)
@@ -108,7 +109,8 @@ fun UmountManagerScreen() {
             scope.launch {
                 if (confirmDialog.awaitConfirm(
                         title = confirmActionText,
-                        content = confirmClearCustomPathsText
+                        content = confirmClearCustomPathsText,
+                        destructive = true
                     ) == ConfirmResult.Confirmed) {
                     withContext(Dispatchers.IO) {
                         val success = clearCustomUmountPaths()

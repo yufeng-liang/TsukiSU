@@ -96,6 +96,6 @@ fun UninstallDialogMaterial(
     }
 
     if (showConfirmDialog.value) {
-        confirmDialog.showConfirm(title = dialogTitle, content = dialogContent)
+        confirmDialog.showConfirm(title = dialogTitle, content = dialogContent, destructive = true)
     }
 }

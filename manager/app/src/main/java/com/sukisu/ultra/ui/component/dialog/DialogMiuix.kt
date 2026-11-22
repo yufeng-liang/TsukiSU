@@ -121,7 +121,12 @@ fun ConfirmDialogMiuix(
                                 dismissState?.invoke()
                             },
                             modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.textButtonColorsPrimary()
+                            colors = if (visuals.isDestructive) {
+                                // 删除 / 卸载 / 清空类确认：红字，别用主色
+                                ButtonDefaults.textButtonColors(textColor = MiuixTheme.colorScheme.error)
+                            } else {
+                                ButtonDefaults.textButtonColorsPrimary()
+                            }
                         )
                     }
                 }

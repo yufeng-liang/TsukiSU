@@ -18,7 +18,9 @@ import androidx.compose.ui.unit.sp
 import com.sukisu.ultra.R
 import com.sukisu.ultra.ui.component.miuix.AppCard
 import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
@@ -62,7 +64,8 @@ fun UniversalDialogMiuix(
     cancelTextRes: Int = R.string.cancel,
     isConfirmEnabled: Boolean = true,
     scrollable: Boolean = false,
-    onReset: (() -> Unit)? = null
+    onReset: (() -> Unit)? = null,
+    destructive: Boolean = false
 ) {
     val showDialogState = remember { mutableStateOf(showDialog) }
 
@@ -136,21 +139,35 @@ fun UniversalDialogMiuix(
                                 text = stringResource(cancelTextRes)
                             )
                         }
-                        Button(
-                            onClick = {
-                                if (onConfirm()) {
-                                    onDismiss()
-                                    onReset?.invoke()
-                                }
-                            },
-                            enabled = isConfirmEnabled && !isLoading,
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 48.dp)
-                        ) {
-                            Text(
-                                text = stringResource(confirmTextRes)
+                        val confirmAction = {
+                            if (onConfirm()) {
+                                onDismiss()
+                                onReset?.invoke()
+                            }
+                        }
+                        val confirmModifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                        if (destructive) {
+                            TextButton(
+                                text = stringResource(confirmTextRes),
+                                onClick = confirmAction,
+                                modifier = confirmModifier,
+                                enabled = isConfirmEnabled && !isLoading,
+                                colors = ButtonDefaults.textButtonColors(
+                                    textColor = MiuixTheme.colorScheme.error
+                                )
                             )
+                        } else {
+                            Button(
+                                onClick = confirmAction,
+                                enabled = isConfirmEnabled && !isLoading,
+                                modifier = confirmModifier
+                            ) {
+                                Text(
+                                    text = stringResource(confirmTextRes)
+                                )
+                            }
                         }
                     }
                 }
@@ -218,7 +235,8 @@ fun ConfirmDialogMiuix(
     onConfirm: () -> Unit,
     titleRes: Int,
     messageRes: Int,
-    isLoading: Boolean = false
+    isLoading: Boolean = false,
+    destructive: Boolean = false
 ) {
     UniversalDialogMiuix(
         showDialog = showDialog,
@@ -239,7 +257,8 @@ fun ConfirmDialogMiuix(
         ),
         confirmTextRes = R.string.confirm,
         cancelTextRes = R.string.cancel,
-        isConfirmEnabled = !isLoading
+        isConfirmEnabled = !isLoading,
+        destructive = destructive
     )
 }
 

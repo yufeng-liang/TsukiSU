@@ -110,6 +110,7 @@ import androidx.compose.ui.unit.sp
 import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamiccolor.ColorSpec
 import com.sukisu.ultra.R
+import com.sukisu.ultra.ui.component.dialog.DestructiveTextButton
 import com.sukisu.ultra.ui.component.miuix.AppCard
 import com.sukisu.ultra.ui.component.miuix.AppScaffold
 import com.sukisu.ultra.ui.component.miuix.ScaleDialog
@@ -2029,14 +2030,13 @@ fun ColorPaletteScreenMiuix(
                             modifier = Modifier.weight(1f),
                         )
                         Spacer(Modifier.width(20.dp))
-                        TextButton(
+                        DestructiveTextButton(
                             text = stringResource(R.string.theme_reset),
                             onClick = {
                                 showResetThemeDialog.value = false
                                 actions.onResetBackgroundAppearance()
                             },
                             modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.textButtonColorsPrimary(),
                         )
                     }
                 },
@@ -2057,14 +2057,13 @@ fun ColorPaletteScreenMiuix(
                             modifier = Modifier.weight(1f),
                         )
                         Spacer(Modifier.width(20.dp))
-                        TextButton(
+                        DestructiveTextButton(
                             text = stringResource(R.string.theme_clear_all),
                             onClick = {
                                 showClearAllDialog.value = false
                                 actions.onClearAllAppearance()
                             },
                             modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.textButtonColorsPrimary(),
                         )
                     }
                 },

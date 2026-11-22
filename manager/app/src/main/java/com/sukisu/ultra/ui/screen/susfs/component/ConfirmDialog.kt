@@ -22,7 +22,8 @@ fun ConfirmDialog(
             onConfirm = onConfirm,
             titleRes = titleRes,
             messageRes = messageRes,
-            isLoading = isLoading
+            isLoading = isLoading,
+            destructive = true
         )
         UiMode.Material -> ConfirmDialogMaterial(
             showDialog = showDialog,
@@ -30,7 +31,8 @@ fun ConfirmDialog(
             onConfirm = onConfirm,
             titleRes = titleRes,
             messageRes = messageRes,
-            isLoading = isLoading
+            isLoading = isLoading,
+            destructive = true
         )
     }
 }

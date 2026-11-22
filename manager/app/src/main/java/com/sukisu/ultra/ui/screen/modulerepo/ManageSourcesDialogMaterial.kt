@@ -109,7 +109,7 @@ fun ManageSourcesDialogMaterial(
                             )
                             IconButton(onClick = {
                                 pendingDelete = source
-                                deleteDialog.showConfirm(title = deleteConfirmTitle, content = source.name)
+                                deleteDialog.showConfirm(title = deleteConfirmTitle, content = source.name, destructive = true)
                             }) {
                                 Icon(
                                     imageVector = Icons.Outlined.Delete,

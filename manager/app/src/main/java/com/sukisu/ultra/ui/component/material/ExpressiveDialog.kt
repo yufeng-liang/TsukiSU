@@ -55,13 +55,23 @@ fun ExpressiveConfirmDialog(
     onDismiss: () -> Unit,
     message: String? = null,
     dismissText: String? = null,
+    destructive: Boolean = false,
 ) {
     ExpressiveDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = message?.let { { Text(it) } },
         confirmButton = {
-            TextButton(onClick = onConfirm) { Text(confirmText) }
+            TextButton(
+                onClick = onConfirm,
+                colors = if (destructive) {
+                    androidx.compose.material3.ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    )
+                } else {
+                    androidx.compose.material3.ButtonDefaults.textButtonColors()
+                },
+            ) { Text(confirmText) }
         },
         dismissButton = dismissText?.let {
             { TextButton(onClick = onDismiss) { Text(it) } }

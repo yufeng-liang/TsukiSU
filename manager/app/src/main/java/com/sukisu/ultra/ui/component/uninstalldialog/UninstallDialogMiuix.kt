@@ -122,6 +122,6 @@ fun UninstallDialogMiuix(
         options.find { it == type }?.let { stringResource(it.message) }
     }
     if (showConfirmDialog.value) {
-        confirmDialog.showConfirm(title = dialogTitle, content = dialogContent)
+        confirmDialog.showConfirm(title = dialogTitle, content = dialogContent, destructive = true)
     }
 }

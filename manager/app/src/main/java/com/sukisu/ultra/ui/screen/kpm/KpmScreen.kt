@@ -142,7 +142,8 @@ fun KpmScreen(bottomInnerPadding: Dp = 0.dp) {
                             title = context.getString(R.string.confirm_uninstall_title_with_filename),
                             content = context.getString(R.string.confirm_uninstall_content, moduleId),
                             confirm = context.getString(R.string.uninstall),
-                            dismiss = context.getString(R.string.cancel)
+                            dismiss = context.getString(R.string.cancel),
+                            destructive = true
                         )
                         if (result == ConfirmResult.Confirmed) viewModel.runOperation {
                             handleModuleUninstall(appContext, moduleId, showToast, viewModel)

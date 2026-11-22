@@ -150,7 +150,8 @@ fun ConfirmDialogMaterial(
     onConfirm: () -> Unit,
     titleRes: Int,
     messageRes: Int,
-    isLoading: Boolean = false
+    isLoading: Boolean = false,
+    destructive: Boolean = false,
 ) {
     if (showDialog) {
         AlertDialog(
@@ -160,12 +161,13 @@ fun ConfirmDialogMaterial(
                 Text(stringResource(messageRes))
             },
             confirmButton = {
-                Button(
+                TextButton(
                     onClick = onConfirm,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError,
-                    ),
+                    colors = if (destructive) {
+                        ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    } else {
+                        ButtonDefaults.textButtonColors()
+                    },
                     enabled = !isLoading
                 ) {
                     Text(stringResource(R.string.confirm))

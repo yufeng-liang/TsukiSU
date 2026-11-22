@@ -286,6 +286,7 @@ fun ModulePagerMaterial(
                 confirm = it.confirm,
                 dismiss = it.dismiss,
                 restricted = it.restricted,
+                destructive = it.request is ModuleConfirmRequest.Uninstall,
             )
         }
     }

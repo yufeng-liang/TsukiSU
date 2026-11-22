@@ -1808,7 +1808,7 @@ internal fun CommentsPage(
     // 删除走异步确认框：awaitConfirm 挂起等用户表态，确认后才真正调 VM。
     LaunchedEffect(deleteTarget) {
         if (deleteTarget != null) {
-            when (confirmDialog.awaitConfirm(confirmTitle, confirmBody)) {
+            when (confirmDialog.awaitConfirm(confirmTitle, confirmBody, destructive = true)) {
                 ConfirmResult.Confirmed -> deleteTarget?.let { viewModel.delete(it.id) }
                 ConfirmResult.Canceled -> Unit
             }

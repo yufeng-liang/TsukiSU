@@ -158,6 +158,7 @@ fun ModuleUploadScreen() {
                             formatFileSize(listState.archivedBytes),
                         ),
                         confirm = context.getString(R.string.module_upload_clear_archived_zip),
+                        destructive = true,
                         dismiss = context.getString(R.string.cancel),
                     )
                     if (result == ConfirmResult.Confirmed) viewModel.clearArchived() else onCancelled()
@@ -182,6 +183,7 @@ fun ModuleUploadScreen() {
                             listState.orphanCount,
                         ),
                         confirm = context.getString(R.string.module_upload_clear_orphan_zip),
+                        destructive = true,
                         dismiss = context.getString(R.string.cancel),
                     )
                     if (result == ConfirmResult.Confirmed) viewModel.clearOrphanArchived() else onCancelled()
@@ -204,6 +206,7 @@ fun ModuleUploadScreen() {
                         title = context.getString(R.string.module_upload_signout_confirm_title),
                         content = context.getString(R.string.module_upload_signout_confirm_body),
                         confirm = context.getString(R.string.module_upload_signout_confirm_title),
+                        destructive = true,
                         dismiss = context.getString(R.string.cancel),
                     )
                     if (result == ConfirmResult.Confirmed) viewModel.signOut()

@@ -38,6 +38,9 @@ interface ConfirmDialogVisuals : Parcelable {
 
     
     val isRestricted: Boolean get() = false
+
+    /** 破坏性操作（删除 / 卸载 / 清空 / 重置）的确认按钮用警示红字。 */
+    val isDestructive: Boolean get() = false
 }
 
 @Parcelize
@@ -49,6 +52,7 @@ private data class ConfirmDialogVisualsImpl(
     override val confirm: String?,
     override val dismiss: String?,
     override val isRestricted: Boolean = false,
+    override val isDestructive: Boolean = false,
 ) : ConfirmDialogVisuals {
     companion object {
         val Empty: ConfirmDialogVisuals = ConfirmDialogVisualsImpl("", "", isMarkdown = false, isHtml = false, confirm = null, dismiss = null)
@@ -83,6 +87,7 @@ interface ConfirmDialogHandle : DialogHandle {
         confirm: String? = null,
         dismiss: String? = null,
         restricted: Boolean = false,
+        destructive: Boolean = false,
     )
 
     suspend fun awaitConfirm(
@@ -93,6 +98,7 @@ interface ConfirmDialogHandle : DialogHandle {
         confirm: String? = null,
         dismiss: String? = null,
         restricted: Boolean = false,
+        destructive: Boolean = false,
     ): ConfirmResult
 }
 
@@ -261,9 +267,10 @@ private class ConfirmDialogHandleImpl(
         confirm: String?,
         dismiss: String?,
         restricted: Boolean,
+        destructive: Boolean,
     ) {
         coroutineScope.launch {
-            updateVisuals(ConfirmDialogVisualsImpl(title, content, markdown, html, confirm, dismiss, restricted))
+            updateVisuals(ConfirmDialogVisualsImpl(title, content, markdown, html, confirm, dismiss, restricted, destructive))
             show()
         }
     }
@@ -276,9 +283,10 @@ private class ConfirmDialogHandleImpl(
         confirm: String?,
         dismiss: String?,
         restricted: Boolean,
+        destructive: Boolean,
     ): ConfirmResult {
         coroutineScope.launch {
-            updateVisuals(ConfirmDialogVisualsImpl(title, content, markdown, html, confirm, dismiss, restricted))
+            updateVisuals(ConfirmDialogVisualsImpl(title, content, markdown, html, confirm, dismiss, restricted, destructive))
             show()
         }
         return awaitResult()

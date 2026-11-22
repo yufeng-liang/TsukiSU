@@ -115,7 +115,7 @@ fun ManageSourcesDialogMiuix(
                             IconButton(
                                 onClick = {
                                     pendingDelete = source
-                                    deleteDialog.showConfirm(title = deleteConfirmTitle, content = source.name)
+                                    deleteDialog.showConfirm(title = deleteConfirmTitle, content = source.name, destructive = true)
                                 },
                                 modifier = Modifier.padding(start = 4.dp),
                             ) {

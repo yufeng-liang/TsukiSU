@@ -149,6 +149,7 @@ fun AppIconScreenMaterial(
             dismissText = stringResource(android.R.string.cancel),
             onConfirm = { actions.onConfirmDeletePack(pack) },
             onDismiss = actions.onDismissDeletePack,
+            destructive = true,
         )
     }
 }
