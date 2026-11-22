@@ -2149,4 +2149,15 @@
     <string name="pkg_rename_revoke_register">撤銷登記並放棄</string>
     <string name="pkg_rename_enabled_by_us">本次改名開啟了動態管理員總開關，之後可以在動態管理員頁裡關掉。</string>
     <string name="pkg_rename_back">返回</string>
+    <string name="settings_group_module">模組與擴充</string>
+    <string name="settings_group_root_security">Root 與安全</string>
+    <string name="settings_group_maintenance">診斷與維護</string>
+    <string name="settings_search_title">搜尋設定</string>
+    <string name="settings_search_hint">搜尋設定項</string>
+    <string name="settings_search_empty">沒有符合的設定項目</string>
+    <string name="settings_section_spoof">偽裝 / 反偵測</string>
+    <string name="settings_section_network">網路</string>
+    <string name="settings_group_module_summary">模組投稿、App Profile 模板、擴充功能與模組行為</string>
+    <string name="settings_group_root_security_summary">臨時 Root、SU 相容、偽裝與 Zygisk</string>
+    <string name="settings_group_maintenance_summary">GitHub 加速、備份與還原、日誌與解除安裝</string>
 </resources>

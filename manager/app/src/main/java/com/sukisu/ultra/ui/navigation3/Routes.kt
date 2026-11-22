@@ -267,4 +267,20 @@ sealed interface Route : NavKey, Parcelable {
     @Parcelize
     @Serializable
     data object AiSettings : Route
+
+    @Parcelize
+    @Serializable
+    data object ModuleSettings : Route
+
+    @Parcelize
+    @Serializable
+    data object RootSecurity : Route
+
+    @Parcelize
+    @Serializable
+    data object Maintenance : Route
+
+    @Parcelize
+    @Serializable
+    data object SettingsSearch : Route
 }

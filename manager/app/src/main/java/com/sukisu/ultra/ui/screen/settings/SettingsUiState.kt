@@ -286,4 +286,12 @@ data class SettingsScreenActions(
     /** 进入页面时自动测速；内部带 3 分钟缓存，不会重复请求。 */
     val onEnsureProxyTested: () -> Unit = {},
     val onOpenProxySettings: () -> Unit = {},
+    /** 一级页「模块与扩展」分组的入口。 */
+    val onOpenModuleSettings: () -> Unit = {},
+    /** 一级页「Root 与安全」分组的入口。 */
+    val onOpenRootSecurity: () -> Unit = {},
+    /** 一级页「诊断与维护」分组的入口。 */
+    val onOpenMaintenance: () -> Unit = {},
+    /** 顶栏放大镜：进入设置搜索页。 */
+    val onOpenSearch: () -> Unit = {},
 )

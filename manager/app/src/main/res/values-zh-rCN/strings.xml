@@ -2517,4 +2517,15 @@
     <string name="pkg_rename_revoke_register">撤销登记并放弃</string>
     <string name="pkg_rename_enabled_by_us">本次换名打开了动态管理器总开关，之后可以在动态管理器页里关掉。</string>
     <string name="pkg_rename_back">返回</string>
+    <string name="settings_group_module">模块与扩展</string>
+    <string name="settings_group_root_security">Root 与安全</string>
+    <string name="settings_group_maintenance">诊断与维护</string>
+    <string name="settings_search_title">搜索设置</string>
+    <string name="settings_search_hint">搜索设置项</string>
+    <string name="settings_search_empty">没有匹配的设置项</string>
+    <string name="settings_section_spoof">伪装 / 反检测</string>
+    <string name="settings_section_network">网络</string>
+    <string name="settings_group_module_summary">模块投稿、App Profile 模板、拓展功能与模块行为</string>
+    <string name="settings_group_root_security_summary">临时 Root、SU 兼容、伪装与 Zygisk</string>
+    <string name="settings_group_maintenance_summary">GitHub 加速、备份与恢复、日志与卸载</string>
 </resources>

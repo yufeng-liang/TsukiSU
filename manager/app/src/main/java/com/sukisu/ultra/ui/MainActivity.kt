@@ -133,6 +133,10 @@ import com.sukisu.ultra.ui.screen.modulerepo.rememberColumnById
 import com.sukisu.ultra.ui.screen.scriptrun.ScriptRunScreen
 import com.sukisu.ultra.ui.screen.settings.SettingPager
 import com.sukisu.ultra.ui.screen.settings.ProxySettingsScreen
+import com.sukisu.ultra.ui.screen.settings.MaintenanceScreen
+import com.sukisu.ultra.ui.screen.settings.ModuleSettingsScreen
+import com.sukisu.ultra.ui.screen.settings.RootSecurityScreen
+import com.sukisu.ultra.ui.screen.settings.SettingsSearchScreen
 import com.sukisu.ultra.ui.screen.settings.SettingsScreenActions
 import com.sukisu.ultra.ui.screen.settings.backup.BackupScreen
 import com.sukisu.ultra.ui.screen.settings.tools.ToolsScreen
@@ -566,6 +570,10 @@ class MainActivity : ComponentActivity() {
                                     PackageRenameScreen(onBackEnabledChange = { renameBackEnabled = it })
                                 }
                                 entry<Route.Extensions>(swipeDismiss = swipeDismiss) { ExtensionsScreen() }
+                                entry<Route.ModuleSettings>(swipeDismiss = swipeDismiss) { ModuleSettingsScreen(navigator) }
+                                entry<Route.RootSecurity>(swipeDismiss = swipeDismiss) { RootSecurityScreen(navigator) }
+                                entry<Route.Maintenance>(swipeDismiss = swipeDismiss) { MaintenanceScreen(navigator) }
+                                entry<Route.SettingsSearch>(swipeDismiss = swipeDismiss) { SettingsSearchScreen(navigator) }
                                 entry<Route.BuiltinZygisk>(swipeDismiss = swipeDismiss) { BuiltinZygiskScreen() }
                                 entry<Route.CpuSpoof>(swipeDismiss = swipeDismiss) { CpuSpoofScreen() }
                                 entry<Route.VersionSpoof>(swipeDismiss = swipeDismiss) { VersionSpoofScreen() }

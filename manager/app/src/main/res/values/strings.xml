@@ -2525,4 +2525,15 @@
     <string name="pkg_rename_revoke_register">Revoke and give up</string>
     <string name="pkg_rename_enabled_by_us">This screen turned on the global dynamic manager switch. You can turn it off again on the dynamic managers page.</string>
     <string name="pkg_rename_back">Back</string>
+    <string name="settings_group_module">Modules &amp; extensions</string>
+    <string name="settings_group_root_security">Root &amp; security</string>
+    <string name="settings_group_maintenance">Diagnostics &amp; maintenance</string>
+    <string name="settings_search_title">Search settings</string>
+    <string name="settings_search_hint">Search settings…</string>
+    <string name="settings_search_empty">No matching settings</string>
+    <string name="settings_section_spoof">Spoofing &amp; detection evasion</string>
+    <string name="settings_section_network">Network</string>
+    <string name="settings_group_module_summary">Module upload, App Profile templates, extensions and module behaviour</string>
+    <string name="settings_group_root_security_summary">Temporary root, SU compatibility, spoofing and Zygisk</string>
+    <string name="settings_group_maintenance_summary">GitHub acceleration, backup, logs and uninstall</string>
 </resources>

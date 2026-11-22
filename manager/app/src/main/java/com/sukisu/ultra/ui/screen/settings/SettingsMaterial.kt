@@ -1,107 +1,76 @@
 package com.sukisu.ultra.ui.screen.settings
 
-import com.sukisu.ultra.ui.component.profile.TemporaryRootPreferences
-import com.sukisu.ultra.ui.util.customText
-import com.sukisu.ultra.ui.util.CustomTextKey
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.Rule
-import androidx.compose.material.icons.filled.Adb
-import androidx.compose.material.icons.filled.AdminPanelSettings
-import androidx.compose.material.icons.filled.Backup
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.Publish
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.DeveloperMode
 import androidx.compose.material.icons.filled.DisplaySettings
-import androidx.compose.material.icons.filled.Fence
-import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.LayersClear
-import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Palette
-import com.sukisu.ultra.ui.component.Storefront
-import androidx.compose.material.icons.filled.RestartAlt
-import androidx.compose.material.icons.filled.Policy
+import androidx.compose.material.icons.filled.Publish
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.rounded.Language
-import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberTopAppBarState
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.sukisu.ultra.R
-import com.sukisu.ultra.data.repository.ModuleContributionPrefs
+import com.sukisu.ultra.data.proxy.ProxyHealth
 import com.sukisu.ultra.ui.UiMode
-import com.sukisu.ultra.ui.component.KsuIsValid
+import com.sukisu.ultra.ui.component.Storefront
 import com.sukisu.ultra.ui.component.material.ExpressiveScaffold
 import com.sukisu.ultra.ui.component.material.IconTile
 import com.sukisu.ultra.ui.component.material.SegmentedColumn
 import com.sukisu.ultra.ui.component.material.SegmentedDropdownItem
 import com.sukisu.ultra.ui.component.material.SegmentedListItem
-import com.sukisu.ultra.ui.component.material.SegmentedRadioItem
-import com.sukisu.ultra.ui.component.material.SegmentedSwitchItem
-import com.sukisu.ultra.ui.component.material.SendLogBottomSheet
-import com.sukisu.ultra.ui.component.material.SnackBarHost
 import com.sukisu.ultra.ui.component.material.expressiveTopAppBarColors
 import com.sukisu.ultra.ui.theme.LocalBackgroundImagePath
+import com.sukisu.ultra.data.repository.ModuleContributionPrefs
+import com.sukisu.ultra.ui.util.CustomTextKey
 import com.sukisu.ultra.ui.util.LocaleHelper
-import com.sukisu.ultra.ui.component.uninstalldialog.UninstallDialog
+import com.sukisu.ultra.ui.util.customText
 import com.sukisu.ultra.ui.viewmodel.MainPageRequest
 import kotlinx.coroutines.delay
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.RadioButton
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.clip
-import com.sukisu.ultra.data.proxy.ProxyHealth
-import com.sukisu.ultra.data.proxy.ProxyMode
 
 /**
+ * 设置一级页（Material 3）。
+ *
+ * 结构只剩两块：外观与语言（4 行 inline，不跳页）与三个分组入口。
+ * 分组内容见 [ModuleSettingsMaterial]、[RootSecurityMaterial]、[MaintenanceMaterial]。
+ *
  * @author weishu
  * @date 2023/1/1.
  */
@@ -116,6 +85,7 @@ fun SettingPagerMaterial(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val anchorRequesters = remember { mutableMapOf<String, BringIntoViewRequester>() }
 
+    // 只有落在一级页的锚点会走到这里（二级页在 SettingPager 里就被导航掉了）。
     LaunchedEffect(sectionRequest?.token) {
         val request = sectionRequest ?: return@LaunchedEffect
         delay(120)
@@ -125,22 +95,13 @@ fun SettingPagerMaterial(
         requester?.bringIntoView()
         onSectionConsumed(request.token)
     }
-    val snackBarHost = remember { SnackbarHostState() }
-    val showUninstallDialog = rememberSaveable { mutableStateOf(false) }
-    var showBottomSheet by remember { mutableStateOf(false) }
-
-    UninstallDialog(
-        show = showUninstallDialog.value,
-        onDismissRequest = { showUninstallDialog.value = false }
-    )
 
     val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
     ExpressiveScaffold(
         containerColor = if (hasCustomBackground) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer,
         topBar = {
-            TopBar(scrollBehavior = scrollBehavior)
+            TopBar(scrollBehavior = scrollBehavior, onSearch = actions.onOpenSearch)
         },
-        snackbarHost = { SnackBarHost(hostState = snackBarHost, modifier = Modifier.padding(bottom = bottomInnerPadding)) },
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
     ) { paddingValues ->
         Column(
@@ -149,536 +110,162 @@ fun SettingPagerMaterial(
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .verticalScroll(rememberScrollState())
         ) {
-            // 更新检查的三个开关已随上游挪到「关于」页，设置页不再重复展示。
-            // 模块上传入口与「安装后提示分享」开关不挂在 KsuIsValid 里：它们不是内核能力，
-            // 没 root 时也要能进 / 能关。投稿功能风险未解决暂时下线
-            // （ModuleContributionPrefs.SUSPENDED），整块一起隐藏。
-            if (!ModuleContributionPrefs.SUSPENDED) {
-                SegmentedColumn(
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
-                    content = listOf(
-                        {
-                            val uploadTitle = stringResource(R.string.module_upload_entry_title)
-                            SegmentedListItem(
-                                onClick = actions.onOpenModuleUpload,
-                                headlineContent = { Text(uploadTitle) },
-                                supportingContent = {
-                                    Text(stringResource(R.string.module_upload_entry_summary))
-                                },
-                                leadingContent = {
-                                    IconTile(Icons.Filled.Publish, uploadTitle)
-                                },
-                                trailingContent = {
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                        null
-                                    )
-                                }
-                            )
-                        },
-                        {
-                            // 只控制装完本地模块后要不要提示分享；上传入口在上面。
-                            SegmentedSwitchItem(
-                                icon = Icons.Filled.Share,
-                                title = stringResource(R.string.module_upload_after_install_title),
-                                summary = stringResource(R.string.module_upload_after_install_summary),
-                                checked = uiState.moduleContributionEnabled,
-                                onCheckedChange = actions.onSetModuleContributionEnabled
-                            )
-                        }
-                    )
-                )
+            SettingsAnchor(SettingsSection.APPEARANCE, anchorRequesters) {
+                AppearanceColumn(uiState = uiState, actions = actions)
             }
-
-            SettingsAnchor(SettingsSection.GENERAL, anchorRequesters) {
-            SegmentedColumn(
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
-                content = buildList {
-                    add {
-                        SegmentedDropdownItem(
-                            icon = Icons.Filled.DisplaySettings,
-                            title = customText(CustomTextKey.SETTING_UI_MODE),
-                            summary = stringResource(id = R.string.settings_ui_mode_summary),
-                            items = UiMode.entries.map { it.name },
-                            selectedIndex = if (uiState.uiMode == UiMode.Material.value) 1 else 0,
-                            onItemSelected = actions.onSetUiModeIndex
-                        )
-                    }
-                    add {
-                        val languageSystemLabel = stringResource(id = R.string.settings_language_system)
-                        val languageTags = remember { listOf(LocaleHelper.SYSTEM) + LocaleHelper.SUPPORTED_TAGS }
-                        val languageNames = remember(languageSystemLabel) {
-                            languageTags.map { if (it.isEmpty()) languageSystemLabel else LocaleHelper.displayName(it) }
-                        }
-                        SegmentedDropdownItem(
-                            icon = Icons.Rounded.Language,
-                            title = customText(CustomTextKey.SETTING_LANGUAGE),
-                            summary = stringResource(id = R.string.settings_language_summary),
-                            items = languageNames,
-                            selectedIndex = languageTags.indexOf(uiState.appLanguage).coerceAtLeast(0),
-                            onItemSelected = { index -> actions.onSetLanguage(languageTags[index]) }
-                        )
-                    }
-                    add {
-                        val themeTitle = customText(CustomTextKey.PAGE_APPEARANCE)
-                        SegmentedListItem(
-                            onClick = actions.onOpenTheme,
-                            headlineContent = { Text(themeTitle) },
-                            supportingContent = { Text(stringResource(id = R.string.settings_theme_summary)) },
-                            leadingContent = { IconTile(Icons.Filled.Palette, themeTitle) },
-                            trailingContent = {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    null
-                                )
-                            }
-                        )
-                    }
-                    add {
-                        val themeStoreTitle = customText(CustomTextKey.PAGE_THEME_STORE)
-                        SegmentedListItem(
-                            onClick = actions.onOpenThemeStore,
-                            headlineContent = { Text(themeStoreTitle) },
-                            supportingContent = { Text(stringResource(id = R.string.theme_store_summary)) },
-                            leadingContent = { IconTile(Icons.Filled.Storefront, themeStoreTitle) },
-                            trailingContent = {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    null
-                                )
-                            }
-                        )
-                    }
-
-                }
-            )
-            }
-
-            // GitHub 下载加速：设置页只留一行入口，模式/代理列表/测速都收进独立子页，
-            // 避免设置页被这一组配置撑得太长。
-            SegmentedColumn(
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
-                content = listOf {
-                    SegmentedListItem(
-                        onClick = actions.onOpenProxySettings,
-                        headlineContent = {
-                            Text(
-                                text = stringResource(R.string.settings_proxy_title),
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                        },
-                        supportingContent = {
-                            Text(stringResource(R.string.settings_proxy_entry_summary))
-                        },
-                        leadingContent = {
-                            IconTile(
-                                Icons.Filled.Download,
-                                stringResource(R.string.settings_proxy_title)
-                            )
-                        },
-                        trailingContent = {
-                            Icon(
-                                Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                null
-                            )
-                        }
-                    )
-                }
-            )
-
-            val profileTemplate = customText(CustomTextKey.PAGE_TEMPLATE)
-            KsuIsValid {
-                SettingsAnchor(SettingsSection.PROFILE_TEMPLATES, anchorRequesters) {
-                SegmentedColumn(
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
-                    content = listOf {
-                        SegmentedListItem(
-                            onClick = actions.onOpenProfileTemplate,
-                            headlineContent = { Text(profileTemplate) },
-                            supportingContent = { Text(stringResource(id = R.string.settings_profile_template_summary)) },
-                            leadingContent = { IconTile(Icons.Filled.Description, profileTemplate) },
-                            trailingContent = {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    null
-                                )
-                            }
-                        )
-                    }
-                )
-                }
-                SettingsAnchor(SettingsSection.EXTENSIONS, anchorRequesters) {
-                SegmentedColumn(
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
-                    content = listOf {
-                        val extensionsTitle = customText(CustomTextKey.PAGE_EXTENSIONS)
-                        SegmentedListItem(
-                            onClick = actions.onOpenExtensions,
-                            headlineContent = { Text(extensionsTitle) },
-                            supportingContent = { Text(stringResource(R.string.extension_section_summary)) },
-                            leadingContent = { IconTile(Icons.Filled.Memory, extensionsTitle) },
-                            trailingContent = {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    null
-                                )
-                            }
-                        )
-                    }
-                )
-                val backupTitle = stringResource(id = R.string.backup_title)
-                SegmentedColumn(
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
-                    content = listOf {
-                        SegmentedListItem(
-                            onClick = actions.onOpenBackup,
-                            headlineContent = { Text(backupTitle) },
-                            supportingContent = { Text(stringResource(id = R.string.backup_entry_summary)) },
-                            leadingContent = { IconTile(Icons.Filled.Backup, backupTitle) },
-                            trailingContent = {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    null
-                                )
-                            }
-                        )
-                    }
-                )
-                }
-                val renameTitle = stringResource(id = R.string.pkg_rename_title)
-                SettingsAnchor(SettingsSection.PACKAGE_RENAME, anchorRequesters) {
-                SegmentedColumn(
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
-                    content = listOf {
-                        SegmentedListItem(
-                            onClick = actions.onOpenPackageRename,
-                            headlineContent = { Text(renameTitle) },
-                            supportingContent = { Text(stringResource(id = R.string.pkg_rename_entry_summary)) },
-                            leadingContent = { IconTile(Icons.Filled.Edit, renameTitle) },
-                            trailingContent = {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    null
-                                )
-                            }
-                        )
-                    }
-                )
-                }
-                val toolsTitle = customText(CustomTextKey.PAGE_TOOLS)
-                SettingsAnchor(SettingsSection.TOOLS, anchorRequesters) {
-                SegmentedColumn(
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
-                    content = listOf {
-                        SegmentedListItem(
-                            onClick = actions.onOpenTools,
-                            headlineContent = { Text(toolsTitle) },
-                            supportingContent = { Text(stringResource(id = R.string.settings_tools_summary)) },
-                            leadingContent = { IconTile(Icons.Filled.Fence, toolsTitle) },
-                            trailingContent = {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    null
-                                )
-                            }
-                        )
-                    }
-                )
-                }
-                SettingsAnchor(SettingsSection.TEMPORARY_ROOT, anchorRequesters) {
-                    TemporaryRootPreferences()
-                }
-            }
-
-            KsuIsValid {
-                val suCompatModeItems = listOf(
-                    stringResource(id = R.string.settings_mode_enable_by_default),
-                    stringResource(id = R.string.settings_mode_disable_until_reboot),
-                    stringResource(id = R.string.settings_mode_disable_always),
-                )
-
-                SettingsAnchor(SettingsSection.SECURITY, anchorRequesters) {
-                SegmentedColumn(
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
-                    content = listOf(
-                        {
-                            val suSummary = when (uiState.suCompatStatus) {
-                                "unsupported" -> stringResource(id = R.string.feature_status_unsupported_summary)
-                                "managed" -> stringResource(id = R.string.feature_status_managed_summary)
-                                "forced" -> stringResource(id = R.string.feature_status_forced_summary)
-                                else -> stringResource(id = R.string.settings_sucompat_summary)
-                            }
-                            SegmentedDropdownItem(
-                                icon = Icons.Filled.AdminPanelSettings,
-                                title = customText(CustomTextKey.SETTING_SUCOMPAT),
-                                summary = suSummary,
-                                items = suCompatModeItems,
-                                enabled = uiState.suCompatStatus == "supported",
-                                selectedIndex = uiState.suCompatMode,
-                                onItemSelected = actions.onSetSuCompatMode
-                            )
-                        },
-                        {
-                            val umountSummary = when (uiState.kernelUmountStatus) {
-                                "unsupported" -> stringResource(id = R.string.feature_status_unsupported_summary)
-                                "managed" -> stringResource(id = R.string.feature_status_managed_summary)
-                                "forced" -> stringResource(id = R.string.feature_status_forced_summary)
-                                else -> stringResource(id = R.string.settings_kernel_umount_summary)
-                            }
-                            SegmentedSwitchItem(
-                                icon = Icons.Filled.LayersClear,
-                                title = customText(CustomTextKey.SETTING_KERNEL_UMOUNT),
-                                summary = umountSummary,
-                                enabled = uiState.kernelUmountStatus == "supported",
-                                checked = uiState.isKernelUmountEnabled,
-                                onCheckedChange = actions.onSetKernelUmountEnabled
-                            )
-                        },
-                        {
-                            val selinuxHideSummary = when (uiState.selinuxHideStatus) {
-                                "unsupported" -> stringResource(id = R.string.feature_status_unsupported_summary)
-                                "managed" -> stringResource(id = R.string.feature_status_managed_summary)
-                                "forced" -> stringResource(id = R.string.feature_status_forced_summary)
-                                else -> stringResource(id = R.string.settings_selinux_hide_summary)
-                            }
-                            SegmentedSwitchItem(
-                                icon = Icons.Filled.Security,
-                                title = customText(CustomTextKey.SETTING_SELINUX_HIDE),
-                                summary = selinuxHideSummary,
-                                enabled = uiState.selinuxHideStatus == "supported",
-                                checked = uiState.isSelinuxHideEnabled,
-                                onCheckedChange = actions.onSetSelinuxHideEnabled
-                            )
-                        },
-                        {
-                            val summary = when (uiState.avcSpoofStatus) {
-                                "unsupported" -> stringResource(R.string.feature_status_unsupported_summary)
-                                "managed" -> stringResource(R.string.feature_status_managed_summary)
-                                "forced" -> stringResource(R.string.feature_status_forced_summary)
-                                else -> stringResource(R.string.settings_avc_spoof_summary)
-                            }
-                            SegmentedSwitchItem(
-                                icon = Icons.Filled.Security,
-                                title = customText(CustomTextKey.SETTING_AVC_SPOOF),
-                                summary = summary,
-                                enabled = uiState.avcSpoofStatus == "supported",
-                                checked = uiState.isAvcSpoofEnabled,
-                                onCheckedChange = actions.onSetAvcSpoofEnabled
-                            )
-                        },
-                        {
-                            val mountHideSummary = when (uiState.mountHideStatus) {
-                                "unsupported" -> stringResource(id = R.string.feature_status_unsupported_summary)
-                                "managed" -> stringResource(id = R.string.feature_status_managed_summary)
-                                "forced" -> stringResource(id = R.string.feature_status_forced_summary)
-                                else -> stringResource(id = R.string.settings_mount_hide_summary)
-                            }
-                            SegmentedSwitchItem(
-                                icon = Icons.Filled.Policy,
-                                title = customText(CustomTextKey.SETTING_MOUNT_HIDE),
-                                summary = mountHideSummary,
-                                enabled = uiState.mountHideStatus == "supported",
-                                checked = uiState.isMountHideEnabled,
-                                onCheckedChange = actions.onSetMountHideEnabled
-                            )
-                        },
-                        {
-                            val sulogSummary = when (uiState.sulogStatus) {
-                                "unsupported" -> stringResource(id = R.string.feature_status_unsupported_summary)
-                                "managed" -> stringResource(id = R.string.feature_status_managed_summary)
-                                "forced" -> stringResource(id = R.string.feature_status_forced_summary)
-                                else -> stringResource(id = R.string.settings_sulog_summary)
-                            }
-                            SegmentedSwitchItem(
-                                icon = Icons.AutoMirrored.Filled.Article,
-                                title = customText(CustomTextKey.SETTING_SULOG),
-                                summary = sulogSummary,
-                                enabled = uiState.sulogStatus == "supported",
-                                checked = uiState.isSulogEnabled,
-                                onCheckedChange = actions.onSetSulogEnabled
-                            )
-                        },
-                        {
-                            val adbRootSummary = when (uiState.adbRootStatus) {
-                                "unsupported" -> stringResource(id = R.string.feature_status_unsupported_summary)
-                                "managed" -> stringResource(id = R.string.feature_status_managed_summary)
-                                "forced" -> stringResource(id = R.string.feature_status_forced_summary)
-                                else -> stringResource(id = R.string.settings_adb_root_summary)
-                            }
-                            SegmentedSwitchItem(
-                                icon = Icons.Filled.Adb,
-                                title = customText(CustomTextKey.SETTING_ADB_ROOT),
-                                summary = adbRootSummary,
-                                enabled = uiState.adbRootStatus == "supported",
-                                checked = uiState.isAdbRootEnabled,
-                                onCheckedChange = actions.onSetAdbRootEnabled
-                            )
-                        },
-                        {
-                            val shellSuAdbOnlySummary = when (uiState.shellSuAdbOnlyStatus) {
-                                "unsupported" -> stringResource(id = R.string.feature_status_unsupported_summary)
-                                "managed" -> stringResource(id = R.string.feature_status_managed_summary)
-                                "forced" -> stringResource(id = R.string.feature_status_forced_summary)
-                                else -> stringResource(id = R.string.settings_shell_su_adb_only_summary)
-                            }
-                            SegmentedSwitchItem(
-                                icon = Icons.Filled.VerifiedUser,
-                                title = customText(CustomTextKey.SETTING_SHELL_SU),
-                                summary = shellSuAdbOnlySummary,
-                                enabled = uiState.shellSuAdbOnlyStatus == "supported",
-                                checked = uiState.isShellSuAdbOnlyEnabled,
-                                onCheckedChange = actions.onSetShellSuAdbOnlyEnabled
-                            )
-                        },
-                        {
-                            SegmentedSwitchItem(
-                                icon = Icons.Filled.RestartAlt,
-                                title = customText(CustomTextKey.SETTING_SOFT_REBOOT),
-                                summary = stringResource(id = R.string.settings_soft_reboot_summary),
-                                enabled = !uiState.isLateLoadMode,
-                                checked = uiState.isLateLoadMode || uiState.useSoftReboot,
-                                onCheckedChange = actions.onSetUseSoftReboot
-                            )
-                        },
-                        {
-                            SegmentedSwitchItem(
-                                icon = Icons.Filled.Extension,
-                                title = customText(CustomTextKey.ZYGISK_SETTINGS_TITLE),
-                                summary = stringResource(id = R.string.settings_builtin_zygisk_summary),
-                                checked = uiState.builtinZygisk,
-                                onCheckedChange = { actions.onSetBuiltinZygisk(it) }
-                            )
-                        },
-                        *(if (uiState.builtinZygisk) arrayOf<@Composable () -> Unit>({
-                            SegmentedListItem(
-                                onClick = actions.onOpenBuiltinZygisk,
-                                headlineContent = { Text(customText(CustomTextKey.ZYGISK_DASHBOARD_TITLE)) },
-                                supportingContent = { Text(stringResource(id = R.string.settings_builtin_zygisk_dashboard_summary)) },
-                                leadingContent = { IconTile(Icons.Filled.Settings, stringResource(id = R.string.settings_builtin_zygisk_dashboard)) }
-                            )
-                        }) else emptyArray()),
-                    )
-                )
-
-                }
-                SettingsAnchor(SettingsSection.MODULE_BEHAVIOUR, anchorRequesters) {
-                SegmentedColumn(
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
-                    content = listOf(
-                        {
-                            SegmentedSwitchItem(
-                                icon = Icons.AutoMirrored.Filled.Rule,
-                                title = customText(CustomTextKey.SETTING_UMOUNT_MODULES_DEFAULT),
-                                summary = stringResource(id = R.string.settings_umount_modules_default_summary),
-                                checked = uiState.isDefaultUmountModules,
-                                onCheckedChange = actions.onSetDefaultUmountModules
-                            )
-                        },
-                        {
-                            SegmentedSwitchItem(
-                                icon = Icons.Filled.Delete,
-                                title = customText(CustomTextKey.SETTING_AUTO_DELETE_MODULE_ZIP),
-                                summary = stringResource(id = R.string.settings_auto_delete_module_zip_summary),
-                                checked = uiState.autoDeleteModuleZip,
-                                onCheckedChange = actions.onSetAutoDeleteModuleZip
-                            )
-                        },
-                        {
-                            SegmentedSwitchItem(
-                                icon = Icons.Filled.Delete,
-                                title = customText(CustomTextKey.SETTING_AUTO_DELETE_UPDATE_APK),
-                                summary = stringResource(id = R.string.settings_auto_delete_update_apk_summary),
-                                checked = uiState.autoDeleteUpdateApk,
-                                onCheckedChange = actions.onSetAutoDeleteUpdateApk
-                            )
-                        },
-                        {
-                            SegmentedSwitchItem(
-                                icon = Icons.Filled.DeveloperMode,
-                                title = customText(CustomTextKey.SETTING_WEB_DEBUGGING),
-                                summary = stringResource(id = R.string.enable_web_debugging_summary),
-                                checked = uiState.enableWebDebugging,
-                                onCheckedChange = actions.onSetEnableWebDebugging
-                            )
-                        },
-                        {
-                            SegmentedSwitchItem(
-                                icon = Icons.Filled.FlashOn,
-                                title = customText(CustomTextKey.SETTING_AUTO_JAILBREAK),
-                                summary = stringResource(id = R.string.settings_auto_jailbreak_summary),
-                                enabled = uiState.isLateLoadMode,
-                                checked = uiState.autoJailbreak,
-                                onCheckedChange = actions.onSetAutoJailbreak
-                            )
-                        }
-                    )
-                )
-                }
-            }
-
-            if (uiState.isLkmMode) {
-                SettingsAnchor(SettingsSection.UNINSTALL, anchorRequesters) {
-                SegmentedColumn(
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
-                    content = listOf(
-                        {
-                            val uninstall = customText(CustomTextKey.SETTING_UNINSTALL)
-                            SegmentedListItem(
-                                onClick = { showUninstallDialog.value = true },
-                                enabled = !uiState.isLateLoadMode,
-                                headlineContent = { Text(uninstall) },
-                                leadingContent = { IconTile(Icons.Filled.Delete, uninstall) }
-                            )
-                        }
-                    )
-                )
-                }
-            }
-
-            SettingsAnchor(SettingsSection.DIAGNOSTICS, anchorRequesters) {
-            SegmentedColumn(
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
-                content = listOf(
-                    {
-                        SegmentedListItem(
-                            onClick = { showBottomSheet = true },
-                            headlineContent = { Text(customText(CustomTextKey.SETTING_SEND_LOG)) },
-                            leadingContent = {
-                                IconTile(
-                                    Icons.Filled.BugReport,
-                                    customText(CustomTextKey.SETTING_SEND_LOG)
-                                )
-                            },
-                        )
-                    },
-                    {
-                        val aboutTitle = customText(CustomTextKey.PAGE_ABOUT)
-                        SegmentedListItem(
-                            onClick = actions.onOpenAbout,
-                            headlineContent = { Text(aboutTitle) },
-                            leadingContent = {
-                                IconTile(
-                                    Icons.Filled.Info,
-                                    aboutTitle
-                                )
-                            },
-                        )
-                    }
-                )
-            )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            if (showBottomSheet) {
-                SendLogBottomSheet(
-                    onDismiss = { showBottomSheet = false },
-                    snackbarHostState = snackBarHost,
-                )
-            }
+            GroupEntryColumn(actions = actions)
+            ExtraEntryColumn(actions = actions, registry = anchorRequesters)
             Spacer(modifier = Modifier.height(bottomInnerPadding))
         }
     }
+}
+
+/** 外观与语言：4 行都是 inline 操作，直接在一级页改完，不跳页。 */
+@Composable
+private fun AppearanceColumn(
+    uiState: SettingsUiState,
+    actions: SettingsScreenActions,
+) {
+    val languageSystemLabel = stringResource(id = R.string.settings_language_system)
+    val languageTags = remember { listOf(LocaleHelper.SYSTEM) + LocaleHelper.SUPPORTED_TAGS }
+    val languageNames = remember(languageSystemLabel) {
+        languageTags.map { if (it.isEmpty()) languageSystemLabel else LocaleHelper.displayName(it) }
+    }
+    val themeTitle = customText(CustomTextKey.PAGE_APPEARANCE)
+    val themeStoreTitle = customText(CustomTextKey.PAGE_THEME_STORE)
+
+    SegmentedColumn(
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
+        content = listOf(
+            {
+                SegmentedDropdownItem(
+                    icon = Icons.Filled.DisplaySettings,
+                    title = customText(CustomTextKey.SETTING_UI_MODE),
+                    summary = stringResource(id = R.string.settings_ui_mode_summary),
+                    items = UiMode.entries.map { it.name },
+                    selectedIndex = if (uiState.uiMode == UiMode.Material.value) 1 else 0,
+                    onItemSelected = actions.onSetUiModeIndex
+                )
+            },
+            {
+                SegmentedDropdownItem(
+                    icon = Icons.Rounded.Language,
+                    title = customText(CustomTextKey.SETTING_LANGUAGE),
+                    summary = stringResource(id = R.string.settings_language_summary),
+                    items = languageNames,
+                    selectedIndex = languageTags.indexOf(uiState.appLanguage).coerceAtLeast(0),
+                    onItemSelected = { index -> actions.onSetLanguage(languageTags[index]) }
+                )
+            },
+            {
+                SegmentedListItem(
+                    onClick = actions.onOpenTheme,
+                    headlineContent = { Text(themeTitle) },
+                    supportingContent = { Text(stringResource(id = R.string.settings_theme_summary)) },
+                    leadingContent = { IconTile(Icons.Filled.Palette, themeTitle) },
+                    trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) }
+                )
+            },
+            {
+                SegmentedListItem(
+                    onClick = actions.onOpenThemeStore,
+                    headlineContent = { Text(themeStoreTitle) },
+                    supportingContent = { Text(stringResource(id = R.string.theme_store_summary)) },
+                    leadingContent = { IconTile(Icons.Filled.Storefront, themeStoreTitle) },
+                    trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) }
+                )
+            }
+        )
+    )
+}
+
+/**
+ * 三个分组入口。一级页只保留这一层索引，具体开关都沉到二级页，
+ * 这样一级页永远是一屏能看完的长度。
+ */
+@Composable
+private fun GroupEntryColumn(actions: SettingsScreenActions) {
+    fun entry(
+        title: String,
+        summary: String,
+        icon: androidx.compose.ui.graphics.vector.ImageVector,
+        onClick: () -> Unit
+    ): @Composable () -> Unit = {
+        SegmentedListItem(
+            onClick = onClick,
+            headlineContent = { Text(title) },
+            supportingContent = { Text(summary) },
+            leadingContent = { IconTile(icon, title) },
+            trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) }
+        )
+    }
+
+    SegmentedColumn(
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
+        content = listOf(
+            entry(
+                title = stringResource(R.string.settings_group_module),
+                summary = stringResource(R.string.settings_group_module_summary),
+                icon = Icons.Filled.Extension,
+                onClick = actions.onOpenModuleSettings
+            ),
+            entry(
+                title = stringResource(R.string.settings_group_root_security),
+                summary = stringResource(R.string.settings_group_root_security_summary),
+                icon = Icons.Filled.Security,
+                onClick = actions.onOpenRootSecurity
+            ),
+            entry(
+                title = stringResource(R.string.settings_group_maintenance),
+                summary = stringResource(R.string.settings_group_maintenance_summary),
+                icon = Icons.Filled.BugReport,
+                onClick = actions.onOpenMaintenance
+            )
+        )
+    )
+}
+
+/**
+ * 单独提到一级页的两行：模块投稿与关于。
+ * 二级页里的对应行已删除，避免同一条目两处入口；投稿被暂停时只隐藏模块投稿。
+ */
+@Composable
+private fun ExtraEntryColumn(
+    actions: SettingsScreenActions,
+    registry: MutableMap<String, BringIntoViewRequester>,
+) {
+    val uploadTitle = stringResource(R.string.module_upload_entry_title)
+    val aboutTitle = customText(CustomTextKey.PAGE_ABOUT)
+    SegmentedColumn(
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
+        content = buildList {
+            if (!ModuleContributionPrefs.SUSPENDED) {
+                add {
+                    SettingsAnchor(SettingsSection.MODULE_UPLOAD, registry) {
+                    SegmentedListItem(
+                        onClick = actions.onOpenModuleUpload,
+                        headlineContent = { Text(uploadTitle) },
+                        supportingContent = {
+                            Text(stringResource(R.string.module_upload_entry_summary))
+                        },
+                        leadingContent = { IconTile(Icons.Filled.Publish, uploadTitle) },
+                        trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) }
+                    )
+                    }
+                }
+            }
+            add {
+                SettingsAnchor(SettingsSection.ABOUT, registry) {
+                SegmentedListItem(
+                    onClick = actions.onOpenAbout,
+                    headlineContent = { Text(aboutTitle) },
+                    leadingContent = { IconTile(Icons.Filled.Info, aboutTitle) },
+                    trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) }
+                )
+                }
+            }
+        }
+    )
 }
 
 @Composable
@@ -696,11 +283,20 @@ private fun SettingsAnchor(
 
 @Composable
 private fun TopBar(
-    scrollBehavior: TopAppBarScrollBehavior? = null
+    scrollBehavior: TopAppBarScrollBehavior? = null,
+    onSearch: () -> Unit,
 ) {
     val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
     LargeFlexibleTopAppBar(
         title = { Text(customText(CustomTextKey.PAGE_SETTINGS)) },
+        actions = {
+            IconButton(onClick = onSearch) {
+                Icon(
+                    Icons.Filled.Search,
+                    contentDescription = stringResource(R.string.settings_search_title)
+                )
+            }
+        },
         colors = expressiveTopAppBarColors(
             containerColor = if (hasCustomBackground) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer,
             scrolledContainerColor = if (hasCustomBackground) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer,

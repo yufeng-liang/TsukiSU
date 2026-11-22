@@ -198,6 +198,7 @@ fun BackupScreen(viewModel: BackupViewModel = viewModel()) {
                         val confirmed = confirmDialog.awaitConfirm(
                             title = partitionConfirmTitle,
                             content = body,
+                            destructive = true,
                         ) == ConfirmResult.Confirmed
                         if (confirmed) {
                             viewModel.restoreSelected(chosen, deduped = chosen.size < selection.size)
@@ -215,6 +216,7 @@ fun BackupScreen(viewModel: BackupViewModel = viewModel()) {
                                 chosen.size,
                             ),
                             content = restoreManyConfirmBody,
+                            destructive = true,
                         ) == ConfirmResult.Confirmed
                         if (confirmed) {
                             viewModel.restoreSelected(chosen, deduped = chosen.size < selection.size)
@@ -228,6 +230,7 @@ fun BackupScreen(viewModel: BackupViewModel = viewModel()) {
                         val confirmed = confirmDialog.awaitConfirm(
                             title = repoRestoreConfirmTitle,
                             content = repoRestoreConfirmBody,
+                            destructive = true,
                         ) == ConfirmResult.Confirmed
                         if (confirmed) {
                             viewModel.restoreSelected(chosen, deduped = chosen.size < selection.size)
@@ -264,6 +267,7 @@ fun BackupScreen(viewModel: BackupViewModel = viewModel()) {
                             originLabel,
                             checked.size,
                         ),
+                        destructive = true,
                     ) == ConfirmResult.Confirmed
                     if (confirmed) viewModel.deleteChecked()
                 }
@@ -286,6 +290,7 @@ fun BackupScreen(viewModel: BackupViewModel = viewModel()) {
                             groups.size,
                             groups.sumOf { it.rows.size },
                         ),
+                        destructive = true,
                     ) == ConfirmResult.Confirmed
                     if (confirmed) viewModel.deleteSelected()
                 }
