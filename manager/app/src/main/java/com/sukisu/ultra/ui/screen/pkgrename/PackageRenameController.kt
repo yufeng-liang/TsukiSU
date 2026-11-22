@@ -6,6 +6,7 @@ import com.sukisu.ultra.core.pkgrename.PackageRenameCoordinator
 import com.sukisu.ultra.core.pkgrename.RegistrationFailed
 import com.sukisu.ultra.core.pkgrename.RenameJournal
 import com.sukisu.ultra.ksuApp
+import com.sukisu.ultra.ui.util.isPackageInstalled
 import com.sukisu.ultra.ui.util.removeDynamicManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -163,11 +164,23 @@ internal object PackageRenameController {
      */
     fun refreshJournal(context: Context) {
         if (busy || _state.value.unregisteredPackage != null || _state.value.finishedPackage != null) return
-        val pending = RenameJournal.read(context.applicationContext) ?: return
-        _state.value = _state.value.copy(
-            unregisteredPackage = pending.newPackage,
-            previousPackage = pending.oldPackage.ifBlank { null },
-        )
+        val appContext = context.applicationContext
+        val pending = RenameJournal.read(appContext) ?: return
+        scope.launch {
+            // 用户在安装器上点了取消：journal 已经写下但包根本没装上，
+            // 不清掉的话每次进页面都报「已装未登记」，还会反复跑无效的登记尝试
+            if (!isPackageInstalled(pending.newPackage)) {
+                if (!busy) RenameJournal.clear(appContext)
+                return@launch
+            }
+            if (busy || _state.value.unregisteredPackage != null || _state.value.finishedPackage != null) {
+                return@launch
+            }
+            _state.value = _state.value.copy(
+                unregisteredPackage = pending.newPackage,
+                previousPackage = pending.oldPackage.ifBlank { null },
+            )
+        }
     }
 
     /** 页面上的本地校验失败（如没有「安装未知应用」权限）也走同一个错误位。 */

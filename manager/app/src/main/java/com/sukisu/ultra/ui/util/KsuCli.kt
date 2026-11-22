@@ -1618,6 +1618,14 @@ private fun putFixedAscii(out: java.nio.ByteBuffer, value: String, size: Int) {
     out.put(bytes, 0, n)
     out.put(ByteArray(size - n))
 }
+/**
+ * 目标包是否真的装在了设备上。
+ *
+ * 读 /data/system/packages.list（root），不受 Android 11 起的包可见性限制；
+ * 换包名恢复流程用它判断「安装器被取消」与「装上但没登记」这两种情况。
+ */
+suspend fun isPackageInstalled(packageName: String): Boolean = lookupAppId(packageName) != null
+
 suspend fun getDynamicManagers(): DynamicManagerState {
     nativeDynamicManagerCall(DM_OP_GET)?.let { (rc, lines) ->
         if (rc == 0) return parseDynamicManagerState(lines)
