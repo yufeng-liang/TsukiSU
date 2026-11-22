@@ -108,4 +108,61 @@ class ThemePackageExportTest {
             file.delete()
         }
     }
+
+    @Test
+    fun exportsV6PackageWithDynamicWallpaper() = runBlocking {
+        val file = File.createTempFile("sukisu-theme-export", ".sukisu")
+        val wallpaper = File.createTempFile("dynamic-wallpaper", ".webp")
+        try {
+            wallpaper.writeBytes(
+                byteArrayOf(
+                    'R'.code.toByte(), 'I'.code.toByte(), 'F'.code.toByte(), 'F'.code.toByte(),
+                    0, 0, 0, 0,
+                    'W'.code.toByte(), 'E'.code.toByte(), 'B'.code.toByte(), 'P'.code.toByte(),
+                ) + ByteArray(32),
+            )
+            val data = ThemePackageData(
+                dynamic = DynamicWallpaperPackage(
+                    hasWallpaper = true,
+                    hasHomeCard = false,
+                    wallpaperTransform = DynamicWallpaperGeometry(
+                        fit = 0,
+                        zoom = 1.5f,
+                        offsetX = -0.25f,
+                        offsetY = 0.1f,
+                    ),
+                ),
+            )
+
+            ThemePackageStorage.exportToFile(
+                file = file,
+                data = data,
+                backgroundFile = null,
+                dynamicWallpaperFile = wallpaper,
+            ).getOrThrow()
+
+            val plain = ThemePackageCrypto.decrypt(file.readBytes())
+            val entries = mutableMapOf<String, ByteArray>()
+            ZipInputStream(ByteArrayInputStream(plain)).use { zip ->
+                var entry = zip.nextEntry
+                while (entry != null) {
+                    entries[entry.name] = zip.readBytes()
+                    zip.closeEntry()
+                    entry = zip.nextEntry
+                }
+            }
+            val decoded = json.decodeFromString(
+                ThemePackageData.serializer(),
+                entries.getValue("theme.json").toString(Charsets.UTF_8),
+            )
+            assertEquals(ThemePackageStorage.DYNAMIC_VERSION, decoded.version)
+            assertEquals(true, decoded.dynamic?.hasWallpaper ?: false)
+            assertEquals(false, decoded.dynamic?.hasHomeCard ?: true)
+            assertEquals(1.5f, decoded.dynamic?.wallpaperTransform?.zoom ?: 0f, 0f)
+            assertTrue(entries.containsKey("dynamic_wallpaper"))
+        } finally {
+            file.delete()
+            wallpaper.delete()
+        }
+    }
 }

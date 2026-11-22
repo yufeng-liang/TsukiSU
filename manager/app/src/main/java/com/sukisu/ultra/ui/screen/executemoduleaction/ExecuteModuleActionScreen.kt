@@ -5,6 +5,7 @@ import androidx.activity.compose.LocalActivity
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -13,13 +14,20 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.dropUnlessResumed
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import kotlinx.coroutines.launch
 import com.sukisu.ultra.ui.LocalUiMode
 import com.sukisu.ultra.ui.UiMode
 import com.sukisu.ultra.ui.navigation3.LocalNavigator
 
 @Composable
-fun ExecuteModuleActionScreen(moduleId: String, fromShortcut: Boolean = false) {
+fun ExecuteModuleActionScreen(
+    moduleId: String,
+    fromShortcut: Boolean = false,
+    onBackEnabledChange: (Boolean) -> Unit = {},
+) {
     val navigator = LocalNavigator.current
     val context = LocalContext.current
     val activity = LocalActivity.current
@@ -29,6 +37,7 @@ fun ExecuteModuleActionScreen(moduleId: String, fromShortcut: Boolean = false) {
     var isComplete by rememberSaveable { mutableStateOf(false) }
     val uiMode = LocalUiMode.current
     val snackbarHost = remember { SnackbarHostState() }
+    val backEnabled = isComplete
     val exitExecute = {
         if (fromShortcut && activity != null) {
             activity.finishAndRemoveTask()
@@ -36,6 +45,13 @@ fun ExecuteModuleActionScreen(moduleId: String, fromShortcut: Boolean = false) {
             navigator.pop()
         }
     }
+
+    SideEffect { onBackEnabledChange(backEnabled) }
+    NavigationBackHandler(
+        state = rememberNavigationEventState(NavigationEventInfo.None),
+        isBackEnabled = !backEnabled,
+        onBackCompleted = {},
+    )
 
     fun showMessage(message: String) {
         scope.launch {
@@ -71,8 +87,8 @@ fun ExecuteModuleActionScreen(moduleId: String, fromShortcut: Boolean = false) {
         isComplete = isComplete,
     )
     val actions = ExecuteModuleActionScreenActions(
-        onBack = dropUnlessResumed { navigator.pop() },
-        onSaveLog = saveLog(logContent, scope) { showMessage(it) },
+        onBack = dropUnlessResumed { if (backEnabled) exitExecute() },
+        onSaveLog = saveLog(logContent, scope, fallbackText = text) { showMessage(it) },
         onClose = exitExecute,
     )
 

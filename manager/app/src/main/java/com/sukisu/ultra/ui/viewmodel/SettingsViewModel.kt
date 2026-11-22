@@ -45,6 +45,8 @@ import com.sukisu.ultra.ui.util.AdaptiveThemeStore
 import com.sukisu.ultra.ui.util.AdaptiveThemeVariantState
 import com.sukisu.ultra.ui.util.AppearanceOverlayData
 import com.sukisu.ultra.ui.util.AppearanceOverlayStore
+import com.sukisu.ultra.ui.component.background.DynamicWallpaperTarget
+import com.sukisu.ultra.ui.component.background.DynamicWallpaperTransform
 import com.sukisu.ultra.ui.util.ImageStorage
 import com.sukisu.ultra.ui.util.ImportedThemeVariant
 import com.sukisu.ultra.ui.util.ThemePackageAdaptiveExport
@@ -586,6 +588,191 @@ homePillScale = HomeStatusStyle.coercePillScale(repo.homePillScale),
                 )
             }
         }
+    }
+
+    fun stageDynamicWallpaper(
+        context: Context,
+        uri: Uri,
+        onResult: (ImageStorage.DynamicWallpaperResult) -> Unit,
+    ) {
+        viewModelScope.launch {
+            val result = try {
+                ImageStorage.stageDynamicWallpaper(context, uri)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                ImageStorage.DynamicWallpaperResult.Failed
+            }
+            onResult(result)
+        }
+    }
+
+    fun commitDynamicWallpaper(
+        context: Context,
+        stagedPath: String,
+        target: DynamicWallpaperTarget = DynamicWallpaperTarget.APP,
+        onResult: (Boolean) -> Unit,
+    ) {
+        viewModelScope.launch {
+            val result = try {
+                when (target) {
+                    DynamicWallpaperTarget.APP ->
+                        ImageStorage.commitStagedDynamicWallpaper(context, stagedPath)
+
+                    DynamicWallpaperTarget.CARD ->
+                        ImageStorage.commitStagedDynamicHomeCard(context, stagedPath)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            if (result is ImageStorage.DynamicWallpaperResult.Ready) {
+                ImageStorage.discardStagedDynamicWallpaper(stagedPath)
+                val updatedAt = System.currentTimeMillis()
+                when (target) {
+                    DynamicWallpaperTarget.APP -> {
+                        repo.dynamicWallpaperPath = result.path
+                        repo.dynamicWallpaperUpdatedAt = updatedAt
+                        _uiState.update {
+                            it.copy(
+                                dynamicWallpaperPath = result.path,
+                                dynamicWallpaperUpdatedAt = updatedAt,
+                            )
+                        }
+                    }
+
+                    DynamicWallpaperTarget.CARD -> {
+                        repo.dynamicHomeCardPath = result.path
+                        repo.dynamicHomeCardUpdatedAt = updatedAt
+                        _uiState.update {
+                            it.copy(
+                                dynamicHomeCardPath = result.path,
+                                dynamicHomeCardUpdatedAt = updatedAt,
+                            )
+                        }
+                    }
+                }
+                onResult(true)
+            } else {
+                onResult(false)
+            }
+        }
+    }
+
+    fun clearDynamicWallpaper(
+        context: Context,
+        target: DynamicWallpaperTarget = DynamicWallpaperTarget.APP,
+        onDone: () -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            try {
+                when (target) {
+                    DynamicWallpaperTarget.APP -> ImageStorage.clearDynamicWallpaper(context)
+                    DynamicWallpaperTarget.CARD -> ImageStorage.clearDynamicHomeCard(context)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // 文件删不掉也要继续清空设置，否则界面会一直显示旧壁纸。
+            }
+            val updatedAt = System.currentTimeMillis()
+            when (target) {
+                DynamicWallpaperTarget.APP -> {
+                    repo.dynamicWallpaperPath = ""
+                    repo.dynamicWallpaperUpdatedAt = updatedAt
+                    _uiState.update {
+                        it.copy(
+                            dynamicWallpaperPath = "",
+                            dynamicWallpaperUpdatedAt = updatedAt,
+                        )
+                    }
+                }
+
+                DynamicWallpaperTarget.CARD -> {
+                    repo.dynamicHomeCardPath = ""
+                    repo.dynamicHomeCardUpdatedAt = updatedAt
+                    _uiState.update {
+                        it.copy(
+                            dynamicHomeCardPath = "",
+                            dynamicHomeCardUpdatedAt = updatedAt,
+                        )
+                    }
+                }
+            }
+            onDone()
+        }
+    }
+
+    fun setDynamicWallpaperTransform(
+        target: DynamicWallpaperTarget,
+        transform: DynamicWallpaperTransform,
+    ) {
+        val sanitized = transform.sanitized()
+        when (target) {
+            DynamicWallpaperTarget.APP -> {
+                repo.dynamicWallpaperFit = sanitized.fit.value
+                repo.dynamicWallpaperZoom = sanitized.zoom
+                repo.dynamicWallpaperOffsetX = sanitized.offsetX
+                repo.dynamicWallpaperOffsetY = sanitized.offsetY
+                _uiState.update {
+                    it.copy(
+                        dynamicWallpaperFit = sanitized.fit.value,
+                        dynamicWallpaperZoom = sanitized.zoom,
+                        dynamicWallpaperOffsetX = sanitized.offsetX,
+                        dynamicWallpaperOffsetY = sanitized.offsetY,
+                    )
+                }
+            }
+
+            DynamicWallpaperTarget.CARD -> {
+                repo.dynamicHomeCardFit = sanitized.fit.value
+                repo.dynamicHomeCardZoom = sanitized.zoom
+                repo.dynamicHomeCardOffsetX = sanitized.offsetX
+                repo.dynamicHomeCardOffsetY = sanitized.offsetY
+                _uiState.update {
+                    it.copy(
+                        dynamicHomeCardFit = sanitized.fit.value,
+                        dynamicHomeCardZoom = sanitized.zoom,
+                        dynamicHomeCardOffsetX = sanitized.offsetX,
+                        dynamicHomeCardOffsetY = sanitized.offsetY,
+                    )
+                }
+            }
+        }
+    }
+
+    fun setDynamicWallpaperMuted(muted: Boolean) {
+        repo.dynamicWallpaperMuted = muted
+        _uiState.update { it.copy(dynamicWallpaperMuted = muted) }
+    }
+
+    fun setDynamicWallpaperFps(fps: Int) {
+        val coerced = if (fps in intArrayOf(0, 24, 30, 60)) fps else 0
+        repo.dynamicWallpaperFps = coerced
+        _uiState.update { it.copy(dynamicWallpaperFps = coerced) }
+    }
+
+    fun setDynamicWallpaperSpeed(speed: Float) {
+        val coerced = speed.coerceIn(0.25f, 2f)
+        repo.dynamicWallpaperSpeed = coerced
+        _uiState.update { it.copy(dynamicWallpaperSpeed = coerced) }
+    }
+
+    fun setTopBarSectionExpanded(expanded: Boolean) {
+        repo.topBarSectionExpanded = expanded
+        _uiState.update { it.copy(topBarSectionExpanded = expanded) }
+    }
+
+    fun setTopBarStyle(style: Int) {
+        val coerced = style.coerceIn(0, 2)
+        repo.topBarStyle = coerced
+        _uiState.update { it.copy(topBarStyle = coerced) }
+    }
+
+    fun setTopBarPillFade(enabled: Boolean) {
+        repo.topBarPillFade = enabled
+        _uiState.update { it.copy(topBarPillFade = enabled) }
     }
 
     fun setCardBackgroundAlphaPercent(percent: Int) {

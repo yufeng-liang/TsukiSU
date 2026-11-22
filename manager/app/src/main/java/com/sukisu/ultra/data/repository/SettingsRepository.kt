@@ -5,7 +5,31 @@ import com.sukisu.ultra.ui.util.HomeCardSticker
 interface SettingsRepository {
     var customBackgroundUri: String
     var customBackgroundUpdatedAt: Long
-    /** Use the launcher wallpaper as the app background instead of [customBackgroundUri]. */
+
+    /** App-private MP4/WebP played behind the whole app; empty when disabled. */
+    var dynamicWallpaperPath: String
+    var dynamicWallpaperUpdatedAt: Long
+    var dynamicWallpaperMuted: Boolean
+
+    /** Geometry of the app-wide dynamic wallpaper (see DynamicWallpaperFit values). */
+    var dynamicWallpaperFit: Int
+    var dynamicWallpaperZoom: Float
+    var dynamicWallpaperOffsetX: Float
+    var dynamicWallpaperOffsetY: Float
+
+    /** Draw cap for every dynamic wallpaper; 0 follows the display. */
+    var dynamicWallpaperFps: Int
+    /** Video playback rate for every dynamic wallpaper (0.25x-2x). */
+    var dynamicWallpaperSpeed: Float
+
+    /** App-private MP4/WebP used as the home status card background; empty when disabled. */
+    var dynamicHomeCardPath: String
+    var dynamicHomeCardUpdatedAt: Long
+    var dynamicHomeCardFit: Int
+    var dynamicHomeCardZoom: Float
+    var dynamicHomeCardOffsetX: Float
+    var dynamicHomeCardOffsetY: Float
+
     var useSystemWallpaper: Boolean
     /**
      * Derive the theme key color from the active background image. This and [keyColor] are
@@ -24,6 +48,7 @@ interface SettingsRepository {
     var homeCardSectionExpanded: Boolean
     var colorsSectionExpanded: Boolean
     var bottomBarSectionExpanded: Boolean
+    var topBarSectionExpanded: Boolean
     var interactionSectionExpanded: Boolean
     var detailsSectionExpanded: Boolean
     var customHomeTitle: String
@@ -97,6 +122,10 @@ interface SettingsRepository {
     var enableProgressiveBlur: Boolean
     var enableFloatingBottomBar: Boolean
     var enableFloatingBottomBarBlur: Boolean
+    /** [com.sukisu.ultra.ui.theme.TopBarStyle] value: standard, floating or floating glass. */
+    var topBarStyle: Int
+    /** Fade the floating top bar control backgrounds in while the page scrolls. */
+    var topBarPillFade: Boolean
     var enableNavigationBadge: Boolean
     var navigationRailExpanded: Boolean
     var pageScale: Float

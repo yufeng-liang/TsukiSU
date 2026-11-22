@@ -9,9 +9,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -41,6 +43,7 @@ import com.sukisu.ultra.ui.screen.executemoduleaction.ExecuteModuleActionUiState
 import com.sukisu.ultra.ui.screen.executemoduleaction.saveLog
 import com.sukisu.ultra.ui.screen.flash.FlashIt
 import com.sukisu.ultra.ui.viewmodel.ScriptRunViewModel
+import com.sukisu.ultra.ui.navigation3.deleteExternalZipCache
 import java.text.DateFormat
 import java.util.Date
 import java.util.UUID
@@ -70,8 +73,16 @@ fun ScriptRunScreen(arg: ScriptRunArg, onBackEnabledChange: (Boolean) -> Unit) {
     )
     // ViewModels here live as long as the activity: free the extraction when the page goes away.
     val activity = LocalActivity.current
+    var handedOffToFlash by remember { mutableStateOf(false) }
     DisposableEffect(viewModel) {
-        onDispose { if (activity?.isChangingConfigurations != true) viewModel.leave() }
+        onDispose {
+            if (activity?.isChangingConfigurations != true) {
+                viewModel.leave()
+                if (!handedOffToFlash) {
+                    deleteExternalZipCache(context, arg.uri)
+                }
+            }
+        }
     }
 
     if (state.phase == ScriptRunPhase.RUNNING || state.phase == ScriptRunPhase.FINISHED) {
@@ -135,7 +146,10 @@ fun ScriptRunScreen(arg: ScriptRunArg, onBackEnabledChange: (Boolean) -> Unit) {
             }
         },
         onInstallAsModule = {
-            if (arg.offerInstall) navigator.replace(Route.Flash(FlashIt.FlashModules(listOf(arg.uri))))
+            if (arg.offerInstall) {
+                handedOffToFlash = true
+                navigator.replace(Route.Flash(FlashIt.FlashModules(listOf(arg.uri))))
+            }
         },
     )
 

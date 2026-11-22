@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
@@ -26,7 +27,6 @@ import androidx.compose.material3.ExpandedFullScreenContainedSearchBar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
@@ -59,6 +59,7 @@ import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.nav.gesture.WindowNavigationEventBridge
 import com.sukisu.ultra.ui.theme.LocalBackgroundImagePath
 import com.sukisu.ultra.ui.theme.backgroundAwareColor
+import com.sukisu.ultra.ui.theme.LocalTopBarStyle
 
 @Composable
 fun SearchAppBar(
@@ -192,7 +193,15 @@ fun SearchAppBar(
     }
 
     val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
-    Surface(color = if (hasCustomBackground) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer) {
+    val floatingTopBar = LocalTopBarStyle.current.isFloating
+    Surface(
+        color = if (floatingTopBar || hasCustomBackground) {
+            // Floating chrome has no full-width bar surface; only the search pill is painted.
+            Color.Transparent
+        } else {
+            MaterialTheme.colorScheme.surfaceContainer
+        }
+    ) {
         Column(
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -213,11 +222,27 @@ fun SearchAppBar(
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
                     .padding(horizontal = 16.dp)
-                    .padding(bottom = 13.dp),
+                    .padding(bottom = 13.dp)
+                    // The MD3E field defaults to 56dp, which reads noticeably taller than the
+                    // Miuix search pill and the floating bars' own controls. Pin the collapsed
+                    // bar to 48dp; the input field's internal min height is coerced, so the
+                    // icons and query text stay vertically centred.
+                    .height(48.dp),
 
                 state = searchBarState,
                 inputField = inputField,
-                colors = SearchBarDefaults.colors(containerColor = backgroundAwareColor(MaterialTheme.colorScheme.surfaceContainerHighest)),
+                colors = SearchBarDefaults.colors(
+                    // Floating chrome sits on the blurred band, so the field is glass rather than
+                    // an opaque tonal block; the glass style sits lighter still. The standard bar
+                    // keeps the background-aware colour.
+                    containerColor = if (floatingTopBar) {
+                        MaterialTheme.colorScheme.surfaceContainerHighest.copy(
+                            alpha = if (LocalTopBarStyle.current.isGlass) 0.3f else 0.55f,
+                        )
+                    } else {
+                        backgroundAwareColor(MaterialTheme.colorScheme.surfaceContainerHighest)
+                    },
+                ),
             )
 
             bottomProgress()

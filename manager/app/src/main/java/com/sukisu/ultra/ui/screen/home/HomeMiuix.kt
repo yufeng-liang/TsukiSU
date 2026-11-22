@@ -3,10 +3,12 @@ package com.sukisu.ultra.ui.screen.home
 import com.sukisu.ultra.data.column.ColumnProgressEntry
 import androidx.compose.foundation.background
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -33,12 +35,19 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material.icons.rounded.CheckCircleOutline
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -93,18 +102,23 @@ import com.sukisu.ultra.ui.util.rememberBlurBackdrop
 import androidx.compose.ui.draw.alpha
 import com.sukisu.ultra.ui.util.AiSharedTransition
 import com.sukisu.ultra.ui.util.aiSharedElement
+import com.sukisu.ultra.ui.component.background.DynamicWallpaperBackground
+import com.sukisu.ultra.ui.theme.AiAssistantMaterialTheme
+import com.sukisu.ultra.ui.theme.LocalDynamicWallpaperActive
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import com.sukisu.ultra.ui.component.Storefront
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
+import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.TopAppBarDefaults
+import com.sukisu.ultra.ui.component.miuix.TopAppBar
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.preference.ArrowPreference
@@ -251,7 +265,7 @@ private fun UpdateCard(
     val updateDialog = rememberConfirmDialog(onConfirm = { actions.onReleaseUpdateClick() })
 
     AnimatedVisibility(
-        visible = state.hasUpdate,
+        visible = state.hasUpdate && state.showReleaseUpdatePrompt,
         enter = fadeIn() + expandVertically(),
         exit = shrinkVertically() + fadeOut()
     ) {
@@ -274,6 +288,115 @@ private fun UpdateCard(
     }
 }
 
+/**
+ * Live self-update card under the status hero. It replaces the update prompt
+ * while a download runs, then switches to install/restart wording. Miuix:
+ * standard AppCard surface, 16 dp content padding and the library's own
+ * progress indicators.
+ */
+@Composable
+private fun UpdateProgressCard(state: HomeUiState) {
+    val progress = state.updateProgress ?: return
+    val failed = progress.stage == UpdateStage.FAILED
+    val settled = progress.stage == UpdateStage.COMPLETED ||
+        progress.stage == UpdateStage.AWAITING_USER
+    val titleColor = when {
+        failed -> colorScheme.error
+        settled -> colorScheme.onSecondaryContainer
+        else -> colorScheme.onSurfaceContainer
+    }
+    val detailColor = when {
+        failed -> colorScheme.error
+        settled -> colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
+        else -> colorScheme.onSurfaceVariantSummary
+    }
+    val cardColors = when {
+        failed -> backgroundAwareCardColors(
+            color = colorScheme.errorContainer,
+            contentColor = colorScheme.onErrorContainer,
+        )
+
+        settled -> backgroundAwareCardColors(
+            color = colorScheme.secondaryContainer,
+            contentColor = colorScheme.onSecondaryContainer,
+        )
+
+        else -> backgroundAwareCardColors()
+    }
+
+    AppCard(
+        modifier = Modifier.fillMaxWidth(),
+        colors = cardColors,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = updateProgressTitle(progress),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = titleColor,
+                    )
+                    updateProgressDetail(progress)?.let { detail ->
+                        Text(
+                            text = detail,
+                            fontSize = 12.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = detailColor,
+                        )
+                    }
+                }
+                when {
+                    failed -> Icon(
+                        imageVector = Icons.Default.Error,
+                        contentDescription = null,
+                        tint = colorScheme.error,
+                    )
+
+                    settled -> Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = colorScheme.primary,
+                    )
+
+                    else -> Icon(
+                        imageVector = Icons.Default.Download,
+                        contentDescription = null,
+                        tint = colorScheme.primary,
+                    )
+                }
+            }
+            when {
+                progress.stage == UpdateStage.DOWNLOADING && progress.percent != null -> {
+                    val animatedProgress by animateFloatAsState(
+                        targetValue = (progress.percent ?: 0) / 100f,
+                        label = "UpdateDownloadProgress",
+                    )
+                    LinearProgressIndicator(
+                        progress = animatedProgress,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                progress.isRunning -> Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    InfiniteProgressIndicator()
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun TopBar(
     title: String,
@@ -282,9 +405,14 @@ private fun TopBar(
     barColor: Color,
     onOpenThemeStore: () -> Unit = {},
 ) {
+    val barColor = if (backdrop != null || LocalBackgroundImagePath.current.isNotEmpty()) {
+        Color.Transparent
+    } else {
+        colorScheme.surface
+    }
     BlurredBar(backdrop = backdrop, scrollBehavior = scrollBehavior) {
         TopAppBar(
-            color = Color.Transparent,
+            color = barColor,
             title = customText(CustomTextKey.HOME_TITLE),
             navigationIcon = {
                 IconButton(onClick = onOpenThemeStore) {
@@ -396,36 +524,73 @@ private fun ActiveStatusCard(
         )
     }
 
-    AppCard(
+    var dynamicCardFailed by remember(
+        state.dynamicHomeCardPath,
+        state.dynamicHomeCardUpdatedAt,
+    ) { mutableStateOf(false) }
+    val dynamicCardPath = state.dynamicHomeCardPath.takeIf { it.isNotEmpty() && !dynamicCardFailed }
+    val hasCardImage = dynamicCardPath != null || cardImagePainter != null
+    val cardShape = RoundedCornerShape(CardDefaults.CornerRadius)
+    val showingDynamicMedia = dynamicCardPath != null || LocalDynamicWallpaperActive.current
+    val dynamicBorderColor = if (isDark) {
+        Color.White.copy(alpha = 0.28f)
+    } else {
+        colorScheme.onSurface.copy(alpha = 0.12f)
+    }
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(CardDefaults.CornerRadius))
+            .clip(cardShape)
             .then(
-                if (cardImagePainter != null) {
-                    Modifier.drawPainterCover(cardImagePainter)
+                if (showingDynamicMedia) {
+                    Modifier.border(1.dp, dynamicBorderColor, cardShape)
                 } else {
                     Modifier
                 }
-            ),
-        colors = CardDefaults.defaultColors(
-            color = if (cardImagePainter != null) {
-                Color.Transparent
-            } else {
-                backgroundAwareColor(
-                    when {
-                        isDynamicColor -> colorScheme.secondaryContainer
-                        isDark -> Color(0xFF1A3825)
-                        else -> Color(0xFFDFFAE4)
-                    }
+            )
+    ) {
+        if (dynamicCardPath != null) {
+            key(dynamicCardPath, state.dynamicHomeCardUpdatedAt) {
+                DynamicWallpaperBackground(
+                    path = dynamicCardPath,
+                    muted = true,
+                    transform = state.dynamicHomeCardTransform,
+                    fps = state.dynamicPlaybackFps,
+                    speed = state.dynamicPlaybackSpeed,
+                    modifier = Modifier.matchParentSize(),
+                    onError = { dynamicCardFailed = true },
                 )
             }
-        ),
-        onClick = onClick,
-        showIndication = !state.isLateLoadMode,
-        pressFeedbackType = PressFeedbackType.Tilt
-    ) {
+        }
+        AppCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (dynamicCardPath == null && cardImagePainter != null) {
+                        Modifier.drawPainterCover(cardImagePainter)
+                    } else {
+                        Modifier
+                    }
+                ),
+            colors = CardDefaults.defaultColors(
+                color = if (hasCardImage) {
+                    Color.Transparent
+                } else {
+                    backgroundAwareColor(
+                        when {
+                            isDynamicColor -> colorScheme.secondaryContainer
+                            isDark -> Color(0xFF1A3825)
+                            else -> Color(0xFFDFFAE4)
+                        }
+                    )
+                }
+            ),
+            onClick = onClick,
+            showIndication = !state.isLateLoadMode,
+            pressFeedbackType = PressFeedbackType.Tilt
+        ) {
         BoxWithConstraints {
-            if (!(state.homeCardImagePath.isNotEmpty() && state.hideHomeCardDecoration)) {
+            if (!(hasCardImage && state.hideHomeCardDecoration)) {
                 Icon(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
@@ -477,7 +642,7 @@ private fun ActiveStatusCard(
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (!(state.homeCardImagePath.isNotEmpty() && state.hideHomeCardStatusText)) {
+                    if (!(hasCardImage && state.hideHomeCardStatusText)) {
                         Text(
                             text = customText(CustomTextKey.HOME_STATUS_WORKING),
                             fontSize = 36.sp,
@@ -500,6 +665,7 @@ private fun ActiveStatusCard(
                 cardWidth = maxWidth,
             )
         }
+    }
     }
 }
 

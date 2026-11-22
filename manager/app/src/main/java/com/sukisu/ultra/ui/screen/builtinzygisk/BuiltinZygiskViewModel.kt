@@ -10,12 +10,18 @@ import com.sukisu.ultra.ui.util.getInjectedZygiskModules
 import com.sukisu.ultra.ui.util.getZygiskImplementationInfo
 import com.sukisu.ultra.ui.util.setBuiltinZygiskConfig
 import com.sukisu.ultra.ui.util.switchToZygisk
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private val zygiskSwitchScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
 class BuiltinZygiskViewModel(
     private val moduleRepo: ModuleRepository = ModuleRepositoryImpl()
@@ -23,6 +29,7 @@ class BuiltinZygiskViewModel(
 
     private val _uiState = MutableStateFlow(BuiltinZygiskUiState())
     val uiState = _uiState.asStateFlow()
+    private var pendingSwitch: Deferred<Boolean>? = null
 
     fun load() {
         viewModelScope.launch {
@@ -59,20 +66,17 @@ class BuiltinZygiskViewModel(
         }
     }
 
-    /**
-     * Hands Zygisk to `target` and leaves the panel to the caller.
-     *
-     * The switch runs in the background: selecting a provider closes this dashboard and
-     * asks for a restart anyway, so waiting here would only keep a panel the user cannot
-     * use any more on screen.
-     */
     fun switchInBackground(target: String, onResult: (Boolean) -> Unit) {
-        viewModelScope.launch(Dispatchers.IO) {
+        if (pendingSwitch?.isActive == true) return
+        val deferred = zygiskSwitchScope.async {
             val ok = switchToZygisk(target)
-            // Toasts and Compose state belong to the main thread.
             withContext(Dispatchers.Main) { onResult(ok) }
+            ok
         }
+        pendingSwitch = deferred
     }
+
+    suspend fun awaitPendingSwitch(): Boolean = pendingSwitch?.await() ?: true
 
     /** Opens or closes the process rows of an injected module. */
     fun toggleInjectedModule(id: String) {

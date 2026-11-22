@@ -30,7 +30,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon as MaterialIcon
 import androidx.compose.material3.IconButton as MaterialIconButton
-import androidx.compose.material3.TopAppBar
+import com.sukisu.ultra.ui.component.material.TopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface

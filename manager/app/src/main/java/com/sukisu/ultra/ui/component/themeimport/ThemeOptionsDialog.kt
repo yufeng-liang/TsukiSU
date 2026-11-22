@@ -63,6 +63,8 @@ fun ThemeOptionsDialog(
     hasCustomColors: Boolean = false,
     hasImageEffects: Boolean = false,
     hasBottomBarIcons: Boolean = false,
+    hasDynamicWallpaper: Boolean = false,
+    hasDynamicHomeCard: Boolean = false,
     onUpload: ((ThemePackageOptions) -> Unit)? = null,
 ) {
     if (!show) return
@@ -86,6 +88,8 @@ fun ThemeOptionsDialog(
     var interactionBehavior by rememberSaveable { mutableStateOf(true) }
     var moduleDisplay by rememberSaveable { mutableStateOf(true) }
     var bottomBarIcons by rememberSaveable { mutableStateOf(true) }
+    var dynamicWallpaper by rememberSaveable { mutableStateOf(true) }
+    var dynamicHomeCard by rememberSaveable { mutableStateOf(true) }
 
     val selectedTextGroups = buildSet {
         if (customTextHome) add(CustomTextGroup.HOME)
@@ -120,6 +124,8 @@ fun ThemeOptionsDialog(
         customColors = customColors && hasCustomColors,
         imageEffects = imageEffects && hasImageEffects,
         bottomBarIcons = bottomBarIcons && hasBottomBarIcons,
+        dynamicWallpaper = dynamicWallpaper && hasDynamicWallpaper,
+        dynamicHomeCard = dynamicHomeCard && hasDynamicHomeCard,
     )
 
     when (if (forceMaterial) UiMode.Material else LocalUiMode.current) {
@@ -171,6 +177,15 @@ fun ThemeOptionsDialog(
                                     )
                                 }
                             }
+                            if (hasDynamicWallpaper) {
+                                item {
+                                    MiuixOptionRow(
+                                        title = stringResource(R.string.theme_opt_dynamic_wallpaper),
+                                        checked = dynamicWallpaper,
+                                        onCheckedChange = { dynamicWallpaper = it },
+                                    )
+                                }
+                            }
                             item {
                                 MiuixOptionRow(
                                     title = stringResource(R.string.theme_opt_background_appearance),
@@ -195,6 +210,15 @@ fun ThemeOptionsDialog(
                                         title = stringResource(R.string.theme_opt_home_card_image),
                                         checked = homeCardImage,
                                         onCheckedChange = { homeCardImage = it },
+                                    )
+                                }
+                            }
+                            if (hasDynamicHomeCard) {
+                                item {
+                                    MiuixOptionRow(
+                                        title = stringResource(R.string.theme_opt_dynamic_home_card),
+                                        checked = dynamicHomeCard,
+                                        onCheckedChange = { dynamicHomeCard = it },
                                     )
                                 }
                             }
@@ -369,6 +393,13 @@ fun ThemeOptionsDialog(
                                 onCheckedChange = { backgroundImage = it },
                             )
                         }
+                        if (hasDynamicWallpaper) {
+                            MaterialCheckboxRow(
+                                title = stringResource(R.string.theme_opt_dynamic_wallpaper),
+                                checked = dynamicWallpaper,
+                                onCheckedChange = { dynamicWallpaper = it },
+                            )
+                        }
                         MaterialCheckboxRow(
                             title = stringResource(R.string.theme_opt_background_appearance),
                             checked = backgroundAppearance,
@@ -388,6 +419,13 @@ fun ThemeOptionsDialog(
                                 title = stringResource(R.string.theme_opt_home_card_image),
                                 checked = homeCardImage,
                                 onCheckedChange = { homeCardImage = it },
+                            )
+                        }
+                        if (hasDynamicHomeCard) {
+                            MaterialCheckboxRow(
+                                title = stringResource(R.string.theme_opt_dynamic_home_card),
+                                checked = dynamicHomeCard,
+                                onCheckedChange = { dynamicHomeCard = it },
                             )
                         }
                         if (hasStickers) {

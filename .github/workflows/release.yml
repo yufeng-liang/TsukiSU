@@ -27,29 +27,7 @@ jobs:
       - name: Checkout
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -eux
-          remote="https://git.zako.shirkneko.top:20004"
-          mirror="/ci/repo-cache/${GITHUB_REPOSITORY}.git"
-          mkdir -p "$(dirname "$mirror")"
-          if [ ! -d "$mirror" ]; then
-            # The token must not appear in the trace of `set -x`.
-            set +x
-            git -c "http.${remote}/.extraHeader=Authorization: token ${TOKEN}" \
-              clone -q --mirror "${remote}/${GITHUB_REPOSITORY}.git" "$mirror"
-            set -x
-          elif command -v flock >/dev/null 2>&1; then
-            (
-              flock 9
-              git --git-dir="$mirror" fetch -q --prune origin \
-                "+refs/heads/*:refs/heads/*" "+refs/tags/*:refs/tags/*"
-            ) 9>"${mirror}.lock"
-          else
-            git --git-dir="$mirror" fetch -q --prune origin \
-              "+refs/heads/*:refs/heads/*" "+refs/tags/*:refs/tags/*"
-          fi
-          git clone -q --shared --no-checkout "$mirror" .
-          git checkout -q "${GITHUB_SHA}"
+        run: /ci/tools/bin/ci-checkout
 
       - name: Calculate version code
         id: version
@@ -59,6 +37,25 @@ jobs:
           VERSION_CODE=$((30000 + COMMIT_COUNT + 996))
           echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
           echo "KernelSU version code: $VERSION_CODE (main commits: $COMMIT_COUNT)"
+
+      # See the note in ci.yml: Forgejo draws no job graph, so it goes in the
+      # summary, where Mermaid is rendered.
+      - name: Write the pipeline graph
+        run: |
+          set -eux
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
+          ci_summary_graph "发布流水线" \
+            determine-version:build-lkm \
+            build-lkm:build-ksud \
+            build-ksuinit:build-ksud \
+            build-builtzygisk:build-ksud \
+            build-ksud:manager \
+            manager:publish \
+            build-lkm:assemble \
+            build-ksuinit:assemble \
+            build-ksud:assemble \
+            manager:assemble \
+            assemble:publish-release
 
   build-lkm:
     needs: [determine-version]
@@ -70,9 +67,11 @@ jobs:
 
   build-ksuinit:
     uses: ./.github/workflows/ksuinit.yml
+    secrets: inherit
 
   build-builtzygisk:
     uses: ./.github/workflows/builtzygisk.yml
+    secrets: inherit
 
   build-ksud:
     needs: [build-lkm, build-ksuinit, build-builtzygisk]
@@ -81,6 +80,7 @@ jobs:
       pack_lkm: true
       pack_ksuinit: true
       pack_builtzygisk: true
+    secrets: inherit
 
   manager:
     needs: build-ksud
@@ -100,56 +100,45 @@ jobs:
   assemble:
     needs: [build-lkm, build-ksuinit, build-ksud, manager]
     runs-on: ubuntu-latest
+    env:
+      # Artifacts travel through CNB; without a token they stay on /ci only.
+      CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+      CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-result' }}
     steps:
       - name: Checkout
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: /ci/tools/bin/ci-checkout
+
+      - name: Provide node and the action sources
         run: |
           set -eux
-          remote="https://git.zako.shirkneko.top:20004"
-          mirror="/ci/repo-cache/${GITHUB_REPOSITORY}.git"
-          mkdir -p "$(dirname "$mirror")"
-          if [ ! -d "$mirror" ]; then
-            # The token must not appear in the trace of `set -x`.
-            set +x
-            git -c "http.${remote}/.extraHeader=Authorization: token ${TOKEN}" \
-              clone -q --mirror "${remote}/${GITHUB_REPOSITORY}.git" "$mirror"
-            set -x
-          fi
-          git clone -q --shared --no-checkout "$mirror" .
-          git checkout -q "${GITHUB_SHA}"
-
-      - name: Collect release files
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
+          ci_provide_node
+      - name: Download the build artifacts
+        id: download_build
+        continue-on-error: true
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eux
-          . .github/scripts/ci/common.sh
-          mkdir -p artifacts
-          for name in Manager \
-                      ksud-aarch64-linux-android ksud-armv7-linux-androideabi \
-                      ksud-x86_64-linux-android ksud-riscv64-linux-android \
-                      ksuinit-aarch64 ksuinit-arm ksuinit-x86_64 ksuinit-riscv64; do
-            if ci_artifact_exists "$name"; then
-              ci_artifact_get "$name" "artifacts/$name"
-            fi
-          done
-          # The LKM artifacts are named per KMI, so pick them up by pattern.
-          for dir in "$CI_ARTIFACT_ROOT"/*-android*-lkm; do
-            [ -d "$dir" ] || continue
-            name="$(basename "$dir")"
-            ci_artifact_get "$name" "artifacts/$name"
-          done
-          # The zygisk payload is what ksud embeds; publishing it as well makes the
-          # release self-explanatory instead of relying on a binary inspection.
-          for arch in aarch64 arm x86_64 riscv64; do
-            if ci_artifact_exists "builtzygisk-$arch"; then
-              ci_artifact_get "builtzygisk-$arch" "artifacts/builtzygisk-$arch"
-            fi
-          done
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
+          ci_download_all_artifacts "${GITHUB_WORKSPACE}/artifacts"
 
-          out="${CI_ARTIFACT_ROOT}/release"
+      - name: Download the build artifacts (Forgejo fallback)
+        if: steps.download_build.outcome == 'failure'
+        uses: ./.ci-actions/download-artifact
+        with:
+          path: artifacts
+
+      - name: Pack the release files
+        run: |
+          set -eux
+          out="$GITHUB_WORKSPACE/release"
+          rm -rf "$out"
           mkdir -p "$out" "$out/lkm" "$out/ksud" "$out/ksuinit"
 
-          cp -f artifacts/Manager/*.apk "$out"/ 2>/dev/null || true
+          cp -f artifacts/sukisu-manager/*.apk "$out"/ 2>/dev/null || true
 
           for d in artifacts/*-android*-lkm; do
             [ -d "$d" ] || continue
@@ -172,7 +161,6 @@ jobs:
           for d in artifacts/builtzygisk-*; do
             [ -d "$d" ] || continue
             arch="${d##*builtzygisk-}"
-            # an older builder nested the files under an arch directory
             [ -d "$d/$arch" ] && d="$d/$arch"
             for f in "$d"/*; do
               [ -f "$f" ] || continue
@@ -184,102 +172,114 @@ jobs:
           test -n "$(ls -A "$out")"
           echo "release files collected in ${out}"
 
+      - name: Upload release to CNB
+        if: github.ref_type == 'tag'
+        env:
+          CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-result' }}
+          CNB_TAG: ${{ github.ref_name }}
+          CNB_NAME: ${{ github.ref_name }}
+          CNB_ASSETS_DIR: release
+          CNB_BODY_FILE: release/notes.md
+          CNB_PRERELEASE: "false"
+          CNB_MAKE_LATEST: "true"
+          CNB_TARGET_COMMITISH: ${{ vars.CNB_TARGET_COMMITISH || 'main' }}
+          # Reads the description written on the release page before the tag
+          # was pushed, so CNB shows the same text.
+          API_TOKEN: ${{ secrets.RELEASE_API_TOKEN || vars.RELEASE_API_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          # The description written on the release page is what people came to
+          # read, so it goes first and CI appends its own part below a separator.
+          manual=""
+          site="${FORGEJO_PUBLIC_URL:-https://git.zako.shirkneko.top:20004}"
+          api="${site}/api/v1/repos/${GITHUB_REPOSITORY}"
+          if curl -sS --connect-timeout 10 --max-time 30 -f \
+            -H "Authorization: token ${API_TOKEN}" \
+            "$api/releases/tags/${GITHUB_REF_NAME}" -o /tmp/rel.json 2>/dev/null; then
+            manual="$(jq -r '.body // ""' /tmp/rel.json)"
+            # Keep only the hand-written part: everything above the separator.
+            manual="${manual%%$'\n---\n'*}"
+            while [ -n "$manual" ] && [ "${manual%$'\n'}" != "$manual" ]; do
+              manual="${manual%$'\n'}"
+            done
+          fi
+          {
+            if [ -n "$manual" ]; then
+              printf '%s\n\n---\n\n' "$manual"
+            fi
+            echo "# ${GITHUB_REF_NAME}"
+            echo
+            echo "Release build for \`${GITHUB_SHA}\`."
+            echo
+            echo "## Latest commit"
+            echo
+            echo '```'
+            git log -1 --format='%B'
+            echo '```'
+          } > release/notes.md
+          bash .github/scripts/ci/cnb-upload.sh
+
+      - name: Trigger CNB Telegram delivery
+        if: github.ref_type == 'tag'
+        env:
+          CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-result' }}
+          CNB_TAG: ${{ github.ref_name }}
+          CNB_KIND: release
+          THREAD_ID: ${{ vars.MESSAGE_RELEASES_THREAD_ID || '' }}
+          BOT_TOKEN: ${{ vars.BOT_TOKEN || secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ vars.CHAT_ID || secrets.CHAT_ID }}
+          TG_API_BASE: ${{ vars.TG_API_BASE || 'https://api.telegram.org' }}
+          TITLE: Release
+          BRANCH: ${{ github.ref_name }}
+          RUN_URL: https://git.zako.shirkneko.top:20004/${{ github.repository }}/actions/runs/${{ github.run_number || github.run_id }}
+          EVENT: ${{ toJson(github.event) }}
+        run: bash .github/scripts/ci/telegram-trigger.sh
+
+      - name: Store the release bundle for LAN handoff
+        run: |
+          set -eux
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
+          ci_artifact_put release "${GITHUB_WORKSPACE}/release/"
+
   # A tag push publishes a real release with every artifact attached: the kernel
   # modules, ksud, ksuinit and the manager APK. Without this the release only
   # existed on the runner host.
+      - name: Write the job summary
+        run: |
+          set -eux
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
+          ci_summary_artifacts "release"
+
   publish-release:
     needs: [assemble]
     runs-on: ubuntu-latest
     steps:
-      - name: Upload the release assets
+      # The release step calls .github/scripts/ci/forgejo-release.sh, so this job
+      # needs the tree as well; it used to be one inline curl block.
+      - name: Checkout
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: /ci/tools/bin/ci-checkout
+
+      # Nothing is uploaded here any more: the assets live on CNB, so this job
+      # only points the Forgejo release page at them (the old step pushed 46
+      # files through the tunnel and could take half an hour).
+      - name: Point the release page at CNB
         if: github.ref_type == 'tag'
         env:
           # Dedicated token with write:repository. The built-in GITHUB_TOKEN is
           # only a fallback: it may lack release permissions on this instance.
           API_TOKEN: ${{ secrets.RELEASE_API_TOKEN || vars.RELEASE_API_TOKEN || secrets.GITHUB_TOKEN }}
+          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-result' }}
+          CNB_WEB: ${{ vars.CNB_WEB || 'https://cnb.cool' }}
         run: |
           set -eu
-          # This job has no checkout: it only reads the files the assemble job
-          # wrote, so common.sh is not available and not needed here.
-          site="${FORGEJO_PUBLIC_URL:-https://git.zako.shirkneko.top:20004}"
-          api="${site}/api/v1/repos/${GITHUB_REPOSITORY}"
-          auth="Authorization: token ${API_TOKEN}"
-          tag="${GITHUB_REF_NAME}"
-          dir="/ci/runs/${GITHUB_RUN_ID}/release"
-          test -d "$dir"
-          echo "publishing ${tag} from ${dir}"
-
-          net() {
-            curl -sS --retry 5 --retry-all-errors --retry-delay 2 \
-              --connect-timeout 10 --max-time 300 "$@"
-          }
-          net_once() {
-            curl -sS --retry 5 --retry-connrefused --retry-delay 2 \
-              --connect-timeout 10 --max-time 300 "$@"
-          }
-
-          release="$api/releases/tags/$tag"
-          status="$(net -o /tmp/release.json -w '%{http_code}' -H "$auth" "$release" || true)"
-          if [ "$status" = "200" ]; then
-            id="$(jq -r '.id' /tmp/release.json)"
-            echo "existing release id=${id}"
-          else
-            payload="$(jq -nc --arg tag "$tag" --arg sha "$GITHUB_SHA" \
-              '{tag_name: $tag, target_commitish: $sha, name: $tag, prerelease: false,
-                body: "Release assets built by CI."}')"
-            net_once -X POST -H "$auth" -H 'Content-Type: application/json' \
-              -d "$payload" "$api/releases" >/dev/null
-            net -H "$auth" "$release" -o /tmp/release.json
-            id="$(jq -r '.id' /tmp/release.json)"
-            echo "created release id=${id}"
-          fi
-          test -n "$id" && [ "$id" != "null" ]
-
-          # Re-runs replace the previous assets instead of piling up duplicates.
-          for asset_id in $(jq -r '.assets[].id' /tmp/release.json); do
-            net -X DELETE -H "$auth" "$api/releases/${id}/assets/$asset_id" >/dev/null
-          done
-
-          # Flat asset names: lkm-<kmi>_kernelsu.ko, ksud-<triple>,
-          # ksuinit-<arch> and the manager APK are already unique.
-          find "$dir" -type f | sort | while read -r f; do
-            name="$(basename "$f")"
-            net_once -f -X POST -H "$auth" -F "attachment=@${f}" \
-              "$api/releases/${id}/assets?name=${name}" >/dev/null
-            echo "uploaded ${name}"
-          done
-          echo "release ${tag} updated"
-
-  # The runner has no artifact service, so a build only lives in the /ci volume
-  # where nobody can reach it. This copies it to the host directory the compose
-  # stack mounts at /out and keeps the five most recent builds.
-  archive:
-    needs: [publish-release]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Export the build to the out directory
-        run: |
-          set -eux
-          # This job has no checkout: it only reads what the other jobs wrote.
-          CI_ARTIFACT_ROOT="/ci/runs/${GITHUB_RUN_ID:-local}"
-          if [ ! -d /out ]; then
-            echo "no /out mount on this runner, skipping the archive"
-            exit 0
-          fi
-          # Run numbers are counted per workflow, so ci and release would collide
-          # on the same number; the workflow name keeps the folders apart.
-          workflow="$(printf '%s' "${GITHUB_WORKFLOW:-run}" | tr ' ' '-')"
-          dest="/out/${workflow}-${GITHUB_RUN_NUMBER:-$GITHUB_RUN_ID}"
-          rm -rf "$dest"
-          mkdir -p "$dest"
-          cp -a "$CI_ARTIFACT_ROOT"/. "$dest"/
-          # the R8 mapping is not something to keep
-          rm -rf "$dest/Manager-mappings"
-          # keep the five most recent builds, newest first by mtime
-          ls -1t /out | tail -n +6 | while read -r old; do
-            rm -rf "/out/$old"
-          done
-          echo "archived to ${dest}"
-          du -sh "$dest"
-          echo "kept: $(ls -1t /out | tr '\n' ' ')"
+          export RELEASE_TAG="${GITHUB_REF_NAME}"
+          export RELEASE_NAME="${GITHUB_REF_NAME}"
+          export RELEASE_PRERELEASE=false
+          RELEASE_BODY="$(printf 'Release assets built by CI.\n\n下载 / Download: %s/%s/-/releases/tag/%s\n' \
+            "$CNB_WEB" "$CNB_REPO" "$GITHUB_REF_NAME")"
+          export RELEASE_BODY
+          bash .github/scripts/ci/forgejo-release.sh

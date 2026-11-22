@@ -1756,7 +1756,7 @@ pub fn shutdown() -> Result<()> {
 const CONFIG_KEYS: &[(&str, &[&str], &str)] = &[
     ("anonymous_memory", &["0", "1"], "0"),
     ("custom_linker", &["0", "1"], "0"),
-    ("plt_engine", &["bytehook", "lsplt"], "bytehook"),
+    ("plt_engine", &["yukiplt", "lsplt"], "yukiplt"),
 ];
 
 fn config_path() -> PathBuf {

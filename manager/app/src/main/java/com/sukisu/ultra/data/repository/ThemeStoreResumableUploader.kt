@@ -5,6 +5,7 @@ import com.sukisu.ultra.data.model.ThemeStoreUploadComplete
 import com.sukisu.ultra.data.model.ThemeStoreUploadInitRequest
 import com.sukisu.ultra.data.model.ThemeStoreUploadSession
 import com.sukisu.ultra.data.model.ThemeStoreUploadTarget
+import com.sukisu.ultra.data.model.ThemeStoreCnbUpload
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -65,6 +66,17 @@ internal fun Response.uploadJson(): String {
     val source = body.source()
     if (source.request(64L * 1024L + 1L)) throw IOException("Upload response is too large")
     return source.readUtf8()
+}
+
+/**
+ * Reads a JSON reply and returns null for an HTML page. A front proxy answers an upstream
+ * failure or timeout (Cloudflare's 100 s limit, Lucky, a captive portal, …) with a web page;
+ * handing that to kotlinx.serialization only produced a raw "Unexpected JSON token" message.
+ */
+internal fun Response.uploadJsonOrNull(): String? {
+    val raw = uploadJson()
+    val trimmed = raw.trimStart()
+    return raw.takeIf { trimmed.startsWith("{") || trimmed.startsWith("[") }
 }
 
 internal data class ThemeStoreUploadedFile(val uploadId: String, val supportsAttachments: Boolean)
@@ -132,6 +144,20 @@ internal class ThemeStoreResumableUploader(
         .callTimeout(10, TimeUnit.MINUTES)
         .build()
     private val edge = sharedEdgeClient
+
+    /**
+     * CNB's presigned PUT URL is a plain object-storage write: no cookies, no
+     * bearer token, no chunk protocol. One request carries the whole package,
+     * which is why the site's uplink is no longer in the path.
+     */
+    private val direct = OkHttpClient.Builder()
+        .protocols(listOf(Protocol.HTTP_1_1))
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .writeTimeout(120, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .callTimeout(45, TimeUnit.MINUTES)
+        .retryOnConnectionFailure(false)
+        .build()
     private val scheduler = Routes()
 
     private class RouteHealth {
@@ -195,7 +221,23 @@ internal class ThemeStoreResumableUploader(
             else -> throw IOException("Unsupported upload file type")
         }
         if (!file.isFile || size !in 1L..limit) throw IOException("Invalid upload file size")
-        val session = init(file, size)
+        val packageLane = file.extension.equals("sukisu", ignoreCase = true)
+        var session = init(file, size, if (packageLane) "cnb" else null)
+        val cnb = session.cnb
+        if (packageLane && cnb != null) {
+            if (cnb.confirmed) {
+                // A previous attempt already landed on CNB; just report it.
+                onTransferred(size, size)
+                return ThemeStoreUploadedFile(session.uploadId, true)
+            }
+            if (ID.matches(session.uploadId) && directUpload(file, session.uploadId, cnb, onTransferred)) {
+                onTransferred(size, size)
+                return ThemeStoreUploadedFile(session.uploadId, true)
+            }
+            // Direct upload failed (expired URL, blocked network, CNB outage).
+            // Reuse the same session on the chunked lane instead of restarting.
+            session = init(file, size, "chunked")
+        }
         val chunkSize = session.chunkSize
         if (!session.ok || !ID.matches(session.uploadId) || chunkSize !in MIB..8L * MIB ||
             session.size != size || session.totalChunks != (size + chunkSize - 1) / chunkSize) {
@@ -209,6 +251,9 @@ internal class ThemeStoreResumableUploader(
             return indices.toSet()
         }
         val confirmed = validIndices(session.received).toMutableSet()
+        // Chunks written by the primary itself. Edge chunks only leave an acknowledgement
+        // there, so a failed merge can resend just the edge copies to the primary.
+        val primaryChunks = session.receivedLocal.toMutableSet()
         val progress = HashMap<Long, Long>()
         val lock = Any()
         var lastReportAt = 0L
@@ -256,6 +301,7 @@ internal class ThemeStoreResumableUploader(
                                 synchronized(lock) {
                                     progress.remove(index)
                                     confirmed.add(index)
+                                    if (route.ticket == null) primaryChunks.add(index)
                                     report(true)
                                 }
                                 break
@@ -282,19 +328,117 @@ internal class ThemeStoreResumableUploader(
         transfer((0 until session.totalChunks).filter { it !in confirmed })
         // Even an entirely resumed session may contain receipts for an offline edge.
         // A receipt is not a merged file; repair only the missing chunks at the primary.
+        // A merge that never answers (a front proxy replaces an overlong one with an HTML
+        // page) is treated the same way: resend everything the writer does not hold
+        // locally, then merge again. Edge receipts are an accelerator, not a hard
+        // dependency of a submission.
         if (session.uploadTargets != null) {
-            var result = complete(session.uploadId)
-            if (!result.complete) {
-                val missing = validIndices(result.missing)
+            var result = try {
+                complete(session.uploadId)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: ThemeStoreUnauthorizedException) {
+                throw error
+            } catch (error: ThemeUploadHttpException) {
+                if (!error.retryable) throw error
+                null
+            } catch (_: IOException) {
+                null
+            }
+            if (result?.complete != true) {
+                val missing = result?.missing?.takeIf { it.isNotEmpty() }?.let { validIndices(it) }
+                    ?: synchronized(lock) {
+                        (0 until session.totalChunks).filter { it !in primaryChunks }.toSet()
+                    }
                 if (missing.isEmpty()) throw IOException("Upload merge did not report missing chunks")
                 synchronized(lock) { confirmed.removeAll(missing); report(true) }
                 transfer(missing, onlyPrimary = true)
                 result = complete(session.uploadId)
             }
-            if (!result.complete || result.missing.isNotEmpty()) throw IOException("Upload merge is incomplete")
+            val merged = result
+            if (!merged.complete || merged.missing.isNotEmpty()) {
+                throw IOException("Upload merge is incomplete")
+            }
         }
         report(true)
         return ThemeStoreUploadedFile(session.uploadId, session.uploadTargets != null)
+    }
+
+    /**
+     * PUT the package straight to CNB, then let the site confirm and pull it
+     * back. Returns false on any transport or confirmation failure so the caller
+     * can resume on the ordinary chunked lane without losing the session.
+     */
+    private suspend fun directUpload(
+        file: File,
+        uploadId: String,
+        target: ThemeStoreCnbUpload,
+        onTransferred: (Long, Long) -> Unit,
+    ): Boolean {
+        val url = target.uploadUrl.toHttpUrlOrNull() ?: return false
+        if (url.scheme != "https" || url.username.isNotEmpty() || url.password.isNotEmpty() ||
+            url.fragment != null) return false
+        val size = file.length()
+        var last: Exception? = null
+        repeat(2) {
+            currentCoroutineContext().ensureActive()
+            try {
+                var reported = 0L
+                val body = object : RequestBody() {
+                    override fun contentType() = CHUNK_MEDIA
+                    override fun contentLength() = size
+                    override fun writeTo(sink: BufferedSink) {
+                        RandomAccessFile(file, "r").use { source ->
+                            val buffer = ByteArray(256 * 1024)
+                            var written = 0L
+                            while (written < size) {
+                                if (Thread.currentThread().isInterrupted) {
+                                    throw IOException("Upload interrupted")
+                                }
+                                val read = source.read(buffer, 0, minOf(size - written, buffer.size.toLong()).toInt())
+                                if (read <= 0) throw IOException("Unexpected end of upload file")
+                                sink.write(buffer, 0, read)
+                                written += read
+                                val now = System.nanoTime()
+                                if (now - reported >= 120_000_000L) {
+                                    reported = now
+                                    onTransferred(written, size)
+                                }
+                            }
+                            sink.flush()
+                            onTransferred(size, size)
+                        }
+                    }
+                }
+                val request = Request.Builder()
+                    .url(url)
+                    .put(body)
+                    .header("Content-Type", "application/octet-stream")
+                    .build()
+                executeThemeUpload(direct, request) { response ->
+                    // Drain the (normally empty) body before the status check so a
+                    // rejected request still frees the connection cleanly.
+                    runCatching { response.uploadJson() }
+                    if (!response.isSuccessful) {
+                        throw ThemeUploadHttpException(
+                            response.code,
+                            "CNB direct upload rejected (${response.code})",
+                        )
+                    }
+                }
+                val result = complete(uploadId)
+                if (result.complete) return true
+                last = IOException("CNB upload was not confirmed")
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: ThemeStoreUnauthorizedException) {
+                throw error
+            } catch (error: Exception) {
+                last = error
+            }
+        }
+        android.util.Log.w("ThemeStoreUpload", "CNB direct upload failed", last)
+        return false
     }
 
     private fun accountRequest(path: String) = Request.Builder()
@@ -303,7 +447,7 @@ internal class ThemeStoreResumableUploader(
         .header("X-Requested-With", "SukiSUThemeAdmin")
         .header("X-Client", "android")
 
-    private suspend fun init(file: File, size: Long): ThemeStoreUploadSession {
+    private suspend fun init(file: File, size: Long, lane: String?): ThemeStoreUploadSession {
         // Larger packages use 8 MB chunks: the per-request overhead (authorization,
         // receipt check, fsync, ack) otherwise dominates on slow links and makes the
         // displayed speed oscillate. Images stay on 2 MB so their tail is short.
@@ -317,11 +461,21 @@ internal class ThemeStoreResumableUploader(
             size = size,
             fingerprint = "${file.name}:$size:${file.lastModified()}",
             chunkSize = chunkSize,
+            lane = lane,
         )).toRequestBody(JSON_MEDIA)
         return executeThemeUpload(primary, accountRequest("init").post(body).build()) { response ->
             if (response.code == 401) throw ThemeStoreUnauthorizedException()
-            val value = json.decodeFromString(ThemeStoreUploadSession.serializer(), response.uploadJson())
-            if (!response.isSuccessful || !value.ok) throw IOException(value.error ?: "Upload initialization rejected (${response.code})")
+            val raw = response.uploadJsonOrNull()
+                ?: throw IOException("主题商店返回了网页而不是 JSON（HTTP ${response.code}），请稍后重试")
+            val value = runCatching {
+                json.decodeFromString(ThemeStoreUploadSession.serializer(), raw)
+            }.getOrNull()
+            if (value == null) {
+                throw IOException("Invalid upload initialization response (HTTP ${response.code})")
+            }
+            if (!response.isSuccessful || !value.ok) {
+                throw IOException(value.error ?: "Upload initialization rejected (${response.code})")
+            }
             value
         }
     }
@@ -329,8 +483,20 @@ internal class ThemeStoreResumableUploader(
     private suspend fun complete(id: String): ThemeStoreUploadComplete =
         executeThemeUpload(primary, accountRequest("$id/complete").post("{}".toRequestBody(JSON_MEDIA)).build()) { response ->
             if (response.code == 401) throw ThemeStoreUnauthorizedException()
-            val value = json.decodeFromString(ThemeStoreUploadComplete.serializer(), response.uploadJson())
-            if (!response.isSuccessful || !value.ok) throw IOException(value.error ?: "Upload merge rejected (${response.code})")
+            val raw = response.uploadJsonOrNull()
+                ?: throw IOException("主题商店返回了网页而不是 JSON（HTTP ${response.code}），请稍后重试")
+            val value = runCatching {
+                json.decodeFromString(ThemeStoreUploadComplete.serializer(), raw)
+            }.getOrNull()
+            if (value == null) {
+                throw IOException("Invalid upload merge response (HTTP ${response.code})")
+            }
+            if (!response.isSuccessful || !value.ok) {
+                throw ThemeUploadHttpException(
+                    response.code,
+                    value.error ?: "Upload merge rejected (${response.code})",
+                )
+            }
             value
         }
 
@@ -377,7 +543,9 @@ internal class ThemeStoreResumableUploader(
                         "Chunk upload rejected (${response.code})",
                     )
                 }
-                val ack = json.decodeFromString(ThemeStoreUploadAck.serializer(), response.uploadJson())
+                val raw = response.uploadJsonOrNull()
+                    ?: throw IOException("上传入口返回了非 JSON 响应（HTTP ${response.code}）")
+                val ack = json.decodeFromString(ThemeStoreUploadAck.serializer(), raw)
                 if (!ack.ok || (route.ticket != null && (ack.index != index || !HASH.matches(ack.sha256)))) {
                     throw IOException("Invalid chunk acknowledgement")
                 }

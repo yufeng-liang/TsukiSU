@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the shared CI image on the runner host.
 #
-#   bash .github/ci/build-image.sh [tag]
+#   bash .github/image/build-image.sh [tag]
 #
 # The tag is what the runner label points at:
 #   runner.labels: - "ubuntu-latest:docker://sukisu-ci:<tag>"
@@ -24,7 +24,7 @@ kpm_dir="${CI_KPM_DIR:-/srv/forgejo-ci/kpm}"
 
 if [ ! -d "$mirrors" ]; then
 	echo "missing git mirrors: ${mirrors}" >&2
-	echo "run .github/ci/mirror-git-deps.sh first (needs github.com access)" >&2
+	echo "run .github/image/mirror-git-deps.sh first (needs github.com access)" >&2
 	exit 1
 fi
 if [ ! -d "$kpm_dir" ]; then

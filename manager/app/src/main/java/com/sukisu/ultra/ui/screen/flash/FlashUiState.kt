@@ -21,4 +21,5 @@ data class FlashScreenActions(
     val onClose: () -> Unit = {},
     val onConfirmJailbreakWarning: () -> Unit,
     val onDismissJailbreakWarning: () -> Unit,
+    val onUserInteraction: () -> Unit = {},
 )

@@ -1,0 +1,12 @@
+# Rust toolchain for the lint jobs: rustup nightly, the Android targets,
+# cargo-ndk and the git mirrors cargo rewrites to (no github access).
+FROM forgejo-ci/base:1
+
+ADD rust.tar /
+RUN rm -f /rust.tar
+
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:${PATH}
+
+RUN set -eux; cargo --version; rustup toolchain list

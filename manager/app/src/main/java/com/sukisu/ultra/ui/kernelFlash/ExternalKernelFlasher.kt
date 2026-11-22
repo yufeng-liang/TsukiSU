@@ -11,12 +11,15 @@ import com.sukisu.ultra.ui.kernelFlash.component.SlotSelectionDialog
 import com.sukisu.ultra.ui.navigation3.LocalNavigator
 import com.sukisu.ultra.ui.navigation3.Route
 import com.sukisu.ultra.ui.util.isAbDevice
+import androidx.compose.ui.platform.LocalContext
+import com.sukisu.ultra.ui.navigation3.deleteExternalZipCache
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 
 @Composable
 fun rememberExternalKernelFlasher(): suspend (Uri) -> Unit {
+    val context = LocalContext.current
     val navigator = LocalNavigator.current
     var kernelUri by remember { mutableStateOf<Uri?>(null) }
     var selectedSlot by remember { mutableStateOf<String?>(null) }
@@ -26,6 +29,7 @@ fun rememberExternalKernelFlasher(): suspend (Uri) -> Unit {
     SlotSelectionDialog(
         show = showSlotDialog,
         onDismiss = {
+            deleteExternalZipCache(context, kernelUri)
             showSlotDialog = false
             kernelUri = null
         },
@@ -39,6 +43,7 @@ fun rememberExternalKernelFlasher(): suspend (Uri) -> Unit {
         show = showKpmDialog,
         currentOption = KpmPatchOption.FOLLOW_KERNEL,
         onDismiss = {
+            deleteExternalZipCache(context, kernelUri)
             showKpmDialog = false
             kernelUri = null
         },

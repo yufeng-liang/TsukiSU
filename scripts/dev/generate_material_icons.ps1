@@ -1,5 +1,5 @@
 # Generate a lightweight material-icons-custom.jar containing only needed and popular icons.
-# Usage: powershell -ExecutionPolicy Bypass -File scripts/generate_material_icons.ps1 [-IconsAar <material-icons-extended.aar>]
+# Usage: powershell -ExecutionPolicy Bypass -File scripts/dev/generate_material_icons.ps1 [-IconsAar <material-icons-extended.aar>]
 
 param(
     [string]$OutJar = "manager/app/libs/material-icons-custom.jar",

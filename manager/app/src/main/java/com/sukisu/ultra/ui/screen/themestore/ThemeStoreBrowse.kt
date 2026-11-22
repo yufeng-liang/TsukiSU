@@ -11,6 +11,31 @@ internal const val ADAPTIVE_TAG = "adaptive"
 /// Store cards rendered per page; preview images load lazily as pages are opened.
 internal const val STORE_PAGE_SIZE = 10
 
+/**
+ * Number of catalogue cards that must be windowed so a restored grid position stays valid.
+ *
+ * The store grid leaves the composition while a detail or author page is shown, so the page
+ * window is rebuilt on the way back while the grid state still reports the previous scroll
+ * position. Windowing fewer cards than that position makes LazyVerticalGrid clamp the restore to
+ * the end of the window, which is why only the first page used to land back on the right spot.
+ */
+internal fun themeStorePageWindow(
+    firstVisibleItemIndex: Int,
+    totalItems: Int,
+    pageSize: Int = STORE_PAGE_SIZE,
+): Int {
+    if (pageSize <= 0) return totalItems.coerceAtLeast(0)
+    if (totalItems <= 0) return pageSize
+    val index = firstVisibleItemIndex.coerceAtLeast(0)
+    val pages = index / pageSize + 1
+    return (pages * pageSize).coerceIn(pageSize, totalItems.coerceAtLeast(pageSize))
+}
+
+/// First package format that can carry the shared dynamic wallpaper/card media.
+internal const val DYNAMIC_FORMAT_VERSION = 6
+
+internal const val DYNAMIC_TAG = "dynamic"
+
 private val ADAPTIVE_TAG_ALIASES = setOf(
     "adaptive",
     "auto",
@@ -22,17 +47,42 @@ private val ADAPTIVE_TAG_ALIASES = setOf(
     "自适应主题包",
 )
 
+private val DYNAMIC_TAG_ALIASES = setOf(
+    DYNAMIC_TAG,
+    "live",
+    "livewallpaper",
+    "live-wallpaper",
+    "animated",
+    "动态",
+    "动态壁纸",
+    "动态背景",
+)
+
 
 internal fun canonicalThemeTag(tag: String): String {
-    val normalized = tag.trim().lowercase(Locale.ROOT)
-    return if (normalized in ADAPTIVE_TAG_ALIASES) ADAPTIVE_TAG else normalized
+    return when (val normalized = tag.trim().lowercase(Locale.ROOT)) {
+        in ADAPTIVE_TAG_ALIASES -> ADAPTIVE_TAG
+        in DYNAMIC_TAG_ALIASES -> DYNAMIC_TAG
+        else -> normalized
+    }
 }
 
 internal fun isAdaptiveThemeTag(tag: String): Boolean = canonicalThemeTag(tag) == ADAPTIVE_TAG
 
+internal fun isDynamicThemeTag(tag: String): Boolean = canonicalThemeTag(tag) == DYNAMIC_TAG
+
 
 internal fun ThemeStoreItem.isAdaptiveTheme(): Boolean =
     entry.adaptive || entry.tags.any(::isAdaptiveThemeTag)
+
+/**
+ * v6 is the first format that can apply the shared dynamic wallpaper/card media. The catalog
+ * flag is preferred, while the format and tag fallbacks keep older mirrors badged correctly.
+ */
+internal fun ThemeStoreItem.isDynamicTheme(): Boolean =
+    entry.dynamic ||
+        entry.formatVersion >= DYNAMIC_FORMAT_VERSION ||
+        entry.tags.any(::isDynamicThemeTag)
 
 internal const val R18_TAG = "r18"
 
@@ -57,14 +107,16 @@ internal fun ThemeStoreItem.isR18Theme(): Boolean =
 @Composable
 internal fun themeTagLabel(tag: String): String = when {
     isAdaptiveThemeTag(tag) -> stringResource(R.string.theme_adaptive_tag)
+    isDynamicThemeTag(tag) -> stringResource(R.string.theme_dynamic_tag)
     canonicalThemeTag(tag) == R18_TAG -> stringResource(R.string.theme_store_r18)
     else -> tag
 }
 
 /**
  * Most-used tags across the aggregated catalog, preserving the first spelling seen for each
- * case-insensitive tag. Adaptive aliases collapse into the canonical "adaptive" key, which is
- * always offered as the first quick filter on the store home.
+ * case-insensitive tag. Adaptive and dynamic aliases collapse into their canonical keys, which
+ * are always offered as the first quick filters on the store home. The dynamic filter only
+ * appears when the catalog actually contains a v6 package.
  */
 internal fun List<ThemeStoreItem>.popularThemeTags(limit: Int = 18): List<String> {
     if (limit <= 0) return emptyList()
@@ -75,7 +127,11 @@ internal fun List<ThemeStoreItem>.popularThemeTags(limit: Int = 18): List<String
             if (display.isEmpty() || display.length > 24) continue
             val canonical = canonicalThemeTag(display)
             val key = canonical.lowercase(Locale.ROOT)
-            val shown = if (canonical == ADAPTIVE_TAG) ADAPTIVE_TAG else display
+            val shown = when (canonical) {
+                ADAPTIVE_TAG -> ADAPTIVE_TAG
+                DYNAMIC_TAG -> DYNAMIC_TAG
+                else -> display
+            }
             val previous = tags[key]
             tags[key] = (previous?.first ?: shown) to ((previous?.second ?: 0) + 1)
         }
@@ -86,21 +142,29 @@ internal fun List<ThemeStoreItem>.popularThemeTags(limit: Int = 18): List<String
                 .thenBy { it.first.lowercase(Locale.ROOT) },
         )
         .map { it.first }
-    return (listOf(ADAPTIVE_TAG) + ranked.filterNot { isAdaptiveThemeTag(it) }).take(limit)
+    val hasDynamic = any { it.isDynamicTheme() }
+    val pinned = buildList {
+        add(ADAPTIVE_TAG)
+        if (hasDynamic) add(DYNAMIC_TAG)
+    }
+    return (pinned + ranked.filterNot { isAdaptiveThemeTag(it) || isDynamicThemeTag(it) })
+        .take(limit)
 }
 
 /**
  * Keeps themes matching any selected tag, so selecting several tags produces a mixed feed
- * rather than an empty intersection. The adaptive filter also matches the catalog's explicit
- * adaptive flag, since older mirrors may not have written the tag yet.
+ * rather than an empty intersection. The adaptive and dynamic filters also match the catalog's
+ * explicit flag / package format, since older mirrors may not have written the tag yet.
  */
 internal fun List<ThemeStoreItem>.filterByThemeTags(selected: Set<String>): List<ThemeStoreItem> {
     if (selected.isEmpty()) return this
     val keys = selected.mapTo(mutableSetOf()) { canonicalThemeTag(it) }
     if (keys.isEmpty()) return this
     val wantsAdaptive = ADAPTIVE_TAG in keys
+    val wantsDynamic = DYNAMIC_TAG in keys
     return filter { item ->
         (wantsAdaptive && item.isAdaptiveTheme()) ||
+            (wantsDynamic && item.isDynamicTheme()) ||
             item.entry.tags.any { canonicalThemeTag(it) in keys }
     }
 }

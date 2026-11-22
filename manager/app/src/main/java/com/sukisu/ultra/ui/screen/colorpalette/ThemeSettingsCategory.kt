@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ChromeReaderMode
 import androidx.compose.material.icons.rounded.CallToAction
 import androidx.compose.material.icons.rounded.Colorize
 import androidx.compose.material.icons.rounded.Description
@@ -60,6 +61,12 @@ enum class ThemeSettingsCategory(
         summaryRes = R.string.settings_section_home_card_summary,
         icon = Icons.Rounded.Home,
     ),
+    TOP_BAR(
+        labelRes = R.string.theme_category_top_bar,
+        titleRes = R.string.settings_section_top_bar,
+        summaryRes = R.string.settings_section_top_bar_summary,
+        icon = Icons.AutoMirrored.Rounded.ChromeReaderMode,
+    ),
     BOTTOM_BAR(
         labelRes = R.string.theme_category_bottom_bar,
         titleRes = R.string.settings_section_bottom_bar,
@@ -101,6 +108,7 @@ enum class ThemeSettingsCategory(
                 "appearance", "icon_text", "icon", "text", "custom_texts" -> ICON_TEXT
                 "home", "home_card", "sticker" -> HOME_CARD
                 "bottom_bar", "chrome", "navigation", "navbar" -> BOTTOM_BAR
+                "top_bar", "topbar", "app_bar", "toolbar", "header" -> TOP_BAR
                 "behavior", "gestures", "predictive_back", "scale", "interaction" -> INTERACTION
                 "details", "module_description" -> DETAILS
                 "theme_package", "theme_store", "adaptive" -> THEME_PACKAGE

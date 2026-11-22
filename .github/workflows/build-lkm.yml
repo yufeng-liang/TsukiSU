@@ -1,8 +1,8 @@
 name: Build LKM for KernelSU
 
-# Self-hosted runner variant. This file only fans the matrix out to ddk-lkm.yml,
-# which is a reusable workflow in the same repository, so it needs no rewrite:
-# local `uses:` never reaches github.com.
+# Fans the KMI matrix out to ddk-lkm.yml. Kept as a reusable workflow so ci.yml
+# and release.yml stay short; the cost is that Forgejo also lists the caller
+# jobs (0s, no steps) in the run view.
 on:
   workflow_call:
     inputs:
@@ -47,9 +47,12 @@ on:
         default: false
         type: boolean
   workflow_dispatch:
+
 jobs:
   build-lkm:
+    name: LKM ${{ matrix.kmi }}
     strategy:
+      fail-fast: false
       matrix:
         kmi:
           - android12-5.10
@@ -71,3 +74,4 @@ jobs:
       version_code: ${{ inputs.version_code || '' }}
       lkm_rev: ${{ inputs.lkm_rev || '' }}
       release_build: ${{ inputs.release_build }}
+    secrets: inherit

@@ -1,5 +1,14 @@
 package com.sukisu.ultra.ui.screen.themestore
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,7 +42,7 @@ import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeFlexibleTopAppBar
+import com.sukisu.ultra.ui.component.material.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -52,9 +61,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -95,6 +106,7 @@ internal fun ThemeStoreHistoryScreen(
         ),
     ) { mutableStateOf(emptySet<String>()) }
     var confirmClear by remember { mutableStateOf(false) }
+    val haptics = LocalHapticFeedback.current
     val kind = if (tab == 0) ThemeStoreHistoryKind.VIEWED else ThemeStoreHistoryKind.DOWNLOADED
     val current = if (tab == 0) viewedHistory else downloadedHistory
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -176,7 +188,19 @@ internal fun ThemeStoreHistoryScreen(
                 ),
                 onTabClick = { tab = it },
             )
-            if (selecting && !loginRequired) {
+            AnimatedVisibility(
+                visible = selecting && !loginRequired,
+                enter = fadeIn(
+                    animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+                ) + expandVertically(
+                    animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+                ),
+                exit = fadeOut(
+                    animationSpec = MaterialTheme.motionScheme.fastEffectsSpec(),
+                ) + shrinkVertically(
+                    animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
+                ),
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -261,6 +285,13 @@ internal fun ThemeStoreHistoryScreen(
                                         selected + entry.key
                                     }
                                 },
+                                onLongPress = {
+                                    if (!loginRequired) {
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        if (!selecting) selecting = true
+                                        selected = selected + entry.key
+                                    }
+                                },
                                 onClick = {
                                     if (selecting) {
                                         selected = if (entry.key in selected) {
@@ -272,7 +303,22 @@ internal fun ThemeStoreHistoryScreen(
                                         onOpen(entry)
                                     }
                                 },
+                                modifier = Modifier.animateItem(
+                                    fadeInSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+                                    placementSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+                                    fadeOutSpec = MaterialTheme.motionScheme.fastEffectsSpec(),
+                                ),
                             )
+                        }
+                        if (!selecting) {
+                            item(key = "hint") {
+                                Text(
+                                    text = stringResource(R.string.theme_store_history_long_press_hint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -328,7 +374,9 @@ private fun HistoryCard(
     selecting: Boolean,
     checked: Boolean,
     onToggle: () -> Unit,
+    onLongPress: () -> Unit,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val imageUrl = source
@@ -344,17 +392,42 @@ private fun HistoryCard(
     val date = remember(entry.createdAt) {
         SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(entry.createdAt))
     }
+    // MD3E selected state mirrors the downloads library: tonal fill plus a primary outline.
+    val containerColor by animateColorAsState(
+        targetValue = if (checked && selecting) {
+            MaterialTheme.colorScheme.secondaryContainer
+        } else {
+            themeStoreCardColor()
+        },
+        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+        label = "history-card-container",
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (checked && selecting) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            themeStoreCardBorderColor()
+        },
+        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+        label = "history-card-border",
+    )
     Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = LocalIndication.current,
+                onClick = onClick,
+                onLongClick = onLongPress,
+            ),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
-            containerColor = themeStoreCardColor(),
+            containerColor = containerColor,
             contentColor = MaterialTheme.colorScheme.onSurface,
         ),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            themeStoreCardBorderColor(),
+            borderColor,
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {

@@ -38,6 +38,14 @@ import com.sukisu.ultra.data.repository.KEY_HOME_STATUS_SCALE
 import com.sukisu.ultra.data.repository.KEY_HOME_PILL_SCALE
 import com.sukisu.ultra.data.repository.KEY_HOME_STATUS_WIDTH_FRACTION
 import com.sukisu.ultra.data.repository.KEY_SHOW_HOME_CARD_IMAGE_WITHOUT_BACKGROUND
+import com.sukisu.ultra.data.repository.KEY_DYNAMIC_HOME_CARD_FIT
+import com.sukisu.ultra.data.repository.KEY_DYNAMIC_WALLPAPER_FPS
+import com.sukisu.ultra.data.repository.KEY_DYNAMIC_WALLPAPER_SPEED
+import com.sukisu.ultra.data.repository.KEY_DYNAMIC_HOME_CARD_OFFSET_X
+import com.sukisu.ultra.data.repository.KEY_DYNAMIC_HOME_CARD_OFFSET_Y
+import com.sukisu.ultra.data.repository.KEY_DYNAMIC_HOME_CARD_PATH
+import com.sukisu.ultra.data.repository.KEY_DYNAMIC_HOME_CARD_UPDATED_AT
+import com.sukisu.ultra.data.repository.KEY_DYNAMIC_HOME_CARD_ZOOM
 import java.io.File
 import com.sukisu.ultra.getKernelVersion
 import com.sukisu.ultra.ksuApp
@@ -62,6 +70,12 @@ import com.sukisu.ultra.ui.util.listModules
 import com.sukisu.ultra.ui.util.module.LatestVersionInfo
 import com.sukisu.ultra.ui.util.resolveDeviceName
 import com.sukisu.ultra.ui.util.rootAvailable
+import com.sukisu.ultra.ui.screen.home.UpdateProgress
+import com.sukisu.ultra.ui.screen.home.UpdateStage
+import com.sukisu.ultra.ui.component.background.DynamicWallpaperFit
+import com.sukisu.ultra.ui.component.background.DynamicWallpaperTransform
+import com.sukisu.ultra.ui.util.getZygiskImplementationInfo
+import com.sukisu.ultra.ui.util.ImageStorage
 
 class HomeViewModel(
     private val settingsRepo: SettingsRepository = SettingsRepositoryImpl()
@@ -74,6 +88,30 @@ class HomeViewModel(
         }
         if (key == null || key == KEY_HOME_CARD_IMAGE_PATH) {
             updateContent { it.copy(homeCardImagePath = existingHomeCardImage()) }
+        }
+        if (
+            key == null || key == KEY_DYNAMIC_HOME_CARD_PATH ||
+            key == KEY_DYNAMIC_HOME_CARD_UPDATED_AT
+        ) {
+            updateContent {
+                it.copy(
+                    dynamicHomeCardPath = existingDynamicHomeCard(),
+                    dynamicHomeCardUpdatedAt = settingsRepo.dynamicHomeCardUpdatedAt,
+                )
+            }
+        }
+        if (key == null || key == KEY_DYNAMIC_HOME_CARD_FIT || key == KEY_DYNAMIC_HOME_CARD_ZOOM ||
+            key == KEY_DYNAMIC_HOME_CARD_OFFSET_X || key == KEY_DYNAMIC_HOME_CARD_OFFSET_Y
+        ) {
+            updateContent { it.copy(dynamicHomeCardTransform = dynamicHomeCardTransform()) }
+        }
+        if (key == null || key == KEY_DYNAMIC_WALLPAPER_FPS || key == KEY_DYNAMIC_WALLPAPER_SPEED) {
+            updateContent {
+                it.copy(
+                    dynamicPlaybackFps = settingsRepo.dynamicWallpaperFps,
+                    dynamicPlaybackSpeed = settingsRepo.dynamicWallpaperSpeed,
+                )
+            }
         }
         if (key == null || key == KEY_HIDE_HOME_CARD_STATUS_TEXT) {
             updateContent { it.copy(hideHomeCardStatusText = settingsRepo.hideHomeCardStatusText) }
@@ -134,6 +172,16 @@ class HomeViewModel(
     private fun existingHomeCardImage(): String =
         settingsRepo.homeCardImagePath.takeIf { it.isNotEmpty() && File(it).isFile } ?: ""
 
+    private fun existingDynamicHomeCard(): String =
+        ImageStorage.dynamicHomeCardFile(ksuApp)?.absolutePath.orEmpty()
+
+    private fun dynamicHomeCardTransform(): DynamicWallpaperTransform = DynamicWallpaperTransform(
+        fit = DynamicWallpaperFit.fromValue(settingsRepo.dynamicHomeCardFit),
+        zoom = settingsRepo.dynamicHomeCardZoom,
+        offsetX = settingsRepo.dynamicHomeCardOffsetX,
+        offsetY = settingsRepo.dynamicHomeCardOffsetY,
+    ).sanitized()
+
     private fun existingHomeCardStickers(): List<HomeCardSticker> =
         settingsRepo.homeCardStickers.filter { File(it.path).isFile }
 
@@ -154,7 +202,14 @@ class HomeViewModel(
 
     fun onResume(isCurrentPage: Boolean) {
         // Match the probe's lifetime, not saved UI state restored after process death.
-        if (hasResumed && isCurrentPage) refresh()
+        if (hasResumed && isCurrentPage) {
+            // Returning from the system installer without updating means the user
+            // cancelled; drop the "confirm installation" card so prompts can retry.
+            if (_uiState.value.content?.updateProgress?.stage == UpdateStage.AWAITING_USER) {
+                updateContent { it.copy(updateProgress = null) }
+            }
+            refresh()
+        }
         hasResumed = true
     }
 
@@ -208,6 +263,30 @@ class HomeViewModel(
                     CiManagerUpdater(ksuApp).updateAndInstall(
                         info,
                         keepApk = !settingsRepo.autoDeleteUpdateApk,
+                        onStage = { stage ->
+                            val uiStage = when (stage) {
+                                CiManagerUpdater.Stage.DOWNLOADING -> UpdateStage.DOWNLOADING
+                                CiManagerUpdater.Stage.VERIFYING -> UpdateStage.VERIFYING
+                                CiManagerUpdater.Stage.INSTALLING -> UpdateStage.INSTALLING
+                            }
+                            updateProgress { it.copy(stage = uiStage) }
+                        },
+                        onProgress = { downloadedBytes, totalBytes, bytesPerSecond ->
+                            updateProgress {
+                                it.copy(
+                                    stage = UpdateStage.DOWNLOADING,
+                                    downloadedBytes = downloadedBytes,
+                                    totalBytes = totalBytes,
+                                    bytesPerSecond = bytesPerSecond,
+                                )
+                            }
+                        },
+                    )
+                }
+                updateProgress {
+                    it.copy(
+                        stage = if (installed) UpdateStage.COMPLETED else UpdateStage.AWAITING_USER,
+                        bytesPerSecond = 0L,
                     )
                 }
                 val message = if (installed) R.string.ci_update_install_success
@@ -216,10 +295,23 @@ class HomeViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                updateProgress {
+                    it.copy(
+                        stage = UpdateStage.FAILED,
+                        bytesPerSecond = 0L,
+                        error = e.message ?: ksuApp.getString(R.string.ci_update_download_failed),
+                    )
+                }
                 android.widget.Toast.makeText(ksuApp, e.message ?: ksuApp.getString(R.string.ci_update_download_failed), android.widget.Toast.LENGTH_LONG).show()
             } finally {
                 // 安装结果不影响首页状态：进度提示只活在这一段协程里。
             }
+        }
+    }
+
+    private fun updateProgress(transform: (UpdateProgress) -> UpdateProgress) {
+        updateContent { state ->
+            state.updateProgress?.let { state.copy(updateProgress = transform(it)) } ?: state
         }
     }
 
@@ -303,6 +395,11 @@ class HomeViewModel(
             checkUpdateEnabled = settingsRepo.checkUpdate,
             customHomeTitle = settingsRepo.customHomeTitle,
             homeCardImagePath = existingHomeCardImage(),
+            dynamicHomeCardPath = existingDynamicHomeCard(),
+            dynamicHomeCardUpdatedAt = settingsRepo.dynamicHomeCardUpdatedAt,
+            dynamicHomeCardTransform = dynamicHomeCardTransform(),
+            dynamicPlaybackFps = settingsRepo.dynamicWallpaperFps,
+            dynamicPlaybackSpeed = settingsRepo.dynamicWallpaperSpeed,
             hideHomeCardStatusText = settingsRepo.hideHomeCardStatusText,
             hideHomeCardDecoration = settingsRepo.hideHomeCardDecoration,
             homeCardStickers = existingHomeCardStickers(),

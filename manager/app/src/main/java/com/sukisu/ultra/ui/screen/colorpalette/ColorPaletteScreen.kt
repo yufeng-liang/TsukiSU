@@ -65,6 +65,8 @@ fun ColorPaletteScreen(section: String? = null, importUri: String? = null) {
         onSetEnableProgressiveBlur = viewModel::setEnableProgressiveBlur,
         onSetEnableFloatingBottomBar = viewModel::setEnableFloatingBottomBar,
         onSetEnableFloatingBottomBarBlur = viewModel::setEnableFloatingBottomBarBlur,
+        onSetTopBarStyle = viewModel::setTopBarStyle,
+        onSetTopBarPillFade = viewModel::setTopBarPillFade,
         onSetEnableNavigationBadge = viewModel::setEnableNavigationBadge,
         onSetEnablePredictiveBack = {
             viewModel.setEnablePredictiveBack(it)
@@ -86,6 +88,7 @@ fun ColorPaletteScreen(section: String? = null, importUri: String? = null) {
         onSetHomeCardSectionExpanded = viewModel::setHomeCardSectionExpanded,
         onSetColorsSectionExpanded = viewModel::setColorsSectionExpanded,
         onSetBottomBarSectionExpanded = viewModel::setBottomBarSectionExpanded,
+        onSetTopBarSectionExpanded = viewModel::setTopBarSectionExpanded,
         onSetInteractionSectionExpanded = viewModel::setInteractionSectionExpanded,
         onSetDetailsSectionExpanded = viewModel::setDetailsSectionExpanded,
         onSetCustomHomeTitle = viewModel::setCustomHomeTitle,
@@ -112,6 +115,12 @@ fun ColorPaletteScreen(section: String? = null, importUri: String? = null) {
             }
         },
         onClearCustomBackground = viewModel::clearCustomBackground,
+        onOpenDynamicWallpaper = { navigator.push(Route.DynamicWallpaper()) },
+        onOpenDynamicHomeCard = { navigator.push(Route.DynamicWallpaper(card = true)) },
+        onClearDynamicHomeCard = { ctx ->
+            viewModel.clearDynamicWallpaper(ctx, com.sukisu.ultra.ui.component.background.DynamicWallpaperTarget.CARD)
+        },
+        onClearDynamicWallpaper = { ctx -> viewModel.clearDynamicWallpaper(ctx) },
         onPickHomeCardImage = viewModel::pickHomeCardImage,
         onClearHomeCardImage = viewModel::clearHomeCardImage,
         onSetHideHomeCardStatusText = viewModel::setHideHomeCardStatusText,

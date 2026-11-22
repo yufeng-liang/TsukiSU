@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.dropUnlessResumed
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import com.sukisu.ultra.R
@@ -40,6 +41,11 @@ import com.sukisu.ultra.ui.util.getLoadedBlockableModules
 import com.sukisu.ultra.ui.util.isBlockModulesValid
 import com.sukisu.ultra.ui.util.getSlotSuffix
 import com.sukisu.ultra.ui.util.isAbDevice
+import kotlinx.coroutines.withContext
+import com.sukisu.ultra.ui.component.dialog.ConfirmResult
+import com.sukisu.ultra.ui.component.dialog.rememberConfirmDialog
+import com.sukisu.ultra.ui.util.KNOWN_BLOCKABLE_MODULES
+import com.sukisu.ultra.ui.util.parseBlockModules
 import android.net.Uri
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.rememberCoroutineScope
@@ -61,6 +67,7 @@ fun InstallScreen(
     val resources = LocalResources.current
     var probeJob by remember { mutableStateOf<Job?>(null) }
     val loadingDialog = rememberLoadingDialog()
+    val confirmDialog = rememberConfirmDialog()
 
     val installMethodState = rememberSaveable { mutableStateOf<InstallMethod?>(null) }
     var installMethod by installMethodState
@@ -101,11 +108,22 @@ fun InstallScreen(
         }
     }
 
-    // Read the configuration from the boot image ksu_config
     val bootConfig by produceState(initialValue = BootConfig()) { value = getBootConfig() }
     var spoofEnabled by rememberSaveable { mutableStateOf(false) }
-    var spoofRelease by rememberSaveable { mutableStateOf(SuSFSManager.getKernelSpoofRelease()) }
-    var spoofVersion by rememberSaveable { mutableStateOf(SuSFSManager.getKernelSpoofVersion()) }
+    var spoofRelease by rememberSaveable { mutableStateOf("") }
+    var spoofVersion by rememberSaveable { mutableStateOf("") }
+    var spoofPrefilled by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        if (!spoofPrefilled) {
+            spoofPrefilled = true
+            val (release, version) = withContext(Dispatchers.IO) {
+                SuSFSManager.getKernelSpoofRelease() to SuSFSManager.getKernelSpoofVersion()
+            }
+            if (spoofRelease.isEmpty()) spoofRelease = release
+            if (spoofVersion.isEmpty()) spoofVersion = version
+        }
+    }
 
     val effectiveSpoofRelease = if (spoofEnabled) spoofRelease else ""
     val effectiveSpoofVersion = if (spoofEnabled) spoofVersion else ""
@@ -204,7 +222,7 @@ fun InstallScreen(
     }
 
     val blockModulesInvalidMessage = stringResource(R.string.install_block_modules_invalid)
-    val onInstall = {
+    val doInstall: () -> Unit = {
         if (isStandaloneKpm) {
             navigator.push(Route.Flash(FlashIt.PatchKpmBoot(boot = kpmBootUri, undo = kpmUndo)))
         } else if (!isBlockModulesValid(effectiveBlockModules)) {
@@ -265,6 +283,30 @@ fun InstallScreen(
                         )
                     )
                 }
+            }
+        }
+    }
+
+    val onInstall: () -> Unit = {
+        val unknownModules = if (isStandaloneKpm || !isBlockModulesValid(effectiveBlockModules)) {
+            emptyList()
+        } else {
+            parseBlockModules(effectiveBlockModules).filter { it !in KNOWN_BLOCKABLE_MODULES }
+        }
+        if (unknownModules.isEmpty()) {
+            doInstall()
+        } else {
+            scope.launch {
+                val result = confirmDialog.awaitConfirm(
+                    title = resources.getString(R.string.install_block_modules_unknown_title),
+                    content = resources.getString(
+                        R.string.install_block_modules_unknown_content,
+                        unknownModules.joinToString(", ")
+                    ),
+                    confirm = resources.getString(R.string.confirm),
+                    dismiss = resources.getString(R.string.cancel)
+                )
+                if (result == ConfirmResult.Confirmed) doInstall()
             }
         }
     }

@@ -49,11 +49,20 @@ import com.sukisu.ultra.ui.util.LocaleHelper
 import com.sukisu.ultra.ui.util.customText
 import com.sukisu.ultra.ui.util.rememberBlurBackdrop
 import com.sukisu.ultra.ui.viewmodel.MainPageRequest
+import com.sukisu.ultra.ui.component.KsuIsValid
+import com.sukisu.ultra.ui.component.dialog.rememberLoadingDialog
+import com.sukisu.ultra.ui.component.miuix.SendLogDialog
+import com.sukisu.ultra.ui.component.profile.TemporaryRootPreferences
+import com.sukisu.ultra.ui.component.rebootlistpopup.rememberRebootAction
+import com.sukisu.ultra.ui.component.rebootlistpopup.rememberRebootChoices
+import com.sukisu.ultra.ui.component.uninstalldialog.UninstallDialog
+import com.sukisu.ultra.ui.screen.builtinzygisk.problemMessage
+import com.sukisu.ultra.ui.screen.builtinzygisk.problemTitle
 import kotlinx.coroutines.delay
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.TopAppBar
+import com.sukisu.ultra.ui.component.miuix.TopAppBar
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.basic.Search
@@ -98,6 +107,8 @@ fun SettingPagerMiuix(
     val enableBlur = LocalEnableBlur.current
     val backdrop = rememberBlurBackdrop(enableBlur)
     val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
+    // Opaque while neither the bar blur nor a custom background is active: a transparent bar there
+    // lets the list scroll through the title. Matches the other Miuix pages.
     val barColor = if (backdrop != null || hasCustomBackground) Color.Transparent else colorScheme.surface
 
     AppScaffold(

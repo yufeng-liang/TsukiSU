@@ -7,6 +7,21 @@
 -->
 <full-backup-content>
     <exclude domain="sharedpref" path="theme_device_access.xml"/>
+    <!-- Dynamic wallpapers can be up to 308 MB; never push them through backup. -->
+    <exclude domain="file" path="backgrounds/dynamic_wallpaper.mp4"/>
+    <exclude domain="file" path="backgrounds/dynamic_wallpaper.webp"/>
+    <exclude domain="file" path="backgrounds/dynamic_wallpaper.mp4.tmp"/>
+    <exclude domain="file" path="backgrounds/dynamic_wallpaper.webp.tmp"/>
+    <exclude domain="file" path="backgrounds/dynamic_home_card.mp4"/>
+    <exclude domain="file" path="backgrounds/dynamic_home_card.webp"/>
+    <exclude domain="file" path="backgrounds/dynamic_home_card.mp4.tmp"/>
+    <exclude domain="file" path="backgrounds/dynamic_home_card.webp.tmp"/>
+    <exclude domain="file" path="backgrounds/adaptive_draft_dynamic_wallpaper.mp4"/>
+    <exclude domain="file" path="backgrounds/adaptive_draft_dynamic_wallpaper.webp"/>
+    <exclude domain="file" path="backgrounds/adaptive_draft_dynamic_home_card.mp4"/>
+    <exclude domain="file" path="backgrounds/adaptive_draft_dynamic_home_card.webp"/>
+    <!-- "My downloads" packages are large and re-downloadable; keep them out of backups. -->
+    <exclude domain="file" path="theme_downloads/"/>
     <!--
    SukiSU：只排除**会话令牌**那一份 sharedpref（ModuleUploadPrefs.PREFS_NAME =
    "module_upload_session"）。它存的是九十天有效的凭据 —— 服务端 KV 里只有它的

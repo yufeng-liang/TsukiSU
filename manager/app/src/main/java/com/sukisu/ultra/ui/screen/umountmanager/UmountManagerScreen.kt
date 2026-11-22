@@ -72,9 +72,11 @@ fun UmountManagerScreen() {
 
             scope.launch(Dispatchers.IO) {
                 val success = addUmountPath(path, flags)
+                if (success) {
+                    saveUmountConfig()
+                }
                 withContext(Dispatchers.Main) {
                     if (success) {
-                        saveUmountConfig()
                         Toast.makeText(context, umountPathAddedText, Toast.LENGTH_SHORT).show()
                         loadPaths()
                     } else {

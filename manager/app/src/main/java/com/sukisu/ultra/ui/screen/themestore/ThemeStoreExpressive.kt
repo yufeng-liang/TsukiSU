@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -226,6 +227,40 @@ internal fun AdaptiveThemeBadge(
         } else {
             Text(
                 text = stringResource(R.string.theme_adaptive_title),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Marks a v6 package that can carry the shared dynamic wallpaper/card media. The tinted
+ * container keeps it readable on top of arbitrary preview images and distinct from the
+ * adaptive badge.
+ */
+@Composable
+internal fun DynamicThemeBadge(
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+) {
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.92f),
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+    ) {
+        if (compact) {
+            Icon(
+                imageVector = Icons.Rounded.Wallpaper,
+                contentDescription = stringResource(R.string.theme_dynamic_title),
+                modifier = Modifier
+                    .padding(5.dp)
+                    .size(14.dp),
+            )
+        } else {
+            Text(
+                text = stringResource(R.string.theme_dynamic_title),
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             )

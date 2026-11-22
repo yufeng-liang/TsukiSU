@@ -61,7 +61,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text as MaterialText
 import androidx.compose.material3.TextButton as MaterialTextButton
-import androidx.compose.material3.TopAppBar as MaterialTopAppBar
+import com.sukisu.ultra.ui.component.material.TopAppBar as MaterialTopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -124,9 +124,15 @@ internal fun ThemeStoreDetailScreen(
     onToggleFollow: () -> Unit = {},
 ) {
     val entry = item.entry
-    val displayTags = remember(item.key, entry.tags, entry.r18) {
+    val displayTags = remember(item.key, entry.tags, entry.r18, entry.dynamic, entry.formatVersion) {
         val hasR18Tag = entry.tags.any { canonicalThemeTag(it) == R18_TAG }
-        if (item.isR18Theme() && !hasR18Tag) listOf(R18_TAG) + entry.tags else entry.tags
+        val hasDynamicTag = entry.tags.any { canonicalThemeTag(it) == DYNAMIC_TAG }
+        buildList {
+            if (item.isR18Theme() && !hasR18Tag) add(R18_TAG)
+            // v6 packages are badged even when their author never typed the tag.
+            if (item.isDynamicTheme() && !hasDynamicTag) add(DYNAMIC_TAG)
+            addAll(entry.tags)
+        }
     }
     val commentsLoggedIn = state.accounts.any { account ->
         account.source.baseUrl == item.source.baseUrl
@@ -284,6 +290,9 @@ internal fun ThemeStoreDetailScreen(
                         }
                         if (item.isAdaptiveTheme()) {
                             AdaptiveThemeBadge()
+                        }
+                        if (item.isDynamicTheme()) {
+                            DynamicThemeBadge()
                         }
                     }
                     if (compatible) {
@@ -846,5 +855,8 @@ internal fun themeImageRequest(context: android.content.Context, url: String, to
             if (current.isNotBlank()) {
                 addHeader(ThemeStoreRepository.TOKEN_HEADER, current)
             }
+            // Theme images may live in the public CNB repository; ask for the
+            // sealed direct URL and decrypt it in ThemeMediaInterceptor.
+            addHeader(ThemeStoreRepository.MEDIA_DIRECT_HEADER, ThemeStoreRepository.MEDIA_DIRECT_VALUE)
         }
         .build()

@@ -1,6 +1,10 @@
 package com.sukisu.ultra.ui.screen.settings
 
 import androidx.compose.foundation.background
+import android.net.Uri
+import com.sukisu.ultra.ui.component.profile.TemporaryRootPreferences
+import com.sukisu.ultra.ui.util.customText
+import com.sukisu.ultra.ui.util.CustomTextKey
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -26,12 +30,16 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Publish
 import androidx.compose.material.icons.filled.Search
+import com.sukisu.ultra.ui.component.Storefront
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Policy
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
+import com.sukisu.ultra.ui.component.material.LargeFlexibleTopAppBar
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
@@ -50,7 +58,6 @@ import androidx.compose.ui.unit.dp
 import com.sukisu.ultra.R
 import com.sukisu.ultra.data.proxy.ProxyHealth
 import com.sukisu.ultra.ui.UiMode
-import com.sukisu.ultra.ui.component.Storefront
 import com.sukisu.ultra.ui.component.material.ExpressiveScaffold
 import com.sukisu.ultra.ui.component.material.IconTile
 import com.sukisu.ultra.ui.component.material.SegmentedColumn
@@ -59,10 +66,19 @@ import com.sukisu.ultra.ui.component.material.SegmentedListItem
 import com.sukisu.ultra.ui.component.material.expressiveTopAppBarColors
 import com.sukisu.ultra.ui.theme.LocalBackgroundImagePath
 import com.sukisu.ultra.data.repository.ModuleContributionPrefs
-import com.sukisu.ultra.ui.util.CustomTextKey
 import com.sukisu.ultra.ui.util.LocaleHelper
-import com.sukisu.ultra.ui.util.customText
 import com.sukisu.ultra.ui.viewmodel.MainPageRequest
+import com.sukisu.ultra.ui.component.KsuIsValid
+import com.sukisu.ultra.ui.component.material.SegmentedSwitchItem
+import com.sukisu.ultra.ui.component.material.SendLogBottomSheet
+import com.sukisu.ultra.ui.component.material.SnackBarHost
+import com.sukisu.ultra.ui.component.rebootlistpopup.rememberRebootAction
+import com.sukisu.ultra.ui.component.rebootlistpopup.rememberRebootChoices
+import com.sukisu.ultra.ui.screen.builtinzygisk.problemMessage
+import com.sukisu.ultra.ui.screen.builtinzygisk.problemTitle
+import android.content.Intent
+import androidx.compose.material.icons.filled.Settings
+import com.sukisu.ultra.ui.component.uninstalldialog.UninstallDialog
 import kotlinx.coroutines.delay
 
 /**

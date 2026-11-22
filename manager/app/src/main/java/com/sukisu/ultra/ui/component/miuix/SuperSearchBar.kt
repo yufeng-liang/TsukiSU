@@ -15,6 +15,7 @@ import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -46,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
@@ -69,6 +71,9 @@ import com.sukisu.ultra.ui.component.SearchStatus
 import com.sukisu.ultra.ui.theme.LocalBackgroundImagePath
 import com.sukisu.ultra.ui.theme.LocalCardBackgroundAlpha
 import com.sukisu.ultra.ui.theme.backgroundAwareColor
+import com.sukisu.ultra.ui.component.FloatingTopBarPill
+import com.sukisu.ultra.ui.component.floatingTopBarPillColor
+import com.sukisu.ultra.ui.theme.LocalTopBarStyle
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.InputField
 import top.yukonga.miuix.kmp.basic.Text
@@ -158,25 +163,18 @@ fun SearchStatus.SearchPager(
                 } else Modifier
             )
     ) {
+        // The full-screen scrim above already covers the page (opaque without a custom
+        // background, translucent over a wallpaper). Painting the row and the field slot again
+        // would stack the same surface colour and turn the header into a dark rectangle.
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(top = topPadding)
-                .then(
-                    if (!searchStatus.isCollapsed()) {
-                        if (hasBackgroundImage) Modifier.background(surfaceColor.copy(alpha = cardAlpha))
-                        else Modifier.background(surfaceColor)
-                    } else Modifier
-                ),
+                .padding(top = topPadding),
             horizontalArrangement = Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (!searchStatus.isCollapsed()) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .background(if (hasBackgroundImage) surfaceColor.copy(alpha = cardAlpha) else surfaceColor)
-                ) {
+                Box(modifier = Modifier.weight(1f)) {
                     expandBar(searchStatus, onSearchStatusChange, searchBarTopPadding)
                 }
             }
@@ -247,6 +245,8 @@ fun SearchBar(
 ) {
     val focusRequester = remember { FocusRequester() }
     var textFieldValue by remember { mutableStateOf(TextFieldValue(searchStatus.searchText)) }
+    val floating = LocalTopBarStyle.current.isFloating
+    val glass = LocalTopBarStyle.current.isGlass
 
     LaunchedEffect(searchStatus.searchText) {
         if (textFieldValue.text != searchStatus.searchText) {
@@ -273,7 +273,27 @@ fun SearchBar(
             .padding(horizontal = 12.dp)
             .padding(top = searchBarTopPadding, bottom = 6.dp)
             .heightIn(min = 45.dp)
-            .background(backgroundAwareColor(colorScheme.surfaceContainerHigh), CircleShape)
+            .background(
+                color = if (floating) {
+                    floatingTopBarPillColor(colorScheme.surfaceContainerHigh)
+                } else {
+                    backgroundAwareColor(colorScheme.surfaceContainerHigh)
+                },
+                shape = CircleShape,
+            )
+            .then(
+                if (floating) {
+                    Modifier.border(
+                        width = 0.5.dp,
+                        color = colorScheme.outline.copy(
+                            alpha = if (glass) 0.7f else 0.35f,
+                        ),
+                        shape = CircleShape,
+                    )
+                } else {
+                    Modifier
+                }
+            )
             .focusRequester(focusRequester),
         decorationBox = { innerTextField ->
             Row(
@@ -328,28 +348,54 @@ fun SearchBarFake(
     label: String,
     searchBarTopPadding: Dp = 12.dp,
 ) {
-    InputField(
-        query = "",
-        onQueryChange = { },
-        label = label,
-        leadingIcon = {
-            Icon(
-                imageVector = MiuixIcons.Basic.Search,
-                contentDescription = "Clean",
-                modifier = Modifier
-                    .size(44.dp)
-                    .padding(start = 16.dp, end = 8.dp),
-                tint = colorScheme.onSurfaceContainerHigh,
-            )
-        },
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp)
-            .padding(top = searchBarTopPadding, bottom = 6.dp),
-        color = backgroundAwareColor(colorScheme.surfaceContainerHigh),
-        onSearch = { },
-        enabled = false,
-        expanded = false,
-        onExpandedChange = { }
-    )
+    val floating = LocalTopBarStyle.current.isFloating
+    val glass = LocalTopBarStyle.current.isGlass
+    val outerModifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 12.dp)
+        .padding(top = searchBarTopPadding, bottom = 6.dp)
+    val field: @Composable () -> Unit = {
+        InputField(
+            query = "",
+            onQueryChange = { },
+            label = label,
+            leadingIcon = {
+                Icon(
+                    imageVector = MiuixIcons.Basic.Search,
+                    contentDescription = "Clean",
+                    modifier = Modifier
+                        .size(44.dp)
+                        .padding(start = 16.dp, end = 8.dp),
+                    tint = colorScheme.onSurfaceContainerHigh,
+                )
+            },
+            modifier = if (floating) Modifier.fillMaxWidth() else outerModifier,
+            // The floating styles draw the capsule themselves (fill + hairline rim) so the field
+            // reads as glass over the bar's frosted band; the standard bar keeps following the
+            // wallpaper behind it.
+            color = if (floating) {
+                Color.Transparent
+            } else {
+                backgroundAwareColor(colorScheme.surfaceContainerHigh)
+            },
+            onSearch = { },
+            enabled = false,
+            expanded = false,
+            onExpandedChange = { }
+        )
+    }
+    if (floating) {
+        FloatingTopBarPill(
+            color = floatingTopBarPillColor(colorScheme.surfaceContainerHigh),
+            modifier = outerModifier,
+            shape = CircleShape,
+            borderColor = colorScheme.outline.copy(
+                alpha = if (glass) 0.7f else 0.35f,
+            ),
+        ) {
+            field()
+        }
+    } else {
+        field()
+    }
 }

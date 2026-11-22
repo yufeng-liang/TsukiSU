@@ -33,7 +33,10 @@ on:
         type: boolean
         default: false
 jobs:
-  build:
+  # The caller owns "build-ksud"; this expanded row is named after what it
+  # builds, and the matrix value keeps the four targets apart. See ksuinit.yml.
+  ksud:
+    name: ksud (${{ matrix.target }})
     strategy:
       fail-fast: false
       matrix:
@@ -44,48 +47,37 @@ jobs:
     env:
       CARGO_HOME: /ci/tools/cargo
       RUSTUP_HOME: /usr/local/rustup
+      # Artifacts travel through CNB; without a token they stay on /ci only.
+      CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+      CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-result' }}
     steps:
       - name: Checkout
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -eux
-          remote="https://git.zako.shirkneko.top:20004"
-          mirror="/ci/repo-cache/${GITHUB_REPOSITORY}.git"
-          mkdir -p "$(dirname "$mirror")"
-          # One bare mirror per repository lives on the runner host, shared by
-          # every job through the /ci volume. Re-downloading the whole history
-          # per job made parallel jobs stall on the same fetch.
-          if [ ! -d "$mirror" ]; then
-            # The token must not appear in the trace of `set -x`.
-            set +x
-            git -c "http.${remote}/.extraHeader=Authorization: token ${TOKEN}" \
-              clone -q --mirror "${remote}/${GITHUB_REPOSITORY}.git" "$mirror"
-            set -x
-          elif command -v flock >/dev/null 2>&1; then
-            (
-              flock 9
-              git --git-dir="$mirror" fetch -q --prune origin \
-                "+refs/heads/*:refs/heads/*" "+refs/tags/*:refs/tags/*"
-            ) 9>"${mirror}.lock"
-          else
-            git --git-dir="$mirror" fetch -q --prune origin \
-              "+refs/heads/*:refs/heads/*" "+refs/tags/*:refs/tags/*"
-          fi
-          git clone -q --shared --no-checkout "$mirror" .
-          git checkout -q "${GITHUB_SHA}"
+        run: /ci/tools/bin/ci-checkout
 
-      - name: Download artifacts
+      # Jobs may land on different runners, so artifacts are passed through
+      # Forgejo instead of the per-host /ci volume.
+      - name: Provide node and the action sources
         run: |
           set -eux
-          . .github/scripts/ci/common.sh
-          mkdir -p artifacts
-          # Every pack_* input below reads from ./artifacts, so mirror the whole
-          # per-run artifact root here and let the individual steps pick.
-          if [ -d "$CI_ARTIFACT_ROOT" ]; then
-            cp -a "$CI_ARTIFACT_ROOT"/. artifacts/
-          fi
-          ls -la artifacts || true
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
+          ci_provide_node
+      - name: Download the build artifacts
+        id: download_build
+        continue-on-error: true
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eux
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
+          ci_download_all_artifacts "${GITHUB_WORKSPACE}/artifacts"
+
+      - name: Download the build artifacts (Forgejo fallback)
+        if: steps.download_build.outcome == 'failure'
+        uses: ./.ci-actions/download-artifact
+        with:
+          path: artifacts
 
       - name: Prepare LKM files
         if: ${{ inputs.pack_lkm }}
@@ -157,10 +149,15 @@ jobs:
       - name: Upload ksud artifact
         run: |
           set -eux
-          . .github/scripts/ci/common.sh
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
           ci_artifact_put "ksud-${{ matrix.target }}" \
             "target/${{ matrix.target }}/release/ksud"
 
+      - name: Write the job summary
+        run: |
+          set -eux
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
+          ci_summary_artifacts "ksud-${{ matrix.target }}"
       - name: Release the parallelism slot
         if: always()
         run: |

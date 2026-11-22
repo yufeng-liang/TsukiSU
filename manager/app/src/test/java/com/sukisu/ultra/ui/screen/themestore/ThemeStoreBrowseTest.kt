@@ -115,8 +115,33 @@ class ThemeStoreBrowseTest {
     }
 
     @Test
-    fun r18DetectionUsesCatalogFlagOrLegacyTags() {
-        assertTrue(item("flag", r18 = true).isR18Theme())
+    fun dynamicThemesAreBadgedByFormatFlagOrTag() {
+        val plain = item("plain")
+        val byFormat = ThemeStoreItem(
+            entry = ThemeStoreEntry(id = "v6", name = "v6", formatVersion = 6),
+            source = plain.source,
+        )
+        val byFlag = ThemeStoreItem(
+            entry = ThemeStoreEntry(id = "flagged", name = "flagged", dynamic = true),
+            source = plain.source,
+        )
+        val byTag = item("tagged", tags = listOf("动态壁纸"))
+        val items = listOf(plain, byFormat, byFlag, byTag)
+
+        assertTrue(byFormat.isDynamicTheme())
+        assertTrue(byFlag.isDynamicTheme())
+        assertTrue(byTag.isDynamicTheme())
+        assertFalse(plain.isDynamicTheme())
+        assertFalse(item("v5", tags = listOf("dark")).copy(
+            entry = item("v5", tags = listOf("dark")).entry.copy(formatVersion = 5),
+        ).isDynamicTheme())
+
+        assertEquals(listOf("adaptive", "dynamic"), listOf(byFormat, byTag).popularThemeTags())
+        assertEquals(listOf(byFormat, byFlag, byTag), items.filterByThemeTags(setOf("动态")))
+    }
+
+    @Test
+    fun r18DetectionUsesCatalogFlagOrLegacyTags() {        assertTrue(item("flag", r18 = true).isR18Theme())
         assertTrue(item("tagged", tags = listOf("R18")).isR18Theme())
         assertTrue(item("nsfw", tags = listOf("nsfw")).isR18Theme())
         assertEquals(false, item("plain", tags = listOf("dark")).isR18Theme())

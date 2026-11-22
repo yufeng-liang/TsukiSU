@@ -48,5 +48,9 @@ fun ThemeImportDialog(
         hasCustomColors = data.appearance?.colors != null,
         hasImageEffects = data.appearance?.image != null,
         hasBottomBarIcons = data.bottomBarIcons != null || theme.bottomBarIconPaths.isNotEmpty(),
+        hasDynamicWallpaper = theme.dynamicWallpaperPath != null ||
+            data.dynamic?.hasWallpaper != null,
+        hasDynamicHomeCard = theme.dynamicHomeCardPath != null ||
+            data.dynamic?.hasHomeCard != null,
     )
 }

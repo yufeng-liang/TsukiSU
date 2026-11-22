@@ -73,7 +73,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.LargeFlexibleTopAppBar
+import com.sukisu.ultra.ui.component.material.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallExtendedFloatingActionButton
 import androidx.compose.material3.TextField
@@ -196,6 +196,7 @@ fun ThemeStoreScreen(
     var showSubmissions by rememberSaveable { mutableStateOf(false) }
     var showMessages by rememberSaveable { mutableStateOf(false) }
     var showHistory by rememberSaveable { mutableStateOf(false) }
+    var showDownloads by rememberSaveable { mutableStateOf(false) }
     var showPreferences by rememberSaveable { mutableStateOf(false) }
     var showConsentDialog by rememberSaveable { mutableStateOf(false) }
     var showAccountPicker by rememberSaveable { mutableStateOf(false) }
@@ -213,6 +214,7 @@ fun ThemeStoreScreen(
     var sortMode by rememberSaveable { mutableStateOf(ThemeStoreSort.DEFAULT) }
     var selectedItemKey by rememberSaveable { mutableStateOf<String?>(null) }
     val themeGridState = rememberLazyGridState()
+    val authorGridState = rememberLazyGridState()
     var selectedAuthor by rememberSaveable { mutableStateOf<String?>(null) }
     var authorReturnItemKey by rememberSaveable { mutableStateOf<String?>(null) }
     var detailReturnAuthor by rememberSaveable { mutableStateOf<String?>(null) }
@@ -256,16 +258,18 @@ fun ThemeStoreScreen(
         }
     }
     val adaptiveSearchLabel = stringResource(R.string.theme_adaptive_tag)
+    val dynamicSearchLabel = stringResource(R.string.theme_dynamic_tag)
     val visibleItems = remember(
         catalogItems,
         searchQuery,
         sortMode,
         selectedTags,
         adaptiveSearchLabel,
+        dynamicSearchLabel,
         state.followedAuthorKeys,
     ) {
         catalogItems
-            .filter { it.matchesSearch(searchQuery, adaptiveSearchLabel) }
+            .filter { it.matchesSearch(searchQuery, adaptiveSearchLabel, dynamicSearchLabel) }
             .filterByThemeTags(selectedTags)
             .sortedFor(sortMode)
             .followedFirst(state.followedAuthorKeys)
@@ -294,6 +298,8 @@ fun ThemeStoreScreen(
 
     fun openUpload(account: ThemeStoreAccount) {
         showSubmissions = false
+        showHistory = false
+        showDownloads = false
         editingThemeId = null
         editingThemeBaseUrl = null
         selectedUploadBaseUrl = account.source.baseUrl
@@ -379,6 +385,12 @@ fun ThemeStoreScreen(
         if (!returnToAuthor) selectedAuthor = null
     }
 
+    // The author page keeps its own grid state so closing a theme detail lands back on the card
+    // that opened it. Only a different author starts from the top.
+    LaunchedEffect(selectedAuthor) {
+        if (selectedAuthor != null) authorGridState.scrollToItem(0)
+    }
+
     LaunchedEffect(showUpload, selectedUploadBaseUrl) {
         val baseUrl = selectedUploadBaseUrl
         if (showUpload && baseUrl != null) viewModel.loadUploadOptions(baseUrl)
@@ -400,6 +412,10 @@ fun ThemeStoreScreen(
 
     LaunchedEffect(showHistory) {
         if (showHistory) viewModel.refreshHistory()
+    }
+
+    LaunchedEffect(showDownloads) {
+        if (showDownloads) viewModel.refreshDownloads()
     }
 
     LaunchedEffect(state.uploadSubmitted) {
@@ -567,6 +583,10 @@ fun ThemeStoreScreen(
         showHistory = false
     }
 
+    BackHandler(enabled = showDownloads && detailItem == null && currentAuthor == null) {
+        showDownloads = false
+    }
+
     when {
         showPreferences -> ThemeStorePreferencesScreen(
             consentAccepted = !state.needsConsent,
@@ -613,6 +633,7 @@ fun ThemeStoreScreen(
             items = authorItems,
             state = state,
             gridLayout = state.gridLayout,
+            listState = authorGridState,
             onToggleLayout = { viewModel.setGridLayout(!state.gridLayout) },
             landscapePreviewKeys = landscapePreviewKeys,
             onBack = ::closeAuthorPage,
@@ -693,6 +714,29 @@ fun ThemeStoreScreen(
             onSubmit = { input -> viewModel.submit(input, uploadSource) },
             onExportCurrentPreset = { settingsViewModel.createCurrentThemePackage(context).getOrNull() },
             onLoadAdaptiveTheme = { settingsViewModel.createAdaptiveThemePackage(context).getOrNull() },
+        )
+
+        showDownloads -> ThemeStoreDownloadsScreen(
+            downloads = state.downloads,
+            loading = state.downloadsLoading,
+            previewFor = viewModel::downloadPreviewFile,
+            onBack = { showDownloads = false },
+            onApply = { record ->
+                val file = viewModel.downloadFile(record)
+                if (file.isFile) {
+                    settingsViewModel.importThemeFile(context, file)
+                } else {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.theme_store_downloads_missing),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    viewModel.refreshDownloads()
+                }
+            },
+            onDelete = viewModel::deleteDownloads,
+            onClear = viewModel::clearDownloads,
+            onRefresh = viewModel::refreshDownloads,
         )
 
         showHistory -> ThemeStoreHistoryScreen(
@@ -818,6 +862,7 @@ fun ThemeStoreScreen(
                 returnToSubmissions = false
                 viewModel.clearUploadState()
                 showMessages = false
+                showDownloads = false
                 showSubmissions = true
             },
             onOpenMessages = {
@@ -827,6 +872,7 @@ fun ThemeStoreScreen(
                 editingThemeBaseUrl = null
                 returnToSubmissions = false
                 viewModel.clearUploadState()
+                showDownloads = false
                 showMessages = true
             },
             onOpenHistory = {
@@ -834,11 +880,24 @@ fun ThemeStoreScreen(
                 showUpload = false
                 showSubmissions = false
                 showMessages = false
+                showDownloads = false
                 editingThemeId = null
                 editingThemeBaseUrl = null
                 returnToSubmissions = false
                 viewModel.clearUploadState()
                 showHistory = true
+            },
+            onOpenDownloads = {
+                viewModel.refreshDownloads()
+                showUpload = false
+                showSubmissions = false
+                showMessages = false
+                showHistory = false
+                editingThemeId = null
+                editingThemeBaseUrl = null
+                returnToSubmissions = false
+                viewModel.clearUploadState()
+                showDownloads = true
             },
             onOpenUpload = {
                 val preferred = viewModel.preferredUploadAccount()
@@ -1212,6 +1271,7 @@ private fun ThemeStoreMaterial(
     onOpenSubmissions: () -> Unit,
     onOpenMessages: () -> Unit,
     onOpenHistory: () -> Unit,
+    onOpenDownloads: () -> Unit,
     onOpenUpload: () -> Unit,
     onInstallLocal: () -> Unit,
     onSelect: (ThemeStoreItem) -> Unit,
@@ -1227,8 +1287,17 @@ private fun ThemeStoreMaterial(
     // Render the catalogue in pages so a fast scroll does not fan out hundreds of
     // preview-image requests at once. Coil still loads only composed cards, but
     // bounding the list keeps its prefetch window small.
+    // A detail/author page replaces the grid, and this window is rebuilt when the grid comes
+    // back while listState keeps the previous scroll position. Seed the window past that
+    // position, otherwise the restored index is outside pagedItems and LazyVerticalGrid clamps
+    // it back to the first page.
     var loadedThemeCount by remember(visibleItems) {
-        mutableStateOf(STORE_PAGE_SIZE)
+        mutableStateOf(
+            themeStorePageWindow(
+                firstVisibleItemIndex = listState.firstVisibleItemIndex,
+                totalItems = visibleItems.size,
+            ),
+        )
     }
     val pagedItems = remember(visibleItems, loadedThemeCount) {
         visibleItems.take(loadedThemeCount)
@@ -1363,6 +1432,19 @@ private fun ThemeStoreMaterial(
                                 onClick = {
                                     menuExpanded = false
                                     onOpenHistory()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { MaterialText(stringResource(R.string.theme_store_downloads_title)) },
+                                leadingIcon = {
+                                    MaterialIcon(
+                                        imageVector = Icons.Rounded.FileDownload,
+                                        contentDescription = null,
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onOpenDownloads()
                                 },
                             )
                             DropdownMenuItem(
@@ -1690,7 +1772,7 @@ internal fun ThemeCardMaterial(
                         ),
                     ),
             )
-            if (item.isR18Theme() || item.isAdaptiveTheme()) {
+            if (item.isR18Theme() || item.isAdaptiveTheme() || item.isDynamicTheme()) {
                 Column(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -1703,6 +1785,9 @@ internal fun ThemeCardMaterial(
                     }
                     if (item.isAdaptiveTheme()) {
                         AdaptiveThemeBadge()
+                    }
+                    if (item.isDynamicTheme()) {
+                        DynamicThemeBadge()
                     }
                 }
             }
@@ -1953,7 +2038,7 @@ internal fun ThemeGridCardMaterial(
                         ),
                     ),
             )
-            if (item.isR18Theme() || item.isAdaptiveTheme()) {
+            if (item.isR18Theme() || item.isAdaptiveTheme() || item.isDynamicTheme()) {
                 Column(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -1966,6 +2051,9 @@ internal fun ThemeGridCardMaterial(
                     }
                     if (item.isAdaptiveTheme()) {
                         AdaptiveThemeBadge(compact = true)
+                    }
+                    if (item.isDynamicTheme()) {
+                        DynamicThemeBadge(compact = true)
                     }
                 }
             }

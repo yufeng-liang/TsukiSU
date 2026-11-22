@@ -23,6 +23,22 @@
         <exclude domain="file" path="module_zips/"/>
         <exclude domain="file" path="pkgrename/"/>
         <exclude domain="file" path="pkgrename-original/"/>
+        <!-- Dynamic wallpapers can be up to 308 MB; never push them through backup. -->
+        <exclude domain="file" path="backgrounds/dynamic_wallpaper.mp4"/>
+        <exclude domain="file" path="backgrounds/dynamic_wallpaper.webp"/>
+        <exclude domain="file" path="backgrounds/dynamic_wallpaper.mp4.tmp"/>
+        <exclude domain="file" path="backgrounds/dynamic_wallpaper.webp.tmp"/>
+        <exclude domain="file" path="backgrounds/dynamic_home_card.mp4"/>
+        <exclude domain="file" path="backgrounds/dynamic_home_card.webp"/>
+        <exclude domain="file" path="backgrounds/dynamic_home_card.mp4.tmp"/>
+        <exclude domain="file" path="backgrounds/dynamic_home_card.webp.tmp"/>
+        <exclude domain="file" path="backgrounds/adaptive_draft_dynamic_wallpaper.mp4"/>
+        <exclude domain="file" path="backgrounds/adaptive_draft_dynamic_wallpaper.webp"/>
+        <exclude domain="file" path="backgrounds/adaptive_draft_dynamic_home_card.mp4"/>
+        <exclude domain="file" path="backgrounds/adaptive_draft_dynamic_home_card.webp"/>
+        <!-- "My downloads" keeps full theme packages; they are re-downloadable and far too
+             large for a cloud backup. -->
+        <exclude domain="file" path="theme_downloads/"/>
         <!-- TODO: Use <include> and <exclude> to control what is backed up.
         <include .../>
         <exclude .../>
@@ -38,5 +54,18 @@
         <exclude domain="sharedpref" path="theme_device_access.xml"/>
         <exclude domain="sharedpref" path="module_upload_session.xml"/>
         <exclude domain="file" path="module_zips/"/>
+        <exclude domain="file" path="backgrounds/dynamic_wallpaper.mp4"/>
+        <exclude domain="file" path="backgrounds/dynamic_wallpaper.webp"/>
+        <exclude domain="file" path="backgrounds/dynamic_wallpaper.mp4.tmp"/>
+        <exclude domain="file" path="backgrounds/dynamic_wallpaper.webp.tmp"/>
+        <exclude domain="file" path="backgrounds/dynamic_home_card.mp4"/>
+        <exclude domain="file" path="backgrounds/dynamic_home_card.webp"/>
+        <exclude domain="file" path="backgrounds/dynamic_home_card.mp4.tmp"/>
+        <exclude domain="file" path="backgrounds/dynamic_home_card.webp.tmp"/>
+        <exclude domain="file" path="backgrounds/adaptive_draft_dynamic_wallpaper.mp4"/>
+        <exclude domain="file" path="backgrounds/adaptive_draft_dynamic_wallpaper.webp"/>
+        <exclude domain="file" path="backgrounds/adaptive_draft_dynamic_home_card.mp4"/>
+        <exclude domain="file" path="backgrounds/adaptive_draft_dynamic_home_card.webp"/>
+        <exclude domain="file" path="theme_downloads/"/>
     </device-transfer>
 </data-extraction-rules>

@@ -31,6 +31,8 @@ data class ThemeStoreEntry(
     val tags: List<String> = emptyList(),
     
     val adaptive: Boolean = false,
+    /** Format v6 and newer can carry the shared dynamic wallpaper/card media. */
+    val dynamic: Boolean = false,
     val r18: Boolean = false,
     val license: String = "",
     val minManagerVersion: Long = 0L,
@@ -83,6 +85,12 @@ data class ThemeStoreUploadInitRequest(
      * value; the manager always uploads using the size echoed by the server.
      */
     val chunkSize: Long? = null,
+    /**
+     * `cnb` asks a mirror that supports it for a presigned upload URL, so the
+     * package goes straight to CNB instead of the site's uplink. Servers that do
+     * not know the field ignore it and keep the chunked lane.
+     */
+    val lane: String? = null,
 )
 
 
@@ -129,7 +137,20 @@ data class ThemeStoreUploadSession(
     // null means the legacy server has neither completion nor attachment references.
     val uploadTargets: List<ThemeStoreUploadTarget>? = null,
     val receivedLocal: List<Long> = emptyList(),
+    /**
+     * Present when the server handed out a direct CNB upload target for the
+     * package. The bytes then bypass the site entirely.
+     */
+    val cnb: ThemeStoreCnbUpload? = null,
     val error: String? = null,
+)
+
+@Serializable
+data class ThemeStoreCnbUpload(
+    val asset: String = "",
+    val uploadUrl: String = "",
+    val expires: Long = 0L,
+    val confirmed: Boolean = false,
 )
 
 @Serializable

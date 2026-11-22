@@ -1,3 +1,5 @@
+@file:Suppress("SpellCheckingInspection")
+
 package com.sukisu.ultra.data.repository
 
 import android.content.ComponentName
@@ -36,9 +38,22 @@ private const val KEY_USE_SOFT_REBOOT = "soft_reboot"
 private const val KEY_AUTO_DELETE_MODULE_ZIP = "auto_delete_module_zip"
 private const val KEY_KEEP_MODULE_ZIP = "keep_module_zip"
 private const val KEY_AUTO_DELETE_UPDATE_APK = "auto_delete_update_apk"
+private const val KEY_UPDATE_SOURCES = "update_sources"
+private const val KEY_PINNED_UPDATE_SOURCE = "pinned_update_source_id"
+
+/** Stored pin value meaning "explicitly automatic", as opposed to "never configured". */
+private const val PIN_AUTO = "auto"
 internal const val KEY_CUSTOM_HOME_TITLE = "custom_home_title"
 internal const val KEY_CUSTOM_TEXTS = "custom_texts"
 internal const val KEY_HOME_CARD_IMAGE_PATH = "home_card_image_path"
+internal const val KEY_DYNAMIC_WALLPAPER_FPS = "dynamic_wallpaper_fps"
+internal const val KEY_DYNAMIC_WALLPAPER_SPEED = "dynamic_wallpaper_speed"
+internal const val KEY_DYNAMIC_HOME_CARD_PATH = "dynamic_home_card_path"
+internal const val KEY_DYNAMIC_HOME_CARD_UPDATED_AT = "dynamic_home_card_updated_at"
+internal const val KEY_DYNAMIC_HOME_CARD_FIT = "dynamic_home_card_fit"
+internal const val KEY_DYNAMIC_HOME_CARD_ZOOM = "dynamic_home_card_zoom"
+internal const val KEY_DYNAMIC_HOME_CARD_OFFSET_X = "dynamic_home_card_offset_x"
+internal const val KEY_DYNAMIC_HOME_CARD_OFFSET_Y = "dynamic_home_card_offset_y"
 internal const val KEY_HIDE_HOME_CARD_STATUS_TEXT = "hide_home_card_status_text"
 internal const val KEY_HIDE_HOME_CARD_DECORATION = "hide_home_card_decoration"
 internal const val KEY_HOME_CARD_STICKERS = "home_card_stickers"
@@ -174,6 +189,66 @@ class SettingsRepositoryImpl : SettingsRepository {
         get() = prefs.getLong("custom_bg_updated_at", 0L)
         set(value) = prefs.edit { putLong("custom_bg_updated_at", value) }
 
+    override var dynamicWallpaperPath: String
+        get() = prefs.getString("dynamic_wallpaper_path", "") ?: ""
+        set(value) = prefs.edit { putString("dynamic_wallpaper_path", value) }
+
+    override var dynamicWallpaperUpdatedAt: Long
+        get() = prefs.getLong("dynamic_wallpaper_updated_at", 0L)
+        set(value) = prefs.edit { putLong("dynamic_wallpaper_updated_at", value) }
+
+    override var dynamicWallpaperMuted: Boolean
+        get() = prefs.getBoolean("dynamic_wallpaper_muted", true)
+        set(value) = prefs.edit { putBoolean("dynamic_wallpaper_muted", value) }
+
+    override var dynamicWallpaperFit: Int
+        get() = prefs.getInt("dynamic_wallpaper_fit", 1)
+        set(value) = prefs.edit { putInt("dynamic_wallpaper_fit", value) }
+
+    override var dynamicWallpaperZoom: Float
+        get() = prefs.getFloat("dynamic_wallpaper_zoom", 1f)
+        set(value) = prefs.edit { putFloat("dynamic_wallpaper_zoom", value) }
+
+    override var dynamicWallpaperOffsetX: Float
+        get() = prefs.getFloat("dynamic_wallpaper_offset_x", 0f)
+        set(value) = prefs.edit { putFloat("dynamic_wallpaper_offset_x", value) }
+
+    override var dynamicWallpaperOffsetY: Float
+        get() = prefs.getFloat("dynamic_wallpaper_offset_y", 0f)
+        set(value) = prefs.edit { putFloat("dynamic_wallpaper_offset_y", value) }
+
+    override var dynamicWallpaperFps: Int
+        get() = prefs.getInt("dynamic_wallpaper_fps", 0)
+        set(value) = prefs.edit { putInt("dynamic_wallpaper_fps", value) }
+
+    override var dynamicWallpaperSpeed: Float
+        get() = prefs.getFloat("dynamic_wallpaper_speed", 1f)
+        set(value) = prefs.edit { putFloat("dynamic_wallpaper_speed", value) }
+
+    override var dynamicHomeCardPath: String
+        get() = prefs.getString(KEY_DYNAMIC_HOME_CARD_PATH, "") ?: ""
+        set(value) = prefs.edit { putString(KEY_DYNAMIC_HOME_CARD_PATH, value) }
+
+    override var dynamicHomeCardUpdatedAt: Long
+        get() = prefs.getLong(KEY_DYNAMIC_HOME_CARD_UPDATED_AT, 0L)
+        set(value) = prefs.edit { putLong(KEY_DYNAMIC_HOME_CARD_UPDATED_AT, value) }
+
+    override var dynamicHomeCardFit: Int
+        get() = prefs.getInt("dynamic_home_card_fit", 1)
+        set(value) = prefs.edit { putInt("dynamic_home_card_fit", value) }
+
+    override var dynamicHomeCardZoom: Float
+        get() = prefs.getFloat("dynamic_home_card_zoom", 1f)
+        set(value) = prefs.edit { putFloat("dynamic_home_card_zoom", value) }
+
+    override var dynamicHomeCardOffsetX: Float
+        get() = prefs.getFloat("dynamic_home_card_offset_x", 0f)
+        set(value) = prefs.edit { putFloat("dynamic_home_card_offset_x", value) }
+
+    override var dynamicHomeCardOffsetY: Float
+        get() = prefs.getFloat("dynamic_home_card_offset_y", 0f)
+        set(value) = prefs.edit { putFloat("dynamic_home_card_offset_y", value) }
+
     override var useSystemWallpaper: Boolean
         get() = prefs.getBoolean("use_system_wallpaper", false)
         set(value) = prefs.edit { putBoolean("use_system_wallpaper", value) }
@@ -234,6 +309,10 @@ class SettingsRepositoryImpl : SettingsRepository {
     override var bottomBarSectionExpanded: Boolean
         get() = prefs.getBoolean("bottom_bar_section_expanded", true)
         set(value) = prefs.edit { putBoolean("bottom_bar_section_expanded", value) }
+
+    override var topBarSectionExpanded: Boolean
+        get() = prefs.getBoolean("top_bar_section_expanded", true)
+        set(value) = prefs.edit { putBoolean("top_bar_section_expanded", value) }
 
     override var interactionSectionExpanded: Boolean
         get() = prefs.getBoolean("interaction_section_expanded", true)
@@ -499,6 +578,14 @@ class SettingsRepositoryImpl : SettingsRepository {
     override var enableFloatingBottomBarBlur: Boolean
         get() = prefs.getBoolean("enable_floating_bottom_bar_blur", false)
         set(value) = prefs.edit { putBoolean("enable_floating_bottom_bar_blur", value) }
+
+    override var topBarStyle: Int
+        get() = prefs.getInt("top_bar_style", 0).coerceIn(0, 2)
+        set(value) = prefs.edit { putInt("top_bar_style", value.coerceIn(0, 2)) }
+
+    override var topBarPillFade: Boolean
+        get() = prefs.getBoolean("top_bar_pill_fade", true)
+        set(value) = prefs.edit { putBoolean("top_bar_pill_fade", value) }
 
     override var enableNavigationBadge: Boolean
         get() = prefs.getBoolean("enable_navigation_badge", true)

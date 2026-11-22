@@ -54,7 +54,7 @@ jobs:
 
   build-manager:
 
-    runs-on: ubuntu-latest
+    runs-on: android
 
     defaults:
       run:
@@ -62,40 +62,26 @@ jobs:
 
     env:
       GRADLE_USER_HOME: /ci/tools/gradle
+      # Artifacts travel through CNB; without a token they stay on /ci only.
+      CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+      CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-result' }}
 
     steps:
 
       - name: Checkout
-        # The job defaults to ./manager, which does not exist before the clone.
+        # The job defaults to ./manager, which does not exist before the clone:
+        # without this, act fails the step with "chdir to cwd ... no such file
+        # or directory" before the script runs.
         working-directory: ${{ github.workspace }}
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: /ci/tools/bin/ci-checkout
+
+      - name: Provide node and the action sources
         run: |
           set -eux
-          remote="https://git.zako.shirkneko.top:20004"
-          mirror="/ci/repo-cache/${GITHUB_REPOSITORY}.git"
-          mkdir -p "$(dirname "$mirror")"
-          # One bare mirror per repository lives on the runner host, shared by
-          # every job through the /ci volume. Re-downloading the whole history
-          # per job made parallel jobs stall on the same fetch.
-          if [ ! -d "$mirror" ]; then
-            # The token must not appear in the trace of `set -x`.
-            set +x
-            git -c "http.${remote}/.extraHeader=Authorization: token ${TOKEN}" \
-              clone -q --mirror "${remote}/${GITHUB_REPOSITORY}.git" "$mirror"
-            set -x
-          elif command -v flock >/dev/null 2>&1; then
-            (
-              flock 9
-              git --git-dir="$mirror" fetch -q --prune origin \
-                "+refs/heads/*:refs/heads/*" "+refs/tags/*:refs/tags/*"
-            ) 9>"${mirror}.lock"
-          else
-            git --git-dir="$mirror" fetch -q --prune origin \
-              "+refs/heads/*:refs/heads/*" "+refs/tags/*:refs/tags/*"
-          fi
-          git clone -q --shared --no-checkout "$mirror" .
-          git checkout -q "${GITHUB_SHA}"
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
+          ci_provide_node
 
       - name: Set artifact name
         id: determine
@@ -153,21 +139,21 @@ jobs:
           python3 --version
 
       - name: Download ksud artifacts
+        id: download_ksud
+        continue-on-error: true
         env:
           ARTIFACTS_RUN: ${{ inputs.artifacts_run }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eux
           . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
-          # Rebuild-only runs take the native artifacts from an earlier run.
-          if [ -n "$ARTIFACTS_RUN" ]; then
-            # This run has not written anything yet, so its root does not exist.
-            mkdir -p "${CI_ARTIFACT_ROOT}"
-            cp -a "/ci/runs/${ARTIFACTS_RUN}"/* "${CI_ARTIFACT_ROOT}/"
-          fi
-          mkdir -p "${GITHUB_WORKSPACE}/artifacts"
-          for t in aarch64-linux-android armv7-linux-androideabi x86_64-linux-android; do
-            ci_artifact_get "ksud-${t}" "${GITHUB_WORKSPACE}/artifacts/ksud-${t}"
-          done
+          ci_download_all_artifacts "${GITHUB_WORKSPACE}/artifacts" "${ARTIFACTS_RUN:-}"
+
+      - name: Download ksud artifacts (Forgejo fallback)
+        if: steps.download_ksud.outcome == 'failure' && inputs.artifacts_run == ''
+        uses: ./.ci-actions/download-artifact
+        with:
+          path: artifacts
 
       # --------------------------------------------------------
       # Copy ksud into Manager
@@ -297,12 +283,13 @@ jobs:
       # Upload un-repacked APK
       # --------------------------------------------------------
 
-      - name: Upload Gradle APK
+      # The job summary links straight at the CNB archive ci_artifact_put writes;
+      # nothing is copied back to Forgejo.
+      - name: Store the Gradle APK for LAN handoff
         run: |
           set -eux
           . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
-          ci_artifact_put "${{ steps.determine.outputs.title }}-gradle" \
-            "${GITHUB_WORKSPACE}/manager/app/build/outputs/apk/release/"*.apk
+          ci_artifact_put "${{ steps.determine.outputs.title }}-gradle" "${GITHUB_WORKSPACE}/manager/app/build/outputs/apk/release/"*.apk
 
       # --------------------------------------------------------
       # Upload mappings
@@ -327,39 +314,19 @@ jobs:
   repack-manager:
     needs: [build-manager]
 
-    runs-on: ubuntu-latest
+    runs-on: android
+
+    env:
+      # Artifacts travel through CNB; without a token they stay on /ci only.
+      CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+      CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-result' }}
 
     steps:
 
       - name: Checkout
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -eux
-          remote="https://git.zako.shirkneko.top:20004"
-          mirror="/ci/repo-cache/${GITHUB_REPOSITORY}.git"
-          mkdir -p "$(dirname "$mirror")"
-          # One bare mirror per repository lives on the runner host, shared by
-          # every job through the /ci volume. Re-downloading the whole history
-          # per job made parallel jobs stall on the same fetch.
-          if [ ! -d "$mirror" ]; then
-            # The token must not appear in the trace of `set -x`.
-            set +x
-            git -c "http.${remote}/.extraHeader=Authorization: token ${TOKEN}" \
-              clone -q --mirror "${remote}/${GITHUB_REPOSITORY}.git" "$mirror"
-            set -x
-          elif command -v flock >/dev/null 2>&1; then
-            (
-              flock 9
-              git --git-dir="$mirror" fetch -q --prune origin \
-                "+refs/heads/*:refs/heads/*" "+refs/tags/*:refs/tags/*"
-            ) 9>"${mirror}.lock"
-          else
-            git --git-dir="$mirror" fetch -q --prune origin \
-              "+refs/heads/*:refs/heads/*" "+refs/tags/*:refs/tags/*"
-          fi
-          git clone -q --shared --no-checkout "$mirror" .
-          git checkout -q "${GITHUB_SHA}"
+        run: /ci/tools/bin/ci-checkout
 
       - name: Set artifact name
         id: determine
@@ -372,19 +339,33 @@ jobs:
           apksigner --version
           python3 --version
 
-      - name: Download artifacts
-        env:
-          ARTIFACTS_RUN: ${{ inputs.artifacts_run }}
+      - name: Provide node and the action sources
         run: |
           set -eux
-          . .github/scripts/ci/common.sh
-          if [ -n "$ARTIFACTS_RUN" ] && [ ! -d "${CI_ARTIFACT_ROOT}/${{ steps.determine.outputs.title }}-gradle" ]; then
-            cp -a "/ci/runs/${ARTIFACTS_RUN}"/* "${CI_ARTIFACT_ROOT}/"
-          fi
-          ci_artifact_get "${{ steps.determine.outputs.title }}-gradle" artifacts/manager-gradle
-          for t in aarch64-linux-android armv7-linux-androideabi x86_64-linux-android riscv64-linux-android; do
-            ci_artifact_get "ksud-${t}" "artifacts/ksud-${t}"
-          done
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
+          ci_provide_node
+      - name: Download the build artifacts
+        id: download_build
+        continue-on-error: true
+        env:
+          ARTIFACTS_RUN: ${{ inputs.artifacts_run }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eux
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
+          ci_download_all_artifacts "${GITHUB_WORKSPACE}/artifacts" "${ARTIFACTS_RUN:-}"
+
+      - name: Download the build artifacts (Forgejo fallback)
+        if: steps.download_build.outcome == 'failure' && inputs.artifacts_run == ''
+        uses: ./.ci-actions/download-artifact
+        with:
+          path: artifacts
+
+      - name: Normalise the artifact layout
+        run: |
+          set -eux
+          mv "artifacts/${{ steps.determine.outputs.title }}-gradle" artifacts/manager-gradle
+          ls -la artifacts artifacts/manager-gradle
 
       # --------------------------------------------------------
       # Place Manager APK and ksud artifacts
@@ -509,6 +490,19 @@ jobs:
       - name: Upload build artifact
         run: |
           set -eux
-          . .github/scripts/ci/common.sh
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
           ci_artifact_put "${{ steps.determine.outputs.title }}" \
             dist/*.apk
+
+      - name: Store the manager APK for local handoff
+        run: |
+          set -eux
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
+          ci_artifact_put sukisu-manager "${GITHUB_WORKSPACE}/dist/"*.apk
+          python3 -c 'import json,os,sys; d=sys.argv[1]; f=sorted(x for x in os.listdir(d) if x != "manifest.json" and os.path.isfile(os.path.join(d,x))); json.dump({"files": f}, open(os.path.join(d,"manifest.json"),"w"))' "${CI_ARTIFACT_ROOT}/sukisu-manager"
+
+      - name: Write the job summary
+        run: |
+          set -eux
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
+          ci_summary_artifacts "sukisu-manager"

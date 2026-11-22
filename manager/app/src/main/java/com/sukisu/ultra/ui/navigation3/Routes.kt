@@ -108,10 +108,14 @@ sealed interface Route : NavKey, Parcelable {
     @Serializable
     data object AppIcon : Route
 
-    
+
     @Parcelize
     @Serializable
     data class BackgroundCrop(val sourcePath: String) : Route
+
+    @Parcelize
+    @Serializable
+    data class DynamicWallpaper(val card: Boolean = false) : Route
 
     @Parcelize
     @Serializable

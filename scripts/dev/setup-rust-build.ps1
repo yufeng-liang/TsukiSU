@@ -1,5 +1,8 @@
-# 用法: .\setup-ndk.ps1 <TRIPLE> <ANDROID_SDK_LEVEL>
-# 示例: .\setup-ndk.ps1 aarch64-linux-android 21
+# 用法: .\setup-rust-build.ps1 <TRIPLE> <ANDROID_SDK_LEVEL>
+# 示例: .\setup-rust-build.ps1 aarch64-linux-android 21
+#
+# 本地 Windows 开发用，与 .github/scripts/setup-rust-build.sh 等价：
+# 只导出环境变量，不打印任何构建配置。
 
 param(
    [Parameter(Mandatory=$true)]

@@ -21,6 +21,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.dropUnlessResumed
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import com.sukisu.ultra.Natives
@@ -36,6 +37,8 @@ import com.sukisu.ultra.ui.util.restartApp
 import com.sukisu.ultra.ui.util.setSepolicy
 import com.sukisu.ultra.ui.viewmodel.SuperUserViewModel
 import com.sukisu.ultra.ui.viewmodel.getTemplateInfoById
+import kotlinx.coroutines.withContext
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun AppProfileScreen(uid: Int) {
@@ -91,14 +94,19 @@ fun AppProfileScreen(uid: Int) {
     val initialProfile = remember(uid, packageName, primaryAppInfo.special) {
         Natives.getAppProfile(packageName, uid).let {
             if (primaryAppInfo.special) it.copy(allowSu = false) else it
-        }.also {
-            if (it.allowSu && !primaryAppInfo.special) {
-                it.rules = getSepolicy(packageName)
-            }
         }
     }
     var profile by rememberSaveable(uid, packageName) {
         mutableStateOf(initialProfile)
+    }
+
+    LaunchedEffect(uid, packageName, primaryAppInfo.special) {
+        if (profile.allowSu && !primaryAppInfo.special && profile.rules.isEmpty()) {
+            val rules = withContext(Dispatchers.IO) { getSepolicy(packageName) }
+            if (rules.isNotEmpty()) {
+                profile = profile.copy(rules = rules)
+            }
+        }
     }
 
     val failToUpdateAppProfile = stringResource(R.string.failed_to_update_app_profile).format(primaryAppInfo.label)
@@ -151,7 +159,8 @@ fun AppProfileScreen(uid: Int) {
                         return@launch
                     }
                     if (!profileToSave.rootUseDefault && profileToSave.rules.isNotEmpty()
-                        && !primaryAppInfo.special && !setSepolicy(profileToSave.name, profileToSave.rules)) {
+                        && !primaryAppInfo.special
+                        && !withContext(Dispatchers.IO) { setSepolicy(profileToSave.name, profileToSave.rules) }) {
                         showMessage(failToUpdateSepolicy)
                         return@launch
                     }
@@ -191,8 +200,11 @@ fun AppProfileScreen(uid: Int) {
         onForceStopApp = ::forceStopApp,
         onRestartApp = ::restartApp,
         onViewTemplate = { templateId ->
-            getTemplateInfoById(templateId)?.let { info ->
-                navigator.push(Route.TemplateEditor(info, true))
+            scope.launch {
+                val info = withContext(Dispatchers.IO) { getTemplateInfoById(templateId) }
+                if (info != null) {
+                    navigator.push(Route.TemplateEditor(info, true))
+                }
             }
         },
         onManageTemplate = {

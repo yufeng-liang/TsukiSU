@@ -25,6 +25,8 @@ import java.io.File
 import java.util.zip.ZipInputStream
 
 private const val TAG = "ZipFileIntentHandler"
+private const val EXTERNAL_ZIP_CACHE_PREFIX = "external_zip_"
+private const val STALE_CACHE_MAX_AGE_MS = 24L * 60 * 60 * 1000
 private val ZIP_MIME_TYPES = setOf(
     "application/zip",
     "application/x-zip",
@@ -209,18 +211,40 @@ private suspend fun handleConfirmed(
     }
 
     if (cachedUris.isNotEmpty()) {
-        navigator.push(Route.Flash(FlashIt.FlashModules(cachedUris)))
+        navigator.push(Route.Flash(FlashIt.FlashModules(cachedUris, fromExternalIntent = true)))
     } else {
         Toast.makeText(context, strings.zipFileUnknown, Toast.LENGTH_SHORT).show()
     }
 }
 
+internal fun deleteExternalZipCache(context: Context, uri: Uri?) {
+    if (uri?.scheme != "file") return
+    val path = uri.path ?: return
+    val cacheDir = runCatching { context.cacheDir.canonicalFile }.getOrNull() ?: return
+    val target = runCatching { File(path).canonicalFile }.getOrNull() ?: return
+    if (target.parentFile == cacheDir && target.name.startsWith(EXTERNAL_ZIP_CACHE_PREFIX)) {
+        runCatching { target.delete() }
+    }
+}
+
+private fun cleanupStaleExternalZipCache(cacheDir: File) {
+    val cutoff = System.currentTimeMillis() - STALE_CACHE_MAX_AGE_MS
+    runCatching {
+        cacheDir.listFiles { file ->
+            file.isFile &&
+                file.name.startsWith(EXTERNAL_ZIP_CACHE_PREFIX) &&
+                file.lastModified() < cutoff
+        }?.forEach { it.delete() }
+    }
+}
+
 private fun copyUriToCache(context: Context, uri: Uri): Uri? {
     return try {
+        cleanupStaleExternalZipCache(context.cacheDir)
         val originalName = uri.getFileName(context) ?: "module.zip"
         val safeName = File(originalName).name
         val suffix = if (safeName.endsWith(".apk", ignoreCase = true)) ".apk" else ".zip"
-        val destFile = File.createTempFile("external_zip_", suffix, context.cacheDir)
+        val destFile = File.createTempFile(EXTERNAL_ZIP_CACHE_PREFIX, suffix, context.cacheDir)
 
         context.contentResolver.openInputStream(uri)?.use { input ->
             destFile.outputStream().use { output -> input.copyTo(output) }

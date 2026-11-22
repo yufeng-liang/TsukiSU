@@ -55,7 +55,7 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.HorizontalDivider as MaterialDivider
 import androidx.compose.material3.Icon as MaterialIcon
-import androidx.compose.material3.LargeFlexibleTopAppBar
+import com.sukisu.ultra.ui.component.material.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
@@ -139,7 +139,6 @@ import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.Surface as MiuixSurface
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
-import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -186,8 +185,12 @@ internal data class ThemePreviewSpec(
 private const val PreviewDesignWidthDp = 360f
 private const val PreviewBadgeCount = "2"
 private const val PreviewKernelVersion = "6.1.75"
-private val PreviewBezelShape = RoundedCornerShape(34.dp)
-private val PreviewScreenShape = RoundedCornerShape(29.dp)
+// Corner radius of the mock device at full size. The frame is only 80dp wide in the
+// compact card in the theme page, so the radius has to follow the frame width: a fixed
+// 34dp radius turns that card into a pill and the 29dp screen radius cuts through the
+// bottom navigation bar.
+private val PreviewBezelRadiusMax = 34.dp
+private const val PreviewBezelRadiusFraction = 0.14f
 private val PreviewBezelColor = Color(0xFF141417)
 
 private data class MiuixPreviewDestination(
@@ -389,19 +392,24 @@ private fun ThemePreviewLayout(
             else -> minOf(maxWidth * 0.52f, 248.dp)
         }
         val frameHeight = frameWidth / screenRatio
+        val bezelPadding = if (compact) 3.dp else 5.dp
+        val bezelRadius = minOf(PreviewBezelRadiusMax, frameWidth * PreviewBezelRadiusFraction)
+        val screenRadius = (bezelRadius - bezelPadding).coerceAtLeast(1.dp)
+        val bezelShape = RoundedCornerShape(bezelRadius)
+        val screenShape = RoundedCornerShape(screenRadius)
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
                 modifier = Modifier
                     .width(frameWidth)
                     .height(frameHeight)
-                    .shadow(if (compact) 12.dp else 22.dp, PreviewBezelShape, clip = false)
+                    .shadow(if (compact) 12.dp else 22.dp, bezelShape, clip = false)
                     .background(
                         Brush.linearGradient(listOf(Color(0xFF242428), PreviewBezelColor)),
-                        PreviewBezelShape,
+                        bezelShape,
                     )
-                    .border(1.dp, Color.White.copy(alpha = 0.12f), PreviewBezelShape)
-                    .padding(if (compact) 3.dp else 5.dp)
-                    .clip(PreviewScreenShape)
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), bezelShape)
+                    .padding(bezelPadding)
+                    .clip(screenShape)
                     // Compact cards and the full-screen viewer handle taps themselves.
                     .then(
                         if (compact || expanded) {
@@ -630,21 +638,36 @@ private fun MiuixPreviewScreen(spec: ThemePreviewSpec, modifier: Modifier = Modi
 @Composable
 private fun MiuixPreviewTopBar(spec: ThemePreviewSpec) {
     val colors = MiuixTheme.colorScheme
-    TopAppBar(
-        title = spec.customHomeTitle.ifBlank { stringResource(R.string.app_name) },
-        color = Color.Transparent,
-        titleColor = colors.onSurface,
-        largeTitleColor = colors.onBackground,
-        defaultWindowInsetsPadding = false,
-        actions = {
+    // Drawn by hand instead of reusing Miuix's TopAppBar: the real bar consumes the window
+    // insets, which are expressed in px and therefore ignore the scaled LocalDensity that
+    // PreviewDevice installs. In the compact card that turned the status bar inset into more
+    // than 100dp of design space and pushed the whole page below the frame's top edge.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.End,
+        ) {
             MiuixIcon(
                 imageVector = Icons.Rounded.RestartAlt,
                 contentDescription = null,
                 modifier = Modifier.size(22.dp),
                 tint = colors.onBackground,
             )
-        },
-    )
+        }
+        MiuixText(
+            text = spec.customHomeTitle.ifBlank { stringResource(R.string.app_name) },
+            style = MiuixTheme.textStyles.title1,
+            color = colors.onBackground,
+        )
+        Spacer(Modifier.height(8.dp))
+    }
 }
 
 @Composable

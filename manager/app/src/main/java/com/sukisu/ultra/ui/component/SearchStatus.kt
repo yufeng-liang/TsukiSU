@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.sukisu.ultra.ui.theme.LocalBackgroundImagePath
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
+import com.sukisu.ultra.ui.theme.LocalTopBarStyle
 
 @Stable
 data class SearchStatus(
@@ -42,7 +43,11 @@ data class SearchStatus(
         content: @Composable () -> Unit
     ) {
         val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
-        val bg = if (hasCustomBackground) Color.Transparent else backgroundColor
+        val bg = if (LocalTopBarStyle.current.isFloating || hasCustomBackground) {
+            Color.Transparent
+        } else {
+            backgroundColor
+        }
         Box(modifier = modifier) {
             if (bg != Color.Transparent) {
                 Box(

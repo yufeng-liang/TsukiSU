@@ -1,8 +1,12 @@
 name: Publish Manager
 
-# Publishes the repacked APKs: the rolling `manager-ci` build on main and the
-# Telegram upload. Both used to be separate jobs doing the same split-and-sign
-# work twice, so they are one job now.
+# Publishes the repacked APKs: a rolling `manager-ci` build on main, a
+# `manager-dev` build on dev, and the Telegram upload. Both used to be separate
+# jobs doing the same split-and-sign work twice, so they are one job now.
+#
+# The channel is what keeps the two branches apart: main keeps the tag the
+# manager's CI updater reads, dev gets its own prerelease, and neither overwrites
+# the other's APKs. Any other ref signs nothing and publishes nothing.
 on:
   workflow_dispatch:
     inputs:
@@ -11,6 +15,11 @@ on:
         required: false
         default: ''
         type: string
+      publish:
+        description: 'Sign and publish the APKs (disable for pull requests)'
+        required: false
+        default: true
+        type: boolean
   workflow_call:
     inputs:
       artifacts_run:
@@ -18,6 +27,11 @@ on:
         required: false
         default: ''
         type: string
+      publish:
+        description: 'Sign and publish the APKs (disable for pull requests)'
+        required: false
+        default: true
+        type: boolean
       release_upload:
         description: 'Upload to the releases Telegram thread'
         required: false
@@ -25,35 +39,18 @@ on:
         type: boolean
 
 jobs:
-  publish:
-    runs-on: ubuntu-latest
+  # ci.yml and release.yml both call this job as `publish`, and Forgejo shows
+  # the caller next to the expanded job: a job also called `publish` showed up
+  # as `publish-1`. Distinct id, explicit display name.
+  publish-manager:
+    name: publish-manager
+    if: ${{ inputs.publish }}
+    runs-on: android
     steps:
       - name: Checkout
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -eux
-          remote="https://git.zako.shirkneko.top:20004"
-          mirror="/ci/repo-cache/${GITHUB_REPOSITORY}.git"
-          mkdir -p "$(dirname "$mirror")"
-          if [ ! -d "$mirror" ]; then
-            # The token must not appear in the trace of `set -x`.
-            set +x
-            git -c "http.${remote}/.extraHeader=Authorization: token ${TOKEN}" \
-              clone -q --mirror "${remote}/${GITHUB_REPOSITORY}.git" "$mirror"
-            set -x
-          elif command -v flock >/dev/null 2>&1; then
-            (
-              flock 9
-              git --git-dir="$mirror" fetch -q --prune origin \
-                "+refs/heads/*:refs/heads/*" "+refs/tags/*:refs/tags/*"
-            ) 9>"${mirror}.lock"
-          else
-            git --git-dir="$mirror" fetch -q --prune origin \
-              "+refs/heads/*:refs/heads/*" "+refs/tags/*:refs/tags/*"
-          fi
-          git clone -q --shared --no-checkout "$mirror" .
-          git checkout -q "${GITHUB_SHA}"
+        run: /ci/tools/bin/ci-checkout
 
       - name: Check toolchain
         run: |
@@ -61,21 +58,59 @@ jobs:
           apksigner --version
           python3 --version
 
+      # One channel per branch. main owns `manager-ci` because the manager's CI
+      # updater reads that tag; a dev push must never replace the build main was
+      # tested with, so dev gets `manager-dev`. Both are prereleases, which keeps
+      # them out of the stable update channel.
+      #
+      # A dispatch from any other ref publishes nothing: it would otherwise
+      # create a release tag per topic branch.
+      - name: Resolve the release channel
+        id: channel
+        run: |
+          set -eu
+          case "${GITHUB_REF_NAME}" in
+            main) channel=ci; title="Manager CI" ;;
+            dev) channel=dev; title="Manager Dev" ;;
+            *)
+              echo "branch ${GITHUB_REF_NAME:-?} has no release channel; keeping the APKs on /ci"
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+          {
+            echo "publish=true"
+            echo "tag=manager-${channel}"
+            echo "title=${title}"
+          } >> "$GITHUB_OUTPUT"
+          echo "release channel: manager-${channel} (${title})"
+
+      - name: Provide node and the action sources
+        run: |
+          set -eux
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
+          ci_provide_node
       - name: Download APKs
+        id: download_apks
+        if: ${{ inputs.publish }}
+        continue-on-error: true
         env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ARTIFACTS_RUN: ${{ inputs.artifacts_run }}
         run: |
           set -eux
-          . .github/scripts/ci/common.sh
-          if [ -n "$ARTIFACTS_RUN" ] && [ ! -d "${CI_ARTIFACT_ROOT}/Manager" ]; then
-            # This run has not written anything yet, so its root does not exist.
-            mkdir -p "${CI_ARTIFACT_ROOT}"
-            cp -a "/ci/runs/${ARTIFACTS_RUN}"/* "${CI_ARTIFACT_ROOT}/"
-          fi
-          ci_artifact_get Manager apks/Manager
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
+          ci_download_artifact sukisu-manager "${GITHUB_WORKSPACE}/apks/Manager" "${ARTIFACTS_RUN:-}"
+
+      - name: Download APKs (Forgejo fallback)
+        if: inputs.publish && steps.download_apks.outcome == 'failure' && inputs.artifacts_run == ''
+        uses: ./.ci-actions/download-artifact
+        with:
+          name: sukisu-manager
+          path: apks/Manager
 
       - name: Prepare signing inputs
-        if: github.event_name != 'pull_request'
+        if: ${{ inputs.publish }}
         env:
           PROD_KEYSTORE: ${{ vars.KEYSTORE || secrets.KEYSTORE }}
           PROD_KEY_ALIAS: ${{ vars.KEY_ALIAS || secrets.KEY_ALIAS }}
@@ -91,7 +126,7 @@ jobs:
           echo "SIGN_KEY_PASSWORD=$PROD_KEY_PASSWORD" >> "$GITHUB_ENV"
 
       - name: Split and sign by architecture
-        if: github.event_name != 'pull_request'
+        if: ${{ inputs.publish }}
         run: |
           set -eu
           apk="$(find apks/Manager -type f -name '*.apk' | head -n 1)"
@@ -103,18 +138,20 @@ jobs:
             unzip -l "$split" | grep ' lib/' | awk -F/ '{print $2}' | sort -u
           done
 
-      - name: Publish rolling CI build
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+      - name: Publish rolling build on /ci
+        if: ${{ inputs.publish && steps.channel.outputs.publish == 'true' }}
         run: |
           set -eux
-          . .github/scripts/ci/common.sh
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
           test -n "$(find apks/split -type f -name '*.apk' -print -quit)"
-          published="${CI_ARTIFACT_ROOT}/manager-ci/${GITHUB_SHA}"
+          tag='${{ steps.channel.outputs.tag }}'
+          title='${{ steps.channel.outputs.title }}'
+          published="${CI_ARTIFACT_ROOT}/${tag}/${GITHUB_SHA}"
           mkdir -p "$published"
           cp -f apks/split/*.apk "$published"/
           {
-            printf '## Manager CI\n\n'
-            printf -- '- **Branch:** `main`\n'
+            printf '## %s\n\n' "$title"
+            printf -- '- **Branch:** `%s`\n' "$GITHUB_REF_NAME"
             printf -- '- **Commit:** `%s`\n' "$GITHUB_SHA"
             printf -- '- **Build:** %s\n\n' "${GITHUB_RUN_NUMBER:-unknown}"
             printf '> Experimental build; may be unstable.\n\n### Recent changes\n\n'
@@ -122,40 +159,93 @@ jobs:
           } > "$published/notes.md"
           echo "published to ${published}"
 
-      # The manager's update check reads the release through the Forgejo API, so
-      # the APKs have to exist as release assets, not only on the runner host.
-      - name: Publish the manager-ci release
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+      # CNB is the upload target for the APKs: its release assets are served
+      # from cnb.cool and the upload goes machine-to-machine, so the tunnel to
+      # this host only ever sees small API calls. Every later step works from
+      # what CNB holds.
+      - name: Upload the signed manager to CNB
+        if: ${{ inputs.publish && steps.channel.outputs.publish == 'true' }}
+        env:
+          CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-result' }}
+          CNB_TAG: ${{ steps.channel.outputs.tag }}
+          CNB_ASSETS_DIR: apks/split
+          CNB_BODY_FILE: cnb-notes.md
+          CNB_PRERELEASE: "true"
+          CNB_MAKE_LATEST: "false"
+          # Rolling channels are deleted and recreated every build: CNB keeps
+          # the original published_at on update, and its release pages embed
+          # only the newest ten, so an updated-in-place release would slowly be
+          # pushed off the page the manager's updater reads.
+          CNB_RECREATE: "true"
+          CNB_TARGET_COMMITISH: ${{ vars.CNB_TARGET_COMMITISH || 'main' }}
+        run: |
+          set -eu
+          tag='${{ steps.channel.outputs.tag }}'
+          title='${{ steps.channel.outputs.title }}'
+          apk="$(find apks/split -type f -name '*.apk' | head -n1)"
+          code="${apk##*_}"
+          code="${code%%-*}"
+          export CNB_NAME="${title} (${code})"
+          {
+            echo "# ${title} (${code})"
+            echo
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Branch: \`${GITHUB_REF_NAME}\`"
+            echo "- Run: ${GITHUB_RUN_NUMBER:-unknown}"
+            echo
+            # Only the commit being published: the changelog is the release
+            # notes, and a rolling channel's value is "what is in this build",
+            # not a scrolling history that repeats itself every run.
+            echo "## Latest commit"
+            echo
+            echo '```'
+            git log -1 --format='%B'
+            echo '```'
+          } > cnb-notes.md
+          echo "uploading to CNB release ${tag}"
+          bash .github/scripts/ci/cnb-upload.sh
+
+      # The summary is written right after the upload: the links are only valid
+      # once CNB holds the files, and a later step failing must not hide them.
+      - name: Write the job summary
+        if: ${{ inputs.publish && steps.channel.outputs.publish == 'true' }}
+        env:
+          CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-result' }}
+        run: |
+          set -eux
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
+          ci_summary_release \
+            "${{ steps.channel.outputs.title }}" \
+            "${{ steps.channel.outputs.tag }}" \
+            apks/split/*.apk
+
+      # The APKs stay on CNB: pushing them into the release here means ~43 MB
+      # through the tunnel at ~90 KB/s, which never finished. The Forgejo release
+      # therefore carries links to the CNB assets instead of copies of them.
+      #
+      # Consequence: the manager's Forgejo update source has no APK to offer for
+      # this tag; its CNB source (the default) does.
+      - name: Point the release at CNB
+        if: ${{ inputs.publish && steps.channel.outputs.publish == 'true' }}
         env:
           # Dedicated token with write:repository. The built-in GITHUB_TOKEN is
           # only a fallback: it may lack release permissions on this instance.
           API_TOKEN: ${{ secrets.RELEASE_API_TOKEN || vars.RELEASE_API_TOKEN || secrets.GITHUB_TOKEN }}
+          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-result' }}
+          CNB_WEB: ${{ vars.CNB_WEB || 'https://cnb.cool' }}
+          RELEASE_TAG: ${{ steps.channel.outputs.tag }}
+          RELEASE_TITLE: ${{ steps.channel.outputs.title }}
+          # Rolling channels recreate the release each time so its tag moves to
+          # this build's commit; a stable release keeps its existing tag.
+          RELEASE_RECREATE: "true"
         run: |
           set -eu
-          # GITHUB_SERVER_URL is the EasyTier address (http://100.0.0.11:3000),
-          # which a job container cannot reach -- the same reason every checkout
-          # uses the public endpoint.
-          site="${FORGEJO_PUBLIC_URL:-https://git.zako.shirkneko.top:20004}"
-          api="${site}/api/v1/repos/${GITHUB_REPOSITORY}"
-          auth="Authorization: token ${API_TOKEN}"
-          tag=manager-ci
-          echo "api=${api} token_len=${#API_TOKEN}"
-
-          # The public endpoint goes through a tunnel that occasionally drops a
-          # connection ("empty reply from server", curl 52). Idempotent calls retry
-          # on any error; calls that create something only retry a refused
-          # connection, and the caller re-reads the state afterwards.
-          net() {
-            curl -sS --retry 5 --retry-all-errors --retry-delay 2 \
-              --connect-timeout 10 --max-time 120 "$@"
-          }
-          net_once() {
-            curl -sS --retry 5 --retry-connrefused --retry-delay 2 \
-              --connect-timeout 10 --max-time 120 "$@"
-          }
-
-          apk="$(find apks/split -type f -name '*.apk' | head -n 1)"
-          # SukiSU_Nova_<sha>_35001-arm64-v8a-release.apk -> 35001
+          src=apks/split
+          apk="$(find "$src" -type f -name '*.apk' | head -n 1)"
+          test -n "$apk"
+          # SukiSU_Nova_<ref>_35001-arm64-v8a-release.apk -> 35001
           base="$(basename "$apk")"
           code="${base##*_}"
           code="${code%%-*}"
@@ -164,46 +254,14 @@ jobs:
           case "$code" in
             '' | *[!0-9]*) echo "cannot parse the version code from ${base}" >&2; exit 1 ;;
           esac
-
-          release="$api/releases/tags/$tag"
-          status="$(curl -sS --connect-timeout 10 --max-time 60 -o /tmp/release.json \
-            -w '%{http_code}' -H "$auth" "$release" || true)"
-          echo "existing release: HTTP ${status}"
-          if [ "$status" = "200" ]; then
-            id="$(jq -r '.id' /tmp/release.json)"
-          else
-            payload="$(jq -nc --arg sha "$GITHUB_SHA" --arg name "Manager CI (${code})" \
-              '{tag_name: "manager-ci", target_commitish: $sha, name: $name, prerelease: true,
-                body: "Rolling CI build from main. Experimental; may be unstable."}')"
-            net_once -X POST -H "$auth" -H 'Content-Type: application/json' \
-              -d "$payload" "$api/releases" -o /tmp/release.json \
-              -w 'create: HTTP %{http_code}\n' || true
-            # A lost response can leave the release behind anyway; read it back.
-            curl -sS --connect-timeout 10 --max-time 60 -H "$auth" "$release" \
-              -o /tmp/release.json
-            id="$(jq -r '.id' /tmp/release.json)"
-          fi
-          test -n "$id" && [ "$id" != "null" ]
-
-          # Replace the assets of the previous build; the names carry the version.
-          for asset_id in $(jq -r '.assets[].id' /tmp/release.json); do
-            # Forgejo 17 nests the asset under its release; /releases/assets/{id} is 404.
-            net -f -X DELETE -H "$auth" "$api/releases/${id}/assets/$asset_id" >/dev/null
-          done
-          for f in apks/split/*.apk; do
-            name="$(basename "$f")"
-            net_once -f -X POST -H "$auth" \
-              -F "attachment=@${f}" "$api/releases/${id}/assets?name=${name}" >/dev/null
-            echo "uploaded ${name}"
-          done
-
-          # Keep the title in step with the build so the app can parse the version.
-          payload="$(jq -nc --arg name "Manager CI (${code})" '{name: $name, prerelease: true}')"
-          net -f -X PATCH -H "$auth" -H 'Content-Type: application/json' \
-            -d "$payload" "$api/releases/${id}" >/dev/null
-          echo "release ${tag} updated"
-
-      # Secrets cannot be used inside `if:`; a step turns them into an output.
+          export RELEASE_NAME="${RELEASE_TITLE} (${code})"
+          export RELEASE_PRERELEASE=true
+          # One link, not a table: the CNB release page lists every split, and
+          # this release stores no bytes any more.
+          RELEASE_BODY="$(printf 'Rolling %s build from %s. Experimental; may be unstable.\n\n下载 / Download: %s/%s/-/releases/tag/%s\n' \
+            "$RELEASE_TITLE" "$GITHUB_REF_NAME" "$CNB_WEB" "$CNB_REPO" "$RELEASE_TAG")"
+          export RELEASE_BODY
+          bash .github/scripts/ci/forgejo-release.sh
       - name: Check Telegram configuration
         id: telegram
         env:
@@ -218,8 +276,35 @@ jobs:
             echo "Telegram upload skipped: set BOT_TOKEN and CHAT_ID to enable it"
           fi
 
-      - name: Upload to Telegram
-        if: github.event_name != 'pull_request' && steps.telegram.outputs.upload == 'true'
+      # Telegram delivery is delegated to CNB so a local network failure cannot
+      # break the build. The CNB pipeline downloads the APKs from the channel's
+      # release, so this runs on main and dev alike; only the tag differs.
+      #
+      # MESSAGE_DEV_THREAD_ID keeps dev drops out of the main topic when it is
+      # set, and falls back to MESSAGE_THREAD_ID when it is not.
+      - name: Trigger CNB Telegram delivery
+        if: ${{ inputs.publish && steps.channel.outputs.publish == 'true' && steps.telegram.outputs.upload == 'true' }}
+        env:
+          CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-result' }}
+          CNB_TAG: ${{ steps.channel.outputs.tag }}
+          CNB_KIND: manager
+          THREAD_ID: ${{ vars.MESSAGE_THREAD_ID || '' }}
+          DEV_THREAD_ID: ${{ vars.MESSAGE_DEV_THREAD_ID || '' }}
+          BOT_TOKEN: ${{ vars.BOT_TOKEN || secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ vars.CHAT_ID || secrets.CHAT_ID }}
+          TG_API_BASE: ${{ vars.TG_API_BASE || 'https://api.telegram.org' }}
+          TITLE: ${{ steps.channel.outputs.title }}
+          BRANCH: ${{ github.ref_name }}
+          RUN_URL: https://git.zako.shirkneko.top:20004/${{ github.repository }}/actions/runs/${{ github.run_number || github.run_id }}
+          EVENT: ${{ toJson(github.event) }}
+        run: bash .github/scripts/ci/telegram-trigger.sh
+
+      # Manual fallback only: if CNB cannot run the delivery, drop the `if: false`
+      # below and the same split APKs go out directly. It stays off because a
+      # flaky tunnel used to fail the whole job here.
+      - name: Upload to Telegram (legacy, disabled)
+        if: ${{ false }}
         timeout-minutes: 20
         env:
           CHAT_ID: ${{ vars.CHAT_ID || secrets.CHAT_ID }}
@@ -227,7 +312,7 @@ jobs:
           GITHUB_EVENT: ${{ toJson(github.event) }}
           # The public endpoint again: github.server_url points at the tunnel address,
           # so the link in the Telegram message would not open for anyone.
-          RUN_URL: https://git.zako.shirkneko.top:20004/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_URL: https://git.zako.shirkneko.top:20004/${{ github.repository }}/actions/runs/${{ github.run_number || github.run_id }}
           BRANCH: ${{ github.ref_name }}
         run: |
           set -eu
@@ -262,5 +347,5 @@ jobs:
             exit 0
           fi
 
-          bash scripts/upload-telegram.sh "${APKS[@]}"
+          bash .github/scripts/upload-telegram.sh "${APKS[@]}"
           date -u +%FT%TZ >"$marker"

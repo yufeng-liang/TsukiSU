@@ -20,6 +20,14 @@ import com.sukisu.ultra.data.repository.SettingsRepositoryImpl
 import com.sukisu.ultra.data.repository.SuperUserRepositoryImpl
 import com.sukisu.ultra.ui.util.BuiltinAppIcons
 import com.sukisu.ultra.ui.viewmodel.SuperUserViewModel
+import com.sukisu.ultra.data.repository.ThemeMediaInterceptor
+import com.sukisu.ultra.data.repository.protectThemeStoreRedirectCredentials
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import com.sukisu.ultra.BuildConfig
 import okhttp3.Cache
 import okhttp3.OkHttpClient
 import org.lsposed.hiddenapibypass.HiddenApiBypass
@@ -28,7 +36,7 @@ import java.util.Locale
 
 lateinit var ksuApp: KernelSUApplication
 
-class KernelSUApplication : Application(), ViewModelStoreOwner {
+class KernelSUApplication : Application(), ViewModelStoreOwner, coil.ImageLoaderFactory {
 
     companion object {
         fun setEnableOnBackInvokedCallback(appInfo: ApplicationInfo, enable: Boolean) {
@@ -46,6 +54,24 @@ class KernelSUApplication : Application(), ViewModelStoreOwner {
 
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(com.sukisu.ultra.ui.util.LocaleHelper.wrap(base))
+    }
+
+    /**
+     * Theme screenshots use the default Coil loader, so it must be able to open
+     * CNB media envelopes and must drop theme credentials on cross-origin
+     * redirects. Other images are unaffected: the interceptor only touches
+     * responses that start with the SKM1 magic.
+     */
+    override fun newImageLoader(): coil.ImageLoader {
+        val builder = coil.ImageLoader.Builder(this).crossfade(true)
+        if (::okhttpClient.isInitialized) {
+            val client = okhttpClient.newBuilder()
+                .addInterceptor(ThemeMediaInterceptor)
+                .protectThemeStoreRedirectCredentials()
+                .build()
+            builder.okHttpClient(client)
+        }
+        return builder.build()
     }
 
     private fun isUserUnlocked(): Boolean =

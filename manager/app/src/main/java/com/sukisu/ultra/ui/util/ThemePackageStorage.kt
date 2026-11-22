@@ -51,6 +51,8 @@ data class ThemeVariantData(
     val uiMode: String? = null,
     val enableFloatingBottomBar: Boolean? = null,
     val enableFloatingBottomBarBlur: Boolean? = null,
+    val topBarStyle: Int? = null,
+    val topBarPillFade: Boolean? = null,
     val enableNavigationBadge: Boolean? = null,
     val enablePredictiveBack: Boolean? = null,
     val enableSwipeDismiss: Boolean? = null,
@@ -60,6 +62,37 @@ data class ThemeVariantData(
     val pageScale: Float? = null,
     val moduleDescriptionMaxLines: Int? = null,
 )
+
+/**
+ * Shared dynamic wallpaper settings for both package styles.
+ *
+ * Dynamic media is deliberately not part of [ThemeVariantData]: the wallpaper is global, so an
+ * adaptive theme records one file for both light and dark instead of one per mode. [hasWallpaper]
+ * and [hasHomeCard] are tri-state like the static image flags: `true` requires the matching zip
+ * entry, `false` explicitly clears it, and `null` leaves the current choice untouched.
+ */
+@Serializable
+data class DynamicWallpaperPackage(
+    val hasWallpaper: Boolean? = null,
+    val hasHomeCard: Boolean? = null,
+    val wallpaperTransform: DynamicWallpaperGeometry? = null,
+    val homeCardTransform: DynamicWallpaperGeometry? = null,
+)
+
+@Serializable
+data class DynamicWallpaperGeometry(
+    val fit: Int = 1,
+    val zoom: Float = 1f,
+    val offsetX: Float = 0f,
+    val offsetY: Float = 0f,
+) {
+    fun sanitized(): DynamicWallpaperGeometry = copy(
+        fit = fit.coerceIn(0, 2),
+        zoom = zoom.coerceIn(1f, 4f),
+        offsetX = offsetX.coerceIn(-1f, 1f),
+        offsetY = offsetY.coerceIn(-1f, 1f),
+    )
+}
 
 /**
  * Serializable part of a theme package. Fields are nullable so that packages written by newer
@@ -96,6 +129,8 @@ data class ThemePackageData(
     val appIconId: String? = null,
     val enableFloatingBottomBar: Boolean? = null,
     val enableFloatingBottomBarBlur: Boolean? = null,
+    val topBarStyle: Int? = null,
+    val topBarPillFade: Boolean? = null,
     val enableNavigationBadge: Boolean? = null,
     val enablePredictiveBack: Boolean? = null,
     val enableSwipeDismiss: Boolean? = null,
@@ -123,7 +158,12 @@ data class ThemePackageData(
      * the overlay itself carries the light/dark split. Added in package format v4.
      */
     val appearance: AppearanceOverlayData? = null,
-    
+    /**
+     * Dynamic wallpaper settings. The media entries are top-level and shared by an adaptive
+     * package's two halves. Carrying them requires format v6; older managers reject the package.
+     */
+    val dynamic: DynamicWallpaperPackage? = null,
+
     val adaptive: Boolean? = null,
     val light: ThemeVariantData? = null,
     val dark: ThemeVariantData? = null,
@@ -147,6 +187,8 @@ data class ImportedTheme(
     val cardBackgroundPath: String? = null,
     val stickerPaths: List<String> = emptyList(),
     val bottomBarIconPaths: Map<String, String> = emptyMap(),
+    val dynamicWallpaperPath: String? = null,
+    val dynamicHomeCardPath: String? = null,
     val light: ImportedThemeVariant? = null,
     val dark: ImportedThemeVariant? = null,
 ) {
@@ -157,6 +199,8 @@ data class ImportedTheme(
     fun temporaryFiles(): List<String> = buildList {
         backgroundPath?.let(::add)
         cardBackgroundPath?.let(::add)
+        dynamicWallpaperPath?.let(::add)
+        dynamicHomeCardPath?.let(::add)
         addAll(stickerPaths)
         addAll(bottomBarIconPaths.values)
         light?.let { variant ->
@@ -180,6 +224,15 @@ data class ThemePackageVariantExport(
     val cardStickerFiles: List<File> = emptyList(),
 )
 
+/** What had to be left out to keep the package under the shared size ceiling. */
+data class ThemePackageExportReport(
+    val skippedDynamicWallpaper: Boolean = false,
+    val skippedDynamicHomeCard: Boolean = false,
+) {
+    val skippedDynamic: Boolean
+        get() = skippedDynamicWallpaper || skippedDynamicHomeCard
+}
+
 
 data class ThemePackageAdaptiveExport(
     val light: ThemePackageVariantExport,
@@ -192,15 +245,19 @@ object ThemePackageStorage {
     const val ADAPTIVE_VERSION = 3
     /** Adds the optional static [ThemePackageData.appearance] overlay. */
     const val APPEARANCE_VERSION = 4
-    /** Adds the immersive home layout, pill/status sizing and banner image position. */
+    /** Adds the immersive home layout, pill/status sizing, banner image position and bottom bar icons. */
     const val HOME_STATUS_VERSION = 5
+    /**
+     * Adds the shared dynamic wallpaper/card media (`dynamic_wallpaper`, `dynamic_home_card`)
+     * and their fit/zoom/offset geometry.
+     */
+    const val DYNAMIC_VERSION = 6
 
     /**
-     * v5 also carries optional custom bottom bar icons (`bottom_bar_icon_<slot>` entries).
-     * The version stays at 5 on purpose: managers that already read v5 ignore the extra
-     * entries, older ones reject v5 as usual, and the web validator accepts both.
+     * v6 is the first format that can carry dynamic media. Older managers reject a v6 package
+     * as a whole instead of applying everything except the wallpaper, as with any newer format.
      */
-    const val CURRENT_VERSION = HOME_STATUS_VERSION
+    const val CURRENT_VERSION = DYNAMIC_VERSION
     const val MIN_SUPPORTED_VERSION = 1
     const val THEME_MIME_TYPE = "application/x-sukisu-theme"
 
@@ -213,6 +270,8 @@ object ThemePackageStorage {
     private const val THEME_ENTRY = "theme.json"
     private const val BACKGROUND_ENTRY = "background"
     private const val CARD_BACKGROUND_ENTRY = "card_background"
+    private const val DYNAMIC_WALLPAPER_ENTRY = "dynamic_wallpaper"
+    private const val DYNAMIC_HOME_CARD_ENTRY = "dynamic_home_card"
     private const val CARD_STICKER_ENTRY_PREFIX = "card_sticker_"
     private const val BACKGROUND_LIGHT_ENTRY = "background_light"
     private const val BACKGROUND_DARK_ENTRY = "background_dark"
@@ -223,6 +282,11 @@ object ThemePackageStorage {
     private const val BOTTOM_BAR_ICON_ENTRY_PREFIX = "bottom_bar_icon_"
     private const val MAX_JSON_BYTES = 64L * 1024
     private const val MAX_BACKGROUND_BYTES = 64L * 1024 * 1024
+    /** Dynamic media must be able to use the whole package budget on its own. */
+    private const val MAX_DYNAMIC_ENTRY_BYTES = ThemeStoreRepository.MAX_PACKAGE_BYTES
+    /** Keep a small reserve for zip headers, the GCM tag and rounding. */
+    private const val PACKAGE_SIZE_RESERVE = 2L * 1024 * 1024
+    private const val PACKAGE_ENTRY_OVERHEAD = 192L
     
     private const val MAX_EXTRACTED_IMAGE_BYTES = 256L * 1024 * 1024
     
@@ -250,7 +314,9 @@ object ThemePackageStorage {
         cardStickerFiles: List<File> = emptyList(),
         adaptive: ThemePackageAdaptiveExport? = null,
         bottomBarIconFiles: Map<String, File> = emptyMap(),
-    ): Result<Unit> = withContext(Dispatchers.IO) {
+        dynamicWallpaperFile: File? = null,
+        dynamicHomeCardFile: File? = null,
+    ): Result<ThemePackageExportReport> = withContext(Dispatchers.IO) {
         runCatching {
             val output = context.contentResolver.openOutputStream(uri)
                 ?: error("Cannot open the destination file")
@@ -263,12 +329,14 @@ object ThemePackageStorage {
                     cardStickerFiles,
                     adaptive,
                     bottomBarIconFiles,
+                    dynamicWallpaperFile,
+                    dynamicHomeCardFile,
                 )
             }
         }
     }
 
-    
+
     suspend fun exportToFile(
         file: File,
         data: ThemePackageData,
@@ -277,7 +345,9 @@ object ThemePackageStorage {
         cardStickerFiles: List<File> = emptyList(),
         adaptive: ThemePackageAdaptiveExport? = null,
         bottomBarIconFiles: Map<String, File> = emptyMap(),
-    ): Result<Unit> = withContext(Dispatchers.IO) {
+        dynamicWallpaperFile: File? = null,
+        dynamicHomeCardFile: File? = null,
+    ): Result<ThemePackageExportReport> = withContext(Dispatchers.IO) {
         runCatching {
             file.parentFile?.mkdirs()
             BufferedOutputStream(file.outputStream()).use {
@@ -289,6 +359,8 @@ object ThemePackageStorage {
                     cardStickerFiles,
                     adaptive,
                     bottomBarIconFiles,
+                    dynamicWallpaperFile,
+                    dynamicHomeCardFile,
                 )
             }
         }
@@ -302,21 +374,18 @@ object ThemePackageStorage {
         cardStickerFiles: List<File>,
         adaptive: ThemePackageAdaptiveExport?,
         bottomBarIconFiles: Map<String, File> = emptyMap(),
-    ) {
+        dynamicWallpaperFile: File? = null,
+        dynamicHomeCardFile: File? = null,
+    ): ThemePackageExportReport {
         val usesImmersiveHome = data.homeLayout == HomeLayout.IMMERSIVE.value ||
             adaptive?.light?.data?.homeLayout == HomeLayout.IMMERSIVE.value ||
             adaptive?.dark?.data?.homeLayout == HomeLayout.IMMERSIVE.value
-        // Custom bottom bar icons ride on the v5 format: managers that cannot read them reject
-        // the package instead of applying everything except the icons.
+        // Custom bottom bar icons require v5 and dynamic media requires v6: managers that cannot
+        // read a feature reject the package instead of applying everything except the new parts.
         val usesBottomBarIcons = bottomBarIconFiles.isNotEmpty()
         val packageData = if (adaptive != null) {
             validateAdaptiveExport(adaptive)
             data.copy(
-                version = when {
-                    usesImmersiveHome || usesBottomBarIcons -> HOME_STATUS_VERSION
-                    data.appearance != null -> APPEARANCE_VERSION
-                    else -> ADAPTIVE_VERSION
-                },
                 adaptive = true,
                 light = adaptive.light.data,
                 dark = adaptive.dark.data,
@@ -334,25 +403,138 @@ object ThemePackageStorage {
             )
         } else {
             data.copy(
-                version = when {
-                    usesImmersiveHome || usesBottomBarIcons -> HOME_STATUS_VERSION
-                    data.appearance != null -> APPEARANCE_VERSION
-                    data.version >= ADAPTIVE_VERSION -> BASE_VERSION
-                    else -> data.version
-                },
                 adaptive = false,
                 light = null,
                 dark = null,
             )
         }
 
-        val encrypted = ThemePackageCrypto.encryptingStream(output)
+        val requestedDynamic = packageData.dynamic
+        var dynamicWallpaper = dynamicWallpaperFile?.takeIf {
+            it.isFile && requestedDynamic?.hasWallpaper == true
+        }
+        var dynamicHomeCard = dynamicHomeCardFile?.takeIf {
+            it.isFile && requestedDynamic?.hasHomeCard == true
+        }
+        var skippedWallpaper = false
+        var skippedHomeCard = false
+
+        fun existingSize(file: File?): Long = file?.takeIf { it.isFile }?.length() ?: 0L
+
+        fun dynamicPackage(): DynamicWallpaperPackage? {
+            val settings = requestedDynamic ?: return null
+            val wallpaperPresent = dynamicWallpaper != null
+            val cardPresent = dynamicHomeCard != null
+            return settings.copy(
+                hasWallpaper = when (settings.hasWallpaper) {
+                    true -> wallpaperPresent
+                    else -> settings.hasWallpaper
+                },
+                hasHomeCard = when (settings.hasHomeCard) {
+                    true -> cardPresent
+                    else -> settings.hasHomeCard
+                },
+                wallpaperTransform = settings.wallpaperTransform?.sanitized()
+                    ?.takeIf { wallpaperPresent },
+                homeCardTransform = settings.homeCardTransform?.sanitized()
+                    ?.takeIf { cardPresent },
+            )
+        }
+
+        /**
+         * The version follows the media that actually made it into the package. If a dynamic
+         * file was dropped to satisfy the size ceiling, the archive no longer needs v6 and can
+         * stay readable by managers that predate the dynamic entries.
+         */
+        fun effectiveVersion(hasDynamicMedia: Boolean): Int {
+            val usesV5 = usesImmersiveHome || usesBottomBarIcons
+            return if (adaptive != null) {
+                when {
+                    hasDynamicMedia -> DYNAMIC_VERSION
+                    usesV5 -> HOME_STATUS_VERSION
+                    data.appearance != null -> APPEARANCE_VERSION
+                    else -> ADAPTIVE_VERSION
+                }
+            } else {
+                when {
+                    hasDynamicMedia -> DYNAMIC_VERSION
+                    usesV5 -> HOME_STATUS_VERSION
+                    data.appearance != null -> APPEARANCE_VERSION
+                    data.version >= ADAPTIVE_VERSION -> BASE_VERSION
+                    else -> data.version
+                }
+            }
+        }
+
+        fun encodePackage(): ByteArray = json.encodeToString(
+            ThemePackageData.serializer(),
+            packageData.copy(
+                version = effectiveVersion(dynamicWallpaper != null || dynamicHomeCard != null),
+                dynamic = dynamicPackage(),
+            ),
+        ).toByteArray(Charsets.UTF_8)
+
+        val staticBytes = if (adaptive != null) {
+            listOf(adaptive.light, adaptive.dark).sumOf { variant ->
+                (if (variant.data.hasBackground == true) {
+                    existingSize(variant.backgroundFile)
+                } else {
+                    0L
+                }) +
+                    (if (variant.data.hasCardBackground == true) {
+                        existingSize(variant.cardBackgroundFile)
+                    } else {
+                        0L
+                    }) +
+                    variant.cardStickerFiles.sumOf { existingSize(it) }
+            }
+        } else {
+            (if (data.hasBackground == true) existingSize(backgroundFile) else 0L) +
+                (if (data.hasCardBackground == true) existingSize(cardBackgroundFile) else 0L) +
+                cardStickerFiles.sumOf { existingSize(it) }
+        } + bottomBarIconFiles.values.sumOf { existingSize(it) }
+        val staticEntryCount = 4L + cardStickerFiles.size + bottomBarIconFiles.size +
+            (adaptive?.let {
+                2L + it.light.cardStickerFiles.size + it.dark.cardStickerFiles.size
+            } ?: 0L)
+        // Headers, the deflated theme.json and a spare margin; the exact figure is verified by the
+        // hard limiter on the encrypted stream below.
+        val fixedOverhead = PACKAGE_ENTRY_OVERHEAD * (staticEntryCount + 2L) + 8L * 1024L
+        val limit = ThemeStoreRepository.MAX_PACKAGE_BYTES - PACKAGE_SIZE_RESERVE
+
+        if (fixedOverhead + staticBytes > limit) error("Theme package is too large")
+
+        var themeJson = encodePackage()
+        var totalBytes = fixedOverhead + staticBytes + themeJson.size +
+            existingSize(dynamicWallpaper) + existingSize(dynamicHomeCard)
+        while (totalBytes > limit && (dynamicWallpaper != null || dynamicHomeCard != null)) {
+            val currentWallpaper = dynamicWallpaper
+            val currentCard = dynamicHomeCard
+            if (currentWallpaper != null &&
+                (currentCard == null || currentWallpaper.length() >= currentCard.length())
+            ) {
+                skippedWallpaper = true
+                dynamicWallpaper = null
+            } else {
+                skippedHomeCard = true
+                dynamicHomeCard = null
+            }
+            themeJson = encodePackage()
+            totalBytes = fixedOverhead + staticBytes + themeJson.size +
+                existingSize(dynamicWallpaper) + existingSize(dynamicHomeCard)
+        }
+        if (totalBytes > limit) error("Theme package is too large")
+
+        val encrypted = ThemePackageCrypto.encryptingStream(
+            SizeLimitedOutputStream(output, ThemeStoreRepository.MAX_PACKAGE_BYTES),
+        )
         ZipOutputStream(encrypted).use { zip ->
-            // Theme images are already compressed (WebP/PNG/JPEG); deflating them again
-            // burns seconds of CPU on large packages for almost no size gain.
-            zip.setLevel(Deflater.NO_COMPRESSION)
+            // Pack every entry at the maximum level. The media is already entropy-coded, so the
+            // gain is small, but deflating is lossless: the unpacked bytes, and therefore the
+            // wallpaper quality, stay exactly the same.
+            zip.setLevel(Deflater.BEST_COMPRESSION)
             zip.putNextEntry(ZipEntry(THEME_ENTRY))
-            zip.write(json.encodeToString(ThemePackageData.serializer(), packageData).toByteArray())
+            zip.write(themeJson)
             zip.closeEntry()
             if (adaptive != null) {
                 writeVariantEntries(zip, adaptive.light, BACKGROUND_LIGHT_ENTRY, CARD_BACKGROUND_LIGHT_ENTRY, CARD_STICKER_LIGHT_PREFIX)
@@ -381,7 +563,51 @@ object ThemePackageStorage {
                     file.inputStream().use { it.copyTo(zip) }
                     zip.closeEntry()
                 }
+            dynamicWallpaper?.let { file ->
+                zip.putNextEntry(ZipEntry(DYNAMIC_WALLPAPER_ENTRY))
+                file.inputStream().use { it.copyTo(zip) }
+                zip.closeEntry()
+            }
+            dynamicHomeCard?.let { file ->
+                zip.putNextEntry(ZipEntry(DYNAMIC_HOME_CARD_ENTRY))
+                file.inputStream().use { it.copyTo(zip) }
+                zip.closeEntry()
+            }
         }
+        return ThemePackageExportReport(
+            skippedDynamicWallpaper = skippedWallpaper,
+            skippedDynamicHomeCard = skippedHomeCard,
+        )
+    }
+
+    /** Throws before the encrypted output can grow past the package ceiling. */
+    private class SizeLimitedOutputStream(
+        private val output: OutputStream,
+        private val maxBytes: Long,
+    ) : OutputStream() {
+        private var written = 0L
+
+        override fun write(b: Int) {
+            ensure(1)
+            output.write(b)
+            written += 1
+        }
+
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            ensure(len.toLong())
+            output.write(b, off, len)
+            written += len
+        }
+
+        private fun ensure(count: Long) {
+            if (written + count > maxBytes) {
+                throw IOException("Theme package is too large")
+            }
+        }
+
+        override fun flush() = output.flush()
+
+        override fun close() = output.close()
     }
 
     
@@ -503,6 +729,12 @@ object ThemePackageStorage {
         if (usesImmersiveHome && data.version < HOME_STATUS_VERSION) {
             error("Immersive home layouts require format v$HOME_STATUS_VERSION")
         }
+        val usesDynamic = data.dynamic?.let {
+            it.hasWallpaper == true || it.hasHomeCard == true
+        } == true
+        if (usesDynamic && data.version < DYNAMIC_VERSION) {
+            error("Dynamic wallpapers require format v$DYNAMIC_VERSION")
+        }
         data.appearance?.let { appearance ->
             val appearanceJson = json.encodeToString(
                 AppearanceOverlayData.serializer(),
@@ -517,6 +749,8 @@ object ThemePackageStorage {
     private fun parseThemeZip(context: Context, zip: ZipInputStream): ImportedTheme {
         var tempBackground: File? = null
         var tempCardBackground: File? = null
+        var tempDynamicWallpaper: File? = null
+        var tempDynamicHomeCard: File? = null
         val tempStickers = mutableMapOf<Int, File>()
         var lightBackground: File? = null
         var lightCardBackground: File? = null
@@ -530,6 +764,8 @@ object ThemePackageStorage {
         fun cleanup() {
             tempBackground?.delete()
             tempCardBackground?.delete()
+            tempDynamicWallpaper?.delete()
+            tempDynamicHomeCard?.delete()
             tempStickers.forEach { (_, file) -> file.delete() }
             lightBackground?.delete()
             lightCardBackground?.delete()
@@ -556,6 +792,22 @@ object ThemePackageStorage {
         fun readImageEntry(zip: ZipInputStream, prefix: String): File {
             val file = newTemp(prefix)
             file.outputStream().use { copyExtractedImage(zip, it) }
+            return file
+        }
+
+        fun copyExtractedMedia(input: InputStream, output: OutputStream) {
+            val remaining = MAX_EXTRACTED_IMAGE_BYTES - extractedImageBytes
+            if (remaining <= 0L) error("Theme package media is too large")
+            extractedImageBytes += copyLimited(
+                input = input,
+                output = output,
+                maxBytes = minOf(MAX_DYNAMIC_ENTRY_BYTES, remaining),
+            )
+        }
+
+        fun readDynamicEntry(zip: ZipInputStream, prefix: String): File {
+            val file = newTemp(prefix)
+            file.outputStream().use { copyExtractedMedia(zip, it) }
             return file
         }
 
@@ -590,6 +842,20 @@ object ThemePackageStorage {
                             error("Duplicate card background entry")
                         }
                         tempCardBackground = readImageEntry(zip, "theme_import_card_")
+                    }
+
+                    name == DYNAMIC_WALLPAPER_ENTRY -> {
+                        if (tempDynamicWallpaper != null) {
+                            error("Duplicate dynamic wallpaper entry")
+                        }
+                        tempDynamicWallpaper = readDynamicEntry(zip, "theme_import_dynamic_")
+                    }
+
+                    name == DYNAMIC_HOME_CARD_ENTRY -> {
+                        if (tempDynamicHomeCard != null) {
+                            error("Duplicate dynamic card entry")
+                        }
+                        tempDynamicHomeCard = readDynamicEntry(zip, "theme_import_dynamic_card_")
                     }
 
                     name == BACKGROUND_LIGHT_ENTRY -> {
@@ -667,6 +933,43 @@ object ThemePackageStorage {
                 }
             }
 
+            // Dynamic media is shared by both adaptive halves, so it is resolved before the
+            // adaptive branch and kept out of the legacy image cleanup below.
+            val resolvedDynamicWallpaper = tempDynamicWallpaper
+            val hasDynamicWallpaper = data.dynamic?.hasWallpaper ?: (resolvedDynamicWallpaper != null)
+            if (hasDynamicWallpaper && resolvedDynamicWallpaper == null) {
+                error("Dynamic wallpaper entry is missing")
+            }
+            if (resolvedDynamicWallpaper != null &&
+                ImageStorage.dynamicWallpaperKindOf(resolvedDynamicWallpaper) == null
+            ) {
+                error("Dynamic wallpaper is invalid")
+            }
+            if (!hasDynamicWallpaper) {
+                resolvedDynamicWallpaper?.delete()
+                tempDynamicWallpaper = null
+            }
+            val resolvedDynamicHomeCard = tempDynamicHomeCard
+            val hasDynamicHomeCard = data.dynamic?.hasHomeCard ?: (resolvedDynamicHomeCard != null)
+            if (hasDynamicHomeCard && resolvedDynamicHomeCard == null) {
+                error("Dynamic card background entry is missing")
+            }
+            if (resolvedDynamicHomeCard != null &&
+                ImageStorage.dynamicWallpaperKindOf(resolvedDynamicHomeCard) == null
+            ) {
+                error("Dynamic card background is invalid")
+            }
+            if (!hasDynamicHomeCard) {
+                resolvedDynamicHomeCard?.delete()
+                tempDynamicHomeCard = null
+            }
+            val dynamicWallpaperPath = resolvedDynamicWallpaper
+                ?.takeIf { hasDynamicWallpaper }
+                ?.absolutePath
+            val dynamicHomeCardPath = resolvedDynamicHomeCard
+                ?.takeIf { hasDynamicHomeCard }
+                ?.absolutePath
+
             if (data.adaptive == true) {
                 val lightData = data.light ?: error("Light variant is missing")
                 val darkData = data.dark ?: error("Dark variant is missing")
@@ -703,6 +1006,8 @@ object ThemePackageStorage {
                         homeCardStickerTransforms = null,
                     ),
                     bottomBarIconPaths = bottomBarIconPaths.toMap(),
+                    dynamicWallpaperPath = dynamicWallpaperPath,
+                    dynamicHomeCardPath = dynamicHomeCardPath,
                     light = light,
                     dark = dark,
                 )
@@ -748,6 +1053,8 @@ object ThemePackageStorage {
                 data = data,
                 backgroundPath = tempBackground?.takeIf { hasBackground }?.absolutePath,
                 cardBackgroundPath = tempCardBackground?.takeIf { hasCardBackground }?.absolutePath,
+                dynamicWallpaperPath = dynamicWallpaperPath,
+                dynamicHomeCardPath = dynamicHomeCardPath,
                 stickerPaths = stickerPaths(tempStickers),
                 bottomBarIconPaths = bottomBarIconPaths.toMap(),
             )

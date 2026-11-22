@@ -344,6 +344,8 @@
     <string name="install_block_modules_list">Engellenecek modüller</string>
     <string name="install_block_modules_summary">Önyüklemede yüklenmesini durdurmak için virgülle ayrılmış modül adları, örn. oplus_secure_guard. Hiçbir şeyi engellememek için boş bırakın.</string>
     <string name="install_block_modules_invalid">Modül adları yalnızca harf, rakam ve alt çizgi içerebilir ve her biri en fazla 64 karakter olabilir.</string>
+    <string name="install_block_modules_unknown_title">Bilinmeyen modüller engellensin mi?</string>
+    <string name="install_block_modules_unknown_content">Bu modüller bilinen anti-root listesinde değil: %1$s. İlk aşama init bunlardan birine ihtiyaç duyarsa cihaz açılmayabilir. Yalnızca engellemenin güvenli olduğundan eminseniz devam edin.</string>
     <string name="settings_adb_root_summary">adbd arka plan hizmetini (daemon) Root yetkileriyle çalıştırın</string>
     <string name="settings_shell_su_adb_only">Shell root erişimini ADB ile sınırlandırın</string>
     <string name="settings_shell_su_adb_only_summary">Shell\'e root yetkisi verildiğinde ek kontrol: Yalnızca adbd veya bir KernelSU root süreci (örn. bir ADB modülü) tarafından başlatılan süreçler bunu kullanabilir; bu da shell ayrıcalıkları elde eden uygulamaların root seviyesine yükselmesini önler</string>

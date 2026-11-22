@@ -9,7 +9,7 @@
 # The kernel jobs keep using ghcr.io/ylarod/ddk-min:<kmi>-<release>, because that
 # image carries the kernel source trees, not just a toolchain.
 #
-# Build:  bash .github/ci/build-image.sh [tag]
+# Build:  bash .github/image/build-image.sh [tag]
 
 FROM catthehacker/ubuntu:act-latest
 
@@ -109,10 +109,10 @@ RUN set -eux;     unzip -q /tmp/gradle.zip -d /opt;     ln -sfn /opt/gradle-9.7.
 ENV PATH="/opt/gradle/bin:${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:${ANDROID_SDK_ROOT}/platform-tools:${ANDROID_SDK_ROOT}/build-tools/37.0.0:${ANDROID_SDK_ROOT}/cmake/3.31.6/bin:${PATH}"
 
 # ---------------------------------------------------------------- git mirrors
-# Seven Rust dependencies come from git repositories on github.com, which this
+# Eight Rust dependencies come from git repositories on github.com, which this
 # network resolves to ::1 (the tunnel only proxies a fixed domain list). Bare
 # mirrors are baked in and git rewrites the URLs, so cargo never talks to
-# github.com. Refresh with .github/ci/mirror-git-deps.sh on a machine that can.
+# github.com. Refresh with .github/image/mirror-git-deps.sh on a machine that can.
 COPY git-mirrors/ /opt/git-mirrors/
 
 RUN set -eux; \

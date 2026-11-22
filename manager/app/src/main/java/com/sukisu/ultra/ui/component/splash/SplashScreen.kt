@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -50,6 +51,8 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import com.sukisu.ultra.R
+import com.sukisu.ultra.ui.LocalUiMode
+import com.sukisu.ultra.ui.UiMode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -69,7 +72,11 @@ fun SplashScreen(
     var splashDismissed by remember { mutableStateOf(false) }
     val currentOnDismissed by rememberUpdatedState(onDismissed)
 
-    val isDark = MiuixTheme.colorScheme.background.luminance() < 0.5f
+    val miuix = LocalUiMode.current == UiMode.Miuix
+    val bgColor = if (miuix) MiuixTheme.colorScheme.background else MaterialTheme.colorScheme.background
+    val fgColor = if (miuix) MiuixTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onBackground
+    val surfaceColor = if (miuix) MiuixTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainer
+    val isDark = bgColor.luminance() < 0.5f
 
     val context = LocalContext.current
     val appIconBitmap = remember(context, isDark) {
@@ -117,7 +124,7 @@ fun SplashScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MiuixTheme.colorScheme.background)
+                .background(bgColor)
                 .pointerInput(Unit) {}
                 .statusBarsPadding()
                 .navigationBarsPadding(),
@@ -148,7 +155,7 @@ fun SplashScreen(
                             .size(88.dp)
                             .shadow(12.dp, shape = RoundedCornerShape(24.dp), clip = false)
                             .clip(RoundedCornerShape(24.dp))
-                            .background(MiuixTheme.colorScheme.surface),
+                            .background(surfaceColor),
                         contentAlignment = Alignment.Center,
                     ) {
                         appIconBitmap?.let { bitmap ->
@@ -172,17 +179,21 @@ fun SplashScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = stringResource(id = R.string.app_name),
-                                color = MiuixTheme.colorScheme.onBackground,
+                                color = fgColor,
                                 fontSize = 22.sp,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = (-0.3).sp,
+                                maxLines = 1,
+                                softWrap = false,
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "Kernel-based Root Solution",
-                                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                                color = fgColor.copy(alpha = 0.55f),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false,
                             )
                         }
                     }
@@ -195,9 +206,11 @@ fun SplashScreen(
                 ) {
                     Text(
                         text = "What you like, you permit; what you permit, you govern.",
-                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.35f),
+                        color = fgColor.copy(alpha = 0.35f),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        softWrap = false,
                     )
                 }
             }

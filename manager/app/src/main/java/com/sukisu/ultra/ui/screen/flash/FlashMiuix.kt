@@ -1,6 +1,7 @@
 package com.sukisu.ultra.ui.screen.flash
 
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -48,7 +49,7 @@ import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
+import com.sukisu.ultra.ui.component.miuix.SmallTopAppBar
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -71,6 +72,13 @@ fun FlashScreenMiuix(
 ) {
     val enableBlur = LocalEnableBlur.current
     val scrollState = rememberScrollState()
+    LaunchedEffect(scrollState.interactionSource, actions.onUserInteraction) {
+        scrollState.interactionSource.interactions.collect { interaction ->
+            if (interaction is DragInteraction.Start) {
+                actions.onUserInteraction()
+            }
+        }
+    }
     val backdrop = rememberBlurBackdrop(enableBlur)
     val blurActive = backdrop != null
     val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()

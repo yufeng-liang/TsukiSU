@@ -9,6 +9,7 @@ import com.sukisu.ultra.ui.kernelFlash.util.KpmTools
 import com.sukisu.ultra.ui.util.getRootShell
 import com.sukisu.ultra.ui.util.install
 import com.sukisu.ultra.ui.util.rootAvailable
+import com.sukisu.ultra.ui.navigation3.deleteExternalZipCache
 import com.topjohnwu.superuser.ShellUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -158,6 +159,7 @@ class HorizonKernelWorker(
             } catch (e: Exception) {
                 state.addLog("Failed to clean flash directory: ${e.message}")
             }
+            deleteExternalZipCache(context, uri)
             val error = failure
             if (error != null) {
                 state.setError(error.message ?: context.getString(R.string.horizon_unknown_error))

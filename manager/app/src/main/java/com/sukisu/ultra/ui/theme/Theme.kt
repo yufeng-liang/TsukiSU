@@ -3,6 +3,10 @@ package com.sukisu.ultra.ui.theme
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamiccolor.ColorSpec
@@ -151,6 +155,27 @@ val LocalEnableBlur = staticCompositionLocalOf { false }
 /** Progressive (edge gradient) blur behind the top and bottom bars. */
 val LocalEnableProgressiveBlur = staticCompositionLocalOf { false }
 
+/**
+ * Collapse progress of the page's top bar (0 = expanded, 1 = collapsed).
+ *
+ * Large app bars publish their progress here while scrolling, and `TopBarVeil` reads it in the
+ * draw phase so its blur band fades in as content scrolls under the bar and fades out again when
+ * the list returns to the top. Bars that never publish (pinned or non-scrolling) keep the band
+ * fully visible, matching the previous look.
+ */
+@Stable
+class TopBarBandProgressState {
+    var fraction by mutableFloatStateOf(1f)
+}
+
+val LocalTopBarBandProgress = staticCompositionLocalOf { TopBarBandProgressState() }
+
+/**
+ * Fade the floating top bar control backgrounds in as the page scrolls. When off, the round
+ * control backgrounds stay fully visible at rest.
+ */
+val LocalTopBarPillFade = staticCompositionLocalOf { true }
+
 val LocalEnableFloatingBottomBar = staticCompositionLocalOf { false }
 
 val LocalEnableFloatingBottomBarBlur = staticCompositionLocalOf { false }
@@ -161,6 +186,9 @@ val LocalModuleDescriptionMaxLines = staticCompositionLocalOf { 4 }
 
 val LocalBackgroundImagePath = staticCompositionLocalOf { "" }
 
+/** True while the shared window background is a dynamic wallpaper rather than a still image. */
+val LocalDynamicWallpaperActive = staticCompositionLocalOf { false }
+
 /**
  * Captures the app background image (and its scrim) exactly as drawn behind the navigation host.
  *
@@ -168,8 +196,22 @@ val LocalBackgroundImagePath = staticCompositionLocalOf { "" }
  * unpainted parts of that layer are fully transparent. Miuix bar blurs sample that layer, and
  * transparent pixels bleed black into the result, so bars combine this backdrop underneath their
  * own page backdrop to blur what is actually on screen. Null when no capture is available.
+ *
+ * Everything drawn over the wallpaper (the scrim, appearance effects) has to stay inside the
+ * captured layer: bars use these pixels as "what is behind me", so an overlay left outside the
+ * capture makes the blurred bar brighter than the background it meets.
  */
 val LocalAppBackgroundBackdrop = staticCompositionLocalOf<LayerBackdrop?> { null }
+
+/**
+ * A record-only backdrop holding the latest low-resolution frame of the dynamic wallpaper.
+ *
+ * A live WebView surface must never be captured into a Compose backdrop (vendor WebViews crash
+ * before the first frame), so the renderer exports small canvas snapshots instead. Bars stack
+ * this layer under their page layer exactly like [LocalAppBackgroundBackdrop]; null while no
+ * frame is available yet, in which case bars fall back to their tint.
+ */
+val LocalDynamicWallpaperFrameBackdrop = staticCompositionLocalOf<LayerBackdrop?> { null }
 
 val LocalCardBackgroundAlpha = staticCompositionLocalOf { 0.6f }
 

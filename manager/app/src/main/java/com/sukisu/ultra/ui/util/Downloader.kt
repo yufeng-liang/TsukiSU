@@ -3,9 +3,16 @@ package com.sukisu.ultra.ui.util
 import android.net.Uri
 import kotlinx.coroutines.withTimeoutOrNull
 import android.util.Log
+import android.os.Build
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import com.sukisu.ultra.data.proxy.GithubProxyRouter
 import com.sukisu.ultra.data.proxy.ProxyEntry
@@ -16,7 +23,15 @@ import com.sukisu.ultra.data.registry.DownloadVerificationException
 import com.sukisu.ultra.data.registry.ExpectedFile
 import com.sukisu.ultra.ksuApp
 import com.sukisu.ultra.ui.util.module.LatestVersionInfo
+import com.sukisu.ultra.data.repository.SettingsRepositoryImpl
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.Request
+import okhttp3.Response
+import org.json.JSONObject
+import java.io.IOException
+import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
 
 /**
  * @author weishu

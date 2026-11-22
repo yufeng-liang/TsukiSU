@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
@@ -44,8 +45,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import com.sukisu.ultra.ui.component.material.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -76,6 +77,7 @@ internal fun ThemeStoreAuthorScreen(
     items: List<ThemeStoreItem>,
     state: ThemeStoreUiState,
     gridLayout: Boolean,
+    listState: LazyGridState,
     onToggleLayout: () -> Unit,
     landscapePreviewKeys: MutableMap<String, Boolean>,
     onBack: () -> Unit,
@@ -206,6 +208,7 @@ internal fun ThemeStoreAuthorScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
+            state = listState,
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 13.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),

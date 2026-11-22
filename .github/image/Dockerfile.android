@@ -1,0 +1,17 @@
+# Android/JVM toolchain on top of the shared base: SDK 37, NDK 27.2 and 29,
+# cmake, Gradle and the kpm tools. ADD unpacks the tar extracted from the old
+# image, so nothing is downloaded here.
+FROM forgejo-ci/base:1
+
+ADD android.tar /
+RUN rm -f /android.tar
+
+ENV ANDROID_SDK_ROOT=/opt/android-sdk \
+    ANDROID_HOME=/opt/android-sdk \
+    ANDROID_NDK_HOME=/opt/android-sdk/ndk/27.2.12479018 \
+    PATH=/opt/gradle/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/opt/android-sdk/build-tools/37.0.0:/opt/android-sdk/cmake/3.31.6/bin:${PATH}
+
+RUN set -eux; \
+    gradle --version | head -3; \
+    test -x "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"; \
+    test -d /opt/android-sdk/ndk/29.0.14206865

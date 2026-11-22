@@ -26,6 +26,7 @@ import com.sukisu.ultra.ui.util.BuiltinAppIcons
 import com.sukisu.ultra.ui.util.customText
 import com.sukisu.ultra.ui.util.CustomTextKey
 import com.sukisu.ultra.ui.viewmodel.SettingsViewModel
+import com.sukisu.ultra.ui.navigation3.Route
 
 // Miuix's own default accent, used when the Miuix skin runs without Monet or a custom key color.
 private val MiuixDefaultSeed = Color(0xFF3482FF)

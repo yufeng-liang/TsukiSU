@@ -31,7 +31,7 @@ html_escape() {
 
 # Keep the useful build context while staying comfortably below Telegram's
 # 1024-character document-caption limit.
-commit_text="$(git log -1 --format='%s by %an' "${GITHUB_SHA:-HEAD}")"
+commit_text="${COMMIT_TEXT:-$(git log -1 --format='%s by %an' "${GITHUB_SHA:-HEAD}")}"
 commit_text="${commit_text:0:500}"
 title_html="$(html_escape "$TITLE")"
 branch_html="$(html_escape "$BRANCH")"
@@ -39,12 +39,16 @@ commits_html="$(html_escape "$commit_text")"
 run_url_html="$(html_escape "$RUN_URL")"
 
 context_link=""
-if [[ -n "${GITHUB_EVENT:-}" ]]; then
+if [[ -n "${CHANGES_URL:-}" ]]; then
+  context_url="$CHANGES_URL"
+elif [[ -n "${GITHUB_EVENT:-}" ]]; then
   context_url="$(jq -r '.compare // .head_commit.url // empty' <<<"$GITHUB_EVENT")"
-  if [[ -n "$context_url" ]]; then
-    context_url_html="$(html_escape "$context_url")"
-    context_link="<a href=\"${context_url_html}\">Changes</a>"$'\n'
-  fi
+else
+  context_url=""
+fi
+if [[ -n "$context_url" ]]; then
+  context_url_html="$(html_escape "$context_url")"
+  context_link="<a href=\"${context_url_html}\">Changes</a>"$'\n'
 fi
 
 caption="<b>${title_html}</b>
@@ -58,7 +62,8 @@ if [[ "$BRANCH" == "dev" ]]; then
   caption+=$'\n⚠️⚠️<b>测试版，安装前请备份</b>⚠️⚠️'
 fi
 
-api="https://api.telegram.org/bot${BOT_TOKEN}"
+api="${TG_API_BASE:-https://api.telegram.org}"
+api="${api%/}/bot${BOT_TOKEN}"
 response="$(mktemp)"
 trap 'rm -f "$response"' EXIT
 
@@ -113,9 +118,12 @@ send_with_retry() {
 
 if (( $# == 1 )); then
   echo "[+] Uploading 1 APK through Telegram Bot API"
+  # --form-string, not -F: the caption is multi-line, and curl reads whatever
+  # follows a newline inside a -F value as a file name to open, which fails the
+  # whole request with (26) Failed to open/read local data.
   run_curl \
     -F "document=@$1;type=application/vnd.android.package-archive" \
-    -F "caption=${caption}" \
+    --form-string "caption=${caption}" \
     -F "parse_mode=HTML" \
     "${api}/sendDocument"
 else
@@ -157,9 +165,10 @@ else
       else
         caption_arg=""
       fi
+      # Same reason as the single-file branch: the caption spans lines.
       send_with_retry \
         -F "document=@${file};type=application/vnd.android.package-archive" \
-        -F "caption=${caption_arg}" \
+        --form-string "caption=${caption_arg}" \
         -F "parse_mode=HTML" \
         "${api}/sendDocument"
     done

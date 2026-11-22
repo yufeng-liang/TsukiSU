@@ -6,6 +6,8 @@ import com.sukisu.ultra.data.model.ThemeStoreEntry
 import com.sukisu.ultra.data.model.ThemeStoreHealth
 import com.sukisu.ultra.data.model.ThemeStoreSubmitResponse
 import com.sukisu.ultra.ksuApp
+import com.sukisu.ultra.data.repository.ThemeStoreRepository.Companion.MAX_DOWNLOAD_CACHE_BYTES
+import com.sukisu.ultra.ui.util.ThemeMediaCrypto
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -13,6 +15,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.CacheControl
+import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaType
@@ -95,6 +98,48 @@ class ThemeStoreUnauthorizedException : IOException("Theme store token rejected"
 
 private class RangeUnsupportedException : IOException("Server does not support ranged downloads")
 
+private data class ThemeStoreDownloadOrigin(val url: HttpUrl)
+
+/**
+ * Keep the store credential on same-origin mirror redirects, but never forward
+ * it to a different host such as CNB or its signed CDN URL. OkHttp only strips
+ * Authorization automatically; custom credential headers need this policy.
+ */
+internal fun OkHttpClient.Builder.protectThemeStoreRedirectCredentials(): OkHttpClient.Builder =
+    addInterceptor { chain ->
+        val request = chain.request()
+        if (request.tag(ThemeStoreDownloadOrigin::class.java) != null) {
+            chain.proceed(request)
+        } else {
+            chain.proceed(
+                request.newBuilder()
+                    .tag(
+                        ThemeStoreDownloadOrigin::class.java,
+                        ThemeStoreDownloadOrigin(request.url),
+                    )
+                    .build(),
+            )
+        }
+    }.addNetworkInterceptor { chain ->
+        val request = chain.request()
+        val origin = request.tag(ThemeStoreDownloadOrigin::class.java)?.url
+        val crossOrigin = origin != null && (
+            origin.scheme != request.url.scheme ||
+                origin.host != request.url.host ||
+                origin.port != request.url.port
+            )
+        if (crossOrigin) {
+            chain.proceed(
+                request.newBuilder()
+                    .removeHeader(ThemeStoreRepository.TOKEN_HEADER)
+                    .removeHeader(ThemeStoreRepository.MEDIA_DIRECT_HEADER)
+                    .build(),
+            )
+        } else {
+            chain.proceed(request)
+        }
+    }
+
 /**
  * Resume marker for a partially downloaded package. [completed] lists the chunks that
  * were fully written, so a retry only fetches the missing ranges instead of the whole
@@ -151,6 +196,14 @@ class ThemeStoreRepository(
     companion object {
         const val TOKEN_HEADER = "X-Sukisu-Theme-Token"
 
+        /**
+         * Asks the theme service to redirect previews/screenshots/avatars to the
+         * CNB raw URL. Only this app can open the sealed bytes, and the marker is
+         * stripped again on cross-origin redirects.
+         */
+        const val MEDIA_DIRECT_HEADER = "X-Sukisu-Media-Direct"
+        const val MEDIA_DIRECT_VALUE = "skm1"
+
         
         private const val MAX_CATALOG_BYTES = 8L * 1024L * 1024L
         
@@ -171,6 +224,9 @@ class ThemeStoreRepository(
         private const val STREAM_FLUSH_BYTES = 256 * 1024
         
         private const val MAX_DOWNLOAD_CACHE_BYTES = 256L * 1024L * 1024L
+
+        /** Covers in "My downloads" are small thumbnails; reject oversized responses early. */
+        private const val MAX_PREVIEW_CACHE_BYTES = 8L * 1024L * 1024L
         
         private val ACTIVE_CACHE_GRACE_MS = TimeUnit.HOURS.toMillis(1)
         private val SHA256_PATTERN = Regex("^[0-9a-fA-F]{64}$")
@@ -247,6 +303,7 @@ class ThemeStoreRepository(
     private val downloadClient: OkHttpClient by lazy {
         client.newBuilder()
             .cache(null)
+            .protectThemeStoreRedirectCredentials()
             // Parallel chunks need separate connections. Under HTTP/2 OkHttp would
             // multiplex every range onto one TCP stream, which inherits the mirror's
             // per-connection throttle and removes the benefit.
@@ -426,6 +483,44 @@ class ThemeStoreRepository(
     }
 
     /**
+     * Fetches a theme image (normally the preview cover) so the download library can keep a
+     * thumbnail offline. Failures are not fatal: the caller simply stores no preview.
+     *
+     * The store client carries no Coil interceptor, so a direct CNB response is still sealed
+     * with the `SKM1` envelope: open it here, and fall back to a plaintext request if the
+     * envelope cannot be read (for example after a media-key rotation).
+     */
+    suspend fun fetchPreviewBytes(
+        url: String,
+        token: String,
+        maxBytes: Long = MAX_PREVIEW_CACHE_BYTES,
+    ): ByteArray? = withContext(Dispatchers.IO) {
+        fun request(direct: Boolean): ByteArray? = runCatching {
+            // Device credentials are rotated per request; a raw header value from the source
+            // config is rejected by the mirror, which used to leave the downloads list blind.
+            val builder = Request.Builder()
+                .url(url)
+                .withToken(token)
+            if (direct) builder.header(MEDIA_DIRECT_HEADER, MEDIA_DIRECT_VALUE)
+            client.newCall(builder.build()).execute().use { response ->
+                if (!response.isSuccessful) return@use null
+                val body = response.body
+                if (body.contentLength() > maxBytes) return@use null
+                val bytes = body.bytes()
+                bytes.takeIf { it.isNotEmpty() && it.size <= maxBytes }
+            }
+        }.getOrNull()
+
+        val direct = request(direct = true) ?: return@withContext null
+        val plain = if (ThemeMediaCrypto.isSealed(direct)) {
+            runCatching { ThemeMediaCrypto.decrypt(direct) }.getOrNull()
+        } else {
+            direct
+        }
+        (plain ?: request(direct = false))?.takeIf { it.isNotEmpty() }
+    }
+
+    /**
      * Downloads a package using parallel ranged requests when the server supports them.
      * Mirrors often throttle a single connection, so a large package can take far longer
      * than its size suggests; ranged workers fetch independent chunks at the same time.
@@ -443,6 +538,16 @@ class ThemeStoreRepository(
         onTransferred: (Long, Long) -> Unit,
         allowRestart: Boolean,
     ): File {
+        // A fresh download can be served by the CNB mirror directly. The server
+        // only redirects requests without `Range`, so probe once before the
+        // ranged downloader; an interrupted direct download falls back to the
+        // ranged (local) path, which can resume from the partial file.
+        if (resumeFrom == 0L && !metaFile.isFile && probeDirectPackage(url, token)) {
+            return downloadThemePackageSequential(
+                entry, url, token, tempFile, 0, expectedSha,
+                onProgress, onTransferred, false,
+            )
+        }
         val probe = probePackageRange(entry, url, token)
         if (probe.totalSize > 0L && probe.totalSize != entry.size) {
             tempFile.delete()
@@ -497,6 +602,36 @@ class ThemeStoreRepository(
     }
 
     
+    /**
+     * True when a Range-less HEAD redirects to the CNB raw host. CNB only serves
+     * the mirror redirect for requests without `Range`, and raw does not support
+     * ranged reads, so a hit here means "download the whole package from CNB".
+     * Mirrors on other hosts are left to the ranged path so their parallel
+     * chunking keeps working.
+     */
+    private fun probeDirectPackage(url: String, token: String): Boolean {
+        val request = Request.Builder()
+            .url(url)
+            .cacheControl(CacheControl.Builder().noCache().build())
+            .header("Accept-Encoding", "identity")
+            .head()
+            .withToken(token)
+            .build()
+        return try {
+            downloadClient.newCall(request).execute().use { response ->
+                if (response.code == 401) throw ThemeStoreUnauthorizedException()
+                if (!response.isSuccessful) return false
+                val host = response.request.url.host
+                host == "cnb.cool" || host.endsWith(".cnb.cool")
+            }
+        } catch (error: ThemeStoreUnauthorizedException) {
+            throw error
+        } catch (_: IOException) {
+            // CNB unreachable: fall back to the server's ranged download.
+            false
+        }
+    }
+
     private fun probePackageRange(
         entry: ThemeStoreEntry,
         url: String,
@@ -1026,16 +1161,29 @@ class ThemeStoreRepository(
             executeThemeUpload(uploadClient, request) { response ->
                 if (response.code == 401) throw ThemeStoreUnauthorizedException()
                 val raw = response.uploadJson()
+                // A front proxy can replace the submission response with its own web page;
+                // say so instead of leaking a decoder error or a bare status code.
+                val webPage = raw.trimStart().startsWith("<")
                 val parsed = runCatching {
                     json.decodeFromString(ThemeStoreSubmitResponse.serializer(), raw)
                 }.getOrNull()
                 if (!response.isSuccessful) {
                     throw IOException(
                         parsed?.error?.takeIf { it.isNotBlank() }
-                            ?: "HTTP ${response.code} while submitting theme",
+                            ?: if (webPage) {
+                                "主题商店前置代理返回了网页（HTTP ${response.code}），请稍后重试"
+                            } else {
+                                "HTTP ${response.code} while submitting theme"
+                            },
                     )
                 }
-                parsed ?: throw IOException("Invalid theme submission response")
+                parsed ?: throw IOException(
+                    if (webPage) {
+                        "主题商店返回了网页而不是 JSON（HTTP ${response.code}），请稍后重试"
+                    } else {
+                        "Invalid theme submission response"
+                    },
+                )
             }
         }.onFailure { if (it is CancellationException) throw it }
     }

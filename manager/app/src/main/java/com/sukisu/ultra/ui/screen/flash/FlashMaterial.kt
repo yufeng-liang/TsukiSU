@@ -1,5 +1,6 @@
 package com.sukisu.ultra.ui.screen.flash
 
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -34,7 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallExtendedFloatingActionButton
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import com.sukisu.ultra.ui.component.material.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
@@ -58,6 +59,13 @@ fun FlashScreenMaterial(
     snackBarHost: SnackbarHostState,
 ) {
     val scrollState = rememberScrollState()
+    LaunchedEffect(scrollState.interactionSource, actions.onUserInteraction) {
+        scrollState.interactionSource.interactions.collect { interaction ->
+            if (interaction is DragInteraction.Start) {
+                actions.onUserInteraction()
+            }
+        }
+    }
     if (state.showJailbreakWarning) {
         JailbreakFlashWarningDialog(
             onConfirm = actions.onConfirmJailbreakWarning,

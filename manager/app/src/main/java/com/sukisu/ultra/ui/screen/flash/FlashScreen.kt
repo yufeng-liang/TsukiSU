@@ -1,6 +1,5 @@
 package com.sukisu.ultra.ui.screen.flash
 
-import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.LocalActivity
 import androidx.compose.material3.SnackbarHostState
@@ -42,6 +41,8 @@ fun FlashScreen(flashIt: FlashIt, onBackEnabledChange: (Boolean) -> Unit) {
     var showRebootAction by rememberSaveable { mutableStateOf(false) }
     var flashingStatus by rememberSaveable { mutableStateOf(FlashingStatus.FLASHING) }
     var actionInProgress by rememberSaveable { mutableStateOf(false) }
+    var autoCloseCancelled by rememberSaveable { mutableStateOf(false) }
+    var hasStartedFlashing by rememberSaveable { mutableStateOf(false) }
     val needJailbreakWarning = flashIt is FlashIt.FlashBoot && Natives.isLateLoadMode
     // Soft reboot keeps the jailbreak and still applies modules
     val softReboot = flashIt is FlashIt.FlashModules && isSoftRebootPreferred()
@@ -75,20 +76,24 @@ fun FlashScreen(flashIt: FlashIt, onBackEnabledChange: (Boolean) -> Unit) {
         onShowRebootChange = { showRebootAction = it },
         onFlashingStatusChange = { flashingStatus = it },
         enabled = flashingEnabled,
+        hasStarted = hasStartedFlashing,
+        onFlashStarted = { hasStartedFlashing = true },
     )
 
-    LaunchedEffect(flashingStatus, flashIt) {
-        if (flashingStatus == FlashingStatus.SUCCESS && flashIt is FlashIt.FlashModules) {
-            val intent = activity?.intent
-            val isFromExternalIntent = intent?.action?.let { action ->
-                action == Intent.ACTION_VIEW ||
-                        action == Intent.ACTION_SEND ||
-                        action == Intent.ACTION_SEND_MULTIPLE
-            } ?: false
-
-            if (isFromExternalIntent) {
-                delay(1000.milliseconds)
-                activity.finish()
+    LaunchedEffect(flashingStatus, flashIt, autoCloseCancelled) {
+        if (
+            flashingStatus == FlashingStatus.SUCCESS &&
+            !autoCloseCancelled &&
+            flashIt is FlashIt.FlashModules &&
+            flashIt.uris.size > 1
+        ) {
+            delay(2500.milliseconds)
+            if (!autoCloseCancelled && !actionInProgress) {
+                if (flashIt.fromExternalIntent) {
+                    activity?.finish()
+                } else {
+                    navigator.pop()
+                }
             }
         }
     }
@@ -101,10 +106,17 @@ fun FlashScreen(flashIt: FlashIt, onBackEnabledChange: (Boolean) -> Unit) {
         rebootLabelRes = if (softReboot) R.string.reboot_soft else R.string.reboot,
         actionInProgress = actionInProgress,
     )
+    val saveLogAction = saveLog(logContent, scope, fallbackText = text) { showMessage(it) }
     val actions = FlashScreenActions(
         onBack = dropUnlessResumed { if (backEnabled) navigator.pop() },
-        onSaveLog = saveLog(logContent, scope) { showMessage(it) },
+        onSaveLog = {
+            if (flashingStatus == FlashingStatus.SUCCESS) {
+                autoCloseCancelled = true
+            }
+            saveLogAction()
+        },
         onReboot = {
+            autoCloseCancelled = true
             actionInProgress = true
             scope.launch {
                 withContext(Dispatchers.IO) {
@@ -115,6 +127,11 @@ fun FlashScreen(flashIt: FlashIt, onBackEnabledChange: (Boolean) -> Unit) {
         onClose = dropUnlessResumed { navigator.pop() },
         onConfirmJailbreakWarning = { flashingEnabled = true },
         onDismissJailbreakWarning = dropUnlessResumed { navigator.pop() },
+        onUserInteraction = {
+            if (flashingStatus == FlashingStatus.SUCCESS) {
+                autoCloseCancelled = true
+            }
+        },
     )
 
     when (LocalUiMode.current) {

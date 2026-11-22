@@ -19,17 +19,20 @@ on:
       - '.github/workflows/ksuinit.yml'
       - '.github/workflows/manager.yml'
       - '.github/workflows/publish.yml'
-      - '.github/ci/**'
+      - '.github/workflows/builtzygisk.yml'
+      - '.github/image/**'
       - '.github/scripts/ci/**'
       - '.github/scripts/setup-rust-build.sh'
       - '.github/riscv64-cargo.toml'
-      - 'scripts/upload-telegram.sh'
+      - '.github/scripts/upload-telegram.sh'
       - 'repack_apk.py'
       - 'split_apk_by_arch.py'
       - 'manager/**'
       - 'kernel/**'
       - 'userspace/**'
+      - 'external/BuiltZygisk'
       - 'external/BuiltZygisk/**'
+      - '.gitmodules'
       - 'Cargo.lock'
       - 'Cargo.toml'
   pull_request:
@@ -42,17 +45,20 @@ on:
       - '.github/workflows/ksuinit.yml'
       - '.github/workflows/manager.yml'
       - '.github/workflows/publish.yml'
-      - '.github/ci/**'
+      - '.github/workflows/builtzygisk.yml'
+      - '.github/image/**'
       - '.github/scripts/ci/**'
       - '.github/scripts/setup-rust-build.sh'
       - '.github/riscv64-cargo.toml'
-      - 'scripts/upload-telegram.sh'
+      - '.github/scripts/upload-telegram.sh'
       - 'repack_apk.py'
       - 'split_apk_by_arch.py'
       - 'manager/**'
       - 'kernel/**'
       - 'userspace/**'
+      - 'external/BuiltZygisk'
       - 'external/BuiltZygisk/**'
+      - '.gitmodules'
       - 'Cargo.lock'
       - 'Cargo.toml'
   workflow_dispatch:
@@ -71,11 +77,20 @@ jobs:
       keystore_password: ${{ steps.gen.outputs.keystore_password }}
       key_password: ${{ steps.gen.outputs.key_password }}
     steps:
+      # Runs on every event and always writes the outputs: a skipped step leaves
+      # the keys absent, and jobs that reference needs.generate-key.outputs.*
+      # then fail to plan ("task generate-key has no output expected_size").
       - name: Generate temporary keystore
-        if: github.event_name == 'pull_request'
         id: gen
         run: |
           set -eux
+          if [ "${GITHUB_EVENT_NAME}" != "pull_request" ]; then
+            echo "keystore=" >> "$GITHUB_OUTPUT"
+            echo "keystore_password=" >> "$GITHUB_OUTPUT"
+            echo "key_password=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           KEYSTORE_PASSWORD=$(openssl rand -hex 32)
           KEY_PASSWORD=$(openssl rand -hex 32)
 
@@ -96,12 +111,17 @@ jobs:
           echo "keystore=$(base64 -w 0 pr-key.jks)" >> "$GITHUB_OUTPUT"
 
       - name: Extract certificate hash and size
-        if: github.event_name == 'pull_request'
         id: extract
         env:
           STORE_PASS: ${{ steps.gen.outputs.keystore_password }}
         run: |
           set -eux
+          if [ "${GITHUB_EVENT_NAME}" != "pull_request" ]; then
+            echo "expected_size=" >> "$GITHUB_OUTPUT"
+            echo "expected_hash=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           keytool -exportcert \
             -alias pr-key \
             -keystore pr-key.jks \
@@ -126,29 +146,7 @@ jobs:
       - name: Checkout
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -eux
-          remote="https://git.zako.shirkneko.top:20004"
-          mirror="/ci/repo-cache/${GITHUB_REPOSITORY}.git"
-          mkdir -p "$(dirname "$mirror")"
-          if [ ! -d "$mirror" ]; then
-            # The token must not appear in the trace of `set -x`.
-            set +x
-            git -c "http.${remote}/.extraHeader=Authorization: token ${TOKEN}" \
-              clone -q --mirror "${remote}/${GITHUB_REPOSITORY}.git" "$mirror"
-            set -x
-          elif command -v flock >/dev/null 2>&1; then
-            (
-              flock 9
-              git --git-dir="$mirror" fetch -q --prune origin \
-                "+refs/heads/*:refs/heads/*" "+refs/tags/*:refs/tags/*"
-            ) 9>"${mirror}.lock"
-          else
-            git --git-dir="$mirror" fetch -q --prune origin \
-              "+refs/heads/*:refs/heads/*" "+refs/tags/*:refs/tags/*"
-          fi
-          git clone -q --shared --no-checkout "$mirror" .
-          git checkout -q "${GITHUB_SHA}"
+        run: /ci/tools/bin/ci-checkout
 
       - name: Calculate version code
         id: version
@@ -159,6 +157,22 @@ jobs:
           echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
           echo "KernelSU version code: $VERSION_CODE (main commits: $COMMIT_COUNT)"
 
+      # The run page lists jobs but draws no dependencies (forgejo#12717), so the
+      # shape is written where Forgejo 17 does render it: the job summary.
+      - name: Write the pipeline graph
+        run: |
+          set -eux
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
+          ci_summary_graph "流水线" \
+            generate-key:build-lkm \
+            determine-version:build-lkm \
+            build-lkm:build-ksud \
+            build-ksuinit:build-ksud \
+            build-builtzygisk:build-ksud \
+            build-ksud:manager \
+            generate-key:manager \
+            manager:publish
+
   build-lkm:
     needs: [generate-key, determine-version]
     uses: ./.github/workflows/build-lkm.yml
@@ -167,13 +181,16 @@ jobs:
       expected_hash: ${{ needs.generate-key.outputs.expected_hash || '' }}
       version_code: ${{ needs.determine-version.outputs.version_code }}
       release_build: false
+    # ddk-lkm archives its .ko files on CNB, so the token has to reach it.
     secrets: inherit
 
   build-ksuinit:
     uses: ./.github/workflows/ksuinit.yml
+    secrets: inherit
 
   build-builtzygisk:
     uses: ./.github/workflows/builtzygisk.yml
+    secrets: inherit
 
   build-ksud:
     needs: [build-lkm, build-ksuinit, build-builtzygisk]
@@ -182,6 +199,7 @@ jobs:
       pack_lkm: true
       pack_ksuinit: true
       pack_builtzygisk: true
+    secrets: inherit
 
   manager:
     needs: [generate-key, build-ksud]
@@ -194,43 +212,11 @@ jobs:
       release_build: false
     secrets: inherit
 
-  # Rolling release + Telegram. Its steps are gated, so on a pull request this
-  # job only downloads the artifacts and exits.
+  # Rolling release + Telegram. Pull requests pass publish=false so the reusable
+  # workflow skips signing and uploading entirely.
   publish:
     needs: manager
     uses: ./.github/workflows/publish.yml
+    with:
+      publish: ${{ github.event_name != 'pull_request' }}
     secrets: inherit
-
-  # The runner has no artifact service, so a build only lives in the /ci volume
-  # where nobody can reach it. This copies it to the host directory the compose
-  # stack mounts at /out and keeps the five most recent builds.
-  archive:
-    needs: [publish]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Export the build to the out directory
-        run: |
-          set -eux
-          # This job has no checkout: it only reads what the other jobs wrote.
-          CI_ARTIFACT_ROOT="/ci/runs/${GITHUB_RUN_ID:-local}"
-          if [ ! -d /out ]; then
-            echo "no /out mount on this runner, skipping the archive"
-            exit 0
-          fi
-          # Run numbers are counted per workflow, so ci and release would collide
-          # on the same number; the workflow name keeps the folders apart.
-          workflow="$(printf '%s' "${GITHUB_WORKFLOW:-run}" | tr ' ' '-')"
-          dest="/out/${workflow}-${GITHUB_RUN_NUMBER:-$GITHUB_RUN_ID}"
-          rm -rf "$dest"
-          mkdir -p "$dest"
-          cp -a "$CI_ARTIFACT_ROOT"/. "$dest"/
-          # the R8 mapping is not something to keep
-          rm -rf "$dest/Manager-mappings"
-          # keep the five most recent builds, newest first by mtime
-          ls -1t /out | tail -n +6 | while read -r old; do
-            rm -rf "/out/$old"
-          done
-          echo "archived to ${dest}"
-          du -sh "$dest"
-          echo "kept: $(ls -1t /out | tr '\n' ' ')"

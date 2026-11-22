@@ -34,6 +34,8 @@ object ThemeStorePreviewLoader {
             maxRequestsPerHost = MAX_PARALLEL_PREVIEWS
         }
         val client = ksuApp.okhttpClient.newBuilder()
+            .addInterceptor(ThemeMediaInterceptor)
+            .protectThemeStoreRedirectCredentials()
             .dispatcher(dispatcher)
             .build()
         return ImageLoader.Builder(context)

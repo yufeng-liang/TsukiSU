@@ -56,6 +56,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ChromeReaderMode
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.automirrored.rounded.MenuOpen
 import androidx.compose.material.icons.filled.Brightness1
@@ -94,6 +95,7 @@ import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Swipe
 import androidx.compose.material.icons.rounded.ViewCarousel
 import androidx.compose.material.icons.rounded.Wallpaper
+import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonGroupDefaults
@@ -104,7 +106,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import com.sukisu.ultra.ui.component.material.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberSliderState
 import androidx.compose.material3.rememberTopAppBarState
@@ -649,6 +651,35 @@ fun ColorPaletteScreenMaterial(
                 }
                 val hasCustomBg = state.customBackgroundUri.isNotEmpty()
                 val usingSystemWallpaper = state.useSystemWallpaper
+                val hasDynamicBg = state.dynamicWallpaperPath.isNotEmpty()
+                val dynamicWallpaperFile = state.dynamicWallpaperPath
+                    .takeIf { it.isNotEmpty() }
+                    ?.let(::File)
+                val dynamicWallpaperKind = dynamicWallpaperFile
+                    ?.let { ImageStorage.dynamicWallpaperKind(it.absolutePath) }
+                val dynamicWallpaperSize = dynamicWallpaperFile
+                    ?.takeIf { it.isFile }
+                    ?.length() ?: 0L
+                val dynamicWallpaperSummary = if (
+                    dynamicWallpaperKind != null && dynamicWallpaperSize > 0L
+                ) {
+                    val format = if (
+                        dynamicWallpaperKind == ImageStorage.DynamicWallpaperKind.MP4
+                    ) {
+                        "MP4"
+                    } else {
+                        "WebP"
+                    }
+                    listOf(
+                        format,
+                        android.text.format.Formatter.formatShortFileSize(
+                            context,
+                            dynamicWallpaperSize,
+                        ),
+                    ).joinToString(" · ")
+                } else {
+                    stringResource(id = R.string.dynamic_wallpaper_settings_summary)
+                }
 
                 SegmentedColumn(modifier = Modifier.padding(horizontal = 16.dp)) {
                     item {
@@ -722,6 +753,30 @@ fun ColorPaletteScreenMaterial(
                             }
                         }
                     }
+                    item(visible = true) {
+                        SegmentedListItem(
+                            onClick = actions.onOpenDynamicWallpaper,
+                            headlineContent = {
+                                Text(stringResource(id = R.string.dynamic_wallpaper_title))
+                            },
+                            supportingContent = { Text(dynamicWallpaperSummary) },
+                            leadingContent = {
+                                IconTile(
+                                    Icons.Rounded.PlayCircle,
+                                    stringResource(id = R.string.dynamic_wallpaper_title),
+                                )
+                            },
+                            trailingContent = if (state.dynamicWallpaperPath.isNotEmpty()) {
+                                {
+                                    TextButton(
+                                        onClick = { actions.onClearDynamicWallpaper(context) },
+                                    ) {
+                                        Text(stringResource(id = R.string.settings_clear))
+                                    }
+                                }
+                            } else null,
+                        )
+                    }
                     if (usingSystemWallpaper || hasCustomBg) {
                         item(visible = true) {
                             SegmentedSwitchItem(
@@ -765,7 +820,7 @@ fun ColorPaletteScreenMaterial(
                     }
                 }
 
-                if (usingSystemWallpaper || hasCustomBg) {
+                if (usingSystemWallpaper || hasCustomBg || hasDynamicBg) {
                     AnimatedVisibility(
                         visible = true,
                         enter = expandVertically() + fadeIn(),
@@ -1004,6 +1059,28 @@ fun ColorPaletteScreenMaterial(
 
             if (selectedCategory == ThemeSettingsCategory.HOME_CARD) {
             item {
+                val dynamicHomeCardFile = state.dynamicHomeCardPath
+                    .takeIf { it.isNotEmpty() }?.let(::File)
+                val dynamicHomeCardKind = dynamicHomeCardFile
+                    ?.let { ImageStorage.dynamicWallpaperKind(it.absolutePath) }
+                val dynamicHomeCardSize = dynamicHomeCardFile
+                    ?.takeIf { it.isFile }?.length() ?: 0L
+                val dynamicHomeCardSummary = if (
+                    dynamicHomeCardKind != null && dynamicHomeCardSize > 0L
+                ) {
+                    val format = if (
+                        dynamicHomeCardKind == ImageStorage.DynamicWallpaperKind.MP4
+                    ) "MP4" else "WebP"
+                    listOf(
+                        format,
+                        android.text.format.Formatter.formatShortFileSize(
+                            context,
+                            dynamicHomeCardSize,
+                        ),
+                    ).joinToString(" · ")
+                } else {
+                    stringResource(R.string.dynamic_home_card_summary)
+                }
                 SegmentedColumn(modifier = Modifier.padding(horizontal = 16.dp)) {
                     item {
                         SegmentedCategoryHeader(
@@ -1078,7 +1155,29 @@ fun ColorPaletteScreenMaterial(
                             },
                         )
                     }
-                    if (state.homeLayout == HomeLayout.CLASSIC && state.homeCardImagePath.isNotBlank()) {
+                    item(visible = true) {
+                        SegmentedListItem(
+                            onClick = actions.onOpenDynamicHomeCard,
+                            headlineContent = { Text(stringResource(R.string.dynamic_home_card_title)) },
+                            supportingContent = { Text(dynamicHomeCardSummary) },
+                            leadingContent = {
+                                IconTile(
+                                    Icons.Rounded.PlayCircle,
+                                    stringResource(R.string.dynamic_home_card_title),
+                                )
+                            },
+                            trailingContent = if (state.dynamicHomeCardPath.isNotBlank()) {
+                                {
+                                    TextButton(
+                                        onClick = { actions.onClearDynamicHomeCard(context) },
+                                    ) {
+                                        Text(stringResource(R.string.settings_clear))
+                                    }
+                                }
+                            } else null,
+                        )
+                    }
+                    if (state.homeLayout == HomeLayout.CLASSIC && (state.homeCardImagePath.isNotBlank() || state.dynamicHomeCardPath.isNotBlank())) {
                         item(visible = true) {
                             SegmentedSwitchItem(
                                 icon = Icons.Rounded.Star,
@@ -1248,12 +1347,14 @@ fun ColorPaletteScreenMaterial(
                         state.homeCardImageStyle == HomeCardImageStyle.BANNER &&
                             state.homeCardImagePath.isNotBlank() &&
                             (state.backgroundPath.isNotBlank() ||
+                                state.dynamicWallpaperPath.isNotEmpty() ||
                                 state.showHomeCardImageWithoutBackground)
                         )
                     val stickerBlockedByBackground =
                         state.homeCardImageStyle == HomeCardImageStyle.BANNER &&
                             state.homeCardImagePath.isNotBlank() &&
                             state.backgroundPath.isBlank() &&
+                            state.dynamicWallpaperPath.isEmpty() &&
                             !state.showHomeCardImageWithoutBackground
                     if (canUseStickers) {
                     item(visible = true) {
@@ -1531,6 +1632,49 @@ fun ColorPaletteScreenMaterial(
                                 },
                             )
                         }
+                    }
+                }
+            }
+            }
+
+            if (selectedCategory == ThemeSettingsCategory.TOP_BAR) {
+            item {
+                SegmentedColumn(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    item {
+                        SegmentedCategoryHeader(
+                            title = stringResource(selectedCategory.titleRes),
+                            summary = stringResource(selectedCategory.summaryRes),
+                            icon = Icons.AutoMirrored.Rounded.ChromeReaderMode,
+                            expanded = state.topBarSectionExpanded,
+                            onClick = {
+                                actions.onSetTopBarSectionExpanded(
+                                    !state.topBarSectionExpanded,
+                                )
+                            },
+                        )
+                    }
+                    item(visible = true) {
+                        SegmentedDropdownItem(
+                            icon = Icons.AutoMirrored.Rounded.ChromeReaderMode,
+                            title = stringResource(R.string.settings_top_bar_style),
+                            summary = stringResource(R.string.settings_top_bar_style_summary),
+                            items = listOf(
+                                stringResource(R.string.settings_top_bar_style_standard),
+                                stringResource(R.string.settings_top_bar_style_floating),
+                                stringResource(R.string.settings_top_bar_style_floating_glass),
+                            ),
+                            selectedIndex = state.topBarStyle.coerceIn(0, 2),
+                            onItemSelected = actions.onSetTopBarStyle,
+                        )
+                    }
+                    item(visible = true) {
+                        SegmentedSwitchItem(
+                            icon = Icons.Rounded.Opacity,
+                            title = stringResource(R.string.settings_top_bar_pill_fade),
+                            summary = stringResource(R.string.settings_top_bar_pill_fade_summary),
+                            checked = state.topBarPillFade,
+                            onCheckedChange = actions.onSetTopBarPillFade,
+                        )
                     }
                 }
             }
@@ -2028,6 +2172,10 @@ fun ColorPaletteScreenMaterial(
         hasImageEffects = state.imageEffectsPresent,
         immersiveHome = state.homeLayout == HomeLayout.IMMERSIVE,
         hasBottomBarIcons = uiState.bottomBarIcons.isNotEmpty(),
+        hasDynamicWallpaper = state.dynamicWallpaperPath.isNotBlank() ||
+            state.adaptiveDraftDynamicWallpaper,
+        hasDynamicHomeCard = state.dynamicHomeCardPath.isNotBlank() ||
+            state.adaptiveDraftDynamicHomeCard,
         onUpload = { options ->
             showExportDialog = false
             actions.onUploadTheme(context, options)
@@ -2108,14 +2256,13 @@ private fun MaterialCategoryGrid(
             modifier = Modifier.padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
         ) {
-            ThemeSettingsCategory.entries.chunked(4).forEach { row ->
+            ThemeSettingsCategory.entries.chunked(3).forEach { row ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
                 ) {
                     row.forEachIndexed { index, category ->
-                        ExpressiveToggleButton(
-                            checked = category == selected,
+                        ExpressiveToggleButton(                            checked = category == selected,
                             onCheckedChange = { checked ->
                                 if (checked) {
                                     haptic.performHapticFeedback(HapticFeedbackType.ContextClick)

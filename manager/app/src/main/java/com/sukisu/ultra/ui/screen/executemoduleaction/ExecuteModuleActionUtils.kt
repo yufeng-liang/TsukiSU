@@ -72,10 +72,14 @@ fun ExecuteModuleActionEffect(
                     mainHandler.post {
                         onTextUpdate(currentText)
                     }
-                    logContent.append(it).append("\n")
+                    synchronized(logContent) {
+                        logContent.append(it).append("\n")
+                    }
                 },
                 onStderr = {
-                    logContent.append(it).append("\n")
+                    synchronized(logContent) {
+                        logContent.append(it).append("\n")
+                    }
                 }
             ).let {
                 actionResult = it
@@ -96,18 +100,29 @@ fun saveLog(
     logContent: StringBuilder,
     scope: CoroutineScope,
     fileNamePrefix: String = "SukiSU_module_action_log",
+    fallbackText: String = "",
     showMessage: (String) -> Unit
 ): () -> Unit {
     return {
         scope.launch {
-            val format = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.getDefault())
-            val date = format.format(Date())
-            val file = File(
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                "${fileNamePrefix}_${date}.log"
+            val content = synchronized(logContent) {
+                if (logContent.isNotEmpty()) logContent.toString() else fallbackText
+            }
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val format = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.getDefault())
+                    val date = format.format(Date())
+                    val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                    dir.mkdirs()
+                    val file = File(dir, "${fileNamePrefix}_${date}.log")
+                    file.writeText(content)
+                    file.absolutePath
+                }
+            }
+            result.fold(
+                onSuccess = { path -> showMessage("Log saved to $path") },
+                onFailure = { e -> showMessage("Failed to save log: ${e.message ?: e.javaClass.simpleName}") }
             )
-            file.writeText(logContent.toString())
-            showMessage("Log saved to ${file.absolutePath}")
         }
     }
 }

@@ -25,6 +25,9 @@ import com.sukisu.ultra.ui.util.HomeStatusStyle
 import com.sukisu.ultra.ui.util.ImageStorage
 import com.sukisu.ultra.ui.util.ThemePackageData
 import com.sukisu.ultra.ui.util.ThemePackageStorage
+import com.sukisu.ultra.BuildConfig
+import com.sukisu.ultra.ui.util.DynamicWallpaperGeometry
+import com.sukisu.ultra.ui.util.DynamicWallpaperPackage
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -71,6 +74,8 @@ object AiThemeController : AiThemeService {
             put("progressive_blur", repo.enableProgressiveBlur)
             put("floating_bottom_bar", repo.enableFloatingBottomBar)
             put("floating_bottom_bar_blur", repo.enableFloatingBottomBarBlur)
+            put("top_bar_style", repo.topBarStyle)
+            put("top_bar_pill_fade", repo.topBarPillFade)
             put("navigation_badge", repo.enableNavigationBadge)
             put("page_scale", repo.pageScale)
             put("enable_predictive_back", repo.enablePredictiveBack)
@@ -194,6 +199,15 @@ object AiThemeController : AiThemeService {
             "blur" -> repo.enableBlur = text.toBooleanValue()
             "progressive_blur" -> repo.enableProgressiveBlur = text.toBooleanValue()
             "floating_bottom_bar" -> repo.enableFloatingBottomBar = text.toBooleanValue()
+            "top_bar_style" -> {
+                val style = text.toIntOrNull()
+                    ?: throw IllegalArgumentException("top_bar_style must be 0 (standard), 1 (floating) or 2 (floating glass)")
+                require(style in 0..2) {
+                    "top_bar_style must be 0 (standard), 1 (floating) or 2 (floating glass)"
+                }
+                repo.topBarStyle = style
+            }
+            "top_bar_pill_fade" -> repo.topBarPillFade = text.toBooleanValue()
             "navigation_badge" -> repo.enableNavigationBadge = text.toBooleanValue()
             "page_scale" -> {
                 val scale = text.toFloatOrNull()
@@ -279,7 +293,7 @@ object AiThemeController : AiThemeService {
                     "color_style, color_spec, custom_home_title, app_icon, app_icon_dynamic_color, " +
                     "card_background_alpha, background_blur, background_scrim, " +
                     "extract_color_from_background, use_system_wallpaper, blur, " +
-                    "floating_bottom_bar, floating_bottom_bar_blur, navigation_badge, page_scale, " +
+                    "floating_bottom_bar, floating_bottom_bar_blur, top_bar_style, navigation_badge, page_scale, " +
                     "predictive_back, swipe_dismiss, pager_mode, module_description_max_lines, " +
                     "show_full_status, hide_home_warnings, home_layout, home_status_alignment, " +
                     "home_status_scale, " +
@@ -325,9 +339,12 @@ object AiThemeController : AiThemeService {
         when (target.trim().lowercase().replace('-', '_')) {
             "background", "wallpaper" -> {
                 ImageStorage.clear(ksuApp)
+                ImageStorage.clearDynamicWallpaper(ksuApp)
                 repo.customBackgroundUri = ""
                 repo.customBackgroundUpdatedAt = System.currentTimeMillis()
-                "The custom background image was removed."
+                repo.dynamicWallpaperPath = ""
+                repo.dynamicWallpaperUpdatedAt = System.currentTimeMillis()
+                "The custom background image and dynamic wallpaper were removed."
             }
 
             "home_card", "home", "card" -> {
@@ -351,6 +368,8 @@ object AiThemeController : AiThemeService {
             cardBackgroundFile = currentHomeCardFile(),
             cardStickerFiles = currentStickerFiles(),
             adaptive = AdaptiveThemeStore.exportPayload(repo),
+            dynamicWallpaperFile = currentDynamicWallpaperFile(),
+            dynamicHomeCardFile = currentDynamicHomeCardFile(),
         ).getOrThrow()
         "Theme package exported to the selected location."
     }
@@ -364,6 +383,8 @@ object AiThemeController : AiThemeService {
             cardBackgroundFile = currentHomeCardFile(),
             cardStickerFiles = currentStickerFiles(),
             adaptive = AdaptiveThemeStore.exportPayload(repo),
+            dynamicWallpaperFile = currentDynamicWallpaperFile(),
+            dynamicHomeCardFile = currentDynamicHomeCardFile(),
         ).getOrThrow()
         val uri = FileProvider.getUriForFile(
             ksuApp,
@@ -389,6 +410,8 @@ object AiThemeController : AiThemeService {
 
     private fun buildThemePackageData(): ThemePackageData {
         val builtinIconIds = BuiltinAppIcons.all.map { it.id }.toSet()
+        val dynamicWallpaperFile = currentDynamicWallpaperFile()
+        val dynamicHomeCardFile = currentDynamicHomeCardFile()
         return ThemePackageData(
             themeMode = repo.themeMode,
             miuixMonet = repo.miuixMonet,
@@ -416,6 +439,7 @@ object AiThemeController : AiThemeService {
             appIconId = repo.appIconId.takeIf { it in builtinIconIds } ?: BuiltinAppIcons.DEFAULT_ID,
             enableFloatingBottomBar = repo.enableFloatingBottomBar,
             enableFloatingBottomBarBlur = repo.enableFloatingBottomBarBlur,
+            topBarStyle = repo.topBarStyle,
             enableNavigationBadge = repo.enableNavigationBadge,
             enablePredictiveBack = repo.enablePredictiveBack,
             enableSwipeDismiss = repo.enableSwipeDismiss,
@@ -429,8 +453,40 @@ object AiThemeController : AiThemeService {
             customHomeTitle = repo.customHomeTitle.takeIf { it.isNotBlank() },
             customTexts = repo.customTexts.takeIf { it.isNotEmpty() },
             appearance = AppearanceOverlayStore.data(repo),
+            // The AI export mirrors the live appearance, so it carries the dynamic media too.
+            // Without this the imported package would silently clear the receiver's wallpaper.
+            dynamic = DynamicWallpaperPackage(
+                hasWallpaper = dynamicWallpaperFile != null,
+                hasHomeCard = dynamicHomeCardFile != null,
+                wallpaperTransform = if (dynamicWallpaperFile != null) {
+                    DynamicWallpaperGeometry(
+                        fit = repo.dynamicWallpaperFit,
+                        zoom = repo.dynamicWallpaperZoom,
+                        offsetX = repo.dynamicWallpaperOffsetX,
+                        offsetY = repo.dynamicWallpaperOffsetY,
+                    ).sanitized()
+                } else {
+                    null
+                },
+                homeCardTransform = if (dynamicHomeCardFile != null) {
+                    DynamicWallpaperGeometry(
+                        fit = repo.dynamicHomeCardFit,
+                        zoom = repo.dynamicHomeCardZoom,
+                        offsetX = repo.dynamicHomeCardOffsetX,
+                        offsetY = repo.dynamicHomeCardOffsetY,
+                    ).sanitized()
+                } else {
+                    null
+                },
+            ),
         )
     }
+
+    private fun currentDynamicWallpaperFile(): File? =
+        ImageStorage.dynamicWallpaperFile(ksuApp)
+
+    private fun currentDynamicHomeCardFile(): File? =
+        ImageStorage.dynamicHomeCardFile(ksuApp)
 
     private fun currentBackgroundFile(): File? = if (repo.useSystemWallpaper) {
         ImageStorage.systemWallpaperFile(ksuApp).takeIf { it.isFile }

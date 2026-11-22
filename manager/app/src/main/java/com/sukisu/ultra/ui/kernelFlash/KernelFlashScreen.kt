@@ -1,11 +1,13 @@
 package com.sukisu.ultra.ui.kernelFlash
 
-import android.content.Intent
 import android.net.Uri
 import android.os.Environment
+import android.widget.Toast
 import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -17,8 +19,11 @@ import com.sukisu.ultra.ui.kernelFlash.state.HorizonKernelState
 import com.sukisu.ultra.ui.kernelFlash.state.HorizonKernelWorker
 import com.sukisu.ultra.ui.navigation3.LocalNavigator
 import com.sukisu.ultra.ui.util.reboot
+import androidx.compose.ui.platform.LocalResources
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -27,19 +32,20 @@ import java.util.Date
 import java.util.Locale
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun KernelFlashScreen(
     kernelUri: Uri,
     selectedSlot: String? = null,
     kpmPatchEnabled: Boolean = false,
-    kpmUndoPatch: Boolean = false
+    kpmUndoPatch: Boolean = false,
+    onBackEnabledChange: (Boolean) -> Unit = {},
 ) {
     val navigator = LocalNavigator.current
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val activity = LocalActivity.current
+    val resources = LocalResources.current
+    val scope = rememberCoroutineScope()
 
     val horizonKernelState = remember(kernelUri, selectedSlot, kpmPatchEnabled, kpmUndoPatch) {
         if (KernelFlashStateHolder.currentState != null &&
@@ -60,6 +66,24 @@ fun KernelFlashScreen(
     }
 
     val flashState by horizonKernelState.state.collectAsStateWithLifecycle()
+    val backEnabled = !flashState.isFlashing
+
+    SideEffect { onBackEnabledChange(backEnabled) }
+    NavigationBackHandler(
+        state = rememberNavigationEventState(NavigationEventInfo.None),
+        isBackEnabled = !backEnabled,
+        onBackCompleted = {},
+    )
+    DisposableEffect(horizonKernelState) {
+        onDispose {
+            if (activity?.isChangingConfigurations != true) {
+                val current = horizonKernelState.state.value
+                if (current.isCompleted || current.error.isNotEmpty()) {
+                    KernelFlashStateHolder.clear()
+                }
+            }
+        }
+    }
 
     val flashComplete = stringResource(R.string.horizon_flash_complete)
 
@@ -70,23 +94,6 @@ fun KernelFlashScreen(
                 append("\n${flashState.error}\n")
             } else if (flashState.isCompleted) {
                 append("\n$flashComplete\n")
-            }
-        }
-    }
-
-    LaunchedEffect(flashState.isCompleted, flashState.error) {
-        if (flashState.isCompleted && flashState.error.isEmpty()) {
-            val intent = activity?.intent
-            val isFromExternalIntent = intent?.action?.let { action ->
-                action == Intent.ACTION_VIEW ||
-                action == Intent.ACTION_SEND ||
-                action == Intent.ACTION_SEND_MULTIPLE
-            } ?: false
-
-            if (isFromExternalIntent) {
-                delay(1500.milliseconds)
-                KernelFlashStateHolder.clear()
-                activity.finish()
             }
         }
     }
@@ -118,14 +125,23 @@ fun KernelFlashScreen(
             }
         },
         onSaveLog = { logContentValue ->
-            scope.launch(Dispatchers.IO) {
-                val format = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.getDefault())
-                val date = format.format(Date())
-                val file = File(
-                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                    "SukiSU_kernel_flash_log_${date}.log"
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val format = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.getDefault())
+                        val date = format.format(Date())
+                        val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                        dir.mkdirs()
+                        val file = File(dir, "SukiSU_kernel_flash_log_${date}.log")
+                        file.writeText(logContentValue)
+                        file.absolutePath
+                    }
+                }
+                val message = result.fold(
+                    onSuccess = { path -> "Log saved to $path" },
+                    onFailure = { e -> "Failed to save log: ${e.message ?: e.javaClass.simpleName}" }
                 )
-                file.writeText(logContentValue)
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
             }
         },
         onReboot = {

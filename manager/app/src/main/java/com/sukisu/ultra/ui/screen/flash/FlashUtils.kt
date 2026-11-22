@@ -41,6 +41,8 @@ import com.sukisu.ultra.ui.util.installBoot
 import com.sukisu.ultra.ui.util.patchKpmBoot
 import com.sukisu.ultra.ui.util.restoreBoot
 import com.sukisu.ultra.ui.util.uninstallPermanently
+import com.sukisu.ultra.ksuApp
+import com.sukisu.ultra.ui.navigation3.deleteExternalZipCache
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -111,7 +113,10 @@ sealed class FlashIt : Parcelable {
     data class PatchKpmBoot(val boot: Uri? = null, val undo: Boolean = false) : FlashIt()
 
     @Parcelize
-    data class FlashModules(val uris: List<Uri>) : FlashIt()
+    data class FlashModules(
+        val uris: List<Uri>,
+        val fromExternalIntent: Boolean = false,
+    ) : FlashIt()
 
     @Parcelize
     data object FlashRestore : FlashIt()
@@ -127,19 +132,23 @@ fun flashModulesSequentially(
     deleteInstalledZips: Boolean = false,
 ): FlashResult {
     var needsReboot = false
-    for (uri in uris) {
-        flashModule(
-            uri,
-            onStdout,
-            onStderr,
-            deleteSourceOnSuccess = deleteInstalledZips,
-            archiveSource = isKeepModuleZipEnabled(),
-        ).apply {
-            needsReboot = needsReboot || showReboot
-            if (code != 0) {
-                return FlashResult(code, err, needsReboot)
+    try {
+        for (uri in uris) {
+            flashModule(
+                uri,
+                onStdout,
+                onStderr,
+                deleteSourceOnSuccess = deleteInstalledZips,
+                archiveSource = isKeepModuleZipEnabled(),
+            ).apply {
+                needsReboot = needsReboot || showReboot
+                if (code != 0) {
+                    return FlashResult(code, err, needsReboot)
+                }
             }
         }
+    } finally {
+        uris.forEach { deleteExternalZipCache(ksuApp, it) }
     }
     // 全部安装成功（code == 0）：按设置触发一次自动备份。备份要跑 zip/tar 打包与网络上传，
     // 因此丢到独立的 IO 协程里，既不阻塞刷入流程，也不会因为刷入页面的离开而被取消。
@@ -198,7 +207,7 @@ fun flashIt(
                 uris = flashIt.uris,
                 onStdout = onStdout,
                 onStderr = onStderr,
-                deleteInstalledZips = isAutoDeleteModuleZipEnabled(),
+                deleteInstalledZips = isAutoDeleteModuleZipEnabled() && !flashIt.fromExternalIntent,
             )
         }
 
@@ -216,12 +225,15 @@ fun FlashEffect(
     onTextUpdate: (String) -> Unit,
     onShowRebootChange: (Boolean) -> Unit,
     onFlashingStatusChange: (FlashingStatus) -> Unit,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    hasStarted: Boolean = false,
+    onFlashStarted: () -> Unit = {},
 ) {
     LaunchedEffect(enabled) {
-        if (!enabled || text.isNotEmpty()) {
+        if (!enabled || hasStarted || text.isNotEmpty()) {
             return@LaunchedEffect
         }
+        onFlashStarted()
         var currentText = text
         val mainHandler = Handler(Looper.getMainLooper())
         withContext(Dispatchers.IO) {
@@ -235,9 +247,13 @@ fun FlashEffect(
                 mainHandler.post {
                     onTextUpdate(currentText)
                 }
-                logContent.append(it).append("\n")
+                synchronized(logContent) {
+                    logContent.append(it).append("\n")
+                }
             }, onStderr = {
-                logContent.append(it).append("\n")
+                synchronized(logContent) {
+                    logContent.append(it).append("\n")
+                }
             }).apply {
                 if (code != 0) {
                     currentText += "Error code: $code.\n $err Please save and check the log.\n"
@@ -263,18 +279,29 @@ fun FlashEffect(
 fun saveLog(
     logContent: StringBuilder,
     scope: CoroutineScope,
+    fallbackText: String = "",
     showMessage: (String) -> Unit
 ): () -> Unit {
     return {
         scope.launch {
-            val format = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.getDefault())
-            val date = format.format(Date())
-            val file = File(
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                "SukiSU_install_log_${date}.log"
+            val content = synchronized(logContent) {
+                if (logContent.isNotEmpty()) logContent.toString() else fallbackText
+            }
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val format = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.getDefault())
+                    val date = format.format(Date())
+                    val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                    dir.mkdirs()
+                    val file = File(dir, "SukiSU_install_log_${date}.log")
+                    file.writeText(content)
+                    file.absolutePath
+                }
+            }
+            result.fold(
+                onSuccess = { path -> showMessage("Log saved to $path") },
+                onFailure = { e -> showMessage("Failed to save log: ${e.message ?: e.javaClass.simpleName}") }
             )
-            file.writeText(logContent.toString())
-            showMessage("Log saved to ${file.absolutePath}")
         }
     }
 }

@@ -2,11 +2,9 @@ package com.sukisu.ultra.ui.screen.builtinzygisk
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -15,6 +13,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -30,6 +29,8 @@ import com.sukisu.ultra.ui.UiMode
 import com.sukisu.ultra.ui.component.rebootlistpopup.rememberRebootAction
 import com.sukisu.ultra.ui.component.rebootlistpopup.rememberRebootChoices
 import com.sukisu.ultra.ui.navigation3.LocalNavigator
+import com.sukisu.ultra.ksuApp
+import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
 import top.yukonga.miuix.kmp.basic.TextButton as MiuixTextButton
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
@@ -40,6 +41,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme.textStyles as miuixTextStyles
 fun BuiltinZygiskScreen() {
     val context = LocalContext.current
     val navigator = LocalNavigator.current
+    val scope = rememberCoroutineScope()
     val viewModel: BuiltinZygiskViewModel = viewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     // The Home page's reboot action, so a late-load device still gets its warning prompt.
@@ -61,12 +63,11 @@ fun BuiltinZygiskScreen() {
         }
     }
     val onSwitch = { target: String, name: String ->
-        // Selecting a provider leaves this panel: ksud finishes the handover in the
-        // background while the user chooses how to restart.
         exitTarget = name
         viewModel.switchInBackground(target) { ok ->
             if (!ok) {
-                Toast.makeText(context, R.string.builtin_zygisk_switch_failed, Toast.LENGTH_SHORT).show()
+                exitTarget = null
+                Toast.makeText(ksuApp, R.string.builtin_zygisk_switch_failed, Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -82,7 +83,11 @@ fun BuiltinZygiskScreen() {
             name = name,
             onReboot = { reason ->
                 exitTarget = null
-                rebootAction(reason)
+                scope.launch {
+                    if (viewModel.awaitPendingSwitch()) {
+                        rebootAction(reason)
+                    }
+                }
             },
             onClose = {
                 exitTarget = null
@@ -130,17 +135,21 @@ private fun SwitchRestartDialog(
             title = { Text(title) },
             text = { Text(message) },
             confirmButton = {
-                Row {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     choices.forEach { choice ->
-                        TextButton(onClick = { onReboot(choice.reason) }) {
+                        TextButton(
+                            onClick = { onReboot(choice.reason) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Text(stringResource(choice.labelRes))
                         }
                     }
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onClose) {
-                    Text(stringResource(R.string.close))
+                    TextButton(
+                        onClick = onClose,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(R.string.close))
+                    }
                 }
             }
         )
@@ -166,25 +175,24 @@ private fun SwitchRestartDialog(
                     textAlign = TextAlign.Center,
                     color = miuixColorScheme.onSurfaceVariantSummary
                 )
-                Row(
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 24.dp)
                 ) {
-                    MiuixTextButton(
-                        text = stringResource(R.string.close),
-                        onClick = onClose,
-                        modifier = Modifier.weight(1f)
-                    )
                     choices.forEach { choice ->
-                        Spacer(Modifier.width(20.dp))
                         MiuixTextButton(
                             text = stringResource(choice.labelRes),
                             onClick = { onReboot(choice.reason) },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
+                    MiuixTextButton(
+                        text = stringResource(R.string.close),
+                        onClick = onClose,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         )

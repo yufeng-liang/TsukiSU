@@ -6,7 +6,8 @@ name: Build BuiltZygisk
 # submodules on github.com. All five repositories are mirrored on this instance
 # and the URLs are rewritten below, because a job container cannot reach
 # github.com. Everything the build needs (SDK 37, NDK 27.2, CMake 4.1.2,
-# cargo-ndk) is baked into the sukisu-ci image.
+# cargo-ndk) is baked into the sukisu-ci image; zygiskd's crates are prewarmed
+# into the host's /ci/tools/cargo by scripts/host/seed-cargo-cache.sh.
 on:
   workflow_dispatch:
   workflow_call:
@@ -17,11 +18,20 @@ on:
         default: ubuntu-latest
 
 jobs:
-  build:
+  # The caller owns "build-builtzygisk"; this expanded row is named after what
+  # it builds. See the note in ksuinit.yml.
+  builtzygisk:
+    name: builtzygisk
     runs-on: ${{ inputs.os }}
     env:
       GRADLE_USER_HOME: /ci/tools/gradle
+      # The persistent cargo home, prewarmed with zygiskd's crate set by
+      # scripts/host/seed-cargo-cache.sh. The build itself is offline (below),
+      # so it never touches static.crates.io, whose TLS connections this tunnel
+      # cuts mid-handshake. A BuiltZygisk dependency change means re-running
+      # that host script, not rebuilding the image.
       CARGO_HOME: /ci/tools/cargo
+      CARGO_NET_OFFLINE: "true"
       RUSTUP_HOME: /usr/local/rustup
       # zygiskd is built with -Z, so cargo must run on nightly; this toolchain
       # also carries rust-src in the image.
@@ -32,33 +42,14 @@ jobs:
       # Cap parallelism: several job containers run at once.
       MAKEFLAGS: "-j6"
       CARGO_BUILD_JOBS: "6"
+      # Artifacts travel through CNB; without a token they stay on /ci only.
+      CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+      CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-result' }}
     steps:
       - name: Checkout
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -eux
-          remote="https://git.zako.shirkneko.top:20004"
-          mirror="/ci/repo-cache/${GITHUB_REPOSITORY}.git"
-          mkdir -p "$(dirname "$mirror")"
-          if [ ! -d "$mirror" ]; then
-            # The token must not appear in the trace of `set -x`.
-            set +x
-            git -c "http.${remote}/.extraHeader=Authorization: token ${TOKEN}" \
-              clone -q --mirror "${remote}/${GITHUB_REPOSITORY}.git" "$mirror"
-            set -x
-          elif command -v flock >/dev/null 2>&1; then
-            (
-              flock 9
-              git --git-dir="$mirror" fetch -q --prune origin \
-                "+refs/heads/*:refs/heads/*" "+refs/tags/*:refs/tags/*"
-            ) 9>"${mirror}.lock"
-          else
-            git --git-dir="$mirror" fetch -q --prune origin \
-              "+refs/heads/*:refs/heads/*" "+refs/tags/*:refs/tags/*"
-          fi
-          git clone -q --shared --no-checkout "$mirror" .
-          git checkout -q "${GITHUB_SHA}"
+        run: /ci/tools/bin/ci-checkout
 
       - name: Fetch the submodules from the mirrors
         run: |
@@ -66,16 +57,19 @@ jobs:
           base="https://git.zako.shirkneko.top:20004/shirkneko"
 
           # The umbrella submodule first, then its own four dependencies.
-          git submodule set-url external/BuiltZygisk "$base/BuiltZygisk.git"
+          # --remote follows the branch configured in .gitmodules (master), so
+          # SukiSU CI always builds the latest BuiltZygisk instead of a stale
+          # gitlink pin.
+          git submodule set-url external/BuiltZygisk "https://git.zako.shirkneko.top:20004/NkBe/BuiltNyaZygisk.git"
           git submodule sync -- external/BuiltZygisk
-          git submodule update --init external/BuiltZygisk
+          git submodule update --init --remote external/BuiltZygisk
 
           cd external/BuiltZygisk
           # Not --recursive: LSPlt carries a docs-only submodule we never build.
           git submodule set-url loader/src/external/lsplt "$base/LSPlt.git"
           git submodule set-url loader/src/external/dobby "$base/Dobby.git"
           git submodule set-url loader/src/external/rv64hook "$base/riscv64-inline-hook.git"
-          git submodule set-url loader/src/external/bhook "$base/bhook.git"
+          git submodule set-url loader/src/external/yukiplt "https://git.zako.shirkneko.top:20004/NkBe/YukiPLT.git"
           git submodule sync
           git submodule update --init
 
@@ -86,6 +80,12 @@ jobs:
           cargo ndk --version || true
           test -d "${ANDROID_NDK_HOME}"
           test -d /opt/android-sdk/cmake/4.1.2
+          # The job is offline: without the prewarmed cache the build cannot
+          # resolve zygiskd's dependencies, and saying so here beats a cargo
+          # error halfway through. Run scripts/host/seed-cargo-cache.sh (see
+          # CI.md).
+          test -n "$(ls "${CARGO_HOME}/registry/cache")"
+          test -d "${CARGO_HOME}/git/db"
 
       - name: Build BuiltZygisk
         working-directory: external/BuiltZygisk
@@ -147,7 +147,7 @@ jobs:
       - name: Upload the zygisk payloads
         run: |
           set -eux
-          . .github/scripts/ci/common.sh
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
           for arch in aarch64 arm x86_64 riscv64; do
             # Pass the files, not the directory: ci_artifact_put would copy the
             # arch directory itself, so the artifact became
@@ -155,3 +155,9 @@ jobs:
             # under the keys aarch64/zygiskd etc, which its own lookups never find.
             ci_artifact_put "builtzygisk-$arch" "${GITHUB_WORKSPACE}/builtzygisk/$arch"/*
           done
+
+      - name: Write the job summary
+        run: |
+          set -eux
+          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
+          ci_summary_artifacts "builtzygisk-aarch64" "builtzygisk-arm" "builtzygisk-x86_64" "builtzygisk-riscv64"

@@ -1,3 +1,4 @@
 [submodule "external/BuiltZygisk"]
 	path = external/BuiltZygisk
-	url = https://git.zako.shirkneko.top:20004/shirkneko/BuiltZygisk.git
+	url = https://github.com/SukiSU-Nova/BuiltZygisk.git
+	branch = master

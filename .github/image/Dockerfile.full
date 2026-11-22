@@ -1,0 +1,23 @@
+# Android + Rust, for the jobs that cross-compile with the NDK: ksud, ksuinit
+# and builtzygisk.
+FROM forgejo-ci/android:1
+
+ADD rust.tar /
+RUN rm -f /rust.tar
+
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:${PATH}
+
+# This tunnel drops TLS connections (static.crates.io cuts the handshake, which
+# is why the old image set CARGO_NET_RETRY only in Dockerfile). builtzygisk
+# runs offline against the prewarmed cache, but ksud/ksuinit still resolve from
+# crates.io on a cache miss, so give cargo a real chance before it gives up.
+ENV CARGO_NET_RETRY=10 \
+    CARGO_HTTP_TIMEOUT=60 \
+    CARGO_HTTP_MULTIPLEXING=false
+
+RUN set -eux; \
+    cargo --version; \
+    rustup toolchain list; \
+    test -x "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"

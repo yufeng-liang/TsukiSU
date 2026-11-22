@@ -8,6 +8,7 @@ import com.sukisu.ultra.ui.util.HomeCardImageStyle
 import com.sukisu.ultra.ui.util.HomeLayout
 import com.sukisu.ultra.ui.util.HomeStatusAlignment
 import com.sukisu.ultra.ui.util.module.LatestVersionInfo
+import com.sukisu.ultra.ui.component.background.DynamicWallpaperTransform
 
 @Immutable
 data class HomeLoadState(
@@ -15,6 +16,42 @@ data class HomeLoadState(
     val isRefreshing: Boolean = true,
     val error: String? = null,
 )
+
+enum class UpdateStage {
+    DOWNLOADING,
+    VERIFYING,
+    INSTALLING,
+    COMPLETED,
+    AWAITING_USER,
+    FAILED,
+}
+
+/** Live state of a manager self-update, shown below the home status card. */
+@Immutable
+data class UpdateProgress(
+    val isCi: Boolean,
+    val stage: UpdateStage,
+    val downloadedBytes: Long = 0L,
+    val totalBytes: Long = 0L,
+    val bytesPerSecond: Long = 0L,
+    val error: String? = null,
+) {
+    val isRunning: Boolean
+        get() = stage == UpdateStage.DOWNLOADING ||
+            stage == UpdateStage.VERIFYING ||
+            stage == UpdateStage.INSTALLING
+
+    /** Non-failed progress suppresses the matching update prompt and blocks new installs. */
+    val isBlocking: Boolean
+        get() = stage != UpdateStage.FAILED
+
+    val percent: Int?
+        get() = if (totalBytes > 0L) {
+            ((downloadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100)
+        } else {
+            null
+        }
+}
 
 @Immutable
 data class HomeUiState(
@@ -33,6 +70,8 @@ data class HomeUiState(
     val isLateLoadMode: Boolean,
     val checkUpdateEnabled: Boolean,
     val latestVersionInfo: LatestVersionInfo,
+    // 正在进行的自更新进度；null 表示没有下载中的更新。
+    val updateProgress: UpdateProgress? = null,
     val currentManagerVersionCode: Long,
     val systemInfo: SystemInfo,
     val showFullStatus: Boolean = true,
@@ -66,6 +105,11 @@ data class HomeUiState(
     val hideEnvRunningCount: Int = 0,
     val customHomeTitle: String = "",
     val homeCardImagePath: String = "",
+    val dynamicHomeCardPath: String = "",
+    val dynamicHomeCardUpdatedAt: Long = 0L,
+    val dynamicHomeCardTransform: DynamicWallpaperTransform = DynamicWallpaperTransform.Default,
+    val dynamicPlaybackFps: Int = 0,
+    val dynamicPlaybackSpeed: Float = 1f,
     val hideHomeCardStatusText: Boolean = false,
     val hideHomeCardDecoration: Boolean = false,
     val homeCardStickers: List<HomeCardSticker> = emptyList(),
@@ -145,6 +189,12 @@ data class HomeUiState(
 
     val hasUpdate: Boolean
         get() = latestVersionInfo.versionCode > currentManagerVersionCode
+
+    val showCiUpdatePrompt: Boolean
+        get() = updateProgress?.isBlocking != true
+
+    val showReleaseUpdatePrompt: Boolean
+        get() = updateProgress?.isBlocking != true
 }
 
 @Immutable

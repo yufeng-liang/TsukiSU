@@ -90,22 +90,27 @@ class SulogViewModel(
                 }
                 val logLines = selectedFile?.let { readSulogFile(it.path) }.orEmpty()
                 val entries = parseSulogLines(logLines)
-                val currentState = _uiState.value
                 currentCoroutineContext().ensureActive()
-                entriesFlow.value = entries
-                SulogUiState(
-                    isLoading = false,
-                    sulogStatus = sulogStatus,
-                    isSulogEnabled = isSulogEnabled,
-                    searchText = currentState.searchText,
-                    selectedFilters = currentState.selectedFilters,
-                    files = files,
-                    selectedFilePath = selectedFile?.path,
-                    entries = entries,
-                    visibleEntries = currentState.visibleEntries,
+                Triple(
+                    Pair(sulogStatus, isSulogEnabled),
+                    Pair(files, selectedFile?.path),
+                    entries,
                 )
-            }.onSuccess { state ->
-                _uiState.value = state
+            }.onSuccess { (statusPair, filesPair, entries) ->
+                val (sulogStatus, isSulogEnabled) = statusPair
+                val (files, selectedFilePath) = filesPair
+                _uiState.update { state ->
+                    state.copy(
+                        isLoading = false,
+                        sulogStatus = sulogStatus,
+                        isSulogEnabled = isSulogEnabled,
+                        files = files,
+                        selectedFilePath = selectedFilePath,
+                        entries = entries,
+                        visibleEntries = buildVisibleSulogEntries(entries, state.searchText, state.selectedFilters),
+                    )
+                }
+                entriesFlow.value = entries
             }.onFailure { error ->
                 if (error is kotlinx.coroutines.CancellationException) {
                     throw error

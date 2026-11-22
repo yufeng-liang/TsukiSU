@@ -27,6 +27,8 @@ import com.sukisu.ultra.ui.util.shellQuote
 import com.sukisu.ultra.ui.util.withNewRootShell
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
+import android.os.SystemClock
+import com.sukisu.ultra.BuildConfig
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
@@ -36,11 +38,25 @@ import java.util.zip.ZipFile
 
 
 class CiManagerUpdater(private val context: Context) {
+    enum class Stage {
+        DOWNLOADING,
+        VERIFYING,
+        INSTALLING,
+    }
+
     /**
      * [keepApk] false installs straight from the private cache copy and never
      * writes the APK to Downloads, so nothing is left behind after the update.
+     *
+     * [onProgress] and [onStage] are invoked on the calling (IO) thread. Progress
+     * is throttled to a few updates per second; the final callback reports 100%.
      */
-    fun updateAndInstall(update: LatestVersionInfo, keepApk: Boolean = true): Boolean {
+    fun updateAndInstall(
+        update: LatestVersionInfo,
+        keepApk: Boolean = true,
+        onStage: (Stage) -> Unit = {},
+        onProgress: (downloadedBytes: Long, totalBytes: Long, bytesPerSecond: Long) -> Unit = { _, _, _ -> },
+    ): Boolean {
         // 传进来的地址可能已经被上一跳套了代理前缀（下载链路会做候选展开）。前缀校验必须针对
         // 还原后的原始 GitHub 地址，否则被代理包过的地址永远通不过 startsWith，更新直接判成「地址无效」。
         // 还原不出来（代理列表加载失败/不是已知代理）时保留原样，交给下面的校验去拒绝。
@@ -54,12 +70,15 @@ class CiManagerUpdater(private val context: Context) {
         val apk = File.createTempFile("manager-ci-", ".apk", context.cacheDir)
         try {
             // 候选通道都基于原始地址展开，所以把归一化后的地址连同 sha256 一起往下传。
-            download(update.copy(downloadUrl = originalUrl), apk, entries)
+            onStage(Stage.DOWNLOADING)
+            download(update.copy(downloadUrl = originalUrl), apk, entries, onProgress)
+            onStage(Stage.VERIFYING)
             verifyApk(apk, abi, update.versionCode)
             if (keepApk) {
                 // 文件名从原始地址取：别把代理域名带进 Downloads。
                 saveToDownloads(apk, originalUrl)
             }
+            onStage(Stage.INSTALLING)
             if (getRootShell().isRoot) {
                 val result = withNewRootShell {
                     if (!isRoot) throw IOException(context.getString(R.string.ci_update_install_failed))
@@ -138,7 +157,12 @@ class CiManagerUpdater(private val context: Context) {
      * - 有 sha256 才展开代理候选，每个候选下完立刻比对，不匹配就丢弃并换下一个；
      * - 直连同样会比对 sha256（发布端换了包却没改版本时能提前发现）。
      */
-    private fun download(update: LatestVersionInfo, destination: File, entries: List<ProxyEntry>) {
+    private fun download(
+        update: LatestVersionInfo,
+        destination: File,
+        entries: List<ProxyEntry>,
+        onProgress: (downloadedBytes: Long, totalBytes: Long, bytesPerSecond: Long) -> Unit,
+    ) {
         val expectedSha256 = expectedSha256Of(update.sha256)
         val originalUrl = update.downloadUrl
         // sha256 为空 = 没有校验依据：候选列表只有直连，绝不套代理（代理能改包，改完也无从发现）。
@@ -169,7 +193,7 @@ class CiManagerUpdater(private val context: Context) {
         for (candidate in candidates) {
             val startedAt = System.nanoTime()
             try {
-                val bytes = downloadOne(candidate, destination, expectedSha256)
+                val bytes = downloadOne(candidate, destination, expectedSha256, onProgress)
                 if (expectedSha256 != null) {
                     // 粘性记忆只记代理通道；直连没有 id 可记。
                     ProxyUrl.entryOf(candidate, entries)?.let { entry ->
@@ -200,15 +224,25 @@ class CiManagerUpdater(private val context: Context) {
      *
      * @return 实际写入的字节数。
      */
-    private fun downloadOne(url: String, destination: File, expectedSha256: String?): Long {
+    private fun downloadOne(
+        url: String,
+        destination: File,
+        expectedSha256: String?,
+        onProgress: (downloadedBytes: Long, totalBytes: Long, bytesPerSecond: Long) -> Unit,
+    ): Long {
         val digest = expectedSha256?.let { MessageDigest.getInstance("SHA-256") }
         var total = 0L
+        // 进度采样：速度按「本次单通道下载」的起点算，节流到 200ms 一次，末尾再补报一次。
+        val startedAt = SystemClock.elapsedRealtime()
+        var bytesPerSecond = 0L
+        var lastReportAt = 0L
         ksuApp.okhttpClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
             if (!response.isSuccessful) {
                 throw IOException(context.getString(R.string.ci_update_http_error, response.code))
             }
             val body = response.body
-            if (body.contentLength() > MAX_APK_BYTES) {
+            val contentLength = body.contentLength()
+            if (contentLength > MAX_APK_BYTES) {
                 throw IOException(context.getString(R.string.ci_update_archive_too_large))
             }
             body.byteStream().use { input ->
@@ -223,8 +257,21 @@ class CiManagerUpdater(private val context: Context) {
                         }
                         output.write(buffer, 0, count)
                         digest?.update(buffer, 0, count)
+                        val now = SystemClock.elapsedRealtime()
+                        val elapsed = (now - startedAt).coerceAtLeast(1L)
+                        bytesPerSecond = total * 1000 / elapsed
+                        if (now - lastReportAt >= 200L) {
+                            lastReportAt = now
+                            onProgress(total, contentLength, bytesPerSecond)
+                        }
                     }
                     output.fd.sync()
+                    if (bytesPerSecond == 0L && total > 0L) {
+                        // Small files can finish between samples; report the average.
+                        val elapsed = (SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(1L)
+                        bytesPerSecond = total * 1000 / elapsed
+                    }
+                    onProgress(total, contentLength, bytesPerSecond)
                 }
             }
         }
@@ -388,6 +435,7 @@ class CiManagerUpdater(private val context: Context) {
         private const val RANKING_SOFT_WAIT_MS = 2_000L
 
         private const val MAX_APK_BYTES = 512L * 1024 * 1024
+        private const val PROGRESS_SAMPLE_INTERVAL_MS = 400L
         private val SUPPORTED_ABIS = setOf("arm64-v8a", "armeabi-v7a", "x86_64", "riscv64")
 
         private const val TAG = "CiManagerUpdater"
