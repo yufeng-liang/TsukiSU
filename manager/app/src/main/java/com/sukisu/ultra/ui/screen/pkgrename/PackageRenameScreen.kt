@@ -53,8 +53,6 @@ internal data class PackageRenameActions(
     val onOpenNew: () -> Unit = {},
     /** 跳到「动态管理器」页，核对登记状态。 */
     val onOpenManagers: () -> Unit = {},
-    /** 回到未开始状态，再换一次。 */
-    val onRestart: () -> Unit = {},
 )
 
 /** 换包名进度的文案。 */
@@ -143,7 +141,6 @@ fun PackageRenameScreen(onBackEnabledChange: (Boolean) -> Unit = {}) {
             }
         },
         onOpenManagers = { navigator.push(Route.DynamicManagers) },
-        onRestart = { PackageRenameController.restart() },
     )
 
     val viewState = state.copy(currentPackage = ksuApp.packageName)

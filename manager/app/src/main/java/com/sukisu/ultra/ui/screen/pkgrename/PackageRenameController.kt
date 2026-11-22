@@ -149,16 +149,6 @@ internal object PackageRenameController {
         }
     }
 
-    /** 完成或放弃后回到初始状态，方便再换一次。 */
-    fun restart() {
-        if (busy) return
-        RenameJournal.clear(ksuApp)
-        _state.value = PackageRenameUiState(
-            currentPackage = ksuApp.packageName,
-            targetPackage = PackageNameUtils.random(),
-        )
-    }
-
     /**
      * 把上次遗留的落盘记录读进界面，两种记录分别恢复成不同的卡片：
      *
