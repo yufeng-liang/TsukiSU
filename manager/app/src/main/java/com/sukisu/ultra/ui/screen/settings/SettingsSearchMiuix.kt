@@ -3,9 +3,9 @@ package com.sukisu.ultra.ui.screen.settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.add
@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -46,6 +47,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -120,16 +122,16 @@ internal fun SettingsSearchMiuix(
         } ?: 0
         // +2px 余量防止取整后把最长的那个标签挤掉最后一个字形；
         // 再留 20dp 白：标签在「卡片左边框 → 标题」这段空间里居中，两侧各 10dp
-        with(density) { (maxPx + 2).toDp() } + 20.dp
+        // 上限 96dp：长分组名（德/葡语）不至于把标题挤成一条缝
+        (with(density) { (maxPx + 2).toDp() } + 20.dp).coerceAtMost(96.dp)
     }
 
     AppScaffold(
         containerColor = if (hasCustomBackground) Color.Transparent else colorScheme.surface,
         topBar = {
             BlurredBar(backdrop = backdrop, scrollBehavior = scrollBehavior) {
-                // 搜索框直接在顶栏里：miuix 的列表是往顶栏底下滚的，用 LazyColumn 的
-                // stickyHeader 会被折叠后的顶栏盖住；放进顶栏后它天然吸顶，
-                // Scaffold 也会把它的高度算进内容内边距，卡片不会钻到胶囊底下
+                // 搜索框必须常驻顶栏：miuix 的列表是往顶栏底下滚的，
+                // 用 LazyColumn 的 stickyHeader 会被折叠后的顶栏盖住
                 Column {
                 TopAppBar(
                     color = barColor,
@@ -170,11 +172,12 @@ internal fun SettingsSearchMiuix(
                     .scrollEndHaptic()
                     .overScrollVertical()
                     .nestedScroll(scrollBehavior.nestedScrollConnection)
-                    .padding(horizontal = 12.dp),
+                    .padding(horizontal = 12.dp)
+                    .imePadding(),
+                // 顶栏底下那部分高度由 innerPadding 让出来，列表不会钻到胶囊下面
                 contentPadding = innerPadding,
                 overscrollEffect = null,
             ) {
-
                 if (matched.isEmpty()) {
                     // 一条都不命中：明确给一句空态，别留一片空白让人以为是没加载完
                     item(key = "empty") {
@@ -222,6 +225,7 @@ internal fun SettingsSearchMiuix(
                                                     style = labelStyle,
                                                     color = colorScheme.onSurfaceVariantSummary,
                                                     maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
                                                 )
                                             }
                                         },

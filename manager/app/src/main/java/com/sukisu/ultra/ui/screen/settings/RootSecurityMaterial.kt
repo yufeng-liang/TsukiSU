@@ -42,6 +42,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -100,6 +101,9 @@ internal fun RootSecurityMaterial(
     onHighlightConsumed: () -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    // 锚点登记表 + 页面级兜底：锚点指向的行在当前状态下不存在时把高亮消费掉，别让它一直挂着
+    val registeredAnchors = LocalSettingsAnchorRegistry.current
+    SettingsAnchorFallback(registeredAnchors, highlightAnchor, onHighlightConsumed)
 
     ExpressiveScaffold(
         topBar = {
@@ -482,6 +486,12 @@ private fun AnchorHighlight(
     content: @Composable (highlighted: Boolean) -> Unit,
 ) {
     val requester = remember { BringIntoViewRequester() }
+    // 自报家门：锚点随行的组合/销毁进出台账，页面级兜底只认登记过的锚点
+    val registry = LocalSettingsAnchorRegistry.current
+    DisposableEffect(anchor) {
+        registry += anchor
+        onDispose { registry -= anchor }
+    }
     val targeted = highlightAnchor == anchor
     var highlighted by remember { mutableStateOf(false) }
 

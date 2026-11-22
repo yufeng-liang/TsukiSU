@@ -20,8 +20,13 @@ class SettingsSectionTest {
             SettingsSection.MODULE_SETTINGS_ENTRY,
             SettingsSection.cardFor("auto_delete_module_zip"),
         )
-        // 未注册的锚点一律降级成一级页 general
-        assertEquals(SettingsSection.GENERAL, SettingsSection.cardFor("diagnostics"))
+        // 一级页三个入口行与「关于」也各有行级 requester，cardFor 不能把它们并成整张卡
+        assertEquals(SettingsSection.MODULE_SETTINGS_ENTRY, SettingsSection.cardFor("module_settings_entry"))
+        assertEquals(SettingsSection.ROOT_SECURITY_ENTRY, SettingsSection.cardFor("root_security_entry"))
+        assertEquals(SettingsSection.MAINTENANCE_ENTRY, SettingsSection.cardFor("maintenance_entry"))
+        assertEquals(SettingsSection.ABOUT, SettingsSection.cardFor("about"))
+        // 未注册的锚点降级到一级页第一张卡（appearance，唯一永远存在的锚点）
+        assertEquals(SettingsSection.APPEARANCE, SettingsSection.cardFor("diagnostics"))
         assertEquals(SettingsSection.GENERAL, SettingsSection.normalize("not_a_section"))
     }
 
@@ -32,5 +37,13 @@ class SettingsSectionTest {
         assertEquals(SettingsPage.MODULE, SettingsSection.pageFor("module_share"))
         assertEquals(SettingsPage.ROOT_SECURITY, SettingsSection.pageFor("package_rename"))
         assertEquals(SettingsPage.MAINTENANCE, SettingsSection.pageFor("uninstall"))
+        // 「更新后不保留安装包」已搬进关于页，page 归属必须跟着走
+        assertEquals(SettingsPage.ABOUT, SettingsSection.pageFor("auto_delete_update_apk"))
+        // 一级页上的入口行 / 关于行都必须落回一级页，否则深链会送人去一个没有这一行的页
+        assertEquals(SettingsPage.APPEARANCE, SettingsSection.pageFor("module_settings_entry"))
+        assertEquals(SettingsPage.APPEARANCE, SettingsSection.pageFor("root_security_entry"))
+        assertEquals(SettingsPage.APPEARANCE, SettingsSection.pageFor("maintenance_entry"))
+        assertEquals(SettingsPage.APPEARANCE, SettingsSection.pageFor("module_upload"))
+        assertEquals(SettingsPage.APPEARANCE, SettingsSection.pageFor("about"))
     }
 }

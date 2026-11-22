@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.LayoutDirection
@@ -78,13 +79,13 @@ internal fun MaintenanceMiuix(
     val scrollBehavior = MiuixScrollBehavior()
     val backdrop = rememberBlurBackdrop(LocalEnableBlur.current)
     val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
-    // 有模糊背景或自定义背景时顶栏必须透明，否则会在背景图上切出一条硬边
-    // 设备若不支持实时模糊，透明顶栏会把滚动内容露在标题底下；
-    // 因此只在有自定义背景图（确实期望透明）时才透明，其余用不透明 surface
-    val barColor = if (hasCustomBackground) Color.Transparent else colorScheme.surface
+    // 有实时模糊或自定义背景时顶栏必须透明：模糊层自己会画底色，背景图本来就要透出来
+    // 两者都没有时用不透明 surface，否则滚动内容会直接露在标题底下
+    val translucentBar = backdrop != null || hasCustomBackground
+    val barColor = if (translucentBar) Color.Transparent else colorScheme.surface
     val listState = rememberLazyListState()
-    // KsuValidCheck 的判据就是 Natives.isManager（version 是 Int，判空恒真），这里只需要布尔值
-    val ksuReady = remember { Natives.isManager }
+    // 判据与 KsuValidCheck 一致（Natives.isManager）；不用 remember，身份变化后能跟着刷新
+    val ksuReady = Natives.isManager
     val loadingDialog = rememberLoadingDialog()
     // 两个对话框的开关跟着页面走：转屏、切深浅色不该把它们弹回来
     var showSendLogDialog by rememberSaveable { mutableStateOf(false) }
@@ -158,10 +159,9 @@ internal fun MaintenanceMiuix(
 
     }
 
-    // 先把列表按已知下标滚过去，行自己的 requester 再把行体精确带进视野
-    MiuixSettingsHighlightScroll(listState, slots, highlightAnchor, onHighlightConsumed)
-
     AppScaffold(
+        // 页面底色只跟自定义背景走：实时模糊开着时整页仍需自己的底色，
+        // 否则会透出上一页（顶栏透明交给 barColor 处理）
         containerColor = if (hasCustomBackground) Color.Transparent else colorScheme.surface,
         topBar = {
             BlurredBar(backdrop = backdrop, scrollBehavior = scrollBehavior) {
@@ -189,6 +189,12 @@ internal fun MaintenanceMiuix(
         popupHost = { },
         contentWindowInsets = WindowInsets.systemBars.add(WindowInsets.displayCutout).only(WindowInsetsSides.Horizontal),
     ) { innerPadding ->
+        // 顶栏高度 + 列表顶部 12dp：scrollToItem 用负偏移让出这块，否则目标行正好藏在顶栏下面
+        val topOffsetPx = with(LocalDensity.current) {
+            (innerPadding.calculateTopPadding() + 12.dp).roundToPx()
+        }
+        // 先把列表按已知下标滚过去，行自己的 requester 再把行体精确带进视野
+        MiuixSettingsHighlightScroll(listState, slots, highlightAnchor, onHighlightConsumed, topOffsetPx)
         Box(modifier = if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier) {
             LazyColumn(
                 state = listState,

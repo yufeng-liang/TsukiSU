@@ -29,6 +29,7 @@ internal fun settingsRouteFor(page: SettingsPage): Route = when (page) {
     SettingsPage.MODULE -> Route.ModuleSettings
     SettingsPage.ROOT_SECURITY -> Route.RootSecurity
     SettingsPage.MAINTENANCE -> Route.Maintenance
+    SettingsPage.ABOUT -> Route.About
 }
 
 /**
@@ -111,11 +112,18 @@ fun SettingPager(
     LaunchedEffect(rawRequest?.token) {
         val request = rawRequest ?: return@LaunchedEffect
         val anchor = SettingsSection.normalize(request.section)
-        val target = SettingsSection.pageFor(anchor)
-        if (target != SettingsPage.APPEARANCE) {
-            SettingsHighlight.request(anchor)
-            mainViewModel.consumePageRequest(request.token)
-            navigator.push(settingsRouteFor(target))
+        when (val target = SettingsSection.pageFor(anchor)) {
+            SettingsPage.APPEARANCE -> Unit
+            // 「关于」页没有滚动高亮机制，只需要跳过去
+            SettingsPage.ABOUT -> {
+                mainViewModel.consumePageRequest(request.token)
+                navigator.push(Route.About)
+            }
+            else -> {
+                SettingsHighlight.request(anchor)
+                mainViewModel.consumePageRequest(request.token)
+                navigator.push(settingsRouteFor(target))
+            }
         }
     }
 

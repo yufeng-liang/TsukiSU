@@ -90,8 +90,8 @@ fun SettingPagerMaterial(
         val request = sectionRequest ?: return@LaunchedEffect
         delay(120)
         val anchor = SettingsSection.normalize(request.section)
+        // cardFor 兜底到 APPEARANCE（一级页唯一既有外观卡），没有锚点就什么都不滚
         val requester = anchorRequesters[SettingsSection.cardFor(anchor)]
-            ?: anchorRequesters[SettingsSection.GENERAL]
         requester?.bringIntoView()
         onSectionConsumed(request.token)
     }
@@ -114,7 +114,7 @@ fun SettingPagerMaterial(
                 AppearanceColumn(uiState = uiState, actions = actions, registry = anchorRequesters)
             }
             ModuleUploadColumn(actions = actions, registry = anchorRequesters)
-            GroupEntryColumn(actions = actions)
+            GroupEntryColumn(actions = actions, registry = anchorRequesters)
             AboutColumn(actions = actions, registry = anchorRequesters)
             Spacer(modifier = Modifier.height(bottomInnerPadding))
         }
@@ -197,14 +197,22 @@ private fun AppearanceColumn(
  * 这样一级页永远是一屏能看完的长度。
  */
 @Composable
-private fun GroupEntryColumn(actions: SettingsScreenActions) {
+private fun GroupEntryColumn(
+    actions: SettingsScreenActions,
+    registry: MutableMap<String, BringIntoViewRequester>,
+) {
     fun entry(
+        anchor: String,
         title: String,
         summary: String,
         icon: androidx.compose.ui.graphics.vector.ImageVector,
         onClick: () -> Unit
     ): @Composable () -> Unit = {
         SegmentedListItem(
+            // 三个入口各挂行级锚点：搜索/AI 跳到「维护」时滚到这一行，而不是整张卡
+            modifier = Modifier.bringIntoViewRequester(
+                registry.getOrPut(anchor) { BringIntoViewRequester() },
+            ),
             onClick = onClick,
             headlineContent = { Text(title) },
             supportingContent = { Text(summary) },
@@ -217,18 +225,21 @@ private fun GroupEntryColumn(actions: SettingsScreenActions) {
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
         content = listOf(
             entry(
+                anchor = SettingsSection.MODULE_SETTINGS_ENTRY,
                 title = stringResource(R.string.settings_group_module),
                 summary = stringResource(R.string.settings_group_module_summary),
                 icon = Icons.Filled.Extension,
                 onClick = actions.onOpenModuleSettings
             ),
             entry(
+                anchor = SettingsSection.ROOT_SECURITY_ENTRY,
                 title = stringResource(R.string.settings_group_root_security),
                 summary = stringResource(R.string.settings_group_root_security_summary),
                 icon = Icons.Filled.Security,
                 onClick = actions.onOpenRootSecurity
             ),
             entry(
+                anchor = SettingsSection.MAINTENANCE_ENTRY,
                 title = stringResource(R.string.settings_group_maintenance),
                 summary = stringResource(R.string.settings_group_maintenance_summary),
                 icon = Icons.Filled.BugReport,

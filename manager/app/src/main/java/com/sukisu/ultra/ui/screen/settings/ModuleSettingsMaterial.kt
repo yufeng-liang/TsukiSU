@@ -35,6 +35,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,9 +66,9 @@ private val CardPadding = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 
 /**
  * 「模块与扩展」二级页（Material 3 皮肤）。
  *
- * 从设置一级页拆出来的 8 行：模块投稿、安装后提示分享、App Profile 模板、拓展功能、工具、
- * 默认卸载模块、安装后删除模块压缩包、更新后不保留安装包。行为与拆分前完全一致：
- * 投稿与分享不受 [KsuIsValid] 限制（没 root 也要能进、能关），其余行依赖管理器身份。
+ * 行：安装后提示分享、App Profile 模板、拓展功能、工具、默认卸载模块、安装后删除模块压缩包。
+ * 模块投稿入口留在一级页，「更新后不保留安装包」搬进「关于」页，两张皮都不该再出现在这里。
+ * 行为与拆分前一致：分享开关不受 [KsuIsValid] 限制（没 root 也要能关），其余行依赖管理器身份。
  *
  * 每行都套了 [AnchorHighlight]：设置搜索或 AI 助手带着 [highlightAnchor] 进来时，
  * 该行滚进视野并高亮 2 秒，随后回调 [onHighlightConsumed]。
@@ -81,6 +82,9 @@ internal fun ModuleSettingsMaterial(
     onHighlightConsumed: () -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    // 锚点登记表 + 页面级兜底：锚点指向的行在当前状态下不存在时把高亮消费掉，别让它一直挂着
+    val registeredAnchors = LocalSettingsAnchorRegistry.current
+    SettingsAnchorFallback(registeredAnchors, highlightAnchor, onHighlightConsumed)
 
     ExpressiveScaffold(
         topBar = {
@@ -231,7 +235,23 @@ internal fun ModuleSettingsMaterial(
                                 )
                             }
                         },
-
+                        {
+                            AnchorHighlight(
+                                anchor = SettingsSection.AUTO_DELETE_MODULE_ZIP,
+                                highlightAnchor = highlightAnchor,
+                                onHighlightConsumed = onHighlightConsumed,
+                            ) { highlighted ->
+                                // 「装完顺手删压缩包」只管家目录里的 zip，跟「更新后删安装包」是两件事
+                                SegmentedSwitchItem(
+                                    icon = Icons.Filled.Delete,
+                                    title = stringResource(R.string.settings_auto_delete_module_zip),
+                                    summary = stringResource(R.string.settings_auto_delete_module_zip_summary),
+                                    colors = rowColors(highlighted),
+                                    checked = uiState.autoDeleteModuleZip,
+                                    onCheckedChange = actions.onSetAutoDeleteModuleZip,
+                                )
+                            }
+                        },
                     ),
                 )
             }
@@ -255,6 +275,12 @@ private fun AnchorHighlight(
     content: @Composable (highlighted: Boolean) -> Unit,
 ) {
     val requester = remember { BringIntoViewRequester() }
+    // 自报家门：锚点随行的组合/销毁进出台账，页面级兜底只认登记过的锚点
+    val registry = LocalSettingsAnchorRegistry.current
+    DisposableEffect(anchor) {
+        registry += anchor
+        onDispose { registry -= anchor }
+    }
     val targeted = highlightAnchor == anchor
     var highlighted by remember { mutableStateOf(false) }
 

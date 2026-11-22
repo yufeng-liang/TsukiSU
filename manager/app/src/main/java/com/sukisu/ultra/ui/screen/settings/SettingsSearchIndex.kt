@@ -109,12 +109,20 @@ object SettingsSearchIndex {
             page = SettingsPage.MODULE,
             anchor = SettingsSection.DEFAULT_UMOUNT_MODULES,
         ),
-        // 这一行已经搬进「关于」页，搜索命中后由搜索页特殊处理跳到关于页
+        SettingsSearchEntry(
+            id = "auto_delete_module_zip",
+            titleRes = R.string.settings_auto_delete_module_zip,
+            groupRes = R.string.settings_group_module,
+            page = SettingsPage.MODULE,
+            anchor = SettingsSection.AUTO_DELETE_MODULE_ZIP,
+        ),
+        // 这一行已经搬进「关于」页：page 必须跟 SettingsSection.pageFor 一致（ABOUT），
+        // 否则搜索页会把人送到维护页那个已经不存在的锚点上
         SettingsSearchEntry(
             id = "auto_delete_update_apk",
             titleRes = R.string.settings_auto_delete_update_apk,
             groupRes = R.string.settings_group_maintenance,
-            page = SettingsPage.MAINTENANCE,
+            page = SettingsPage.ABOUT,
             anchor = SettingsSection.AUTO_DELETE_UPDATE_APK,
         ),
 

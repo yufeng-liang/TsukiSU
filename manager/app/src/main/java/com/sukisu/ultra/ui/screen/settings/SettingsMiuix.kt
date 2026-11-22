@@ -90,8 +90,8 @@ fun SettingPagerMiuix(
         val request = sectionRequest ?: return@LaunchedEffect
         delay(120)
         val anchor = SettingsSection.normalize(request.section)
+        // cardFor 兜底到 APPEARANCE（一级页唯一既有外观卡），没有锚点就什么都不滚
         val target = anchorRequesters[SettingsSection.cardFor(anchor)]
-            ?: anchorRequesters[SettingsSection.GENERAL]
         target?.bringIntoView()
         onSectionConsumed(request.token)
     }
@@ -166,7 +166,9 @@ fun SettingPagerMiuix(
                             .fillMaxWidth(),
                         colors = backgroundAwareCardColors(),
                     ) {
-                        GroupEntryPreferences(actions = actions)
+                        // 三个入口各挂行级锚点，锚点登记在卡内的每一行上（同一节点挂多个
+                        // bringIntoViewRequester 只有最后一个生效，所以不能挂在卡片这一层）
+                        GroupEntryPreferences(actions = actions, registry = anchorRequesters)
                     }
                 }
                 // 关于：独立成组，放在一级页最末
@@ -310,9 +312,16 @@ private fun AboutPreference(actions: SettingsScreenActions) {
 }
 
 @Composable
-private fun GroupEntryPreferences(actions: SettingsScreenActions) {
+private fun GroupEntryPreferences(
+    actions: SettingsScreenActions,
+    registry: MutableMap<String, BringIntoViewRequester>,
+) {
+    fun requester(anchor: String): BringIntoViewRequester =
+        registry.getOrPut(anchor) { BringIntoViewRequester() }
+
     @Composable
     fun entry(
+        anchor: String,
         title: String,
         summary: String,
         icon: ImageVector,
@@ -320,6 +329,7 @@ private fun GroupEntryPreferences(actions: SettingsScreenActions) {
     ) {
         ArrowPreference(
             title = title,
+            modifier = Modifier.bringIntoViewRequester(requester(anchor)),
             summary = summary,
             startAction = {
                 Icon(
@@ -334,18 +344,21 @@ private fun GroupEntryPreferences(actions: SettingsScreenActions) {
     }
 
     entry(
+        anchor = SettingsSection.MODULE_SETTINGS_ENTRY,
         title = stringResource(R.string.settings_group_module),
         summary = stringResource(R.string.settings_group_module_summary),
         icon = Icons.Rounded.Extension,
         onClick = actions.onOpenModuleSettings
     )
     entry(
+        anchor = SettingsSection.ROOT_SECURITY_ENTRY,
         title = stringResource(R.string.settings_group_root_security),
         summary = stringResource(R.string.settings_group_root_security_summary),
         icon = Icons.Rounded.Security,
         onClick = actions.onOpenRootSecurity
     )
     entry(
+        anchor = SettingsSection.MAINTENANCE_ENTRY,
         title = stringResource(R.string.settings_group_maintenance),
         summary = stringResource(R.string.settings_group_maintenance_summary),
         icon = Icons.Rounded.BugReport,

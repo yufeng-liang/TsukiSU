@@ -8,6 +8,9 @@ enum class SettingsPage {
     MODULE,
     ROOT_SECURITY,
     MAINTENANCE,
+
+    /** 「关于」页：管理器自更新相关开关，独立路由，不属于四个设置分组。 */
+    ABOUT,
 }
 
 /**
@@ -87,18 +90,20 @@ object SettingsSection {
      * 锚点 → 页面。未知锚点归到一级页，与 [normalize] 的兜底一致。
      */
     fun pageFor(anchor: String): SettingsPage = when (normalize(anchor)) {
-        GENERAL, UI_MODE, LANGUAGE, THEME, THEME_STORE, APPEARANCE -> SettingsPage.APPEARANCE
-        MODULE_SETTINGS_ENTRY, MODULE_UPLOAD, MODULE_SHARE, PROFILE_TEMPLATES,
-        EXTENSIONS, TOOLS, DEFAULT_UMOUNT_MODULES, AUTO_DELETE_MODULE_ZIP,
-        AUTO_DELETE_UPDATE_APK,
+        // 三个入口行与「关于」行都渲染在一级页，锚点必须落回一级页才滚得到那一行
+        GENERAL, UI_MODE, LANGUAGE, THEME, THEME_STORE, APPEARANCE,
+        MODULE_SETTINGS_ENTRY, ROOT_SECURITY_ENTRY, MAINTENANCE_ENTRY, MODULE_UPLOAD, ABOUT,
+        -> SettingsPage.APPEARANCE
+        MODULE_SHARE, PROFILE_TEMPLATES, EXTENSIONS, TOOLS,
+        DEFAULT_UMOUNT_MODULES, AUTO_DELETE_MODULE_ZIP,
         -> SettingsPage.MODULE
-        ROOT_SECURITY_ENTRY, TEMPORARY_ROOT, SECURITY, SU_COMPAT, KERNEL_UMOUNT,
-        SELINUX_HIDE, AVC_SPOOF, MOUNT_HIDE, SULOG, ADB_ROOT, SHELL_SU_ADB_ONLY,
-        SOFT_REBOOT, BUILTIN_ZYGISK, BUILTIN_ZYGISK_DASHBOARD, PACKAGE_RENAME,
-        AUTO_JAILBREAK,
+        // 安装后删除安装包已搬进「关于」页，只有 About 页能高亮它
+        AUTO_DELETE_UPDATE_APK -> SettingsPage.ABOUT
+        TEMPORARY_ROOT, SECURITY, SU_COMPAT, KERNEL_UMOUNT, SELINUX_HIDE,
+        AVC_SPOOF, MOUNT_HIDE, SULOG, ADB_ROOT, SHELL_SU_ADB_ONLY, SOFT_REBOOT,
+        BUILTIN_ZYGISK, BUILTIN_ZYGISK_DASHBOARD, PACKAGE_RENAME, AUTO_JAILBREAK,
         -> SettingsPage.ROOT_SECURITY
-        MAINTENANCE_ENTRY, GITHUB_PROXY, BACKUP, SEND_LOG, WEB_DEBUGGING,
-        UNINSTALL, ABOUT,
+        GITHUB_PROXY, BACKUP, SEND_LOG, WEB_DEBUGGING, UNINSTALL,
         -> SettingsPage.MAINTENANCE
         else -> SettingsPage.APPEARANCE
     }
@@ -106,9 +111,11 @@ object SettingsSection {
     /**
      * 锚点 → 卡片。页面拆分后一级页只剩外观与语言，卡片粒度仅供页内分组使用。
      */
-    fun cardFor(anchor: String): String = when (anchor.trim().lowercase().replace('-', '_')) {
-        // 一级页的四行各自注册了行级 requester，跳转要命中那一行而不是整张卡
-        UI_MODE, LANGUAGE, THEME, THEME_STORE -> normalize(anchor)
+    fun cardFor(anchor: String): String = when (val id = anchor.trim().lowercase().replace('-', '_')) {
+        // 一级页的四行、三个入口行与「关于」各自注册了行级 requester，跳转要命中那一行而不是整张卡
+        UI_MODE, LANGUAGE, THEME, THEME_STORE, APPEARANCE,
+        MODULE_SETTINGS_ENTRY, ROOT_SECURITY_ENTRY, MAINTENANCE_ENTRY, ABOUT,
+        -> id
         PROFILE_TEMPLATES -> PROFILE_TEMPLATES
         EXTENSIONS -> EXTENSIONS
         PACKAGE_RENAME -> PACKAGE_RENAME
@@ -121,9 +128,9 @@ object SettingsSection {
         DEFAULT_UMOUNT_MODULES, AUTO_DELETE_MODULE_ZIP, AUTO_DELETE_UPDATE_APK,
         WEB_DEBUGGING, AUTO_JAILBREAK, MODULE_UPLOAD, MODULE_SHARE,
         -> MODULE_SETTINGS_ENTRY
-        GITHUB_PROXY, BACKUP, SEND_LOG, ABOUT -> MAINTENANCE_ENTRY
+        GITHUB_PROXY, BACKUP, SEND_LOG -> GITHUB_PROXY
         UNINSTALL -> UNINSTALL
-        else -> GENERAL
+        else -> APPEARANCE
     }
 
     fun normalize(anchor: String): String {
