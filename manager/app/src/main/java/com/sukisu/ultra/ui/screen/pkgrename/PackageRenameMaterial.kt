@@ -181,7 +181,8 @@ private fun PackageActionBar(
                     ) {
                         Text(stringResource(R.string.pkg_rename_registered_managers))
                     }
-                    if (state.previousPackage != null && state.unregisteredPackage == null) {
+                    // 这个分支只在「没有未登记的新包」时才会走到，所以不必再判 unregisteredPackage
+                    if (state.previousPackage != null) {
                         TextButton(
                             onClick = actions.onUninstallOld,
                             modifier = Modifier.fillMaxWidth().height(48.dp),

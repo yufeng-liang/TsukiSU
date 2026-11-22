@@ -189,7 +189,9 @@ internal class PackageRenameCoordinator(private val context: Context) {
             if (t is CancellationException) throw t
             throw RegistrationFailed(newPackage, result.apkFile, t)
         }
-        RenameJournal.clear(context)
+        // 换成「已完成」记录而不是直接删：成功卡上的「卸载旧APK / 打开新管理器」
+        // 原先只存在内存里，进程一被杀这两个入口就永久消失，只剩一个用户记不住的新包名。
+        RenameJournal.writeCompleted(context, RenameJournal.Completed(newPackage, oldPackage))
 
         onStage(RenameStage.DONE)
         return RenameOutcome(

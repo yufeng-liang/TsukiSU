@@ -100,8 +100,12 @@ internal object PackageRenameController {
             _state.value = _state.value.copy(busy = true, error = null)
             try {
                 val enabledByUs = PackageRenameCoordinator(appContext).registerNewPackage(pkg)
-                // 登记成功了，那条「待登记」记录再留着会在下次启动时被重复登记一遍。
-                RenameJournal.clear(appContext)
+                // 登记成功后把记录升级成「已完成」：待登记记录再留着会在下次启动时被重复登记一遍，
+                // 而直接删掉又会让成功卡那两个收尾入口在进程被杀后消失。
+                RenameJournal.writeCompleted(
+                    appContext,
+                    RenameJournal.Completed(newPackage = pkg, oldPackage = _state.value.currentPackage),
+                )
                 _state.value = _state.value.copy(
                     finishedPackage = pkg,
                     previousPackage = _state.value.currentPackage,
@@ -156,15 +160,36 @@ internal object PackageRenameController {
     }
 
     /**
-     * 把上次遗留的「已提交安装、未登记」记录读进界面。
+     * 把上次遗留的落盘记录读进界面，两种记录分别恢复成不同的卡片：
      *
-     * 启动续登记（[PackageRenameRecovery]）可能在后台静默失败——它没有界面，也没法弹通知。
-     * 这里在页面打开时补一次：记录还在就说明新包没登记上，直接进入「已装未登记」卡片，
-     * 用户可以自己点重试或撤销，比对着灰掉的功能发呆强。
+     * - 待登记：启动续登记（[PackageRenameRecovery]）可能在后台静默失败——它没有界面，也没法弹通知。
+     *   这里在页面打开时补一次，进入「已装未登记」卡片，用户可以自己点重试或撤销。
+     * - 已完成：恢复成功卡上的「卸载旧APK / 打开新管理器」。不恢复的话，用户在装完新包后
+     *   杀掉进程再回来，就只剩一个自己记不住的新包名和一颗还装着旧包、随时该删的应用图标。
      */
     fun refreshJournal(context: Context) {
         if (busy || _state.value.unregisteredPackage != null || _state.value.finishedPackage != null) return
         val appContext = context.applicationContext
+
+        val completed = RenameJournal.readCompleted(appContext)
+        if (completed != null) {
+            scope.launch {
+                // 新包可能已经被用户自己卸掉了：记录留着会让「打开新管理器」必然失败。
+                if (!isPackageInstalled(completed.newPackage)) {
+                    if (!busy) RenameJournal.clear(appContext)
+                    return@launch
+                }
+                if (busy || _state.value.unregisteredPackage != null || _state.value.finishedPackage != null) {
+                    return@launch
+                }
+                _state.value = _state.value.copy(
+                    finishedPackage = completed.newPackage,
+                    previousPackage = completed.oldPackage.ifBlank { null },
+                )
+            }
+            return
+        }
+
         val pending = RenameJournal.read(appContext) ?: return
         scope.launch {
             // 用户在安装器上点了取消：journal 已经写下但包根本没装上，

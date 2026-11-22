@@ -311,10 +311,13 @@ private fun PackageActionBar(
                             .fillMaxWidth()
                             .height(50.dp),
                     )
-                    state.previousPackage?.takeIf { state.unregisteredPackage == null }?.let { old ->
+                    // 这个分支只在「没有未登记的新包」时才会走到，所以不必再判 unregisteredPackage
+                    if (state.previousPackage != null) {
                         // 卸载不可逆：用错误色明确标出来。
+                        // 文案与 Material 保持一致，不在按钮里拼包名：旧包名已经写在完成卡正文，
+                        // 按钮再拼一次会随语言长度失控（中文括号也只是硬编码的本地化残留）。
                         TextButton(
-                            text = stringResource(R.string.pkg_rename_uninstall_old) + "（" + old + "）",
+                            text = stringResource(R.string.pkg_rename_uninstall_old),
                             onClick = actions.onUninstallOld,
                             modifier = Modifier
                                 .fillMaxWidth()
