@@ -256,26 +256,26 @@ internal class PackageRenameCoordinator(private val context: Context) {
     private suspend fun registerWithRetry(newPackage: String, signature: DynamicManagerSignature) {
         var lastError: Throwable? = null
         for (attempt in 0 until REGISTER_ATTEMPTS) {
+            // 内核认了这条、但状态文件没写成功时不算登记成功：重启后条目会丢
+            var kernelAcceptedOnly = false
             try {
-                addDynamicManager(newPackage, signature)
-                return
+                if (addDynamicManager(newPackage, signature)) return
+                lastError = PackageRenameException("状态文件写入失败")
+                kernelAcceptedOnly = true
             } catch (t: Throwable) {
                 if (t is CancellationException) throw t
                 lastError = t
-                // ksud 是「ioctl 写内核内存 → persist 写状态文件」两步，persist 失败时内核其实已经
+                // ksud 路线是「ioctl 写内核内存 → persist 写状态文件」两步，persist 失败时内核其实已经
                 // 认了这条。当成登记失败会让用户去卸旧包，重启后新包反而丢权限，所以先回读确认。
-                if (isRegisteredInKernel(newPackage)) {
-                    val persisted = runCatching { addDynamicManager(newPackage, signature) }.isSuccess
-                    if (!persisted) {
-                        throw PackageRenameException(
-                            "内核已经接受登记，但状态文件写入失败；重启后会丢失，先别卸载旧包，稍后重试即可",
-                            t,
-                        )
-                    }
-                    return
-                }
-                delay(400L * (attempt + 1))
+                kernelAcceptedOnly = isRegisteredInKernel(newPackage)
             }
+            if (kernelAcceptedOnly && attempt == REGISTER_ATTEMPTS - 1) {
+                throw PackageRenameException(
+                    "内核已经接受登记，但状态文件写入失败；重启后会丢失，先别卸载旧包，稍后重试即可",
+                    lastError,
+                )
+            }
+            delay(400L * (attempt + 1))
         }
         throw PackageRenameException("向内核登记新包名失败：${lastError?.message}", lastError)
     }

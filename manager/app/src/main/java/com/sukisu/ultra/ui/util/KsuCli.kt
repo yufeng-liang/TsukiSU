@@ -13,6 +13,8 @@ import com.topjohnwu.superuser.CallbackList
 import com.topjohnwu.superuser.Shell
 import com.topjohnwu.superuser.ShellUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
 import com.sukisu.ultra.BuildConfig
@@ -1529,6 +1531,17 @@ private const val DM_STATE_FILE = "/data/adb/ksu/.dynamic_managers"
 /** 内核 struct ksu_manager_entry 的对齐后大小：4 + 4 + 128 + 65 = 201，按 4 字节对齐补到 204。 */
 private const val DM_ENTRY_SIZE = 204
 
+/** 写盘串行化：并发写同一份状态会产生前后半段来自不同快照的错文件。 */
+private val dmPersistLock = Mutex()
+
+/**
+ * 内核明确表示「这个通道不支持 / 调用者不是管理器」时才退回 ksud。
+ *
+ * 其它错误码（-EINVAL 参数不合法、-ENOSPC 表满 16 条、-ENOMEM）说明请求本身有问题，
+ * 退回 ksud 只会把它掩盖成「ksud 执行失败（退出码 2）」，真实原因被丢掉。
+ */
+private fun Int.dmMayFallbackToKsud(): Boolean = this == -1 || this == -38 || this == -95
+
 /**
  * 把内存里的动态管理器状态写回 [/data/adb/ksu/.dynamic_managers]。
  *
@@ -1536,21 +1549,45 @@ private const val DM_ENTRY_SIZE = 204
  * 写盘原本是 ksud 的 `manager` 子命令干的活；设备上的老 ksud 没有这个子命令，
  * 所以登记完必须由 App 自己按 struct dynamic_manager_state 的布局写一次，否则重启后条目消失。
  */
-private suspend fun persistDynamicManagers(): Boolean = withContext(Dispatchers.IO) {
-    val state = runCatching { getDynamicManagers() }.getOrNull() ?: return@withContext false
-    val blob = encodeDynamicManagerState(state)
-    val app = com.sukisu.ultra.ksuApp
-    val tmp = java.io.File(app.cacheDir, "dynamic_managers.bin")
-    tmp.writeBytes(blob)
-    val cmd = "/system/bin/cp " + tmp.absolutePath.ksudShellArg() + " " + DM_STATE_FILE +
-        " && /system/bin/chmod 600 " + DM_STATE_FILE +
-        " && /system/bin/stat -c %s " + DM_STATE_FILE
-    val written = runCmdWithErr(getRootShell(), cmd).trim().toIntOrNull()
-    if (written != blob.size) {
-        android.util.Log.w("PkgRenameDM", "状态文件写盘失败，期望 ${blob.size} 字节，实际 " + written)
-        return@withContext false
+private suspend fun persistDynamicManagers(): Boolean = dmPersistLock.withLock {
+    withContext(Dispatchers.IO) {
+        val state = runCatching { getDynamicManagers() }.getOrNull() ?: return@withContext false
+        val blob = encodeDynamicManagerState(state)
+        val app = com.sukisu.ultra.ksuApp
+        // 缓存目录里的临时文件名带随机后缀：两次写盘撞同一个文件会写出
+        // 「前半 A 快照、后半 B 快照」的错文件，长度对但内容错
+        val source = java.io.File(
+            app.cacheDir,
+            "dynamic_managers." + java.util.UUID.randomUUID() + ".bin",
+        )
+        val staged = DM_STATE_FILE + ".tmp"
+        try {
+            source.writeBytes(blob)
+            // 先 cp 成目标目录下的 .tmp（cp 会让新文件拿到 /data/adb/ksu 的 SELinux 上下文，
+            // 直接 mv 过去会留着 app_data_file 上下文，内核可能读不到），
+            // 再 sync 落盘、最后同目录 mv 覆盖 —— 覆盖这一步是原子的。
+            val cmd = "/system/bin/cp " + source.absolutePath.ksudShellArg() + " " + staged +
+                " && /system/bin/chmod 600 " + staged +
+                " && /system/bin/sync" +
+                " && /system/bin/mv -f " + staged + " " + DM_STATE_FILE +
+                " && /system/bin/stat -c %s " + DM_STATE_FILE
+            val written = runCmdWithErr(getRootShell(), cmd).trim().toIntOrNull()
+            if (written != blob.size) {
+                android.util.Log.w(
+                    "PkgRenameDM",
+                    "状态文件写盘失败，期望 ${blob.size} 字节，实际 " + written,
+                )
+                return@withContext false
+            }
+            true
+        } finally {
+            source.delete()
+            // 失败时把目标目录里的半成品也清掉，别留一个内核下次读盘会撞上的 .tmp
+            runCatching {
+                runCmdWithErr(getRootShell(), "/system/bin/rm -f " + staged)
+            }
+        }
     }
-    true
 }
 
 /**
@@ -1602,22 +1639,27 @@ suspend fun getDynamicManagers(): DynamicManagerState {
     return DynamicManagerState(enabled, entries)
 }
 
-suspend fun setDynamicManagersEnabled(enabled: Boolean) {
+/** 返回值表示状态是否真的落到 /data/adb/ksu/.dynamic_managers（否则重启后开关会弹回去）。 */
+suspend fun setDynamicManagersEnabled(enabled: Boolean): Boolean {
     val native = nativeDynamicManagerCall(DM_OP_SET_ENABLED, enabled = enabled)
-    if (native != null && native.first == 0) {
-        persistDynamicManagers()
-        return
+    if (native != null) {
+        if (native.first == 0) return persistDynamicManagers()
+        if (!native.first.dmMayFallbackToKsud()) error("内核拒绝设置动态管理器开关（rc=${native.first}）")
     }
+    // ksud 自己负责落盘，走到这里就算成功
     runDynamicManagerCommand("manager", "set-enabled", enabled.toString())
+    return true
 }
 
-suspend fun removeDynamicManager(packageName: String) {
+/** 返回值表示状态是否真的落到 /data/adb/ksu/.dynamic_managers。 */
+suspend fun removeDynamicManager(packageName: String): Boolean {
     val native = nativeDynamicManagerCall(DM_OP_REMOVE, packageName = packageName)
-    if (native != null && native.first == 0) {
-        persistDynamicManagers()
-        return
+    if (native != null) {
+        if (native.first == 0) return persistDynamicManagers()
+        if (!native.first.dmMayFallbackToKsud()) error("内核拒绝删除动态管理器（rc=${native.first}）")
     }
     runDynamicManagerCommand("manager", "remove", packageName)
+    return true
 }
 
 suspend fun getDynamicManagerSignature(apkPath: String): DynamicManagerSignature {
@@ -1630,7 +1672,13 @@ suspend fun getDynamicManagerSignature(apkPath: String): DynamicManagerSignature
     return DynamicManagerSignature(certSize, hash)
 }
 
-suspend fun addDynamicManager(packageName: String, signature: DynamicManagerSignature) {
+/**
+ * 登记一个动态管理器。
+ *
+ * 返回 true 表示内核已接受且状态文件已落盘；返回 false 表示内核已经认了这条，
+ * 但状态文件没写成功（重启后会丢）—— 调用方要据此拒绝卸载旧管理器。
+ */
+suspend fun addDynamicManager(packageName: String, signature: DynamicManagerSignature): Boolean {
     // 原生通道需要自己给出目标包的 appid；查不到（例如包刚装好、还没建数据目录）再退回 ksud
     val appid = lookupAppId(packageName)
     if (appid != null) {
@@ -1641,12 +1689,16 @@ suspend fun addDynamicManager(packageName: String, signature: DynamicManagerSign
             appid = appid,
             hash = signature.hash,
         )
-        if (native != null && native.first == 0) {
-            persistDynamicManagers()
-            return
+        if (native != null) {
+            if (native.first == 0) return persistDynamicManagers()
+            if (!native.first.dmMayFallbackToKsud()) {
+                // 参数被内核判错 / 表满：退 ksud 只会变成「退出码 2」，把真实错误码埋掉
+                error("内核拒绝登记新包名（rc=${native.first}）")
+            }
         }
     }
     runDynamicManagerCommand("manager", "add", packageName, signature.certSize.toString(), signature.hash)
+    return true
 }
 data class ZygiskProcess(
     val name: String = "",

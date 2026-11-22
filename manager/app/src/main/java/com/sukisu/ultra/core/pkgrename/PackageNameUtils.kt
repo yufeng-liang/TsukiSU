@@ -130,7 +130,9 @@ internal object ManifestPackageRewriter {
         // `旧包名/...`（组件、authority 拼接）：漏掉它们会出现「校验通过但清单里还有旧包名」。
         val leftover = strings.filter {
             it == oldPackage ||
-                it.startsWith(oldPackage + ".") ||
+                // 只有白名单后缀的派生串才算安装包名；其余「旧包名.Xxx」是组件类名（源码命名空间），
+                // 一律按类名放过 —— 早先这里对任意前缀都判残留，包名等于源码命名空间时必然误报
+                isRewritable(it, oldPackage) ||
                 it.startsWith(oldPackage + ":") ||
                 it.startsWith(oldPackage + "/")
         }
