@@ -46,6 +46,7 @@ enum class CustomTextKey(
     HOME_INFO_KERNEL("home.info_kernel", R.string.home_kernel, R.string.home_kernel, CustomTextGroup.HOME),
     HOME_INFO_KERNEL_FULL("home.info_kernel_full", R.string.home_kernel_full_version, R.string.home_kernel_full_version, CustomTextGroup.HOME),
     HOME_INFO_MANAGER_VERSION("home.info_manager_version", R.string.home_manager_version, R.string.home_manager_version, CustomTextGroup.HOME),
+    HOME_INFO_MANAGER_PACKAGE("home.info_manager_package", R.string.home_manager_package, R.string.home_manager_package, CustomTextGroup.HOME),
     HOME_INFO_SELINUX("home.info_selinux", R.string.home_selinux_status, R.string.home_selinux_status, CustomTextGroup.HOME),
     HOME_INFO_SECCOMP("home.info_seccomp", R.string.home_seccomp_status, R.string.home_seccomp_status, CustomTextGroup.HOME),
     HOME_INFO_ZYGISK("home.info_zygisk", R.string.home_zygisk_implementation, R.string.home_zygisk_implementation, CustomTextGroup.HOME),

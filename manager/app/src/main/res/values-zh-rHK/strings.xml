@@ -12,6 +12,7 @@
     <string name="home_device_model">裝置型號</string>
     <string name="home_kernel">核心版本</string>
     <string name="home_manager_version">管理器版本</string>
+    <string name="home_manager_package">管理器包名</string>
     <string name="home_fingerprint">指紋</string>
     <string name="home_selinux_status">SELinux 狀態</string>
     <string name="selinux_status_disabled">已停用</string>
@@ -780,7 +781,7 @@
     <string name="settings_search_empty">沒有符合的設定項目</string>
     <string name="settings_section_spoof">偽裝 / 反偵測</string>
     <string name="settings_section_network">網絡</string>
-    <string name="settings_group_module_summary">模組投稿、App Profile 模板、擴充功能與模組行為</string>
+    <string name="settings_group_module_summary">App Profile 模板、擴充功能與模組行為</string>
     <string name="settings_group_root_security_summary">臨時 Root、SU 相容、偽裝與 Zygisk</string>
     <string name="settings_group_maintenance_summary">GitHub 加速、備份與還原、日誌與解除安裝</string>
 </resources>

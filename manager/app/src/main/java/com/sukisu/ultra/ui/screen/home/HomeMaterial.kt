@@ -709,6 +709,7 @@ private fun InfoCard(
 
     val systemRows = buildList {
         add(customText(CustomTextKey.HOME_INFO_MANAGER_VERSION) to systemInfo.managerVersion)
+        add(customText(CustomTextKey.HOME_INFO_MANAGER_PACKAGE) to systemInfo.managerPackageName)
         add(customText(CustomTextKey.HOME_INFO_KERNEL) to systemInfo.kernelVersion)
         if (showFullStatus) {
             if (!systemInfo.kernelFullVersion.isNullOrBlank()) {
@@ -776,6 +777,7 @@ private fun StatusCardJailbreakPreview() {
 private val previewSystemInfo = SystemInfo(
     kernelVersion = "6.1.0-android14-0-g1234567",
     managerVersion = "1.0.0 (10000)",
+    managerPackageName = "com.sukisu.ultra",
     deviceModel = "Google Pixel 6 Pro",
     kernelFullVersion = "v4.1.2-abc1234@main",
     fingerprint = "google/raven/raven:14/AP1A.240305.019:user/release-keys",

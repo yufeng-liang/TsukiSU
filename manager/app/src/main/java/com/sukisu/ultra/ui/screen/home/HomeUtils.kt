@@ -22,6 +22,7 @@ data class ManagerVersion(
 data class SystemInfo(
     val kernelVersion: String,
     val managerVersion: String,
+    val managerPackageName: String,
     val deviceModel: String,
     val kernelFullVersion: String?,
     val fingerprint: String,

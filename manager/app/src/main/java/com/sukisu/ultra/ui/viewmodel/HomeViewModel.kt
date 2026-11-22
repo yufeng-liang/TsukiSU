@@ -327,6 +327,8 @@ class HomeViewModel(
                 kernelVersion = Os.uname().release,
                 // versionName 自带版本号（"mod (41284)"），只补 UAPI 段，别再拼一次版号。
                 managerVersion = "${managerVersion.versionName}-${managerUAPIVersion}",
+                // 运行时包名取自 PackageManager，换包名后这里跟着变。
+                managerPackageName = ksuApp.packageName,
                 deviceModel = resolveDeviceName(),
                 kernelFullVersion = kernelFullVersion,
                 fingerprint = Build.FINGERPRINT,
