@@ -139,6 +139,22 @@ object Natives {
 
     external fun getHookType(): String
 
+    /**
+     * 直接调用内核的动态管理器扩展，不经过 ksud（设备上的 ksud 可能没有 manager 子命令）。
+     *
+     * @param op 0=GET，1=ADD，2=REMOVE，3=SET_ENABLED，4=CLEAR（对齐 uapi/manager.h）
+     * @return 首行 `rc:<错误码>`，其后 GET 成功时为 `enabled:<0|1>` 与若干条
+     *         `包名\t证书大小\t证书哈希\tappid`。内核没有该扩展时 rc 为负。
+     */
+    external fun dynamicManagerCall(
+        op: Int,
+        enabled: Boolean,
+        packageName: String?,
+        certSize: Int,
+        uid: Int,
+        hash: String?,
+    ): String?
+
     private const val NON_ROOT_DEFAULT_PROFILE_KEY = "$"
     private const val NOBODY_UID = 9999
 

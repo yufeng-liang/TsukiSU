@@ -1433,18 +1433,74 @@ data class DynamicManagerEntry(val packageName: String, val certSize: Int, val h
 data class DynamicManagerState(val enabled: Boolean, val entries: List<DynamicManagerEntry>)
 data class DynamicManagerSignature(val certSize: Int, val hash: String)
 
+/** 内核扩展 op，与 uapi/manager.h 的 KSU_MANAGER_* 对齐。 */
+private const val DM_OP_GET = 0
+private const val DM_OP_ADD = 1
+private const val DM_OP_REMOVE = 2
+private const val DM_OP_SET_ENABLED = 3
+
+/**
+ * 直接调用内核的动态管理器扩展。
+ *
+ * 设备上的 ksud 可能没有 `manager` 子命令（老版本），只有这条原生通道能保证功能可用。
+ * 返回 null 表示原生调用不可用（库没加载 / 内核没有该扩展 / 解析失败）。
+ */
+private fun nativeDynamicManagerCall(
+    op: Int,
+    enabled: Boolean = false,
+    packageName: String? = null,
+    certSize: Int = 0,
+    appid: Int = 0,
+    hash: String? = null,
+): Pair<Int, List<String>>? {
+    val raw = runCatching {
+        Natives.dynamicManagerCall(op, enabled, packageName, certSize, appid, hash)
+    }.getOrNull() ?: return null
+    val lines = raw.split('\n')
+    val rc = lines.firstOrNull()?.removePrefix("rc:")?.toIntOrNull() ?: return null
+    return rc to lines.drop(1)
+}
+
+private fun parseDynamicManagerState(lines: List<String>): DynamicManagerState {
+    val enabled = lines.firstOrNull { it.startsWith("enabled:") }?.substringAfter(':')?.trim() == "1"
+    val entries = lines.filter { it.isNotBlank() && !it.startsWith("enabled:") }.mapNotNull { line ->
+        val fields = line.split('\t')
+        if (fields.size < 4) return@mapNotNull null
+        DynamicManagerEntry(
+            packageName = fields[0],
+            certSize = fields[1].toIntOrNull() ?: return@mapNotNull null,
+            hash = fields[2],
+            uid = fields[3].toIntOrNull() ?: return@mapNotNull null,
+        )
+    }
+    return DynamicManagerState(enabled, entries)
+}
+
+/** 用 root 查目标包的 appid（uid % 100000）：原生 ADD 需要调用方给出 uid。 */
+private suspend fun lookupAppId(packageName: String): Int? = withContext(Dispatchers.IO) {
+    val cmd = "stat -c %u " + ("/data/data/" + packageName).ksudShellArg()
+    runCmd(getRootShell(), cmd).trim().toIntOrNull()?.let { it % 100000 }
+}
+
 private suspend fun runDynamicManagerCommand(vararg args: String): String = withContext(Dispatchers.IO) {
     val command = "${getKsuDaemonPath()} " + args.joinToString(" ") { it.ksudShellArg() }
     val output = runCmdWithErr(getRootShell(), "$command; printf '\\n__KSUD_EXIT_CODE__:%s' $? ")
-    val marker = Regex("\\n__KSUD_EXIT_CODE__:(\\d+)$").find(output)
-        ?: error("ksud command did not return an exit status")
-    check(marker.groupValues[1] == "0") { output.substringBefore(marker.value).ifBlank { "ksud command failed" } }
+    // runCmdWithErr 把 stderr 拼在 stdout 之后，退出码标记因此不在末尾，不能锚定 $ 匹配
+    val marker = Regex("__KSUD_EXIT_CODE__:(\\d+)").find(output)
+        ?: error("ksud 没有返回退出码，输出：" + output.takeLast(300))
+    if (marker.groupValues[1] != "0") {
+        val detail = output.substringBefore(marker.value).trim()
+        error(detail.ifBlank { "ksud 执行失败（退出码 " + marker.groupValues[1] + "）" })
+    }
     output.substringBefore(marker.value)
 }
 
 private fun String.ksudShellArg(): String = "'${replace("'", "'\\''")}'"
 
 suspend fun getDynamicManagers(): DynamicManagerState {
+    nativeDynamicManagerCall(DM_OP_GET)?.let { (rc, lines) ->
+        if (rc == 0) return parseDynamicManagerState(lines)
+    }
     val lines = runDynamicManagerCommand("manager", "list").lines()
     val enabled = lines.firstOrNull { it.startsWith("enabled:") }
         ?.substringAfter(':')?.trim()?.toBooleanStrictOrNull() ?: false
@@ -1463,10 +1519,14 @@ suspend fun getDynamicManagers(): DynamicManagerState {
 }
 
 suspend fun setDynamicManagersEnabled(enabled: Boolean) {
+    val native = nativeDynamicManagerCall(DM_OP_SET_ENABLED, enabled = enabled)
+    if (native != null && native.first == 0) return
     runDynamicManagerCommand("manager", "set-enabled", enabled.toString())
 }
 
 suspend fun removeDynamicManager(packageName: String) {
+    val native = nativeDynamicManagerCall(DM_OP_REMOVE, packageName = packageName)
+    if (native != null && native.first == 0) return
     runDynamicManagerCommand("manager", "remove", packageName)
 }
 
@@ -1481,6 +1541,18 @@ suspend fun getDynamicManagerSignature(apkPath: String): DynamicManagerSignature
 }
 
 suspend fun addDynamicManager(packageName: String, signature: DynamicManagerSignature) {
+    // 原生通道需要自己给出目标包的 appid；查不到（例如包刚装好、还没建数据目录）再退回 ksud
+    val appid = lookupAppId(packageName)
+    if (appid != null) {
+        val native = nativeDynamicManagerCall(
+            DM_OP_ADD,
+            packageName = packageName,
+            certSize = signature.certSize,
+            appid = appid,
+            hash = signature.hash,
+        )
+        if (native != null && native.first == 0) return
+    }
     runDynamicManagerCommand("manager", "add", packageName, signature.certSize.toString(), signature.hash)
 }
 data class ZygiskProcess(

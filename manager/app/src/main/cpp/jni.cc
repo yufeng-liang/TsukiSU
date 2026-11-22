@@ -8,6 +8,7 @@
 
 #include <android/log.h>
 #include <cstring>
+#include <string>
 
 #include "ksu.h"
 #include "logging.h"
@@ -398,6 +399,46 @@ Java_com_sukisu_ultra_Natives_getUserName(JNIEnv *env, jobject thiz, jint uid) {
     }
     return nullptr;
 }
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_com_sukisu_ultra_Natives_dynamicManagerCall(JNIEnv *env, jobject, jint op, jboolean enabled,
+                                               jstring pkg, jint certSize, jint uid, jstring hash) {
+    // 直接走内核扩展调用（KSU_EXTENSION_DYNAMIC_MANAGER），不依赖设备上的 ksud 版本。
+    struct ksu_manager_cmd cmd = {};
+    cmd.operation = static_cast<uint32_t>(op);
+    cmd.enabled = enabled ? 1 : 0;
+    cmd.cert_size = static_cast<uint32_t>(certSize);
+    cmd.uid = static_cast<uint32_t>(uid);
+    if (pkg != nullptr) {
+        const char *s = env->GetStringUTFChars(pkg, nullptr);
+        if (s != nullptr) {
+            strncpy(cmd.package, s, sizeof(cmd.package) - 1);
+            env->ReleaseStringUTFChars(pkg, s);
+        }
+    }
+    if (hash != nullptr) {
+        const char *s = env->GetStringUTFChars(hash, nullptr);
+        if (s != nullptr) {
+            strncpy(cmd.hash, s, sizeof(cmd.hash) - 1);
+            env->ReleaseStringUTFChars(hash, s);
+        }
+    }
+    int rc = (op == KSU_MANAGER_GET) ? dynamic_manager_get(&cmd) : dynamic_manager_set(&cmd);
+    std::string out = "rc:" + std::to_string(rc) + "\n";
+    if (rc == 0 && op == KSU_MANAGER_GET) {
+        out += "enabled:" + std::string(cmd.enabled ? "1" : "0") + "\n";
+        uint32_t n = cmd.count > KSU_MANAGER_MAX_ENTRIES ? KSU_MANAGER_MAX_ENTRIES : cmd.count;
+        for (uint32_t i = 0; i < n; i++) {
+            out += std::string(cmd.entries[i].package) + "\t" +
+                   std::to_string(cmd.entries[i].cert_size) + "\t" +
+                   std::string(cmd.entries[i].hash) + "\t" +
+                   std::to_string(cmd.entries[i].uid) + "\n";
+        }
+    }
+    return env->NewStringUTF(out.c_str());
+}
+
 
 int fork_dont_care_and_exec_ksud(const char *path, const char *pkg) {
     int pid = fork();
