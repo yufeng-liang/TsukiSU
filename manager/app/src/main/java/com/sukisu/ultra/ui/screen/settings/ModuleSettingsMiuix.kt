@@ -296,6 +296,8 @@ internal fun MiuixSettingsSelfCardRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
+            // 自带卡片的行没有段落容器替它收尾，这里补上卡片之间的 12 dp 间距
+            .padding(bottom = 12.dp)
             .bringIntoViewRequester(requester),
     ) {
         content()
@@ -303,7 +305,7 @@ internal fun MiuixSettingsSelfCardRow(
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .padding(top = 12.dp)
+                .padding(top = 12.dp, bottom = 12.dp)
                 .border(
                     width = 2.dp,
                     color = borderColor,
