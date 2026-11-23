@@ -64,7 +64,7 @@ fun ModuleUploadArchiveDialog(
     if (LocalUiMode.current == UiMode.Miuix) {
         OverlayDialog(
             show = true,
-            title = stringResource(R.string.module_upload_more),
+            title = stringResource(R.string.module_upload_archive_title),
             onDismissRequest = onDismissRequest,
             // 纵向留 24dp（内容区只补左右）：否则表单和底部按钮会贴住对话框上下边框。
             // 不传的话默认 insideMargin 是 24dp，会和下面 Column 自带的 24dp 叠加成左右各 48dp。
@@ -140,7 +140,7 @@ fun ModuleUploadArchiveDialog(
     } else {
         AlertDialog(
             onDismissRequest = onDismissRequest,
-            title = { Text(stringResource(R.string.module_upload_more)) },
+            title = { Text(stringResource(R.string.module_upload_archive_title)) },
             text = {
                 SegmentedColumn(
                     modifier = Modifier.fillMaxWidth(),

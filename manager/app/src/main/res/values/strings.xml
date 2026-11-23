@@ -1696,6 +1696,8 @@
     <string name="module_upload_use_archived_zip_summary">Kept automatically when this module was installed, no need to look for it in storage</string>
     <string name="module_upload_archived_missing">The kept zip for \"%1$s\" is gone (evicted or unreadable), please choose it manually</string>
     <string name="module_upload_more">More</string>
+    <!-- 顶栏「更多」菜单最后一项，也是留存与清理面板的标题。 -->
+    <string name="module_upload_archive_title">Saved packages</string>
     <string name="module_upload_keep_zip">Keep the original zip when installing</string>
     <string name="module_upload_keep_zip_summary">Lets you upload without hunting for the file again</string>
     <string name="module_upload_clear_archived_zip">Clear the kept zips</string>

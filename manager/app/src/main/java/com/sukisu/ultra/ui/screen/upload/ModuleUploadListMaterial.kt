@@ -2,6 +2,7 @@ package com.sukisu.ultra.ui.screen.upload
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +27,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.MoreVert
@@ -35,14 +37,19 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.FolderZip
 import androidx.compose.material.icons.rounded.SearchOff
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuGroup
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenuPopup
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -52,8 +59,11 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -139,19 +149,12 @@ fun ModuleUploadListMaterial(
                 // 清除即清空搜索词：VM 的 updateSearchText 会把 searchStatus 一并同步。
                 onClearClick = { onSearchTextChange("") },
                 navigationIcon = { TopBarBackButton(onClick = onBack) },
-                // 顶栏只留「解释」「记录」「更多」三件事：它们都是点一下就走。
-                // 刷新是「等一下再看」，已经挪到列表下拉（见 content 里的 PullToRefreshBox）。
+                // 顶栏只留两颗：头像/记录（我是谁 + 我投过什么）与「更多」菜单。
+                // 悬浮顶栏样式会把 actions 整块塞进 48dp 高的圆胶囊，每多一颗图标就多吃掉
+                // 约 50dp 的标题宽度（397dp 宽的屏上 5 颗时标题只剩不到 90dp），其余入口一律收进菜单。
+                // 刷新是「等一下再说」的那类操作，已经挪到列表下拉（见 content 里的 PullToRefreshBox）。
                 actions = {
-                    // 「为什么只能传原始 zip」的说明入口。重建包那条路关掉之后，
-                    // 「已经装过的模块」上就没有上传入口了，用户会来找解释——就在这里。
-                    IconButton(onClick = onOpenInfo) {
-                        Icon(
-                            imageVector = Icons.Outlined.Info,
-                            contentDescription = stringResource(R.string.module_upload_info_open),
-                        )
-                    }
-                    // 上传记录单独一个入口：它回答的是「我以前投过什么」，
-                    // 与「这一版收录了没有」是两件事，塞进列表里只会把主列表顶长。
+                    // 上传记录：回答的是「我以前投过什么」，与「这一版收录了没有」是两件事。
                     // 有头像就画头像：这颗按钮现在同时回答「我是谁」与「我投过什么」，
                     // 光一个历史图标答不了前半句。
                     IconButton(onClick = onOpenHistory) {
@@ -161,45 +164,101 @@ fun ModuleUploadListMaterial(
                                 contentDescription = stringResource(R.string.module_upload_history_open),
                             )
                         } else {
+                            // 描一圈 1dp 环：头像直接落在胶囊底色上会跟胶囊糊成一块。
                             VerifiedAvatar(
                                 avatarUrl = avatarUrl,
                                 tint = MaterialTheme.colorScheme.primary,
                                 placeholder = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                modifier = Modifier
+                                    .border(
+                                        width = 1.dp,
+                                        color = MaterialTheme.colorScheme.outlineVariant,
+                                        shape = CircleShape,
+                                    )
+                                    .padding(1.dp),
                                 avatarSize = 28.dp,
                                 markSize = 12.dp,
                             )
                         }
                     }
-                    // 商店入口：「别人传了什么」。与「我投过什么」并排但去向不同——
-                    // 点进去直接落到模块商店的酷安社区模块，省掉再筛一次。
-                    IconButton(onClick = onOpenStore) {
-                        Icon(
-                            imageVector = Icons.Outlined.Storefront,
-                            contentDescription = stringResource(R.string.module_upload_store_open),
-                        )
-                    }
-                    // 「我的评论」入口：我在商店里发过什么、有没有被删，与上传记录分开。
-                    IconButton(onClick = onOpenMyComments) {
-                        Icon(
-                            imageVector = Icons.Outlined.Email,
-                            contentDescription = stringResource(R.string.module_my_comments_open),
-                        )
-                    }
-                    // 刷新不再占顶栏位置：顶栏按钮要「点一下就走」，而刷新是「等一下再看」，
-                    // 放在列表上下拉更符合它（与模块页/仓库页同一个手势）。
-                    // 留存开关与清理入口都在这个菜单背后：两件事都只跟「占空间」有关，
-                    // 顶栏也不该为此多摆一个开关。
-                    // 载入完成前先禁掉：面板里的开关初值来自 settings，而列表状态里的
-                    // keepZip 默认是 true —— 这一小段窗口里打开面板会显示一个用户其实
-                    // 已经关掉的开关，点一下反而把设置写成 true。
-                    IconButton(
-                        onClick = onOpenArchiveSettings,
-                        enabled = !state.loading && !state.refreshing,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.MoreVert,
-                            contentDescription = stringResource(R.string.module_upload_more),
-                        )
+                    // 其余入口都收在这颗「更多」背后：它们是「去别处看看」与「维护」，
+                    // 都不是这一页的主要动作。载入完成前先禁掉：菜单里的开关初值来自
+                    // settings，而列表状态里的 keepZip 默认是 true —— 这一小段窗口里打开
+                    // 菜单会显示一个用户其实已经关掉的开关，点一下反而把设置写成 true。
+                    Box {
+                        var showMenu by remember { mutableStateOf(false) }
+                        IconButton(
+                            onClick = { showMenu = true },
+                            enabled = !state.loading && !state.refreshing,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.MoreVert,
+                                contentDescription = stringResource(R.string.module_upload_more),
+                            )
+                        }
+                        DropdownMenuPopup(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false },
+                        ) {
+                            // 分成两组：前三项是「去别处看看」，最后一项是「维护」。
+                            // expressive 菜单不画 Divider，组间靠 MenuDefaults 的组间隙分隔。
+                            DropdownMenuGroup(shapes = MenuDefaults.groupShape(index = 0, count = 2)) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.module_upload_info_open)) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Info,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        onOpenInfo()
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.module_upload_store_open)) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Storefront,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        onOpenStore()
+                                    },
+                                )
+                            }
+                            DropdownMenuGroup(shapes = MenuDefaults.groupShape(index = 1, count = 2)) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.module_my_comments_open)) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Email,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        onOpenMyComments()
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.module_upload_archive_title)) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Rounded.FolderZip,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        onOpenArchiveSettings()
+                                    },
+                                )
+                            }
+                        }
                     }
                 },
                 scrollBehavior = scrollBehavior,

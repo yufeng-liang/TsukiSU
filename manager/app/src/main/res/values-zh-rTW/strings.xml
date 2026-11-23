@@ -868,6 +868,7 @@
     <string name="module_upload_use_archived_zip_summary">安裝這個模組時已自動留存，不用再去儲存空間找</string>
     <string name="module_upload_archived_missing">「%1$s」留存的包已不在了（被清理或讀不出），請手動選擇</string>
     <string name="module_upload_more">更多</string>
+    <string name="module_upload_archive_title">留存與清理</string>
     <string name="module_upload_keep_zip">安裝時留存原始 zip</string>
     <string name="module_upload_keep_zip_summary">上傳時不用再去找包</string>
     <string name="module_upload_clear_archived_zip">清理留存的包</string>

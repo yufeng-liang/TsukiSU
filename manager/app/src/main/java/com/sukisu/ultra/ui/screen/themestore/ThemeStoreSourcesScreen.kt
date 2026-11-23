@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -405,9 +406,14 @@ private fun ThemeStoreSourcesMaterial(
                         style = MaterialTheme.typography.titleLarge,
                     )
                 },
+                // 顶栏一律图标按钮：悬浮顶栏样式会把 actions 整块塞进 48dp 高的圆胶囊，
+                // 文字按钮（最小 64dp 宽、带文字排版）会把胶囊撑破。
                 actions = {
-                    MaterialTextButton(onClick = onSave) {
-                        MaterialText(stringResource(R.string.theme_store_save))
+                    MaterialIconButton(onClick = onSave) {
+                        MaterialIcon(
+                            imageVector = Icons.Rounded.Check,
+                            contentDescription = stringResource(R.string.theme_store_save),
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

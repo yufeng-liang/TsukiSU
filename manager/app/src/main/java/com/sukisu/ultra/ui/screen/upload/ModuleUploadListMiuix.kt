@@ -4,6 +4,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -33,15 +34,19 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.rounded.FolderZip
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +72,9 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sukisu.ultra.R
+import com.sukisu.ultra.ui.component.ListPopupDefaults
+import com.sukisu.ultra.ui.component.TopBarVeil
+import top.yukonga.miuix.kmp.blur.layerBackdrop
 import com.sukisu.ultra.ui.component.ScrollToTopOnChange
 import com.sukisu.ultra.ui.component.SearchStatus
 import com.sukisu.ultra.ui.component.miuix.SearchBarFake
@@ -77,12 +85,15 @@ import com.sukisu.ultra.ui.util.BlurredBar
 import com.sukisu.ultra.ui.util.CheckStatus
 import com.sukisu.ultra.ui.util.UpdateEligibility
 import com.sukisu.ultra.ui.util.rememberBlurBackdrop
+import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
+import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.PullToRefresh
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTitle
@@ -93,10 +104,13 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Filter
 import top.yukonga.miuix.kmp.icon.extended.Layers
+import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.icon.extended.MoreCircle
 import top.yukonga.miuix.kmp.icon.extended.Notes
+import top.yukonga.miuix.kmp.icon.extended.Recent
 import top.yukonga.miuix.kmp.icon.extended.Store
 import top.yukonga.miuix.kmp.icon.extended.UploadCloud
+import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
@@ -173,7 +187,10 @@ fun ModuleUploadListMiuix(
 
     Scaffold(
         topBar = {
-            BlurredBar(backdrop) {
+            // 悬浮/自定义背景下顶栏自身没有底色，必须套一层与 AppScaffold 相同的 veil；
+            // 否则列表会从透明顶栏底下穿出来（标准样式看不出来，悬浮样式一眼穿帮）。
+            TopBarVeil(colorScheme.surface) {
+                BlurredBar(backdrop = backdrop, scrollBehavior = scrollBehavior) {
                 searchStatus.TopAppBarAnim(backgroundColor = barColor) {
                     TopAppBar(
                         color = barColor,
@@ -191,68 +208,132 @@ fun ModuleUploadListMiuix(
                                 )
                             }
                         },
-                        // 顶栏只留「解释」「记录」「更多」三件事：都是点一下就走。
-                        // 刷新是「等一下再看」，已经挪到列表下拉（见 content 里的 PullToRefresh）。
+                        // 顶栏只留两颗：头像/记录（我是谁 + 我投过什么）与「更多」菜单。
+                        // 悬浮顶栏样式会把 actions 整块塞进 48dp 高的圆胶囊，每多一颗图标就
+                        // 多吃掉约 50dp 标题宽度，其余入口一律收进菜单。
+                        // 刷新是「等一下再说」的那类操作，已经挪到列表下拉（见 content 里的 PullToRefresh）。
                         actions = {
-                            // 「为什么只能传原始 zip」的说明入口：重建包那条路关掉之后，
-                            // 已经装过的模块在这页没有上传入口，解释放在这里。
-                            IconButton(onClick = onOpenInfo) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Info,
-                                    contentDescription = stringResource(R.string.module_upload_info_open),
-                                    tint = colorScheme.onSurface,
-                                )
-                            }
                             // 上传记录：回答「我以前投过什么」，与「这一版收录了没有」是两件事。
                             // 有头像就画头像：这颗按钮同时回答「我是谁」，图标答不了。
                             IconButton(onClick = onOpenHistory) {
                                 if (avatarUrl.isEmpty()) {
                                     Icon(
-                                        imageVector = MiuixIcons.Notes,
+                                        imageVector = MiuixIcons.Recent,
                                         contentDescription = stringResource(R.string.module_upload_history_open),
                                         tint = colorScheme.onSurface,
                                     )
                                 } else {
+                                    // 描一圈 1dp 环：头像直接落在胶囊底色上会跟胶囊糊成一块。
                                     VerifiedAvatar(
                                         avatarUrl = avatarUrl,
                                         tint = colorScheme.primary,
                                         placeholder = colorScheme.surfaceContainer,
+                                        modifier = Modifier
+                                            .border(
+                                                width = 1.dp,
+                                                color = colorScheme.onSurface.copy(alpha = 0.12f),
+                                                shape = CircleShape,
+                                            )
+                                            .padding(1.dp),
                                         avatarSize = 28.dp,
                                         markSize = 12.dp,
                                     )
                                 }
                             }
-                            // 商店入口：「别人传了什么」。与「我投过什么」并排但去向不同——
-                            // 点进去直接落到模块商店的酷安社区模块，省掉再筛一次。
-                            IconButton(onClick = onOpenStore) {
-                                Icon(
-                                    imageVector = MiuixIcons.Store,
-                                    contentDescription = stringResource(R.string.module_upload_store_open),
-                                    tint = colorScheme.onSurface,
-                                )
-                            }
-                            // 「我的评论」入口：与商店并排，回答「我在商店里说过什么」。
-                            IconButton(onClick = onOpenMyComments) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Email,
-                                    contentDescription = stringResource(R.string.module_my_comments_open),
-                                    tint = colorScheme.onSurface,
-                                )
-                            }
-                            // 刷新不占顶栏：与模块页/仓库页一样改成列表下拉。
-                            // 留存开关与清理入口都在这个按钮背后：两件事都只跟「占空间」有关，
-                            // 顶栏也不该为此多摆一个开关。
-                            // 载入完成前先禁掉：面板里的开关初值来自 settings，而列表状态里的
-                            // keepZip 默认是 true —— 这一小段窗口里打开面板会显示一个用户其实
-                            // 已经关掉的开关，点一下反而把设置写成 true。
-                            IconButton(
-                                onClick = onOpenArchiveSettings,
-                                enabled = !state.loading && !state.refreshing,
-                            ) {
-                                Icon(
-                                    imageVector = MiuixIcons.MoreCircle,
-                                    contentDescription = stringResource(R.string.module_upload_more),
-                                    tint = colorScheme.onSurface,
+                            // 其余入口都收在这颗「更多」背后。载入完成前先禁掉：菜单里的开关
+                            // 初值来自 settings，而列表状态里的 keepZip 默认是 true —— 这一小段
+                            // 窗口里打开菜单会显示一个用户其实已经关掉的开关，点一下反而写成 true。
+                            Box {
+                                var showMenu by remember { mutableStateOf(false) }
+                                IconButton(
+                                    onClick = { showMenu = true },
+                                    holdDownState = showMenu,
+                                    enabled = !state.loading && !state.refreshing,
+                                ) {
+                                    Icon(
+                                        imageVector = MiuixIcons.More,
+                                        contentDescription = stringResource(R.string.module_upload_more),
+                                        tint = colorScheme.onSurface,
+                                    )
+                                }
+                                OverlayListPopup(
+                                    show = showMenu,
+                                    popupPositionProvider = ListPopupDefaults.MenuPositionProvider,
+                                    alignment = PopupPositionProvider.Align.TopEnd,
+                                    onDismissRequest = { showMenu = false },
+                                    content = {
+                                        ListPopupColumn {
+                                            BasicComponent(
+                                                startAction = {
+                                                    Icon(
+                                                        imageVector = Icons.Outlined.Info,
+                                                        contentDescription = null,
+                                                        tint = colorScheme.onSurface,
+                                                        modifier = Modifier.padding(end = 12.dp),
+                                                    )
+                                                },
+                                                title = stringResource(R.string.module_upload_info_open),
+                                                onClick = {
+                                                    showMenu = false
+                                                    onOpenInfo()
+                                                },
+                                            )
+                                            BasicComponent(
+                                                startAction = {
+                                                    Icon(
+                                                        imageVector = MiuixIcons.Store,
+                                                        contentDescription = null,
+                                                        tint = colorScheme.onSurface,
+                                                        modifier = Modifier.padding(end = 12.dp),
+                                                    )
+                                                },
+                                                title = stringResource(R.string.module_upload_store_open),
+                                                onClick = {
+                                                    showMenu = false
+                                                    onOpenStore()
+                                                },
+                                            )
+                                            BasicComponent(
+                                                startAction = {
+                                                    Icon(
+                                                        imageVector = Icons.Outlined.Email,
+                                                        contentDescription = null,
+                                                        tint = colorScheme.onSurface,
+                                                        modifier = Modifier.padding(end = 12.dp),
+                                                    )
+                                                },
+                                                title = stringResource(R.string.module_my_comments_open),
+                                                onClick = {
+                                                    showMenu = false
+                                                    onOpenMyComments()
+                                                },
+                                            )
+                                            // 分隔线：miuix 的列表弹层没有分组间隙，
+                                            // 「维护」与上面三项分开才不会读成同一类动作。
+                                            Box(
+                                                modifier = Modifier
+                                                    .padding(horizontal = 16.dp)
+                                                    .fillMaxWidth()
+                                                    .height(1.dp)
+                                                    .background(colorScheme.onSurface.copy(alpha = 0.12f)),
+                                            )
+                                            BasicComponent(
+                                                startAction = {
+                                                    Icon(
+                                                        imageVector = Icons.Rounded.FolderZip,
+                                                        contentDescription = null,
+                                                        tint = colorScheme.onSurface,
+                                                        modifier = Modifier.padding(end = 12.dp),
+                                                    )
+                                                },
+                                                title = stringResource(R.string.module_upload_archive_title),
+                                                onClick = {
+                                                    showMenu = false
+                                                    onOpenArchiveSettings()
+                                                },
+                                            )
+                                        }
+                                    },
                                 )
                             }
                         },
@@ -308,6 +389,7 @@ fun ModuleUploadListMiuix(
                             }
                         },
                     )
+                }
                 }
             }
         },
@@ -388,6 +470,7 @@ fun ModuleUploadListMiuix(
             ) {
                 LazyColumn(
                     modifier = Modifier
+                        .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
                         .fillMaxHeight()
                         .scrollEndHaptic()
                         .overScrollVertical()

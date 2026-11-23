@@ -47,9 +47,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import com.sukisu.ultra.R
 import com.sukisu.ultra.ui.theme.LocalEnableBlur
 import com.sukisu.ultra.ui.util.BlurredBar
+import com.sukisu.ultra.ui.component.TopBarVeil
+import top.yukonga.miuix.kmp.blur.layerBackdrop
 import com.sukisu.ultra.ui.util.MineModule
 import com.sukisu.ultra.ui.util.ProgressItem
 import com.sukisu.ultra.ui.util.ProgressStage
@@ -142,34 +146,41 @@ fun ModuleUploadHistoryMiuix(
 
     Scaffold(
         topBar = {
-            BlurredBar(backdrop) {
-                TopAppBar(
-                    color = barColor,
-                    title = stringResource(R.string.module_upload_mine_entry_title),
-                    scrollBehavior = scrollBehavior,
-                    actions = {
-                        // 换账号只能在这里：身份页核验过就不出现了，退出是唯一回头路。
-                        // 登出清身份、代价不小：红字警示，别让它看起来像普通操作。
-                        TextButton(
-                            text = stringResource(R.string.module_upload_session_signout),
-                            onClick = onSignOut,
-                            colors = ButtonDefaults.textButtonColors(textColor = colorScheme.error),
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            val layoutDirection = LocalLayoutDirection.current
-                            Icon(
-                                modifier = Modifier.graphicsLayer {
-                                    if (layoutDirection == LayoutDirection.Rtl) scaleX = -1f
-                                },
-                                imageVector = MiuixIcons.Back,
-                                contentDescription = null,
-                            )
-                        }
-                    },
-                    // 刷新不在顶栏：这一页只有一件可刷的事，改成列表下拉（见下面 PullToRefresh）。
-                )
+            // 悬浮/自定义背景下顶栏自身没有底色，必须套一层与 AppScaffold 相同的 veil；
+            // 否则列表会从透明顶栏底下穿出来（标准样式看不出来，悬浮样式一眼穿帮）。
+            TopBarVeil(colorScheme.surface) {
+                BlurredBar(backdrop = backdrop, scrollBehavior = scrollBehavior) {
+                    TopAppBar(
+                        color = barColor,
+                        title = stringResource(R.string.module_upload_mine_entry_title),
+                        scrollBehavior = scrollBehavior,
+                        actions = {
+                            // 换账号只能在这里：身份页核验过就不出现了，退出是唯一回头路。
+                            // 登出清身份、代价不小：红字警示，别让它看起来像普通操作。
+                            // 用图标而非文字：悬浮顶栏样式会把 actions 塞进 48dp 圆胶囊。
+                            IconButton(onClick = onSignOut) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                                    contentDescription = stringResource(R.string.module_upload_session_signout),
+                                    tint = colorScheme.error,
+                                )
+                            }
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = onBack) {
+                                val layoutDirection = LocalLayoutDirection.current
+                                Icon(
+                                    modifier = Modifier.graphicsLayer {
+                                        if (layoutDirection == LayoutDirection.Rtl) scaleX = -1f
+                                    },
+                                    imageVector = MiuixIcons.Back,
+                                    contentDescription = null,
+                                )
+                            }
+                        },
+                        // 刷新不在顶栏：这一页只有一件可刷的事，改成列表下拉（见下面 PullToRefresh）。
+                    )
+                }
             }
         },
         contentWindowInsets = WindowInsets.systemBars.add(WindowInsets.displayCutout)
@@ -193,6 +204,7 @@ fun ModuleUploadHistoryMiuix(
         ) {
             LazyColumn(
                 modifier = Modifier
+                    .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
                     .fillMaxHeight()
                     .scrollEndHaptic()
                     .overScrollVertical()
