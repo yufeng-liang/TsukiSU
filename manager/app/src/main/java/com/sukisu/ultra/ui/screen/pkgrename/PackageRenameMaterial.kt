@@ -1,6 +1,5 @@
 package com.sukisu.ultra.ui.screen.pkgrename
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -46,9 +46,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -64,6 +69,7 @@ import com.sukisu.ultra.ui.component.material.ExpressiveScaffold
 import com.sukisu.ultra.ui.component.material.TonalCard
 import com.sukisu.ultra.ui.component.material.TopBarBackButton
 import com.sukisu.ultra.ui.component.material.expressiveTopAppBarColors
+import com.sukisu.ultra.ui.theme.backgroundAwareColor
 
 /**
  * Material 分支：内容区只讲「换成什么包名、会有什么后果」，
@@ -286,16 +292,27 @@ private fun DoneCard(newPackage: String, state: PackageRenameUiState) {
     }
 }
 
-/** 当前包名（弱化）：透明底 + 1dp 描边，把视觉权重让给下方的新包名。 */
+private val CurrentPackageShape = RoundedCornerShape(28.dp)
+
+/**
+ * 当前包名（弱化）：与主页「未安装」状态卡同一套虚线描边，
+ * 底色是卡片色而不是透明色，所以看起来是同一张卡换了个边框；
+ * 视觉权重仍然低于下方的新包名。
+ */
 @Composable
 private fun CurrentPackageCard(currentPackage: String) {
+    val outlineColor = MaterialTheme.colorScheme.outline
     Surface(
-        color = Color.Transparent,
-        shape = MaterialTheme.shapes.large,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        color = backgroundAwareColor(MaterialTheme.colorScheme.surfaceBright),
+        shape = CurrentPackageShape,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .drawBehind { drawDashedOutline(outlineColor) }
+                .padding(20.dp),
+        ) {
             Text(
                 text = stringResource(R.string.pkg_rename_current),
                 style = MaterialTheme.typography.labelMedium,
@@ -308,6 +325,19 @@ private fun CurrentPackageCard(currentPackage: String) {
             )
         }
     }
+}
+
+/** 虚线描边，参数与主页「未安装」状态卡的 drawDashedBorder 保持一致。 */
+private fun DrawScope.drawDashedOutline(color: Color) {
+    val stroke = 2.dp.toPx()
+    val radius = 28.dp.toPx() - stroke / 2
+    drawRoundRect(
+        color = color,
+        topLeft = Offset(stroke / 2, stroke / 2),
+        size = size.copy(width = size.width - stroke, height = size.height - stroke),
+        cornerRadius = CornerRadius(radius, radius),
+        style = Stroke(stroke, pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx()))),
+    )
 }
 
 /**
