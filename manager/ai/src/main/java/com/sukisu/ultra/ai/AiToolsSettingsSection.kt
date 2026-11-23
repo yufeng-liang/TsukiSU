@@ -36,7 +36,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -442,7 +441,7 @@ private fun McpServerAddDialog(
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    Switch(checked = enabled, onCheckedChange = { enabled = it })
+                    AiExpressiveSwitch(checked = enabled, onCheckedChange = { enabled = it })
                 }
                 OutlinedTextField(
                     value = name,
@@ -563,7 +562,7 @@ private fun McpServerRow(
                 )
             }
         }
-        Switch(checked = server.enabled, onCheckedChange = onToggle)
+        AiExpressiveSwitch(checked = server.enabled, onCheckedChange = onToggle)
         // 右箭头提示这一行能进详情页。
         Icon(
             imageVector = Icons.Rounded.ChevronRight,

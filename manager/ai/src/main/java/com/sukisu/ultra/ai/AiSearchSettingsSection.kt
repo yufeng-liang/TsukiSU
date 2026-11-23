@@ -21,7 +21,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -134,7 +133,7 @@ internal fun AiSearchSettingsSection(modifier: Modifier = Modifier) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Switch(
+            AiExpressiveSwitch(
                 checked = config.searchEnabled,
                 onCheckedChange = { persist(config.copy(searchEnabled = it)) },
             )
@@ -272,7 +271,7 @@ private fun SearchProviderRow(
             R.string.ai_search_provider_enabled,
             providerTitle(provider),
         )
-        Switch(
+        AiExpressiveSwitch(
             checked = checked,
             onCheckedChange = onToggle,
             modifier = Modifier.semantics { contentDescription = toggleDescription },

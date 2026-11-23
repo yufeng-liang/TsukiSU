@@ -23,7 +23,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -273,7 +272,7 @@ internal fun AiComposerQuickBarMaterial(
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
                         )
-                        Switch(checked = searchOn, onCheckedChange = onSetSearchEnabled)
+                        AiExpressiveSwitch(checked = searchOn, onCheckedChange = onSetSearchEnabled)
                     }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                     search.quickSearchProviders().forEach { state ->
