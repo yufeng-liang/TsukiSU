@@ -61,6 +61,8 @@ import com.sukisu.ultra.R
 import com.sukisu.ultra.ui.component.CoolapkUidState
 import com.sukisu.ultra.ui.theme.LocalEnableBlur
 import com.sukisu.ultra.ui.util.BlurredBar
+import com.sukisu.ultra.ui.component.TopBarVeil
+import top.yukonga.miuix.kmp.blur.layerBackdrop
 import com.sukisu.ultra.ui.util.rememberBlurBackdrop
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -119,23 +121,27 @@ fun ModuleUploadIdentityMiuix(
 
     Scaffold(
         topBar = {
-            BlurredBar(backdrop) {
-                TopAppBar(
-                    color = barColor,
-                    title = stringResource(
-                        if (commentMode) R.string.module_verify_title
-                        else R.string.module_upload_identity_title,
-                    ),
-                    scrollBehavior = scrollBehavior,
-                    navigationIcon = {
-                        IconButton(onClick = onExit) {
-                            Icon(
-                                imageVector = MiuixIcons.Back,
-                                contentDescription = stringResource(R.string.action_back),
-                            )
-                        }
-                    },
-                )
+            // 悬浮/自定义背景下顶栏自身没有底色，必须套一层与 AppScaffold 相同的 veil；
+            // 否则列表会从透明顶栏底下穿出来（标准样式看不出来，悬浮样式一眼穿帮）。
+            TopBarVeil(colorScheme.surface) {
+                BlurredBar(backdrop = backdrop, scrollBehavior = scrollBehavior) {
+                    TopAppBar(
+                        color = barColor,
+                        title = stringResource(
+                            if (commentMode) R.string.module_verify_title
+                            else R.string.module_upload_identity_title,
+                        ),
+                        scrollBehavior = scrollBehavior,
+                        navigationIcon = {
+                            IconButton(onClick = onExit) {
+                                Icon(
+                                    imageVector = MiuixIcons.Back,
+                                    contentDescription = stringResource(R.string.action_back),
+                                )
+                            }
+                        },
+                    )
+                }
             }
         },
         bottomBar = {
@@ -152,6 +158,7 @@ fun ModuleUploadIdentityMiuix(
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier
+                .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
                 .fillMaxHeight()
                 .scrollEndHaptic()
                 .overScrollVertical()

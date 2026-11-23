@@ -67,6 +67,8 @@ import com.sukisu.ultra.ui.component.CoolapkUidState
 import com.sukisu.ultra.ui.theme.LocalEnableBlur
 import com.sukisu.ultra.ui.util.BatchLimits
 import com.sukisu.ultra.ui.util.BlurredBar
+import com.sukisu.ultra.ui.component.TopBarVeil
+import top.yukonga.miuix.kmp.blur.layerBackdrop
 import com.sukisu.ultra.ui.util.rememberBlurBackdrop
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Button
@@ -140,24 +142,28 @@ fun ModuleUploadFormMiuix(
 
     Scaffold(
         topBar = {
-            BlurredBar(backdrop) {
-                TopAppBar(
-                    color = barColor,
-                    title = stringResource(R.string.module_upload_form_title),
-                    scrollBehavior = scrollBehavior,
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            val layoutDirection = LocalLayoutDirection.current
-                            Icon(
-                                modifier = Modifier.graphicsLayer {
-                                    if (layoutDirection == LayoutDirection.Rtl) scaleX = -1f
-                                },
-                                imageVector = MiuixIcons.Back,
-                                contentDescription = stringResource(R.string.action_back),
-                            )
-                        }
-                    },
-                )
+            // 悬浮/自定义背景下顶栏自身没有底色，必须套一层与 AppScaffold 相同的 veil；
+            // 否则列表会从透明顶栏底下穿出来（标准样式看不出来，悬浮样式一眼穿帮）。
+            TopBarVeil(colorScheme.surface) {
+                BlurredBar(backdrop = backdrop, scrollBehavior = scrollBehavior) {
+                    TopAppBar(
+                        color = barColor,
+                        title = stringResource(R.string.module_upload_form_title),
+                        scrollBehavior = scrollBehavior,
+                        navigationIcon = {
+                            IconButton(onClick = onBack) {
+                                val layoutDirection = LocalLayoutDirection.current
+                                Icon(
+                                    modifier = Modifier.graphicsLayer {
+                                        if (layoutDirection == LayoutDirection.Rtl) scaleX = -1f
+                                    },
+                                    imageVector = MiuixIcons.Back,
+                                    contentDescription = stringResource(R.string.action_back),
+                                )
+                            }
+                        },
+                    )
+                }
             }
         },
         // 提交按钮钉在底部：这一屏有四张卡，滚到底才能提交的旧做法让人白滚一趟。
@@ -177,6 +183,7 @@ fun ModuleUploadFormMiuix(
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier
+                .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
                 .fillMaxHeight()
                 .scrollEndHaptic()
                 .overScrollVertical()

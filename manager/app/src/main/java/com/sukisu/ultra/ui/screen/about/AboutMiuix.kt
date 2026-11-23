@@ -73,6 +73,7 @@ import com.sukisu.ultra.ui.component.miuix.effect.ColorBlendToken
 import com.sukisu.ultra.ui.theme.LocalEnableBlur
 import com.sukisu.ultra.ui.theme.isInDarkTheme
 import com.sukisu.ultra.ui.util.BlurredBar
+import com.sukisu.ultra.ui.component.TopBarVeil
 import com.sukisu.ultra.ui.util.rememberBlurBackdrop
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
@@ -131,30 +132,34 @@ fun AboutScreenMiuix(
 
     Scaffold(
         topBar = {
-            BlurredBar(backdrop = barBlurBackdrop, blurActive = blurActive) {
-                SmallTopAppBar(
-                    title = state.title,
-                    scrollBehavior = topAppBarScrollBehavior,
-                    color = barColor,
-                    titleColor = colorScheme.onSurface.copy(
-                        alpha = ((scrollProgress - 0.35f) / 0.65f).coerceIn(0f, 1f),
-                    ),
-                    navigationIcon = {
-                        IconButton(
-                            onClick = actions.onBack
-                        ) {
-                            val layoutDirection = LocalLayoutDirection.current
-                            Icon(
-                                modifier = Modifier.graphicsLayer {
-                                    if (layoutDirection == LayoutDirection.Rtl) scaleX = -1f
-                                },
-                                imageVector = MiuixIcons.Back,
-                                contentDescription = null,
-                                tint = colorScheme.onBackground
-                            )
-                        }
-                    },
-                )
+            // 悬浮/自定义背景下顶栏自身没有底色，必须套一层与 AppScaffold 相同的 veil；
+            // 否则列表会从透明顶栏底下穿出来（标准样式看不出来，悬浮样式一眼穿帮）。
+            TopBarVeil(colorScheme.surface) {
+                BlurredBar(backdrop = barBlurBackdrop, blurActive = blurActive) {
+                    SmallTopAppBar(
+                        title = state.title,
+                        scrollBehavior = topAppBarScrollBehavior,
+                        color = barColor,
+                        titleColor = colorScheme.onSurface.copy(
+                            alpha = ((scrollProgress - 0.35f) / 0.65f).coerceIn(0f, 1f),
+                        ),
+                        navigationIcon = {
+                            IconButton(
+                                onClick = actions.onBack
+                            ) {
+                                val layoutDirection = LocalLayoutDirection.current
+                                Icon(
+                                    modifier = Modifier.graphicsLayer {
+                                        if (layoutDirection == LayoutDirection.Rtl) scaleX = -1f
+                                    },
+                                    imageVector = MiuixIcons.Back,
+                                    contentDescription = null,
+                                    tint = colorScheme.onBackground
+                                )
+                            }
+                        },
+                    )
+                }
             }
         },
         popupHost = { },

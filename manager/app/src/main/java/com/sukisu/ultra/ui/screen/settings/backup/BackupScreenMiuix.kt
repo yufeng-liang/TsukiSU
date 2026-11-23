@@ -72,6 +72,8 @@ import com.sukisu.ultra.data.backup.WebDavPresets
 import com.sukisu.ultra.ui.theme.LocalEnableBlur
 import com.sukisu.ultra.ui.util.BackupText
 import com.sukisu.ultra.ui.util.BlurredBar
+import com.sukisu.ultra.ui.component.TopBarVeil
+import top.yukonga.miuix.kmp.blur.layerBackdrop
 import com.sukisu.ultra.ui.util.blockTaps
 import com.sukisu.ultra.ui.util.rememberBlurBackdrop
 import top.yukonga.miuix.kmp.basic.Button
@@ -130,71 +132,75 @@ fun BackupMiuix(
 
     Scaffold(
         topBar = {
-            // 顶栏是半透明的、列表从它下面滚过去（Miuix 那套模糊栏就是这么用的），所以这一层
-            // 必须自己接住点击：不然点在两个分页标签中间会穿到下面那一行上（实测会把
-            // 「选择要备份的模块」折叠掉）。见 blockTaps。
-            Box(Modifier.blockTaps()) {
-                BlurredBar(backdrop) {
-                    TopAppBar(
-                        color = barColor,
-                        // 多选时顶栏换成"正在多选"的操作栏：标题说勾了几份，左边是取消、
-                        // 右边是删除。列表行上的勾选框已经在说"选了什么"，这里补上"选了多少、
-                        // 能干什么"。
-                        title = if (state.selecting) {
-                            stringResource(R.string.backup_selection_title, state.selectedGroups.size)
-                        } else {
-                            stringResource(R.string.backup_title)
-                        },
-                        scrollBehavior = scrollBehavior,
-                        navigationIcon = {
-                            if (state.selecting) {
-                                IconButton(onClick = actions.onClearSelection) {
-                                    Icon(imageVector = MiuixIcons.Close, contentDescription = null)
-                                }
+            // 悬浮/自定义背景下顶栏自身没有底色，必须套一层与 AppScaffold 相同的 veil；
+            // 否则列表会从透明顶栏底下穿出来（标准样式看不出来，悬浮样式一眼穿帮）。
+            TopBarVeil(colorScheme.surface) {
+                // 顶栏是半透明的、列表从它下面滚过去（Miuix 那套模糊栏就是这么用的），所以这一层
+                // 必须自己接住点击：不然点在两个分页标签中间会穿到下面那一行上（实测会把
+                // 「选择要备份的模块」折叠掉）。见 blockTaps。
+                Box(Modifier.blockTaps()) {
+                    BlurredBar(backdrop = backdrop, scrollBehavior = scrollBehavior) {
+                        TopAppBar(
+                            color = barColor,
+                            // 多选时顶栏换成"正在多选"的操作栏：标题说勾了几份，左边是取消、
+                            // 右边是删除。列表行上的勾选框已经在说"选了什么"，这里补上"选了多少、
+                            // 能干什么"。
+                            title = if (state.selecting) {
+                                stringResource(R.string.backup_selection_title, state.selectedGroups.size)
                             } else {
-                                IconButton(onClick = actions.onBack) {
-                                    Icon(imageVector = MiuixIcons.Back, contentDescription = null)
+                                stringResource(R.string.backup_title)
+                            },
+                            scrollBehavior = scrollBehavior,
+                            navigationIcon = {
+                                if (state.selecting) {
+                                    IconButton(onClick = actions.onClearSelection) {
+                                        Icon(imageVector = MiuixIcons.Close, contentDescription = null)
+                                    }
+                                } else {
+                                    IconButton(onClick = actions.onBack) {
+                                        Icon(imageVector = MiuixIcons.Back, contentDescription = null)
+                                    }
                                 }
-                            }
-                        },
-                        actions = {
-                            if (state.selecting) {
-                                // 删除是这一栏唯一的操作，也是唯一不可逆的：用误差色而不是默认
-                                // 的主题色，让"按下去东西就没了"这件事在做之前就看得出来。
-                                //
-                                // 自己画而不是用 TextButton：这个版本的 Miuix 只给了 Primary 那套
-                                // textButtonColors，没有 error 变体，所以这里拿 Text 直接染成误差色。
-                                IconButton(
-                                    onClick = actions.onDeleteSelected,
-                                    enabled = state.selectedGroups.isNotEmpty() && !state.loading,
-                                ) {
-                                    Icon(
-                                        imageVector = MiuixIcons.Delete,
-                                        contentDescription = stringResource(R.string.backup_selection_delete),
-                                        tint = colorScheme.error,
-                                    )
+                            },
+                            actions = {
+                                if (state.selecting) {
+                                    // 删除是这一栏唯一的操作，也是唯一不可逆的：用误差色而不是默认
+                                    // 的主题色，让"按下去东西就没了"这件事在做之前就看得出来。
+                                    //
+                                    // 自己画而不是用 TextButton：这个版本的 Miuix 只给了 Primary 那套
+                                    // textButtonColors，没有 error 变体，所以这里拿 Text 直接染成误差色。
+                                    IconButton(
+                                        onClick = actions.onDeleteSelected,
+                                        enabled = state.selectedGroups.isNotEmpty() && !state.loading,
+                                    ) {
+                                        Icon(
+                                            imageVector = MiuixIcons.Delete,
+                                            contentDescription = stringResource(R.string.backup_selection_delete),
+                                            tint = colorScheme.error,
+                                        )
+                                    }
                                 }
-                            }
-                        },
-                        bottomContent = {
-                            // 多选时收起分页标签：勾的是恢复页那份清单，把"备份/恢复"留在上面
-                            // 等于给了一个会把勾选清掉的按钮。
-                            if (!state.selecting) {
-                                Column(
-                                    modifier = Modifier
-                                        .padding(horizontal = 12.dp)
-                                        .padding(bottom = 6.dp),
-                                ) {
-                                    TabRow(
-                                        tabs = BackupTab.entries.map { tabLabel(it, state.groups.size) },
-                                        selectedTabIndex = state.tab.ordinal,
-                                        onTabSelected = { actions.onSelectTab(BackupTab.entries[it]) },
-                                        colors = TabRowDefaults.tabRowColors(backgroundColor = barColor),
-                                    )
+                            },
+                            bottomContent = {
+                                // 多选时收起分页标签：勾的是恢复页那份清单，把"备份/恢复"留在上面
+                                // 等于给了一个会把勾选清掉的按钮。
+                                if (!state.selecting) {
+                                    Column(
+                                        modifier = Modifier
+                                            .padding(horizontal = 12.dp)
+                                            .padding(bottom = 6.dp),
+                                    ) {
+                                        TabRow(
+                                            tabs = BackupTab.entries.map { tabLabel(it, state.groups.size) },
+                                            selectedTabIndex = state.tab.ordinal,
+                                            onTabSelected = { actions.onSelectTab(BackupTab.entries[it]) },
+                                            colors = TabRowDefaults.tabRowColors(backgroundColor = barColor),
+                                        )
+                                    }
                                 }
-                            }
-                        },
-                    )
+                            },
+                        )
+                    }
                 }
             }
         },
@@ -209,6 +215,7 @@ fun BackupMiuix(
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier
+                .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
                 .fillMaxHeight()
                 .scrollEndHaptic()
                 .overScrollVertical()

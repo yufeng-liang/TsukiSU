@@ -34,6 +34,8 @@ import com.sukisu.ultra.R
 import com.sukisu.ultra.data.backup.BackupOrigin
 import com.sukisu.ultra.ui.theme.LocalEnableBlur
 import com.sukisu.ultra.ui.util.BlurredBar
+import com.sukisu.ultra.ui.component.TopBarVeil
+import top.yukonga.miuix.kmp.blur.layerBackdrop
 import com.sukisu.ultra.ui.util.blockTaps
 import com.sukisu.ultra.ui.util.rememberBlurBackdrop
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -79,20 +81,24 @@ fun BackupDetailMiuix(
 
     Scaffold(
         topBar = {
-            // 和备份页同一个道理：顶栏半透明、列表从它下面滚过去，所以顶栏自己得接住点击，
-            // 否则点在这行的空白处会穿到下面那一条上去。见 blockTaps。
-            Box(Modifier.blockTaps()) {
-                BlurredBar(backdrop) {
-                    TopAppBar(
-                        color = barColor,
-                        title = group.label,
-                        scrollBehavior = scrollBehavior,
-                        navigationIcon = {
-                            IconButton(onClick = actions.onCloseGroup, enabled = state.restoreRun?.done != false) {
-                                Icon(imageVector = MiuixIcons.Back, contentDescription = null)
+            // 悬浮/自定义背景下顶栏自身没有底色，必须套一层与 AppScaffold 相同的 veil；
+            // 否则列表会从透明顶栏底下穿出来（标准样式看不出来，悬浮样式一眼穿帮）。
+            TopBarVeil(colorScheme.surface) {
+                // 和备份页同一个道理：顶栏半透明、列表从它下面滚过去，所以顶栏自己得接住点击，
+                // 否则点在这行的空白处会穿到下面那一条上去。见 blockTaps。
+                Box(Modifier.blockTaps()) {
+                    BlurredBar(backdrop = backdrop, scrollBehavior = scrollBehavior) {
+                        TopAppBar(
+                            color = barColor,
+                            title = group.label,
+                            scrollBehavior = scrollBehavior,
+                            navigationIcon = {
+                                IconButton(onClick = actions.onCloseGroup, enabled = state.restoreRun?.done != false) {
+                                    Icon(imageVector = MiuixIcons.Back, contentDescription = null)
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
         },
@@ -107,6 +113,7 @@ fun BackupDetailMiuix(
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier
+                .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
                 .fillMaxHeight()
                 .scrollEndHaptic()
                 .overScrollVertical()
