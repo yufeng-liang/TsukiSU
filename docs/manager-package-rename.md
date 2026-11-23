@@ -1,4 +1,9 @@
 > 本文件是本项目 fork（`yufeng-liang/SukiSU-Ultra`）的迁移说明，非上游官方文档。
+>
+> **更新（2026-11-23）**：默认包名已再次改为 `com.yufeng.tsukisu`，单一真源仍是
+> `manager-package.properties`。本文记录的是 `com.sukisu.ultra` → `com.yufeng.sukisu.ultra`
+> 那一次迁移；把文中所有 `com.yufeng.sukisu.ultra` 换成 `com.yufeng.tsukisu` 后，步骤与
+> 风险完全适用。签名不变、内核 `EXPECTED_HASH` 不变这条红线依旧适用。
 
 # 管理器包名迁移说明：`com.sukisu.ultra` → `com.yufeng.sukisu.ultra`
 
