@@ -11,7 +11,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.dropUnlessResumed
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sukisu.ultra.ui.viewmodel.sharedSettingsViewModel
 import com.sukisu.ultra.BuildConfig
 import com.sukisu.ultra.R
 import com.sukisu.ultra.ui.LocalUiMode
@@ -35,7 +35,7 @@ private val MiuixDefaultSeed = Color(0xFF3482FF)
 fun AboutScreen() {
     val navigator = LocalNavigator.current
     val uriHandler = LocalUriHandler.current
-    val viewModel = viewModel<SettingsViewModel>()
+    val viewModel = sharedSettingsViewModel()
     val settingsState by viewModel.uiState.collectAsStateWithLifecycle()
     // 关于页只留仓库入口（Telegram 频道那一行已删）；地址本身在列表行下面用小字补出来
     val htmlString = stringResource(

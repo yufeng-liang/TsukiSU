@@ -23,7 +23,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sukisu.ultra.ui.viewmodel.sharedSettingsViewModel
 import com.sukisu.ultra.R
 import com.sukisu.ultra.ui.LocalUiMode
 import com.sukisu.ultra.ui.UiMode
@@ -85,7 +85,7 @@ data class DynamicWallpaperPreviewActions(
 fun DynamicWallpaperScreen(card: Boolean = false) {
     val context = LocalContext.current
     val navigator = LocalNavigator.current
-    val viewModel = viewModel<SettingsViewModel>()
+    val viewModel = sharedSettingsViewModel()
     val settings by viewModel.uiState.collectAsStateWithLifecycle()
     val target = if (card) DynamicWallpaperTarget.CARD else DynamicWallpaperTarget.APP
 

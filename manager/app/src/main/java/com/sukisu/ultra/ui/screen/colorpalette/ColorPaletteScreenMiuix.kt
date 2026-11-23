@@ -142,7 +142,7 @@ import com.sukisu.ultra.ui.util.ThemePackageStorage
 import com.sukisu.ultra.ui.util.rememberBlurBackdrop
 import com.sukisu.ultra.ui.viewmodel.SettingsViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sukisu.ultra.ui.viewmodel.sharedSettingsViewModel
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
@@ -192,7 +192,7 @@ fun ColorPaletteScreenMiuix(
         state.currentColorMode.isSystem && isSystemInDarkTheme()
     val context = LocalContext.current
     // Rows outside the preview still read the shared settings (app icon, predictive back, ...).
-    val uiState by viewModel<SettingsViewModel>().uiState.collectAsStateWithLifecycle()
+    val uiState by sharedSettingsViewModel().uiState.collectAsStateWithLifecycle()
     // Live drag values: the preview follows the sliders before they commit to the repository.
     // The drafts start from the committed value but are not reset by it, so a slider does not
     // jump back while its own commit round-trips.

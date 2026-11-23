@@ -14,7 +14,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.dropUnlessResumed
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sukisu.ultra.ui.viewmodel.sharedSettingsViewModel
 import com.sukisu.ultra.KernelSUApplication
 import com.sukisu.ultra.ui.LocalUiMode
 import com.sukisu.ultra.ui.UiMode
@@ -29,7 +29,7 @@ fun ColorPaletteScreen(section: String? = null, importUri: String? = null) {
     val navigator = LocalNavigator.current
     val context = LocalContext.current
     val activity = LocalActivity.current
-    val viewModel = viewModel<SettingsViewModel>()
+    val viewModel = sharedSettingsViewModel()
     // The page state is projected in the view model, so nothing is parsed while composing.
     val state by viewModel.colorPaletteState.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()

@@ -2,6 +2,7 @@ package com.sukisu.ultra.ui.screen.settings
 
 import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -12,7 +13,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sukisu.ultra.ui.viewmodel.sharedSettingsViewModel
 import com.sukisu.ultra.ui.LocalUiMode
 import com.sukisu.ultra.ui.UiMode
 import com.sukisu.ultra.ui.navigation3.Navigator
@@ -38,7 +39,7 @@ internal fun settingsRouteFor(page: SettingsPage): Route = when (page) {
 @Composable
 fun rememberSettingsScreenActions(navigator: Navigator): SettingsScreenActions {
     val context = LocalContext.current
-    val viewModel = viewModel<SettingsViewModel>()
+    val viewModel = sharedSettingsViewModel()
     return SettingsScreenActions(
         onSetCheckUpdate = viewModel::setCheckUpdate,
         onSetCheckModuleUpdate = viewModel::setCheckModuleUpdate,
@@ -92,7 +93,7 @@ fun SettingPager(
     bottomInnerPadding: Dp,
     isCurrentPage: Boolean = true,
 ) {
-    val viewModel = viewModel<SettingsViewModel>()
+    val viewModel = sharedSettingsViewModel()
     val activityOwner = LocalActivity.current as? ViewModelStoreOwner
     val mainViewModel: MainActivityViewModel = if (activityOwner != null) {
         viewModel(viewModelStoreOwner = activityOwner)

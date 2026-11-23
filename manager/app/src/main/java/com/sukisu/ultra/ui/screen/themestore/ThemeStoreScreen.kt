@@ -85,6 +85,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -117,7 +118,7 @@ import coil.compose.rememberAsyncImagePainter
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sukisu.ultra.ui.viewmodel.sharedSettingsViewModel
 import com.sukisu.ultra.R
 import com.sukisu.ultra.data.repository.ThemeStoreRepository
 import com.sukisu.ultra.data.repository.ThemeStorePreviewLoader
@@ -189,7 +190,7 @@ fun ThemeStoreScreen(
 ) {
     val context = LocalContext.current
     val navigator = LocalNavigator.current
-    val settingsViewModel = viewModel<SettingsViewModel>()
+    val settingsViewModel = sharedSettingsViewModel()
     val settingsUiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var showUpload by rememberSaveable { mutableStateOf(false) }

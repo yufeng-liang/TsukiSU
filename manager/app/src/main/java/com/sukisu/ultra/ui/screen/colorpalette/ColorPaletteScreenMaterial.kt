@@ -6,7 +6,7 @@ import com.sukisu.ultra.ai.api.AiFeatureBridge
 import android.net.Uri
 import java.io.File
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sukisu.ultra.ui.viewmodel.sharedSettingsViewModel
 import android.os.Build
 import com.sukisu.ultra.ui.util.customText
 import com.sukisu.ultra.ui.util.customTextGroupsIn
@@ -187,7 +187,7 @@ fun ColorPaletteScreenMaterial(
     val listState = rememberLazyListState()
     val currentColorMode = state.currentColorMode
     // Rows outside the preview still read the shared settings (app icon, predictive back, ...).
-    val uiState by viewModel<SettingsViewModel>().uiState.collectAsStateWithLifecycle()
+    val uiState by sharedSettingsViewModel().uiState.collectAsStateWithLifecycle()
 
     // A background-derived seed is not one of the fixed swatches; show it as the default pick.
     val currentKeyColor = if (state.extractColorFromBackground) 0 else state.keyColor

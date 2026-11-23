@@ -21,7 +21,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sukisu.ultra.ui.viewmodel.sharedSettingsViewModel
 import com.sukisu.ultra.R
 import com.sukisu.ultra.ui.LocalUiMode
 import com.sukisu.ultra.ui.UiMode
@@ -85,7 +85,7 @@ data class BackgroundCropActions(
 fun BackgroundCropScreen(sourcePath: String) {
     val context = LocalContext.current
     val navigator = LocalNavigator.current
-    val viewModel = viewModel<SettingsViewModel>()
+    val viewModel = sharedSettingsViewModel()
     val scope = rememberCoroutineScope()
     val controller = rememberCropController()
     val windowSize = LocalWindowInfo.current.containerSize

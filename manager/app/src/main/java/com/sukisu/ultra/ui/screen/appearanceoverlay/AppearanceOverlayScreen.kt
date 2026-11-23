@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sukisu.ultra.ui.viewmodel.sharedSettingsViewModel
 import com.sukisu.ultra.R
 import com.sukisu.ultra.ui.LocalUiMode
 import com.sukisu.ultra.ui.UiMode
@@ -64,7 +64,7 @@ data class AppearanceOverlayActions(
 
 @Composable
 fun AppearanceOverlayScreen(onBack: () -> Unit) {
-    val viewModel = viewModel<SettingsViewModel>()
+    val viewModel = sharedSettingsViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val data = uiState.appearanceData ?: AppearanceOverlayData()
     val isDark = isInDarkTheme()

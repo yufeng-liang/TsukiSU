@@ -52,7 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sukisu.ultra.ui.viewmodel.sharedSettingsViewModel
 import com.sukisu.ultra.R
 import com.sukisu.ultra.ui.component.material.ExpressiveScaffold
 import com.sukisu.ultra.ui.component.material.TonalCard
@@ -74,7 +74,7 @@ import com.sukisu.ultra.ui.viewmodel.SettingsViewModel
 fun AdaptiveThemeBuilderScreen() {
     val navigator = LocalNavigator.current
     val context = LocalContext.current
-    val viewModel = viewModel<SettingsViewModel>()
+    val viewModel = sharedSettingsViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     val exportLauncher = rememberLauncherForActivityResult(

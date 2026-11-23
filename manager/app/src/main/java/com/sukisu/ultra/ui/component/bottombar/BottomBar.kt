@@ -11,7 +11,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sukisu.ultra.ui.viewmodel.sharedSettingsViewModel
 import com.sukisu.ultra.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -114,7 +114,7 @@ fun useNavigationRail(enableFloatingBottomBar: Boolean): Boolean {
 
 @Composable
 internal fun rememberBottomBarIconPaths(): Map<String, String> {
-    val state by viewModel<SettingsViewModel>().uiState.collectAsStateWithLifecycle()
+    val state by sharedSettingsViewModel().uiState.collectAsStateWithLifecycle()
     return state.bottomBarIcons
 }
 

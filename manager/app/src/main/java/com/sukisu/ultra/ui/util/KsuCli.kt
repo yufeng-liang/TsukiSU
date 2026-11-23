@@ -143,6 +143,79 @@ private suspend fun readFeatureValue(args: String): Long? = withContext(Dispatch
     valueLine.substringAfter("Value:").trim().toLongOrNull()
 }
 
+/** 单个内核 feature 的读取结果：生效状态、内核当前值、持久化配置值。 */
+data class FeatureState(
+    val status: String,
+    val kernelValue: Long? = null,
+    val configValue: Long? = null,
+)
+
+/** `feature list` 的单行格式：[ENABLED (1)] su_compat (ID=0) [FORCED] */
+private val FEATURE_LIST_LINE =
+    Regex("""^\[(ENABLED|DISABLED|NOT_SUPPORTED)(?:\s*\((\d+)\))?]\s+(\S+)\s+\(ID=\d+\)(.*)$""")
+
+private fun parseFeatureList(out: List<String>): Map<String, FeatureState> {
+    val states = mutableMapOf<String, FeatureState>()
+    for (line in out) {
+        val match = FEATURE_LIST_LINE.find(line.trim()) ?: continue
+        val state = match.groupValues[1]
+        val value = match.groupValues[2]
+        val name = match.groupValues[3]
+        val suffix = match.groupValues[4]
+        val status = when {
+            suffix.contains("[FORCED]") -> "forced"
+            suffix.contains("[MODULE_MANAGED]") -> "managed"
+            state == "NOT_SUPPORTED" -> "unsupported"
+            else -> "supported"
+        }
+        val kernelValue = if (state == "NOT_SUPPORTED") null else value.ifBlank { "0" }.toLongOrNull()
+        states[name] = FeatureState(status = status, kernelValue = kernelValue)
+    }
+    return states
+}
+
+/**
+ * 批量读取多个 feature 的状态。
+ *
+ * 以前每个 feature 都各跑一次 `feature check` 和 `feature get`，设置页 8 个 feature 就是十几次
+ * root shell 往返，只能先画默认值再等结果回来改写（表现为开关「先关后开」）。这里压成两条命令：
+ * `feature list` 一条进程拿全部 status 与内核值，再用一个 shell job 以 `echo @@<id>` 作分隔符
+ * 批量读 `feature get --config <id>`。list 解析不出来（旧内核/旧 ksud）时退回逐个 `feature check`。
+ */
+suspend fun loadFeatureStates(ids: List<String>): Map<String, FeatureState> = withContext(Dispatchers.IO) {
+    if (ids.isEmpty()) return@withContext emptyMap()
+    val daemon = getKsuDaemonPath()
+    val shell = getRootShell()
+    val listed = shell.newJob()
+        .add("$daemon feature list").to(ArrayList<String>(), null).exec().out
+    val states = parseFeatureList(listed).toMutableMap()
+    for (id in ids) {
+        if (states.containsKey(id)) continue
+        val status = getFeatureStatus(id)
+        if (status.isNotEmpty()) states[id] = FeatureState(status)
+    }
+    // 一个 job 里批量读各 feature 的持久化配置值，用 @@<id> 作分隔符切段
+    val script = buildString {
+        append("for f in ").append(ids.joinToString(" ")).append("; do echo \"@@\$f\"; ")
+        append(daemon).append(" feature get --config \$f; done")
+    }
+    val configOut = shell.newJob().add(script).to(ArrayList<String>(), null).exec().out
+    val configs = mutableMapOf<String, Long>()
+    var current: String? = null
+    for (line in configOut) {
+        val text = line.trim()
+        if (text.startsWith("@@")) {
+            current = text.removePrefix("@@")
+            continue
+        }
+        if (!text.startsWith("Value:")) continue
+        val value = text.substringAfter("Value:").trim().toLongOrNull() ?: continue
+        val key = current ?: continue
+        configs[key] = value
+    }
+    ids.mapNotNull { id -> states[id]?.let { id to it.copy(configValue = configs[id]) } }.toMap()
+}
+
 fun install() {
     val start = SystemClock.elapsedRealtime()
     val libadbroot = File(ksuApp.applicationInfo.nativeLibraryDir, "libadbroot.so").absolutePath
