@@ -830,18 +830,26 @@ private fun SpecSheet(
         modifier = modifier.fillMaxWidth(),
         colors = backgroundAwareCardColors(),
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+        // 行直接贴卡片边缘：按住的底色才能铺满整卡宽度，再由卡片圆角裁掉外侧
+        Column {
             rows.forEachIndexed { index, (label, value) ->
                 if (index > 0) {
-                    HorizontalDivider()
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
                 // 按住时整行高亮：这些行本来没有点击行为，但长按复制需要看得见的按压反馈
                 var pressed by remember { mutableStateOf(false) }
+                // 首行只圆上两角、末行只圆下两角，中间行直角，轮廓与卡片重合，高亮不会溢出卡片
+                val rowShape = RoundedCornerShape(
+                    topStart = if (index == 0) CardDefaults.CornerRadius else 0.dp,
+                    topEnd = if (index == 0) CardDefaults.CornerRadius else 0.dp,
+                    bottomEnd = if (index == rows.lastIndex) CardDefaults.CornerRadius else 0.dp,
+                    bottomStart = if (index == rows.lastIndex) CardDefaults.CornerRadius else 0.dp,
+                )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 48.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(rowShape)
                         .background(
                             if (pressed) colorScheme.onSurface.copy(alpha = 0.10f)
                             else Color.Transparent
@@ -863,7 +871,7 @@ private fun SpecSheet(
                                 },
                             )
                         }
-                        .padding(vertical = 12.dp),
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {

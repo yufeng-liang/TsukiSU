@@ -128,7 +128,8 @@ import com.sukisu.ultra.ui.theme.LocalDynamicWallpaperActive
 import java.io.File
 
 private val HeroShape = RoundedCornerShape(28.dp)
-private val TileShape = RoundedCornerShape(22.dp)
+private val TileCornerRadius = 22.dp
+private val TileShape = RoundedCornerShape(TileCornerRadius)
 
 @Composable
 fun HomePagerMaterial(
@@ -775,18 +776,29 @@ private fun SpecSheet(
         shape = TileShape,
         color = backgroundAwareColor(MaterialTheme.colorScheme.surfaceBright),
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+        // 行直接贴卡片边缘：按住的底色才能铺满整卡宽度，再由卡片圆角裁掉外侧
+        Column {
             rows.forEachIndexed { index, (label, value) ->
                 if (index > 0) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    )
                 }
                 // 按住时整行高亮：这些行本来没有点击行为，但长按复制需要看得见的按压反馈
                 var pressed by remember { mutableStateOf(false) }
+                // 首行只圆上两角、末行只圆下两角，中间行直角，轮廓与卡片重合，高亮不会溢出卡片
+                val rowShape = RoundedCornerShape(
+                    topStart = if (index == 0) TileCornerRadius else 0.dp,
+                    topEnd = if (index == 0) TileCornerRadius else 0.dp,
+                    bottomEnd = if (index == rows.lastIndex) TileCornerRadius else 0.dp,
+                    bottomStart = if (index == rows.lastIndex) TileCornerRadius else 0.dp,
+                )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 46.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(rowShape)
                         .background(
                             if (pressed) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
                             else Color.Transparent
@@ -808,7 +820,7 @@ private fun SpecSheet(
                                 },
                             )
                         }
-                        .padding(vertical = 10.dp),
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
