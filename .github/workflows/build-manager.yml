@@ -898,7 +898,8 @@ jobs:
             -S "$PROD_KEY_PASSWORD"
       - name: Publish rolling CI prerelease
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          # 仓库内发布用默认 token 即可；secrets.GH_TOKEN 仅用于跨仓场景，缺失时回退。
+          GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
           GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
