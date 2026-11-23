@@ -835,13 +835,28 @@ private fun SpecSheet(
                 if (index > 0) {
                     HorizontalDivider()
                 }
+                // 按住时整行高亮：这些行本来没有点击行为，但长按复制需要看得见的按压反馈
+                var pressed by remember { mutableStateOf(false) }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 48.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(
+                            if (pressed) colorScheme.onSurface.copy(alpha = 0.10f)
+                            else Color.Transparent
+                        )
                         // 长按整行把那行的值复制到剪贴板，排障时直接贴出来
                         .pointerInput(value) {
                             detectTapGestures(
+                                onPress = {
+                                    pressed = true
+                                    try {
+                                        tryAwaitRelease()
+                                    } finally {
+                                        pressed = false
+                                    }
+                                },
                                 onLongPress = {
                                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                     copySystemInfoValue(context, value)
