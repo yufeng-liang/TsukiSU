@@ -1717,7 +1717,5 @@
     <string name="builtin_zygisk_opt_anonymous_memory_summary">Transforma os mapeamentos de módulo em /proc/self/maps em mapeamentos anônimos. Se a interface do sistema não iniciar ou o monitor mostrar NO, desative isto primeiro.</string>
     <string name="builtin_zygisk_opt_custom_linker">Linker personalizado</string>
     <string name="builtin_zygisk_opt_custom_linker_summary">Carrega os módulos com o loader de ELF integrado para que eles nunca entrem na solist do linker do sistema. Recorre ao linker do sistema se um módulo não puder ser carregado.</string>
-    <string name="builtin_zygisk_opt_lsplt">Usar LSPLT para hooks de PLT</string>
-    <string name="builtin_zygisk_opt_lsplt_summary">Desativado usa o ByteHook; ativado usa o LSPLT.</string>
     <string name="profile" translatable="false">Perfil do Aplicativo</string>
 </resources>

@@ -6,6 +6,10 @@
 # with the caption logic included. Delegating keeps a local network failure from
 # failing the publishing job.
 #
+# The pipeline that answers this request is .github/cnb/sukisu-release.cnb.yml,
+# committed to the release repository as `.cnb.yml`; the payload below and the
+# pipeline's env mapping have to stay in step.
+#
 # Env:
 #   CNB_TOKEN CNB_REPO CNB_TAG CNB_KIND
 #   THREAD_ID DEV_THREAD_ID            (DEV_THREAD_ID wins on branch dev)
@@ -21,6 +25,17 @@ thread="${THREAD_ID:-}"
 if [ "${BRANCH:-}" = "dev" ] && [ -n "${DEV_THREAD_ID:-}" ]; then
 	thread="$DEV_THREAD_ID"
 fi
+
+# CNB has no route to api.telegram.org; the endpoint has to be the Cloudflare
+# Worker proxy, and its secret path is what the variable carries. The trigger
+# returns before the build runs, so leaving the default here would only surface
+# as a timeout in the CNB log later -- fail instead, while the reason is obvious.
+case "${TG_API_BASE:-}" in
+'' | 'https://api.telegram.org' | 'https://api.telegram.org/')
+	echo "telegram: TG_API_BASE must be the Telegram proxy base (https://tg.oddnexus.top/<secret>); CNB cannot reach api.telegram.org" >&2
+	exit 1
+	;;
+esac
 
 version="$(git rev-list --count HEAD 2>/dev/null || true)"
 commit_text="$(git log -1 --format='%s by %an' 2>/dev/null | cut -c1-400)"

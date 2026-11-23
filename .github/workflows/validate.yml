@@ -62,12 +62,14 @@ jobs:
           missing=""
           for fn in \
             ci_provide_node ci_artifact_path ci_artifact_manifest ci_artifact_put \
-            ci_artifact_cnb_tag ci_artifact_cnb_put ci_artifact_names \
+            ci_artifact_cnb_tag ci_artifact_cnb_repo ci_artifact_cnb_put \
+            ci_artifact_cnb_prune ci_artifact_cnb_prune_once ci_artifact_names \
             ci_download_artifact ci_download_all_artifacts ci_cnb_link_base \
             ci_summary_artifacts ci_parallel_acquire ci_parallel_release \
-            cnb_api_base cnb_web_base cnb_enabled cnb_curl cnb_release_id \
+            cnb_repo cnb_api_base cnb_web_base cnb_enabled cnb_curl cnb_release_id \
             cnb_release_ensure cnb_release_patch cnb_release_assets \
-            cnb_release_delete cnb_tag_delete cnb_asset_delete cnb_clear_assets cnb_asset_put cnb_asset_get; do
+            cnb_release_list cnb_release_delete cnb_tag_delete cnb_asset_delete \
+            cnb_clear_assets cnb_asset_put cnb_asset_get; do
             command -v "$fn" >/dev/null 2>&1 || missing="${missing} ${fn}"
           done
           test -z "$missing" || {

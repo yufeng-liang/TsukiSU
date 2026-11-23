@@ -7,7 +7,7 @@
 #   CNB_TAG         release tag, e.g. manager-ci or v3.0.0
 #   CNB_ASSETS_DIR  directory whose files become release assets
 # Optional:
-#   CNB_REPO                 default shirkneko/sukisu-result
+#   CNB_REPO                 default shirkneko/sukisu-release
 #   CNB_API                  default https://api.cnb.cool
 #   CNB_NAME                 default CNB_TAG
 #   CNB_BODY_FILE            release notes

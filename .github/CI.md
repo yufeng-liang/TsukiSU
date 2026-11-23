@@ -171,10 +171,21 @@ so artifacts move through these places, tried in this order by
    (`scripts/host/artifact-server.sh`), so the other host can fetch the same tree.
    Flat files only: the manifest fetch rejects any entry containing `/`.
 3. **CNB** — every artifact is also archived as `<name>.tar.gz` on the CNB
-   release `ci-<run_id>` of `CNB_REPO` (default `shirkneko/sukisu-result`). This
-   is the path that works across hosts *and* across runs, and it carries the
-   directory layout the peer cannot. Downloads are anonymous. Those releases are
-   created as prereleases so the manager's stable channel never picks one up.
+   release `ci-<run_id>` of `CNB_ARTIFACT_REPO` (default
+   `shirkneko/sukisu-artifacts`). This is the path that works across hosts *and*
+   across runs, and it carries the directory layout the peer cannot. Downloads
+   are anonymous. Those releases are created as prereleases so the manager's
+   stable channel never picks one up.
+
+   The per-run releases live in their own repository, separate from the release
+   repository (`CNB_REPO`, default `shirkneko/sukisu-release`), and only the newest
+   `CI_ARTIFACT_KEEP_RUNS` (default 5) are kept: `ci_artifact_cnb_prune` deletes
+   the older release *and* its git tag once per run per runner. The run doing the
+   pruning is never a candidate, so a slow run cannot delete its own release
+   halfway through. Without that cap the repository collects a release per run
+   forever, which is what got the old `sukisu-result` repository removed for
+   release abuse. Older runs therefore cannot be fetched from CNB any more; they
+   stay on `/ci` only where they were produced.
 4. **Forgejo Artifacts API** — last resort (zip download); needs a token and is
    the slow endpoint.
 
@@ -185,10 +196,10 @@ only thing Forgejo still stores is release metadata (title and body) the manager
 parses.
 
 Summary links percent-encode one character of the CNB account name
-(`cnb.cool/%73hirkneko/...`). The runner masks every occurrence of a secret value
-in job output, and on this instance that value is the account name, so a plain
-link arrives as `cnb.cool/***/...`. CNB decodes the escape, so the link still
-works, and the masker no longer matches.
+(`cnb.cool/%73hirkneko/sukisu-artifacts/...`). The runner masks every occurrence
+of a secret value in job output, and on this instance that value is the account
+name, so a plain link arrives as `cnb.cool/***/...`. CNB decodes the escape, so
+the link still works, and the masker no longer matches.
 
 ```
 /ci/repo-cache/                bare mirror per repository, shared by all jobs
@@ -225,6 +236,16 @@ normal and dev builds (`MESSAGE_DEV_THREAD_ID` overrides it on dev) and
 `MESSAGE_RELEASES_THREAD_ID` for releases; it is skipped when `BOT_TOKEN` or
 `CHAT_ID` is empty. Only the single Manager variant is published.
 
+`TG_API_BASE` has to be set too. CNB cannot reach `api.telegram.org`, so the
+delivery runs through a Cloudflare Worker proxy: the variable is the Bot API base
+**including the worker's secret path**, e.g.
+`https://tg.oddnexus.top/<secret>`, and `upload-telegram.sh` appends
+`/bot<token>/<method>` to it. The worker only accepts `/<secret>/bot...` and
+answers 404 for everything else, so the secret is what keeps the proxy from being
+used by anyone else — keep it in the repository variable, never in this file or
+in a committed `.cnb.yml`. `telegram-trigger.sh` fails the publishing step when
+the variable is still the default, rather than letting the CNB build time out.
+
 Rolling channels: main publishes `manager-ci` (the tag the manager's CI updater
 reads) and dev publishes `manager-dev`. Both are CNB prereleases, so a dev push
 never replaces the build main was tested with and neither enters the stable
@@ -234,9 +255,21 @@ CNB keeps the original `published_at` when a release is updated, and its release
 pages only embed the newest ten, so a patched-in-place release would eventually
 be pushed off the page the updater reads.
 
-CNB needs `CNB_TOKEN` (release read/write); `CNB_REPO` is an optional variable
-(default `shirkneko/sukisu-result`). Publishing back to Forgejo uses
-`RELEASE_API_TOKEN` when set, and the built-in `GITHUB_TOKEN` otherwise.
+CNB needs `CNB_TOKEN` (release read/write; the per-run pruning also needs
+`repo-code:r` to list releases). Two optional variables pick the repositories:
+`CNB_REPO` (default `shirkneko/sukisu-release`) for stable releases and the rolling
+channels, and `CNB_ARTIFACT_REPO` (default `shirkneko/sukisu-artifacts`) for the
+`ci-<run_id>` archives. Publishing back to Forgejo uses `RELEASE_API_TOKEN` when
+set, and the built-in `GITHUB_TOKEN` otherwise.
+
+Telegram delivery is a CNB pipeline in the release repository, not a workflow
+step: `.github/scripts/ci/telegram-trigger.sh` posts to
+`{repo}/-/build/start` with the `api_trigger_telegram` event, and the pipeline
+downloads the release's APKs and runs the inline copy of
+`.github/scripts/upload-telegram.sh`. The pipeline source is versioned here as
+`.github/cnb/sukisu-release.cnb.yml` and has to be committed to the release
+repository as `.cnb.yml` on its default branch — without it the trigger fails and
+nothing reaches Telegram.
 
 ## Disabled workflows
 

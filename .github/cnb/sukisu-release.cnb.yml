@@ -1,0 +1,96 @@
+# Telegram delivery pipeline for the CNB release repository.
+#
+# This file is not used by this repository. It is the canonical copy of the
+# pipeline that belongs in the CNB repository holding the release assets:
+# commit it there as `.cnb.yml` on the default branch. The intended repository
+# is `shirkneko/sukisu-release` (the release repository, not the one holding
+# per-run CI archives).
+#
+# It lives here because the previous copy existed only in
+# `shirkneko/sukisu-result`, which CNB removed for release abuse, and the
+# pipeline went with it.
+#
+# The pipeline is triggered by .github/scripts/ci/telegram-trigger.sh:
+#
+#   POST https://api.cnb.cool/<repo>/-/build/start
+#   {
+#     "event": "api_trigger_telegram",
+#     "env": {
+#       "TAG", "KIND", "THREAD_ID",
+#       "TG_BOT_TOKEN", "TG_CHAT_ID", "TG_API_BASE",
+#       "TITLE", "BRANCH", "VERSION", "COMMIT_TEXT",
+#       "RUN_URL", "CHANGES_URL", "TELEGRAM_SCRIPT_B64"
+#     }
+#   }
+#
+# The APKs are read from the release TAG in this same repository, and the
+# caption/upload logic arrives inline as TELEGRAM_SCRIPT_B64 (a base64 copy of
+# .github/scripts/upload-telegram.sh), so the repository needs no other files
+# and no access back to the Forgejo instance.
+#
+# TG_API_BASE is not the real Bot API: CNB has no route to api.telegram.org, so
+# it carries a Cloudflare Worker proxy base with the worker's secret path, e.g.
+# https://tg.oddnexus.top/<secret>. The worker only forwards /<secret>/bot... and
+# answers 404 otherwise, which is why the secret lives in a repository variable
+# and not in this file.
+#
+# `$` matches every branch: the trigger sends no branch, so the build runs on
+# the default branch and finds this pipeline there.
+
+$:
+  api_trigger_telegram:
+    - stages:
+        - name: Upload the release APKs to Telegram
+          script: |
+            set -euo pipefail
+
+            repo="${CNB_REPO_SLUG:?}"
+            api="${CNB_API_ENDPOINT:-https://api.cnb.cool}"
+            web="${CNB_WEB_ENDPOINT:-https://cnb.cool}"
+            api="${api%/}"
+            web="${web%/}"
+            tag="${TAG:?}"
+            work="$(mktemp -d)"
+
+            # The release page is the source of truth for what to send, so an
+            # extra or renamed APK never has to be listed in two places.
+            curl -fsS --retry 3 \
+              -H "Authorization: Bearer ${CNB_TOKEN}" \
+              -H 'Accept: application/vnd.cnb.api+json' \
+              "${api}/${repo}/-/releases/tags/${tag}" -o "${work}/release.json"
+            jq -r '.assets[]? | select(.name | endswith(".apk")) | .name' \
+              "${work}/release.json" | sed '/^$/d' > "${work}/apks.txt"
+            test -s "${work}/apks.txt" || {
+              echo "release ${tag} has no .apk asset to deliver" >&2
+              exit 1
+            }
+
+            # Downloads are anonymous; only the listing above needs the token.
+            mkdir -p "${work}/apks"
+            while IFS= read -r name; do
+              [ -n "$name" ] || continue
+              curl -fsSL --retry 3 -o "${work}/apks/${name}" \
+                "${web}/${repo}/-/releases/download/${tag}/${name}"
+              echo "downloaded ${name}"
+            done < "${work}/apks.txt"
+
+            # upload-telegram.sh reads its own environment and accepts at most
+            # ten files, which the manager's split APKs stay well below.
+            printf '%s' "${TELEGRAM_SCRIPT_B64:?}" |
+              base64 -d > "${work}/upload-telegram.sh"
+
+            # TG_API_BASE is the Bot API base including the proxy's secret path
+            # (CNB cannot reach api.telegram.org, so the variable points at a
+            # Cloudflare Worker such as https://tg.oddnexus.top/<secret>).
+            # Failing here beats a network timeout inside Telegram's request.
+            BOT_TOKEN="${TG_BOT_TOKEN:?}" \
+            CHAT_ID="${TG_CHAT_ID:?}" \
+            MESSAGE_THREAD_ID="${THREAD_ID:-}" \
+            TG_API_BASE="${TG_API_BASE:?set TG_API_BASE to the Telegram proxy base}" \
+            TITLE="${TITLE:?}" \
+            VERSION="${VERSION:?}" \
+            BRANCH="${BRANCH:?}" \
+            RUN_URL="${RUN_URL:?}" \
+            COMMIT_TEXT="${COMMIT_TEXT:-}" \
+            CHANGES_URL="${CHANGES_URL:-}" \
+            bash "${work}/upload-telegram.sh" "${work}"/apks/*.apk

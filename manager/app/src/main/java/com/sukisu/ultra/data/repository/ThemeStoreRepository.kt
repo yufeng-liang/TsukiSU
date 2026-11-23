@@ -423,15 +423,22 @@ class ThemeStoreRepository(
 
             downloadDir.mkdirs()
             val finalFile = File(downloadDir, "${entry.id}-v${entry.version}.sukisu")
-            if (finalFile.isFile &&
-                finalFile.length() == entry.size &&
-                sha256Of(finalFile) == expectedSha
-            ) {
+            // A previously verified download leaves a `.verified` receipt beside the package
+            // (size + sha). When the receipt matches, the package is trusted without re-hashing
+            // the whole (up-to-128-MiB) file on every open. Any other case falls back to a
+            // full SHA-256 pass, which rewrites the receipt on success.
+            val receipted = isVerifiedMarker(finalFile, entry.size, expectedSha) ||
+                (finalFile.isFile &&
+                    finalFile.length() == entry.size &&
+                    sha256Of(finalFile) == expectedSha)
+            if (receipted) {
+                writeVerifiedMarker(finalFile, entry.size, expectedSha)
                 onProgress(1f)
                 onTransferred(entry.size, entry.size)
                 return@runCatching finalFile
             }
             finalFile.delete()
+            verifiedMarkerFile(finalFile).delete()
 
             val tempFile = File(downloadDir, "${finalFile.name}.part")
             val metaFile = File(downloadDir, "${finalFile.name}.part.meta")
@@ -445,6 +452,7 @@ class ThemeStoreRepository(
                     tempFile.length() == entry.size && sha256Of(tempFile) == expectedSha -> {
                         metaFile.delete()
                         moveDownloadedFile(tempFile, finalFile)
+                        writeVerifiedMarker(finalFile, entry.size, expectedSha)
                         onProgress(1f)
                         onTransferred(entry.size, entry.size)
                         return@runCatching finalFile
@@ -476,6 +484,7 @@ class ThemeStoreRepository(
                 allowRestart = resumeFrom > 0,
             )
             moveDownloadedFile(downloaded, finalFile)
+            writeVerifiedMarker(finalFile, entry.size, expectedSha)
             onProgress(1f)
             onTransferred(entry.size, entry.size)
             finalFile
@@ -1388,5 +1397,29 @@ class ThemeStoreRepository(
             }
         }
         return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    /** The `.verified` receipt written beside a theme package once its SHA-256 has matched. */
+    private fun verifiedMarkerFile(file: File): File =
+        File(file.parentFile, "${file.name}.verified")
+
+    /** Reads the receipt as `(size, sha)`, or null when it is absent, unreadable, or malformed. */
+    private fun verifiedMarkerOf(file: File): Pair<Long, String>? = runCatching {
+        val text = verifiedMarkerFile(file).readText().trim()
+        val sep = text.indexOf(' ')
+        if (sep < 0) null
+        else Pair(text.substring(0, sep).toLong(), text.substring(sep + 1).lowercase())
+    }.getOrNull()
+
+    /** Records that `file` (of `size` bytes) hashes to `sha`, so later opens skip the re-hash. */
+    private fun writeVerifiedMarker(file: File, size: Long, sha: String) {
+        runCatching { verifiedMarkerFile(file).writeText("$size ${sha.lowercase()}") }
+    }
+
+    /** True when the receipt matches the requested size and checksum. */
+    private fun isVerifiedMarker(file: File, size: Long, sha: String): Boolean {
+        if (!file.isFile || file.length() != size) return false
+        val marker = verifiedMarkerOf(file) ?: return false
+        return marker.first == size && marker.second == sha
     }
 }

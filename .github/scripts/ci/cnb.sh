@@ -7,11 +7,17 @@
 #
 # Environment:
 #   CNB_TOKEN   bearer token; required for anything that writes
-#   CNB_REPO    default shirkneko/sukisu-result
+#   CNB_REPO    default shirkneko/sukisu-release (stable releases and rolling channels)
 #   CNB_API     default https://api.cnb.cool
 #   CNB_WEB     default https://cnb.cool (public download host)
 #
+# The helpers that touch a release take an optional trailing REPO so the
+# artifact transport can keep its per-run releases in a separate repository
+# (see ci_artifact_cnb_repo in common.sh) while publishing still targets
+# CNB_REPO. Omitting REPO keeps the release repository.
+#
 # API surface used:
+#   GET    /-/releases                          -> api.Release[] (paged)
 #   GET    /-/releases/tags/<tag>
 #   POST   /-/releases                          {tag_name,target_commitish,name,body,draft,prerelease,make_latest}
 #   PATCH  /-/releases/<id>                     {name,body,prerelease,make_latest}
@@ -23,12 +29,22 @@
 #   PUT    <upload_url>                         pre-signed object storage, no auth
 #   POST   <verify_url>                         marks the upload committed
 
-cnb_api_base() {
-	printf '%s/%s\n' "${CNB_API:-https://api.cnb.cool}" "${CNB_REPO:-shirkneko/sukisu-result}"
+# cnb_repo
+#   The repository releases are published to. Artifact helpers pass their own
+#   repository explicitly instead of overwriting CNB_REPO, so a caller can
+#   archive a build and publish a release in the same step.
+cnb_repo() {
+	printf '%s\n' "${CNB_REPO:-shirkneko/sukisu-release}"
 }
 
+# cnb_api_base [REPO]
+cnb_api_base() {
+	printf '%s/%s\n' "${CNB_API:-https://api.cnb.cool}" "${1:-$(cnb_repo)}"
+}
+
+# cnb_web_base [REPO]
 cnb_web_base() {
-	printf '%s/%s\n' "${CNB_WEB:-https://cnb.cool}" "${CNB_REPO:-shirkneko/sukisu-result}"
+	printf '%s/%s\n' "${CNB_WEB:-https://cnb.cool}" "${1:-$(cnb_repo)}"
 }
 
 # True when a token is configured; every write path checks this.
@@ -56,24 +72,26 @@ cnb_curl() {
 	return "$status"
 }
 
-# cnb_release_id TAG
+# cnb_release_id TAG [REPO]
 #   Prints the release id for TAG, empty when the release does not exist.
 cnb_release_id() {
-	local tag="$1" json
+	local tag="$1" repo json
+	repo="${2:-$(cnb_repo)}"
 	json="$(mktemp)"
-	cnb_curl -o "$json" "$(cnb_api_base)/-/releases/tags/${tag}" >/dev/null 2>&1 || true
+	cnb_curl -o "$json" "$(cnb_api_base "$repo")/-/releases/tags/${tag}" >/dev/null 2>&1 || true
 	jq -r '.id // empty' "$json" 2>/dev/null || true
 	rm -f "$json"
 }
 
-# cnb_release_ensure TAG NAME TARGET BODY PRERELEASE MAKE_LATEST
+# cnb_release_ensure TAG NAME TARGET BODY PRERELEASE MAKE_LATEST [REPO]
 #   Prints the release id, creating the release when it is missing. Re-reading
 #   after a failed create covers the case where the response was lost but the
 #   release was written anyway (and the concurrent-run race).
 cnb_release_ensure() {
 	local tag="$1" name="$2" target="$3" body="$4" pre="$5" latest="$6"
+	local repo="${7:-$(cnb_repo)}"
 	local id json payload code
-	id="$(cnb_release_id "$tag")"
+	id="$(cnb_release_id "$tag" "$repo")"
 	if [ -n "$id" ]; then
 		printf '%s\n' "$id"
 		return 0
@@ -86,14 +104,14 @@ cnb_release_ensure() {
 		'{tag_name:$tag,target_commitish:$target,name:$name,body:$body,
 		  draft:false,prerelease:$pre,make_latest:$latest}')"
 	code="$(cnb_curl -o "$json" -w '%{http_code}' -H 'Content-Type: application/json' \
-		-X POST -d "$payload" "$(cnb_api_base)/-/releases" || true)"
+		-X POST -d "$payload" "$(cnb_api_base "$repo")/-/releases" || true)"
 	id="$(jq -r '.id // empty' "$json" 2>/dev/null || true)"
 	if [ -z "$id" ]; then
 		echo "cnb: release create returned HTTP ${code}; reading it back" >&2
 		# The API explains a rejection in the body; surface it instead of guessing.
 		head -c 500 "$json" >&2 || true
 		echo >&2
-		id="$(cnb_release_id "$tag")"
+		id="$(cnb_release_id "$tag" "$repo")"
 	fi
 	rm -f "$json"
 	# Producers archive in parallel, and CNB can accept two creates for the same
@@ -101,7 +119,7 @@ cnb_release_ensure() {
 	# resolves to, so every job converges on the release the consumers will read.
 	if [ -n "$id" ]; then
 		local canonical
-		canonical="$(cnb_release_id "$tag")"
+		canonical="$(cnb_release_id "$tag" "$repo")"
 		[ -z "$canonical" ] || id="$canonical"
 	fi
 	[ -n "$id" ] || {
@@ -135,18 +153,19 @@ cnb_release_patch() {
 	rm -f "$out"
 }
 
-# cnb_release_delete TAG
+# cnb_release_delete TAG [REPO]
 #   Deletes the release for TAG. Rolling channels use this instead of patching,
 #   because a release keeps the published_at it was created with: the manager
 #   reads CNB's release pages, which only embed the newest ten, so an
 #   ever-patched release slowly sinks out of view. Idempotent: a missing release
 #   is not an error.
 cnb_release_delete() {
-	local tag="$1" id code
-	id="$(cnb_release_id "$tag")"
+	local tag="$1" repo id code
+	repo="${2:-$(cnb_repo)}"
+	id="$(cnb_release_id "$tag" "$repo")"
 	[ -n "$id" ] || return 0
 	code="$(cnb_curl -o /dev/null -w '%{http_code}' \
-		-X DELETE "$(cnb_api_base)/-/releases/${id}" || true)"
+		-X DELETE "$(cnb_api_base "$repo")/-/releases/${id}" || true)"
 	case "$code" in
 	200 | 202 | 204 | 404) return 0 ;;
 	*)
@@ -156,13 +175,14 @@ cnb_release_delete() {
 	esac
 }
 
-# cnb_tag_delete TAG
+# cnb_tag_delete TAG [REPO]
 #   Removes the git tag. Deleting a release does not always remove its tag, and
 #   recreating a release needs a free tag name. A missing tag is not an error.
 cnb_tag_delete() {
-	local tag="$1" code
+	local tag="$1" repo code
+	repo="${2:-$(cnb_repo)}"
 	code="$(cnb_curl -o /dev/null -w '%{http_code}' \
-		-X DELETE "$(cnb_api_base)/-/git/tags/${tag}" || true)"
+		-X DELETE "$(cnb_api_base "$repo")/-/git/tags/${tag}" || true)"
 	case "$code" in
 	200 | 202 | 204 | 404) return 0 ;;
 	*)
@@ -172,14 +192,40 @@ cnb_tag_delete() {
 	esac
 }
 
-# cnb_release_assets TAG
+# cnb_release_assets TAG [REPO]
 #   One asset name per line. Empty when the release has no assets.
 cnb_release_assets() {
-	local tag="$1" json
+	local tag="$1" repo json
+	repo="${2:-$(cnb_repo)}"
 	json="$(mktemp)"
-	cnb_curl -o "$json" "$(cnb_api_base)/-/releases/tags/${tag}" >/dev/null 2>&1 || true
+	cnb_curl -o "$json" "$(cnb_api_base "$repo")/-/releases/tags/${tag}" >/dev/null 2>&1 || true
 	jq -r '.assets[]?.name // empty' "$json" 2>/dev/null || true
 	rm -f "$json"
+}
+
+# cnb_release_list [REPO]
+#   One "TAG<TAB>ID<TAB>PUBLISHED_AT" per release, newest first as CNB returns
+#   them. Paginates with page_size=100 (the API's ceiling); a short page ends the
+#   walk. Returns 1 when the API answered with something that is not a JSON
+#   array, so a token without repo-code:r looks like a failure instead of an
+#   empty repository.
+cnb_release_list() {
+	local repo="${1:-$(cnb_repo)}" page=1 size=100 out count
+	while [ "$page" -le 10 ]; do
+		out="$(mktemp)"
+		cnb_curl -o "$out" \
+			"$(cnb_api_base "$repo")/-/releases?page=${page}&page_size=${size}" 2>/dev/null || true
+		if ! jq -e 'type == "array"' "$out" >/dev/null 2>&1; then
+			rm -f "$out"
+			echo "cnb: cannot list releases of ${repo} (token needs repo-code:r)" >&2
+			return 1
+		fi
+		jq -r '.[]? | [.tag_name, (.id | tostring), (.published_at // "")] | @tsv' "$out"
+		count="$(jq 'length' "$out")"
+		rm -f "$out"
+		[ "$count" -ge "$size" ] || break
+		page=$((page + 1))
+	done
 }
 
 
@@ -213,18 +259,19 @@ cnb_clear_assets() {
 	rm -f "$ids"
 }
 
-# cnb_asset_put FILE ASSET_NAME RELEASE_ID
+# cnb_asset_put FILE ASSET_NAME RELEASE_ID [REPO]
 #   Uploads through the pre-signed URL and then verifies, which is what makes the
 #   asset readable from the public download host.
 cnb_asset_put() {
 	local file="$1" name="$2" release_id="$3"
+	local repo="${4:-$(cnb_repo)}"
 	local size url_json upload_url verify_url code
 	size="$(wc -c <"$file" | tr -d ' ')"
 	url_json="$(mktemp)"
 	code="$(cnb_curl -o "$url_json" -w '%{http_code}' -H 'Content-Type: application/json' \
 		-X POST -d "$(jq -nc --arg name "$name" --argjson size "$size" \
 			'{asset_name:$name,size:$size,overwrite:true}')" \
-		"$(cnb_api_base)/-/releases/${release_id}/asset-upload-url" || true)"
+		"$(cnb_api_base "$repo")/-/releases/${release_id}/asset-upload-url" || true)"
 	case "$code" in
 	200 | 201) ;;
 	*)
@@ -261,14 +308,15 @@ cnb_asset_put() {
 	esac
 }
 
-# cnb_asset_get ASSET_NAME DEST [TAG]
+# cnb_asset_get ASSET_NAME DEST [TAG] [REPO]
 #   Anonymous download from the public host (CNB answers with a 302 to
 #   asset.cnb.cool, hence -L). Returns 1 when the asset is not there.
 cnb_asset_get() {
 	local name="$1" dest="$2" tag="${3:-${CNB_RELEASE_TAG:-}}"
+	local repo="${4:-$(cnb_repo)}"
 	[ -n "$tag" ] || return 1
 	curl -fsS -L --retry 3 --retry-all-errors --retry-delay 2 \
 		--connect-timeout 10 --max-time 900 \
 		--speed-limit 1024 --speed-time 60 \
-		-o "$dest" "$(cnb_web_base)/-/releases/download/${tag}/${name}"
+		-o "$dest" "$(cnb_web_base "$repo")/-/releases/download/${tag}/${name}"
 }

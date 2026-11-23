@@ -1,5 +1,6 @@
 package com.sukisu.ultra.ui.screen.themestore
 
+import android.annotation.SuppressLint
 import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -35,8 +36,11 @@ import com.sukisu.ultra.data.repository.ThemeDownloadInput
 import com.sukisu.ultra.data.repository.ThemeDownloadRecord
 import com.sukisu.ultra.data.repository.ThemeDownloadStore
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
@@ -56,6 +60,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import androidx.core.graphics.scale
+import kotlinx.coroutines.cancel
 import kotlin.time.Duration.Companion.milliseconds
 
 data class ThemeStoreSource(
@@ -104,6 +109,24 @@ data class ThemeStoreItem(
     val source: ThemeStoreSource,
 ) {
     val key: String get() = "${source.id}:${entry.id}"
+
+    /**
+     * The searchable body — everything except the localized adaptive/dynamic labels —
+     * lowercased once at construction so [matchesSearch] never rebuilds or re-lowercases the
+     * description-heavy text on every keystroke.
+     */
+    internal val searchBody: String = buildString {
+        append(entry.id).append(' ')
+        append(entry.name).append(' ')
+        append(entry.author).append(' ')
+        append(entry.description).append(' ')
+        append(entry.tags.joinToString(" ")).append(' ')
+        append(source.name).append(' ')
+        append(source.baseUrl)
+    }.lowercase(Locale.ROOT)
+
+    /** Compact form of [searchBody], for the diacritic / full-width fallback path. */
+    internal val searchBodyCompact: String = searchBody.searchKey()
 }
 
 data class DownloadedTheme(
@@ -268,6 +291,8 @@ class ThemeStoreViewModel(application: Application) : AndroidViewModel(applicati
         const val WEBP_QUALITY = 80
         /** Cap on covers refetched when the downloads list opens without thumbnails. */
         const val MAX_PREVIEW_BACKFILL = 12
+        /** How long after the last tap before queued history is flushed to the account. */
+        const val HISTORY_FLUSH_DELAY_MS = 1500L
         val THEME_ID_PATTERN = Regex("^[a-z0-9][a-z0-9-]{0,63}$")
         val AUTHOR_ID_PATTERN = Regex("^[A-Za-z0-9._~-]{16,128}$")
     }
@@ -282,6 +307,9 @@ class ThemeStoreViewModel(application: Application) : AndroidViewModel(applicati
     private var editPrefillJob: kotlinx.coroutines.Job? = null
     private var followsJob: kotlinx.coroutines.Job? = null
     private var loadJob: kotlinx.coroutines.Job? = null
+    /** (baseUrl, kind, themeId) events awaiting a flush; duplicates collapse. */
+    private val pendingHistory = LinkedHashSet<Triple<String, String, String>>()
+    private var historyFlushJob: kotlinx.coroutines.Job? = null
     private var commentsJob: kotlinx.coroutines.Job? = null
     private var preferencesPushJob: kotlinx.coroutines.Job? = null
     private var preferencesPullJob: kotlinx.coroutines.Job? = null
@@ -304,7 +332,7 @@ class ThemeStoreViewModel(application: Application) : AndroidViewModel(applicati
         }
         viewModelScope.launch {
             while (true) {
-                kotlinx.coroutines.delay((10 * 60 * 1000L).milliseconds)
+                delay((10 * 60 * 1000L).milliseconds)
                 if (!_uiState.value.needsConsent) {
                     load()
                 }
@@ -746,27 +774,57 @@ class ThemeStoreViewModel(application: Application) : AndroidViewModel(applicati
             adaptive = item.themeAdaptive,
         )
 
-    /** History lives on the account: record every view/download for the matching source. */
+    /** History lives on the account; queue the event and let the debounced flush send it. */
     fun recordView(item: ThemeStoreItem) {
         if (!hasAccountFor(item.source.baseUrl)) return
-        viewModelScope.launch {
-            account.recordThemeHistory(
-                item.source.baseUrl,
-                ThemeStoreHistoryKind.VIEWED.apiKind,
-                item.entry.id,
-            )
-        }
+        queueHistory(item.source.baseUrl, ThemeStoreHistoryKind.VIEWED.apiKind, item.entry.id)
     }
 
     private fun recordDownload(item: ThemeStoreItem) {
         if (!hasAccountFor(item.source.baseUrl)) return
-        viewModelScope.launch {
-            account.recordThemeHistory(
-                item.source.baseUrl,
-                ThemeStoreHistoryKind.DOWNLOADED.apiKind,
-                item.entry.id,
-            )
+        queueHistory(item.source.baseUrl, ThemeStoreHistoryKind.DOWNLOADED.apiKind, item.entry.id)
+    }
+
+    /**
+     * The server records one event per request, so the store buffers `(source, kind, theme)`
+     * events and flushes them shortly after the user stops browsing instead of firing a
+     * fire-and-forget POST for every tap. Duplicates collapse, and the flush itself issues at
+     * most one request at a time.
+     */
+    private fun queueHistory(baseUrl: String, kind: String, themeId: String) {
+        if (!pendingHistory.add(Triple(baseUrl, kind, themeId))) return
+        historyFlushJob?.cancel()
+        historyFlushJob = viewModelScope.launch {
+            delay(HISTORY_FLUSH_DELAY_MS.milliseconds)
+            flushHistoryBuffer()
         }
+    }
+
+    /** Drains the buffer and records each event sequentially, one request at a time. */
+    private suspend fun flushHistoryBuffer() {
+        val batch = pendingHistory.toList()
+        if (batch.isEmpty()) return
+        pendingHistory.clear()
+        for ((baseUrl, kind, themeId) in batch) {
+            runCatching { account.recordThemeHistory(baseUrl, kind, themeId) }
+        }
+    }
+
+    @SuppressLint("EmptySuperCall")
+    override fun onCleared() {
+        super.onCleared()
+        historyFlushJob?.cancel()
+        val batch = pendingHistory.toList()
+        pendingHistory.clear()
+        if (batch.isEmpty()) return
+        // viewModelScope is cancelled here, so finish the queued history on an app-lifetime
+        // scope. The batch is bounded, so the scope carries no open-ended work.
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        scope.launch {
+            for ((baseUrl, kind, themeId) in batch) {
+                runCatching { account.recordThemeHistory(baseUrl, kind, themeId) }
+            }
+        }.invokeOnCompletion { scope.coroutineContext.cancel() }
     }
 
     fun refreshHistory() {
@@ -1087,33 +1145,38 @@ class ThemeStoreViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             val sources = withContext(Dispatchers.IO) { configuredSources() }
             val catalog = _uiState.value.items
+            // Two covers at a time: enough to fill the list promptly without fanning out a
+            // dozen requests at once (mirrors the image-compression semaphore in this file).
+            val previewSemaphore = Semaphore(2)
             for ((key, themeId, sourceId, baseUrl1, _, _, _, _, _, _, _, _, previewPath) in missing.take(MAX_PREVIEW_BACKFILL)) {
-                val source = sources.firstOrNull {
-                    it.id == sourceId ||
-                        it.baseUrl.trimEnd('/') == baseUrl1.trimEnd('/')
-                } ?: sources.firstOrNull()
-                val item = catalog.firstOrNull {
-                    it.entry.id == themeId &&
-                        it.source.baseUrl.trimEnd('/') == baseUrl1.trimEnd('/')
-                }
-                val baseUrl = baseUrl1.ifBlank { source?.baseUrl.orEmpty() }
-                val path = previewPath.ifBlank { item?.entry?.previewPath.orEmpty() }
-                    .ifBlank { item?.entry?.screenshotPaths?.firstOrNull().orEmpty() }
-                if (baseUrl.isBlank() || path.isBlank()) continue
-                val url = ThemeStoreRepository.assetUrl(baseUrl, path) ?: continue
-                val token = repository.accessToken(baseUrl, source?.token.orEmpty())
-                    .getOrNull()
-                    .orEmpty()
-                val bytes = runCatching { repository.fetchPreviewBytes(url, token) }
-                    .getOrNull() ?: continue
-                val updated = runCatching { downloadStore.attachPreview(key, bytes) }
-                    .getOrNull() ?: continue
-                _uiState.update { current ->
-                    current.copy(
-                        downloads = current.downloads.map {
-                            if (it.key == updated.key) updated else it
-                        },
-                    )
+                previewSemaphore.withPermit {
+                    val source = sources.firstOrNull {
+                        it.id == sourceId ||
+                            it.baseUrl.trimEnd('/') == baseUrl1.trimEnd('/')
+                    } ?: sources.firstOrNull()
+                    val item = catalog.firstOrNull {
+                        it.entry.id == themeId &&
+                            it.source.baseUrl.trimEnd('/') == baseUrl1.trimEnd('/')
+                    }
+                    val baseUrl = baseUrl1.ifBlank { source?.baseUrl.orEmpty() }
+                    val path = previewPath.ifBlank { item?.entry?.previewPath.orEmpty() }
+                        .ifBlank { item?.entry?.screenshotPaths?.firstOrNull().orEmpty() }
+                    if (baseUrl.isBlank() || path.isBlank()) return@withPermit
+                    val url = ThemeStoreRepository.assetUrl(baseUrl, path) ?: return@withPermit
+                    val token = repository.accessToken(baseUrl, source?.token.orEmpty())
+                        .getOrNull()
+                        .orEmpty()
+                    val bytes = runCatching { repository.fetchPreviewBytes(url, token) }
+                        .getOrNull() ?: return@withPermit
+                    val updated = runCatching { downloadStore.attachPreview(key, bytes) }
+                        .getOrNull() ?: return@withPermit
+                    _uiState.update { current ->
+                        current.copy(
+                            downloads = current.downloads.map {
+                                if (it.key == updated.key) updated else it
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -1528,8 +1591,8 @@ class ThemeStoreViewModel(application: Application) : AndroidViewModel(applicati
                 comments = if (keepExisting) it.comments else emptyList(),
                 commentsLoading = true,
                 commentsError = null,
-                commentsIsThemeAuthor = if (keepExisting) it.commentsIsThemeAuthor else false,
-                commentsIsAdmin = if (keepExisting) it.commentsIsAdmin else false,
+                commentsIsThemeAuthor = keepExisting && it.commentsIsThemeAuthor,
+                commentsIsAdmin = keepExisting && it.commentsIsAdmin,
                 commentReplyTarget = if (keepExisting && signedIn) it.commentReplyTarget else null,
             )
         }
@@ -2231,29 +2294,25 @@ internal fun ThemeStoreItem.matchesSearch(
 ): Boolean {
     val normalized = query.trim().lowercase(Locale.ROOT)
     if (normalized.isEmpty()) return true
-    val haystack = buildString {
-        append(entry.id).append(' ')
-        append(entry.name).append(' ')
-        append(entry.author).append(' ')
-        append(entry.description).append(' ')
-        append(entry.tags.joinToString(" ")).append(' ')
+    // Adaptive/dynamic badges match through their localized labels (and the literal English
+    // words), which sit outside the precomputed body. A query token carries no internal
+    // separator, so it cannot span the space that separates a label from the body.
+    val labelHaystack = buildString {
         if (isAdaptiveTheme()) append(adaptiveLabel).append(" adaptive ")
         if (isDynamicTheme()) append(dynamicLabel).append(" dynamic ")
-        append(source.name).append(' ')
-        append(source.baseUrl)
     }.lowercase(Locale.ROOT)
+    val labelCompact = labelHaystack.searchKey()
     // Authors are displayed and shared as @name, so accept queries written that way too.
     val parts = normalized.split(Regex("\\s+"))
         .map { it.removePrefix("@") }
         .filter { it.isNotEmpty() }
     if (parts.isEmpty()) return true
-    if (parts.all { part -> haystack.contains(part) }) return true
+    if (parts.all { part -> searchBody.contains(part) || labelHaystack.contains(part) }) return true
     // Fallback: compare compacted text so handles written with spaces, underscores, full-width
     // characters or zero-width joiners still match.
-    val compactHaystack = haystack.searchKey()
     return parts.all { part ->
         val key = part.searchKey()
-        key.isNotEmpty() && compactHaystack.contains(key)
+        key.isNotEmpty() && (searchBodyCompact.contains(key) || labelCompact.contains(key))
     }
 }
 

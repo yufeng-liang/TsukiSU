@@ -97,6 +97,8 @@ jobs:
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ARTIFACTS_RUN: ${{ inputs.artifacts_run }}
+          # CNB archives are downloaded anonymously; only the repository matters.
+          CNB_ARTIFACT_REPO: ${{ vars.CNB_ARTIFACT_REPO || 'shirkneko/sukisu-artifacts' }}
         run: |
           set -eux
           . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
@@ -167,7 +169,7 @@ jobs:
         if: ${{ inputs.publish && steps.channel.outputs.publish == 'true' }}
         env:
           CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
-          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-result' }}
+          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-release' }}
           CNB_TAG: ${{ steps.channel.outputs.tag }}
           CNB_ASSETS_DIR: apks/split
           CNB_BODY_FILE: cnb-notes.md
@@ -212,7 +214,7 @@ jobs:
         if: ${{ inputs.publish && steps.channel.outputs.publish == 'true' }}
         env:
           CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
-          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-result' }}
+          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-release' }}
         run: |
           set -eux
           . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
@@ -233,7 +235,7 @@ jobs:
           # Dedicated token with write:repository. The built-in GITHUB_TOKEN is
           # only a fallback: it may lack release permissions on this instance.
           API_TOKEN: ${{ secrets.RELEASE_API_TOKEN || vars.RELEASE_API_TOKEN || secrets.GITHUB_TOKEN }}
-          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-result' }}
+          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-release' }}
           CNB_WEB: ${{ vars.CNB_WEB || 'https://cnb.cool' }}
           RELEASE_TAG: ${{ steps.channel.outputs.tag }}
           RELEASE_TITLE: ${{ steps.channel.outputs.title }}
@@ -286,7 +288,7 @@ jobs:
         if: ${{ inputs.publish && steps.channel.outputs.publish == 'true' && steps.telegram.outputs.upload == 'true' }}
         env:
           CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
-          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-result' }}
+          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-release' }}
           CNB_TAG: ${{ steps.channel.outputs.tag }}
           CNB_KIND: manager
           THREAD_ID: ${{ vars.MESSAGE_THREAD_ID || '' }}

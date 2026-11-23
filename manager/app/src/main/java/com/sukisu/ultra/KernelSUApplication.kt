@@ -64,6 +64,9 @@ class KernelSUApplication : Application(), ViewModelStoreOwner, coil.ImageLoader
      */
     override fun newImageLoader(): coil.ImageLoader {
         val builder = coil.ImageLoader.Builder(this).crossfade(true)
+            // Shares the theme preview loader's memory cache so a cover decoded for the store
+            // grid is reused by the detail screen instead of being decoded a second time.
+            .memoryCache { com.sukisu.ultra.data.repository.ThemeStorePreviewLoader.sharedMemoryCache(this) }
         if (::okhttpClient.isInitialized) {
             val client = okhttpClient.newBuilder()
                 .addInterceptor(ThemeMediaInterceptor)

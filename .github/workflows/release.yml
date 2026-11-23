@@ -103,7 +103,8 @@ jobs:
     env:
       # Artifacts travel through CNB; without a token they stay on /ci only.
       CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
-      CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-result' }}
+      CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-release' }}
+      CNB_ARTIFACT_REPO: ${{ vars.CNB_ARTIFACT_REPO || 'shirkneko/sukisu-artifacts' }}
     steps:
       - name: Checkout
         env:
@@ -176,7 +177,7 @@ jobs:
         if: github.ref_type == 'tag'
         env:
           CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
-          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-result' }}
+          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-release' }}
           CNB_TAG: ${{ github.ref_name }}
           CNB_NAME: ${{ github.ref_name }}
           CNB_ASSETS_DIR: release
@@ -224,7 +225,7 @@ jobs:
         if: github.ref_type == 'tag'
         env:
           CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
-          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-result' }}
+          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-release' }}
           CNB_TAG: ${{ github.ref_name }}
           CNB_KIND: release
           THREAD_ID: ${{ vars.MESSAGE_RELEASES_THREAD_ID || '' }}
@@ -272,7 +273,7 @@ jobs:
           # Dedicated token with write:repository. The built-in GITHUB_TOKEN is
           # only a fallback: it may lack release permissions on this instance.
           API_TOKEN: ${{ secrets.RELEASE_API_TOKEN || vars.RELEASE_API_TOKEN || secrets.GITHUB_TOKEN }}
-          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-result' }}
+          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-release' }}
           CNB_WEB: ${{ vars.CNB_WEB || 'https://cnb.cool' }}
         run: |
           set -eu
