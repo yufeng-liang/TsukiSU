@@ -6,6 +6,7 @@ CLAUDE.md
 .cargo/config.toml
 __pycache__
 /dist
+/artifacts
 /repack-config.json
 /userspace/ksud/.lkm_image_bootstrap.o
 /.cursor
