@@ -234,7 +234,9 @@ private fun SettingsSearchRowMaterial(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onPick(entry) }
-            .padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 14.dp),
+            // 左右留白要看着一样宽：左侧分组名直接从 20dp 起笔，而 24dp 的箭头图标盒里
+            // 字形左右各有约 8dp 留白，右端只留 12dp 才能让箭头的视觉右缘也落在 20dp 上
+            .padding(start = 20.dp, end = 12.dp, top = 14.dp, bottom = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // 分组标题不再挂在卡片上方，改为每行左侧的小字标签；

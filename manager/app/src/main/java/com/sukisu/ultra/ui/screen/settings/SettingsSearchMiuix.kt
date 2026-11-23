@@ -71,6 +71,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.basic.ArrowRight
 import top.yukonga.miuix.kmp.icon.basic.Search
 import top.yukonga.miuix.kmp.icon.basic.SearchCleanup
 import top.yukonga.miuix.kmp.icon.extended.Back
@@ -214,6 +215,9 @@ internal fun SettingsSearchMiuix(
                                         )
                                     }
                                     BasicComponent(
+                                        // 默认左右各 16dp，补到 20dp：和 Material 皮肤一致，
+                                        // 也让左侧分组名与右侧箭头的留白看着一样宽
+                                        modifier = Modifier.padding(horizontal = 4.dp),
                                         title = stringResource(entry.titleRes),
                                         startAction = {
                                             // 各分组名字长短不一，统一放到等宽列里左对齐，
@@ -230,6 +234,15 @@ internal fun SettingsSearchMiuix(
                                                     overflow = TextOverflow.Ellipsis,
                                                 )
                                             }
+                                        },
+                                        endActions = {
+                                            // 设置页列表行都有右箭头，搜索行以前没有，两种皮肤看着不一样
+                                            Icon(
+                                                imageVector = MiuixIcons.Basic.ArrowRight,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(width = 10.dp, height = 16.dp),
+                                                tint = colorScheme.onSurfaceVariantActions,
+                                            )
                                         },
                                         onClick = { onPick(entry) },
                                     )
