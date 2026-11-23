@@ -12,6 +12,11 @@ name: Build BuiltZygisk
 # zygisk-sepolicy.rule / zygisk-module.prop，供 ksud.yml 拷进 userspace/ksud/bin/<arch>。
 on:
   workflow_dispatch:
+    inputs:
+      os:
+        required: false
+        type: string
+        default: ubuntu-latest
   workflow_call:
     inputs:
       os:
@@ -22,7 +27,8 @@ on:
 jobs:
   builtzygisk:
     name: builtzygisk
-    runs-on: ${{ inputs.os }}
+    # workflow_dispatch 若不声明 os 输入，inputs.os 为空会让 runs-on 非法、run 直接 0 job 失败。
+    runs-on: ${{ inputs.os || 'ubuntu-latest' }}
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
