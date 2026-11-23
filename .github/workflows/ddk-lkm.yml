@@ -104,6 +104,14 @@ jobs:
         if [ -n "$KSU_VERSION_CODE" ]; then
           EXTRA_ARGS="$EXTRA_ARGS KSU_VERSION=$KSU_VERSION_CODE"
         fi
+        # DDK 容器内的 git 探测可能失效，提交号与分支由 workflow 显式注入，
+        # 保证内核完整版本串里的 sha@branch 段始终可追溯（release 构建仍覆盖为 release）。
+        if [ -n "$GITHUB_SHA" ]; then
+          EXTRA_ARGS="$EXTRA_ARGS KSU_BUILD_SHA=${GITHUB_SHA::8}"
+        fi
+        if [ -n "$GITHUB_REF_NAME" ]; then
+          EXTRA_ARGS="$EXTRA_ARGS KSU_BUILD_REF=$GITHUB_REF_NAME"
+        fi
         if [ -n "$LKM_REV" ]; then
           EXTRA_ARGS="$EXTRA_ARGS KSU_LKM_REV=$LKM_REV"
         fi
@@ -200,6 +208,13 @@ jobs:
         fi
         if [ -n "$KSU_VERSION_CODE" ]; then
           EXTRA_ARGS="$EXTRA_ARGS KSU_VERSION=$KSU_VERSION_CODE"
+        fi
+        # 同 arm64 块：提交号与分支显式注入，避免容器内 git 探测失败。
+        if [ -n "$GITHUB_SHA" ]; then
+          EXTRA_ARGS="$EXTRA_ARGS KSU_BUILD_SHA=${GITHUB_SHA::8}"
+        fi
+        if [ -n "$GITHUB_REF_NAME" ]; then
+          EXTRA_ARGS="$EXTRA_ARGS KSU_BUILD_REF=$GITHUB_REF_NAME"
         fi
         if [ -n "$LKM_REV" ]; then
           EXTRA_ARGS="$EXTRA_ARGS KSU_LKM_REV=$LKM_REV"

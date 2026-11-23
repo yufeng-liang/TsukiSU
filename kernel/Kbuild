@@ -184,8 +184,12 @@ REPO_NAME   := SukiSU-Ultra
 # 用 ?= 允许 make/环境覆盖，正常构建路径请走 KSU_VERSION 注入。
 REPO_BRANCH ?= main
 
-VERSION_BASE    := 30000
-VERSION_OFFSET  := 4001
+# 版本号口径与管理器 manager/build.gradle.kts 的 getVersionCode() 完全一致：
+#   major = 4，versionCode = major*10000 + git rev-list --count HEAD - 2815
+# 于是 CI 注入 KSU_VERSION 与本地 make 自算这两条路径永远得到同一个数字，
+# 不会再出现「内核报 30503、管理器报 41690」这种首页永久提示有更新的情况。
+VERSION_BASE    := 40000
+VERSION_OFFSET  := 2815
 
 GIT_BIN  := /usr/bin/env PATH="$$PATH":/usr/bin:/usr/local/bin git
 CURL_BIN := /usr/bin/env PATH="$$PATH":/usr/bin:/usr/local/bin curl
@@ -193,7 +197,10 @@ CURL_BIN := /usr/bin/env PATH="$$PATH":/usr/bin:/usr/local/bin curl
 KSU_SRC := $(if $(filter $(srctree),$(src)),$(src),$(srctree)/$(src))
 KSU_SRC := $(if $(wildcard $(KSU_SRC)/../.git),$(KSU_SRC),$(MDIR))
 
-git_short_sha    = $(shell cd $(KSU_SRC) && $(GIT_BIN) rev-parse --short=8 HEAD 2>/dev/null)
+# 允许 KSU_BUILD_SHA 覆盖：DDK 容器里 git 探测可能失效（镜像内无 git，或挂载
+# 目录的 dubious ownership 让 rev-parse 静默失败），CI 直接把自己知道的提交号
+# 传进来，内核完整版本串才不会退化成 unknown@unknown。
+git_short_sha    = $(if $(strip $(KSU_BUILD_SHA)),$(strip $(KSU_BUILD_SHA)),$(shell cd $(KSU_SRC) && $(GIT_BIN) rev-parse --short=8 HEAD 2>/dev/null))
 # 分支名允许 KSU_BUILD_REF 覆盖：发布构建是 detached HEAD，rev-parse 只会得到
 # "HEAD"，上游 workflow 因此在 release 构建里显式传 KSU_BUILD_REF=release。
 git_branch       = $(if $(strip $(KSU_BUILD_REF)),$(KSU_BUILD_REF),$(shell cd $(KSU_SRC) && $(GIT_BIN) rev-parse --abbrev-ref HEAD 2>/dev/null))
@@ -217,7 +224,12 @@ GITHUB_COMMITS   := $(shell $(CURL_BIN) -sI "$(GITHUB_API_BASE)/commits?sha=$(RE
 # tarball 构建下才回退到 GitHub API 查上游 main。
 LOCAL_COUNT     := $(if $(git_commit_count),$(git_commit_count),$(GITHUB_COMMITS))
 KSU_VERSION     := $(if $(LOCAL_COUNT),$(shell expr $(VERSION_BASE) + $(LOCAL_COUNT) - $(VERSION_OFFSET)),$(VERSION_BASE))
-VERSION_TAG     := $(or $(KSU_GITHUB_VER),$(git_latest_tag),3.0.0)
+# 标签段是本 fork 自己的口径：固定 4.x，与 versionCode 的 4xxxx 主号对齐。
+# 不再走 GitHub releases/latest 与 git describe——DDK 容器没有外网，而仓库里那批
+# custom-repo-backup-* / v2.0_beta tag 只会得到误导性的字符串。
+# 要变更时用 `make KSU_VERSION_TAG=4.1.0` 或由 CI 注入即可。
+KSU_VERSION_TAG ?= 4.0.0
+VERSION_TAG     := $(strip $(KSU_VERSION_TAG))
 KSU_VERSION_FULL := $(if $(call git_short_sha),v$(VERSION_TAG)-$(call git_short_sha)@$(call git_branch),v$(VERSION_TAG)-$(REPO_NAME)-unknown@unknown)
 # 只有 CI/本地真能算出指纹时才拼后缀，算不出来（无 .git 的 tarball 构建）就保持原样，
 # 管理器侧解析不到后缀会自动退回「比版本号」的老逻辑。
