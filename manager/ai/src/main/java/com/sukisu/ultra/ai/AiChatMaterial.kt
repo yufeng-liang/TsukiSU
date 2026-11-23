@@ -199,15 +199,9 @@ fun AiChatMaterial(
                 },
                 navigationIcon = { AiTopBarBackButton(onClick = actions.onBack) },
                 actions = {
-                    // 会话列表
-                    IconButton(onClick = { showSessions = true }) {
-                        Icon(Icons.Rounded.History, contentDescription = stringResource(R.string.ai_sessions))
-                    }
-                    // 设置
-                    IconButton(onClick = { actions.onOpenSettings(null) }) {
-                        Icon(Icons.Rounded.Tune, contentDescription = stringResource(R.string.ai_settings))
-                    }
-                    // 清空聊天记录
+                    // 顺序与 Miuix 版逐颗对齐：清空聊天记录 → 会话历史 → 设置。
+                    // 顶栏最右侧是拇指最容易落在的位置，设置固定留在最右，两套皮肤才不会
+                    // 因为「同一颗按钮换了个位置」点错。
                     IconButton(onClick = {
                         clearDialog.showConfirm(
                             title = clearTitle,
@@ -219,6 +213,12 @@ fun AiChatMaterial(
                             Icons.Rounded.DeleteSweep,
                             contentDescription = stringResource(R.string.ai_clear_history_action),
                         )
+                    }
+                    IconButton(onClick = { showSessions = true }) {
+                        Icon(Icons.Rounded.History, contentDescription = stringResource(R.string.ai_sessions))
+                    }
+                    IconButton(onClick = { actions.onOpenSettings(null) }) {
+                        Icon(Icons.Rounded.Tune, contentDescription = stringResource(R.string.ai_settings))
                     }
                 },
                 colors = aiExpressiveTopAppBarColors(),

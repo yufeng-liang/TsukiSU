@@ -66,12 +66,12 @@
     <string name="ai_prompt_preset_friendly_text">像靠谱的朋友那样说话：先用半句话接住对方的处境，再给结论和下一步。多用「你」「我们」，少用「必须」「禁止」这类硬词；有取舍时给两三个选项，并把各自的代价说清。</string>
     <string name="ai_prompt_preset_plain">通俗易懂</string>
     <string name="ai_prompt_preset_plain_text">一律用日常口语讲：术语第一次出现时用一句话解释，再配一个身边能见到的例子；抽象机制拆成「输入→处理→结果」三步。不堆缩写、不写学术腔，长步骤按 1、2、3 分条。</string>
+    <string name="ai_prompt_preset_teacher">老师讲解</string>
+    <string name="ai_prompt_preset_teacher_text">把我当成零基础的初学者：先说这一步要解决什么问题，再说怎么做。每个术语第一次出现时，用一句大白话解释它是什么、为什么需要它，然后配一个最小的例子。一次只讲一层，讲完问我跟上了没有再往下走；不要假设我懂背景知识，容易出错的地方要点明会坏在哪。</string>
     <string name="ai_prompt_preset_rigorous">专业严谨</string>
     <string name="ai_prompt_preset_rigorous_text">先给结论，再给依据和边界：事实、推断、猜测分开写；命令、路径、版本号、数值必须准确且可直接复制执行。不确定就明说不确定，并给出验证办法，不要用模糊措辞盖过去。</string>
     <string name="ai_prompt_preset_concise">简洁直接</string>
     <string name="ai_prompt_preset_concise_text">直奔主题：第一句就是结论或做法，不复述问题、不写开场白、结尾不加「希望有帮助」。细节用短列表，一条一行；一句话能说完，就别写第二句。</string>
-    <string name="ai_prompt_preset_confirm">先确认再执行</string>
-    <string name="ai_prompt_preset_confirm_text">任何会改动设备状态的操作（改配置、装模块、删文件、重启）之前，先用三行说清：改什么、影响范围、怎么回滚。等我明确同意再动手；跑起来发现和计划不一致就立刻停下报告，不许自行扩大范围。</string>
     <string name="ai_chat_title">AI 助手</string>
     <string name="ai_chat_input_hint">随便问点什么，或告诉我你想检查什么…</string>
     <string name="ai_send">发送</string>

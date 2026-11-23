@@ -1,6 +1,7 @@
 package com.sukisu.ultra.ai
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -138,5 +139,27 @@ class AiSettingsLogicTest {
         assertEquals(preset, mergePromptPreset("", preset))
         assertEquals("保持简短。\n$preset", mergePromptPreset("保持简短。", preset))
         assertEquals("保持简短。\n$preset", mergePromptPreset("保持简短。\n$preset", preset))
+    }
+
+    @Test
+    fun togglePromptPresetAddsThenRemovesTheSameText() {
+        val preset = "回答用中文。"
+        val added = togglePromptPreset("保持简短。", preset)
+        assertEquals("保持简短。\n$preset", added)
+        assertTrue(hasPromptPreset(added, preset))
+        // 再点一下：连模板带回的换行一并撤掉，不留下空行。
+        assertEquals("保持简短。", togglePromptPreset(added, preset))
+        assertFalse(hasPromptPreset("保持简短。", preset))
+    }
+
+    @Test
+    fun removePromptPresetKeepsTheRestIntact() {
+        val first = "回答用中文。"
+        val second = "多用例子。"
+        val both = mergePromptPreset(mergePromptPreset("", first), second)
+        assertEquals(second, removePromptPreset(both, first))
+        assertEquals("", removePromptPreset(first, first))
+        // 用户把模板改过之后，删不掉也不能炸，原样返回。
+        assertEquals("回答用中文", removePromptPreset("回答用中文", first))
     }
 }

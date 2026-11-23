@@ -67,12 +67,12 @@
     <string name="ai_prompt_preset_friendly_text">Talk like a dependable friend: one short line that acknowledges the situation, then the conclusion and the next step. Prefer you and we over must and forbidden. When there is a trade-off, offer two or three options and name the cost of each.</string>
     <string name="ai_prompt_preset_plain">Plain language</string>
     <string name="ai_prompt_preset_plain_text">Use everyday words: explain a term in one sentence the first time it appears, then add a real-life example. Break an abstract mechanism into input, processing, result. Avoid acronym soup, and keep long procedures as numbered steps.</string>
+    <string name="ai_prompt_preset_teacher">Teach me like a beginner</string>
+    <string name="ai_prompt_preset_teacher_text">Treat me as a complete beginner: say what problem this step solves before how to do it. The first time a term appears, explain it in one plain sentence, then give the smallest concrete example. Teach one layer at a time and ask whether I am still with you before moving on. Never skip a step assuming I know the background, and when a mistake is likely, name it and what it would break.</string>
     <string name="ai_prompt_preset_rigorous">Strict and precise</string>
     <string name="ai_prompt_preset_rigorous_text">Conclusion first, then evidence and limits. Keep facts, inference and guesses apart. Commands, paths, versions and numbers must be exact and ready to run. When unsure, say so plainly and give a way to verify instead of hedging.</string>
     <string name="ai_prompt_preset_concise">Short and direct</string>
     <string name="ai_prompt_preset_concise_text">Get to the point: the first sentence is the conclusion or the action. Do not restate the question, do not open with pleasantries, do not close with hope this helps. Details go in short one-line bullets; when one sentence is enough, stop there.</string>
-    <string name="ai_prompt_preset_confirm">Confirm before acting</string>
-    <string name="ai_prompt_preset_confirm_text">Before anything that changes device state (config, modules, deleting files, rebooting) state three lines: what changes, the blast radius, and how to roll back. Wait for explicit approval, and if reality differs from the plan once it runs, stop and report instead of widening the scope.</string>
     <string name="ai_chat_title">AI assistant</string>
     <string name="ai_chat_input_hint">Ask anything, or describe what you want to inspect…</string>
     <string name="ai_send">Send</string>

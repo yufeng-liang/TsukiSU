@@ -181,9 +181,9 @@ internal enum class AiSystemPromptPreset(val labelRes: Int, val textRes: Int) {
     Humorous(R.string.ai_prompt_preset_humorous, R.string.ai_prompt_preset_humorous_text),
     Friendly(R.string.ai_prompt_preset_friendly, R.string.ai_prompt_preset_friendly_text),
     Plain(R.string.ai_prompt_preset_plain, R.string.ai_prompt_preset_plain_text),
+    Teacher(R.string.ai_prompt_preset_teacher, R.string.ai_prompt_preset_teacher_text),
     Rigorous(R.string.ai_prompt_preset_rigorous, R.string.ai_prompt_preset_rigorous_text),
     Concise(R.string.ai_prompt_preset_concise, R.string.ai_prompt_preset_concise_text),
-    Confirm(R.string.ai_prompt_preset_confirm, R.string.ai_prompt_preset_confirm_text),
 }
 
 /** 把模板并入已有指令：已有内容就换行追加，重复的模板不重复添加。 */
@@ -193,3 +193,23 @@ internal fun mergePromptPreset(current: String, preset: String): String {
     if (trimmed.contains(preset)) return current
     return trimmed + "\n" + preset
 }
+
+/** 模板当前是否已填入指令：芯片据此显示选中态。 */
+internal fun hasPromptPreset(current: String, preset: String): Boolean = current.contains(preset)
+
+/** 从指令里摘掉模板：连同它带进来的那个换行一起删，避免留下空行。 */
+internal fun removePromptPreset(current: String, preset: String): String {
+    val index = current.indexOf(preset)
+    if (index < 0) return current
+    val before = current.substring(0, index).trimEnd()
+    val after = current.substring(index + preset.length).trimStart()
+    return when {
+        before.isEmpty() -> after
+        after.isEmpty() -> before
+        else -> before + "\n" + after
+    }
+}
+
+/** 点一下填入模板，再点一下连内容一起撤掉——芯片的选中态与输入框内容始终一致。 */
+internal fun togglePromptPreset(current: String, preset: String): String =
+    if (hasPromptPreset(current, preset)) removePromptPreset(current, preset) else mergePromptPreset(current, preset)

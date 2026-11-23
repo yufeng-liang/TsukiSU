@@ -660,11 +660,11 @@ internal fun AiConfigEditorMaterial(
                 AiSystemPromptPreset.entries.forEach { preset ->
                     val presetText = stringResource(preset.textRes)
                     FilterChip(
-                        selected = draft.systemPrompt.contains(presetText),
+                        selected = hasPromptPreset(draft.systemPrompt, presetText),
                         onClick = {
                             onDraftChange(
                                 draft.copy(
-                                    systemPrompt = mergePromptPreset(draft.systemPrompt, presetText),
+                                    systemPrompt = togglePromptPreset(draft.systemPrompt, presetText),
                                 ),
                             )
                         },

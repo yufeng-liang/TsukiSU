@@ -646,16 +646,14 @@ internal fun AiConfigEditorMiuix(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             AiSystemPromptPreset.entries.forEachIndexed { index, preset ->
+                val presetText = presetTexts[index]
                 MiuixFormatChip(
-                    selected = false,
+                    selected = hasPromptPreset(draft.systemPrompt, presetText),
                     text = stringResource(preset.labelRes),
                     onClick = {
                         onDraftChange(
                             draft.copy(
-                                systemPrompt = mergePromptPreset(
-                                    draft.systemPrompt,
-                                    presetTexts[index],
-                                ),
+                                systemPrompt = togglePromptPreset(draft.systemPrompt, presetText),
                             ),
                         )
                     },
