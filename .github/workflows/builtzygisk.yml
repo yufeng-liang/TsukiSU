@@ -1,0 +1,145 @@
+name: Build BuiltZygisk
+
+# 为 GitHub Actions 移植版：上游同名为自托管 Forgejo 专用（/ci/tools、.ci-actions、
+# 预烤 cargo 缓存），在 github.com 上跑不了。这里改成公开依赖：
+#   - external/BuiltZygisk 及其 4 个子模块都指向 github.com（见仓库根 .gitmodules）
+#   - SDK 组件（platform 37.0 / build-tools 37.0.0 / cmake 4.1.2 / ndk 27.2.12479018）
+#     运行时用 sdkmanager 装，与 BuiltZygisk 的 build.gradle.kts 中硬编码版本一致
+#   - zygiskd 用 nightly + -Zbuild-std，需 rust-src；cargo-ndk 从 crates.io 装
+#
+# 产物与上游保持一致：builtzygisk-<arch>（arch = aarch64/arm/x86_64/riscv64），
+# 目录内是 zygiskd / zygisk-ptrace / libzygisk.so / libzygisk32.so /
+# zygisk-sepolicy.rule / zygisk-module.prop，供 ksud.yml 拷进 userspace/ksud/bin/<arch>。
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      os:
+        required: false
+        type: string
+        default: ubuntu-latest
+
+jobs:
+  builtzygisk:
+    name: builtzygisk
+    runs-on: ${{ inputs.os }}
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/27.2.12479018
+      # zygiskd 的 release 路径带 -Z 与 -Zbuild-std，必须跑在 nightly 上。
+      RUSTUP_TOOLCHAIN: nightly-2026-09-23
+      CARGO_BUILD_JOBS: "4"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install Android SDK packages
+        run: |
+          set -eux
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKM" || SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager.sh"
+          yes | "$SDKM" --licenses >/dev/null 2>&1 || true
+          "$SDKM" "platforms;android-37.0" "build-tools;37.0.0" "cmake;4.1.2" "ndk;27.2.12479018"
+          test -d "$ANDROID_NDK_HOME"
+          test -d "$ANDROID_HOME/cmake/4.1.2"
+
+      - name: Setup Rust nightly and cargo-ndk
+        run: |
+          set -eux
+          rustup toolchain install nightly-2026-09-23 --profile minimal --component rust-src
+          rustup default nightly-2026-09-23
+          rustup target list --installed
+          cargo --version
+          if ! command -v cargo-ndk >/dev/null; then
+            cargo install cargo-ndk --locked
+          fi
+          cargo ndk --version
+
+      - name: Build BuiltZygisk
+        working-directory: external/BuiltZygisk
+        run: |
+          set -eux
+          ./gradlew --no-daemon --build-cache zipRelease \
+            -Porg.gradle.parallel=true \
+            -Dorg.gradle.jvmargs=-Xmx2048m
+
+      - name: Organize artifacts
+        working-directory: external/BuiltZygisk
+        run: |
+          set -eux
+          zip="$(find module/build/outputs/release -type f -name 'NyaZygisk-v*-release.zip' | head -n 1)"
+          test -n "$zip"
+          rm -rf extracted
+          mkdir -p extracted
+          unzip -q "$zip" -d extracted
+
+          out="$GITHUB_WORKSPACE/builtzygisk"
+          rm -rf "$out"
+          for arch in aarch64 arm x86_64 riscv64; do
+            mkdir -p "$out/$arch"
+            # 四个架构共用：SELinux 规则与 module.prop。
+            cp module/src/sepolicy.rule "$out/$arch/zygisk-sepolicy.rule"
+            cp extracted/module.prop "$out/$arch/zygisk-module.prop"
+          done
+
+          # 64 位包同时带 32 位 loader，供 32 位 zygote 使用。
+          copy() {
+            [ -f "extracted/$1" ] || return 0
+            cp "extracted/$1" "$out/$2/$3"
+          }
+          copy bin/arm64-v8a/zygiskd             aarch64 zygiskd
+          copy lib/arm64-v8a/libzygisk_ptrace.so aarch64 zygisk-ptrace
+          copy lib/arm64-v8a/libzygisk.so        aarch64 libzygisk.so
+          copy lib/armeabi-v7a/libzygisk.so      aarch64 libzygisk32.so
+
+          copy bin/armeabi-v7a/zygiskd           arm zygiskd
+          copy lib/armeabi-v7a/libzygisk_ptrace.so arm zygisk-ptrace
+          copy lib/armeabi-v7a/libzygisk.so      arm libzygisk.so
+
+          copy bin/x86_64/zygiskd                x86_64 zygiskd
+          copy lib/x86_64/libzygisk_ptrace.so     x86_64 zygisk-ptrace
+          copy lib/x86_64/libzygisk.so            x86_64 libzygisk.so
+          copy lib/x86/libzygisk.so              x86_64 libzygisk32.so
+
+          copy bin/riscv64/zygiskd               riscv64 zygiskd
+          copy lib/riscv64/libzygisk_ptrace.so    riscv64 zygisk-ptrace
+          copy lib/riscv64/libzygisk.so           riscv64 libzygisk.so
+
+          for arch in aarch64 arm x86_64 riscv64; do
+            test -f "$out/$arch/zygiskd"
+            ls -l "$out/$arch"
+          done
+
+      - name: Upload aarch64
+        uses: actions/upload-artifact@v7
+        with:
+          name: builtzygisk-aarch64
+          path: builtzygisk/aarch64/*
+      - name: Upload arm
+        uses: actions/upload-artifact@v7
+        with:
+          name: builtzygisk-arm
+          path: builtzygisk/arm/*
+      - name: Upload x86_64
+        uses: actions/upload-artifact@v7
+        with:
+          name: builtzygisk-x86_64
+          path: builtzygisk/x86_64/*
+      - name: Upload riscv64
+        uses: actions/upload-artifact@v7
+        with:
+          name: builtzygisk-riscv64
+          path: builtzygisk/riscv64/*
