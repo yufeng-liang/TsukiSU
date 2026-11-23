@@ -122,9 +122,10 @@ internal fun SettingsSearchMiuix(
             textMeasurer.measure(AnnotatedString(it), labelStyle).size.width
         } ?: 0
         // +2px 余量防止取整后把最长的那个标签挤掉最后一个字形；
-        // 再留 20dp 白：标签在「卡片左边框 → 标题」这段空间里居中，两侧各 10dp
+        // 再留 12dp 白当标签与标题之间的呼吸：标签靠左贴住卡片内边距，
+        // 不再整列居中（居中会让「外观」这种短标签离左边框很远）
         // 上限 96dp：长分组名（德/葡语）不至于把标题挤成一条缝
-        (with(density) { (maxPx + 2).toDp() } + 20.dp).coerceAtMost(96.dp)
+        (with(density) { (maxPx + 2).toDp() } + 12.dp).coerceAtMost(96.dp)
     }
 
     AppScaffold(
@@ -215,11 +216,11 @@ internal fun SettingsSearchMiuix(
                                     BasicComponent(
                                         title = stringResource(entry.titleRes),
                                         startAction = {
-                                            // 各分组名字长短不一，统一放到等宽列里居中，
+                                            // 各分组名字长短不一，统一放到等宽列里左对齐，
                                             // 右侧标题的左起点才不会跟着分组名抖
                                             Box(
                                                 modifier = Modifier.width(labelColumnWidth),
-                                                contentAlignment = Alignment.Center,
+                                                contentAlignment = Alignment.CenterStart,
                                             ) {
                                                 Text(
                                                     text = groupLabel,

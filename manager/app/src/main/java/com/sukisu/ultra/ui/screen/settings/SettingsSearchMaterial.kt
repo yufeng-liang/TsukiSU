@@ -95,9 +95,10 @@ internal fun SettingsSearchMaterial(
             textMeasurer.measure(AnnotatedString(it), labelStyle).size.width
         } ?: 0
         // +2px 余量防止取整后把最长的那个标签挤掉最后一个字形；
-        // 再留 20dp 白：标签在「卡片左边框 → 标题」这段空间里居中，两侧各 10dp
+        // 再留 12dp 白当标签与标题之间的呼吸：标签靠左贴住卡片内边距，
+        // 不再整列居中（居中会让「外观」这种短标签离左边框很远）
         // 上限 96dp：长分组名（德/葡语）不至于把标题挤成一条缝
-        (with(density) { (maxPx + 2).toDp() } + 20.dp).coerceAtMost(96.dp)
+        (with(density) { (maxPx + 2).toDp() } + 12.dp).coerceAtMost(96.dp)
     }
 
     ExpressiveScaffold(
@@ -237,14 +238,14 @@ private fun SettingsSearchRowMaterial(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // 分组标题不再挂在卡片上方，改为每行左侧的小字标签；
-        // 列宽由调用方按最长标签统一给出，标签在列里居中，右侧标题左起点才一致
+        // 列宽由调用方按最长标签统一给出，标签左对齐，右侧标题左起点才一致
         Text(
             text = groupLabel,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
+            textAlign = TextAlign.Start,
             modifier = Modifier.width(labelWidth),
         )
         Text(
