@@ -26,11 +26,17 @@ fun getGitCommitCount(): Int {
     return process.inputStream.bufferedReader().use { it.readText().trim().toInt() }
 }
 
+/**
+ * 版本号公式与上游完全一致：major * 10000 + 提交数 + end。
+ * 内核 KSU_VERSION（kernel/Kbuild）用同一套 30000 起点、+996 偏移的算法，同一提交
+ * 编出的内核与管理器版本号必然相等——首页「内嵌 LKM 有更新」的提醒才不会因为
+ * 两边公式不同而永久误报。改这里的常数必须同时改 kernel/Kbuild。
+ */
 fun getVersionCode(): Int {
     val commitCount = getGitCommitCount()
-    val major = 4
-    val end = 2815
-    return major * 10000 + commitCount - end
+    val major = 3
+    val end = 996
+    return major * 10000 + commitCount + end
 }
 
 /**
