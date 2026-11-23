@@ -159,12 +159,11 @@ jobs:
         run: |
           set -euo pipefail
           # 必须与 manager/build.gradle.kts 的 getVersionCode() 同源同式：两边都数
-          # 当前被构建的 ref（HEAD），公式与上游一致（major 3 + 提交数 + 偏移 996）。
-          # 不要数 origin/main——本仓库发版在 custom-repo-backup 分支上，main 会少掉一批
-          # 提交，于是 kernel 的 KSU_VERSION 小于 APK 的 versionCode，首页「有可用更新」
-          # 点多少次都消不掉。
+          # 当前被构建的 ref（HEAD）。不要数 origin/main——本仓库发版在
+          # custom-repo-backup 分支上，main 会少掉一批提交，于是 kernel 的
+          # KSU_VERSION 小于 APK 的 versionCode，首页「有可用更新」点多少次都消不掉。
           COMMIT_COUNT=$(git rev-list --count HEAD)
-          VERSION_CODE=$((30000 + COMMIT_COUNT + 996))
+          VERSION_CODE=$((40000 + COMMIT_COUNT - 2815))
           # LKM 指纹：kernel/ 子树的 tree hash。只在内核目录内容变化时才变，
           # 纯管理器/文档改动保持不动。内核与管理器都注入同一个值，首页据此判断
           # 「这次升级是否真的带来了新 .ko」，避免改个 UI 也催用户刷内核。

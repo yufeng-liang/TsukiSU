@@ -140,10 +140,9 @@ data class HomeUiState(
                 !requiresNewManager
 
     // 只有内核比管理器内附的 LKM 旧，才叫「有可用更新」。
-    // 两侧版本号同一公式（30000 + 提交数 + 996，见 kernel/Kbuild 与
-    // manager/build.gradle.kts），同一提交编出来必然相等；这里仍判「小于」而不是
-    // 「不等于」：CI 与本机的提交数一旦差一两个，用 != 会让横幅永远消不掉——
-    // 用户会陷入「点了安装、提示还在」的死循环。
+    // 这里必须是「小于」而不是「不等于」：APK 里的 LKM 版本号与 versionCode 未必相等
+    // （构建链路两处各算一次就会出现偏差），用 != 的话装完更新版本号依旧不等，
+    // 横幅永远消不掉——用户会陷入「点了安装、提示还在」的死循环。
     private val kernelLkmOutdated: Boolean
         get() = ksuVersion?.toLong()?.let { it < currentManagerVersionCode } ?: false
 
