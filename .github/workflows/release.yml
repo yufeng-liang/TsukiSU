@@ -1,286 +1,104 @@
 name: Release
-
-# Assembles a release: kernel modules, ksuinit, ksud, the manager APK, then the
-# publish step. Each stage is its own workflow so any of them can be dispatched
-# alone. All of them write to /ci/runs/<run_id>/<artifact> on the runner host, and
-# a stage can reuse an earlier result by dispatching the workflow that needs it
-# with artifacts_run=<id>.
+permissions:
+  contents: write
+  actions: write
 on:
   push:
     tags:
       - "v*"
   workflow_dispatch:
-    inputs:
-      artifacts_run:
-        description: 'Reuse ksud/LKM/ksuinit from this run id (empty = build them)'
-        required: false
-        default: ''
-        type: string
 
 jobs:
-
-  determine-version:
-    runs-on: ubuntu-latest
-    outputs:
-      version_code: ${{ steps.version.outputs.version_code }}
-    steps:
-      - name: Checkout
-        env:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: /ci/tools/bin/ci-checkout
-
-      - name: Calculate version code
-        id: version
-        run: |
-          set -eux
-          COMMIT_COUNT=$(git rev-list --count refs/remotes/origin/main)
-          VERSION_CODE=$((30000 + COMMIT_COUNT + 996))
-          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
-          echo "KernelSU version code: $VERSION_CODE (main commits: $COMMIT_COUNT)"
-
-      # See the note in ci.yml: Forgejo draws no job graph, so it goes in the
-      # summary, where Mermaid is rendered.
-      - name: Write the pipeline graph
-        run: |
-          set -eux
-          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
-          ci_summary_graph "发布流水线" \
-            determine-version:build-lkm \
-            build-lkm:build-ksud \
-            build-ksuinit:build-ksud \
-            build-builtzygisk:build-ksud \
-            build-ksud:manager \
-            manager:publish \
-            build-lkm:assemble \
-            build-ksuinit:assemble \
-            build-ksud:assemble \
-            manager:assemble \
-            assemble:publish-release
-
-  build-lkm:
-    needs: [determine-version]
-    uses: ./.github/workflows/build-lkm.yml
+  build-manager:
+    uses: ./.github/workflows/build-manager.yml
+    secrets: inherit
     with:
-      version_code: ${{ needs.determine-version.outputs.version_code }}
       release_build: true
-    secrets: inherit
-
-  build-ksuinit:
-    uses: ./.github/workflows/ksuinit.yml
-    secrets: inherit
-
-  build-builtzygisk:
-    uses: ./.github/workflows/builtzygisk.yml
-    secrets: inherit
-
-  build-ksud:
-    needs: [build-lkm, build-ksuinit, build-builtzygisk]
-    uses: ./.github/workflows/ksud.yml
-    with:
-      pack_lkm: true
-      pack_ksuinit: true
-      pack_builtzygisk: true
-    secrets: inherit
-
-  manager:
-    needs: build-ksud
-    uses: ./.github/workflows/manager.yml
-    with:
-      artifacts_run: ''
-      release_build: true
-    secrets: inherit
-
-  publish:
-    needs: manager
-    uses: ./.github/workflows/publish.yml
-    with:
-      release_upload: true
-    secrets: inherit
-
-  assemble:
-    needs: [build-lkm, build-ksuinit, build-ksud, manager]
+  release:
+    needs:
+      - build-manager
     runs-on: ubuntu-latest
-    env:
-      # Artifacts travel through CNB; without a token they stay on /ci only.
-      CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
-      CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-release' }}
-      CNB_ARTIFACT_REPO: ${{ vars.CNB_ARTIFACT_REPO || 'shirkneko/sukisu-artifacts' }}
     steps:
-      - name: Checkout
-        env:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: /ci/tools/bin/ci-checkout
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
 
-      - name: Provide node and the action sources
+      - name: Rename ksud
         run: |
-          set -eux
-          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
-          ci_provide_node
-      - name: Download the build artifacts
-        id: download_build
-        continue-on-error: true
-        env:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -eux
-          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
-          ci_download_all_artifacts "${GITHUB_WORKSPACE}/artifacts"
-
-      - name: Download the build artifacts (Forgejo fallback)
-        if: steps.download_build.outcome == 'failure'
-        uses: ./.ci-actions/download-artifact
-        with:
-          path: artifacts
-
-      - name: Pack the release files
-        run: |
-          set -eux
-          out="$GITHUB_WORKSPACE/release"
-          rm -rf "$out"
-          mkdir -p "$out" "$out/lkm" "$out/ksud" "$out/ksuinit"
-
-          cp -f artifacts/sukisu-manager/*.apk "$out"/ 2>/dev/null || true
-
-          for d in artifacts/*-android*-lkm; do
-            [ -d "$d" ] || continue
-            name="$(basename "$d")"
-            cp -f "$d"/*_kernelsu.ko "$out/lkm/lkm-${name%-lkm}_kernelsu.ko"
-          done
-
-          for d in artifacts/ksud-*; do
-            [ -d "$d" ] || continue
-            cp -f "$d"/ksud* "$out/ksud/$(basename "$d")" 2>/dev/null || true
-          done
-
-          for d in artifacts/ksuinit-*; do
-            [ -d "$d" ] || continue
-            cp -f "$d"/ksuinit "$out/ksuinit/$(basename "$d")" 2>/dev/null || true
-          done
-
-          # Flat release assets: the payload names repeat across architectures,
-          # so they are prefixed instead of kept in per-arch directories.
-          for d in artifacts/builtzygisk-*; do
-            [ -d "$d" ] || continue
-            arch="${d##*builtzygisk-}"
-            [ -d "$d/$arch" ] && d="$d/$arch"
-            for f in "$d"/*; do
-              [ -f "$f" ] || continue
-              cp -f "$f" "$out/zygisk-${arch}-$(basename "$f")"
-            done
-          done
-
-          find "$out" -type f | sort
-          test -n "$(ls -A "$out")"
-          echo "release files collected in ${out}"
-
-      - name: Upload release to CNB
-        if: github.ref_type == 'tag'
-        env:
-          CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
-          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-release' }}
-          CNB_TAG: ${{ github.ref_name }}
-          CNB_NAME: ${{ github.ref_name }}
-          CNB_ASSETS_DIR: release
-          CNB_BODY_FILE: release/notes.md
-          CNB_PRERELEASE: "false"
-          CNB_MAKE_LATEST: "true"
-          CNB_TARGET_COMMITISH: ${{ vars.CNB_TARGET_COMMITISH || 'main' }}
-          # Reads the description written on the release page before the tag
-          # was pushed, so CNB shows the same text.
-          API_TOKEN: ${{ secrets.RELEASE_API_TOKEN || vars.RELEASE_API_TOKEN || secrets.GITHUB_TOKEN }}
-        run: |
-          set -eu
-          # The description written on the release page is what people came to
-          # read, so it goes first and CI appends its own part below a separator.
-          manual=""
-          site="${FORGEJO_PUBLIC_URL:-https://git.zako.shirkneko.top:20004}"
-          api="${site}/api/v1/repos/${GITHUB_REPOSITORY}"
-          if curl -sS --connect-timeout 10 --max-time 30 -f \
-            -H "Authorization: token ${API_TOKEN}" \
-            "$api/releases/tags/${GITHUB_REF_NAME}" -o /tmp/rel.json 2>/dev/null; then
-            manual="$(jq -r '.body // ""' /tmp/rel.json)"
-            # Keep only the hand-written part: everything above the separator.
-            manual="${manual%%$'\n---\n'*}"
-            while [ -n "$manual" ] && [ "${manual%$'\n'}" != "$manual" ]; do
-              manual="${manual%$'\n'}"
-            done
-          fi
-          {
-            if [ -n "$manual" ]; then
-              printf '%s\n\n---\n\n' "$manual"
+          mkdir -p ksud
+          for dir in ./ksud-*; do
+            if [ -d "$dir" ]; then
+                echo "----- Rename $dir -----"
+                ksud_platform_name=$(basename "$dir")
+                if [ -f "$dir/ksud" ]; then
+                  mv "$dir/ksud" "ksud/$ksud_platform_name"
+                elif [ -f "$dir/ksud.exe" ]; then
+                  mv "$dir/ksud.exe" "ksud/$ksud_platform_name.exe"
+                fi
             fi
-            echo "# ${GITHUB_REF_NAME}"
-            echo
-            echo "Release build for \`${GITHUB_SHA}\`."
-            echo
-            echo "## Latest commit"
-            echo
-            echo '```'
-            git log -1 --format='%B'
-            echo '```'
-          } > release/notes.md
-          bash .github/scripts/ci/cnb-upload.sh
+          done
 
-      - name: Trigger CNB Telegram delivery
-        if: github.ref_type == 'tag'
-        env:
-          CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
-          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-release' }}
-          CNB_TAG: ${{ github.ref_name }}
-          CNB_KIND: release
-          THREAD_ID: ${{ vars.MESSAGE_RELEASES_THREAD_ID || '' }}
-          BOT_TOKEN: ${{ vars.BOT_TOKEN || secrets.BOT_TOKEN }}
-          CHAT_ID: ${{ vars.CHAT_ID || secrets.CHAT_ID }}
-          TG_API_BASE: ${{ vars.TG_API_BASE || 'https://api.telegram.org' }}
-          TITLE: Release
-          BRANCH: ${{ github.ref_name }}
-          RUN_URL: https://git.zako.shirkneko.top:20004/${{ github.repository }}/actions/runs/${{ github.run_number || github.run_id }}
-          EVENT: ${{ toJson(github.event) }}
-        run: bash .github/scripts/ci/telegram-trigger.sh
-
-      - name: Store the release bundle for LAN handoff
+      - name: Rename ksuinit
         run: |
-          set -eux
-          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
-          ci_artifact_put release "${GITHUB_WORKSPACE}/release/"
+          mkdir -p ksuinit
+          for dir in ./ksuinit-*; do
+            if [ -d "$dir" ]; then
+                echo "----- Rename $dir -----"
+                ksuinit_platform_name=$(basename "$dir")
+                if [ -f "$dir/ksuinit" ]; then
+                  mv "$dir/ksuinit" "ksuinit/$ksuinit_platform_name"
+                fi
+            fi
+          done
 
-  # A tag push publishes a real release with every artifact attached: the kernel
-  # modules, ksud, ksuinit and the manager APK. Without this the release only
-  # existed on the runner host.
-      - name: Write the job summary
+      - name: Rename lkm
         run: |
-          set -eux
-          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
-          ci_summary_artifacts "release"
-
-  publish-release:
-    needs: [assemble]
-    runs-on: ubuntu-latest
-    steps:
-      # The release step calls .github/scripts/ci/forgejo-release.sh, so this job
-      # needs the tree as well; it used to be one inline curl block.
-      - name: Checkout
-        env:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: /ci/tools/bin/ci-checkout
-
-      # Nothing is uploaded here any more: the assets live on CNB, so this job
-      # only points the Forgejo release page at them (the old step pushed 46
-      # files through the tunnel and could take half an hour).
-      - name: Point the release page at CNB
-        if: github.ref_type == 'tag'
-        env:
-          # Dedicated token with write:repository. The built-in GITHUB_TOKEN is
-          # only a fallback: it may lack release permissions on this instance.
-          API_TOKEN: ${{ secrets.RELEASE_API_TOKEN || vars.RELEASE_API_TOKEN || secrets.GITHUB_TOKEN }}
-          CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-release' }}
-          CNB_WEB: ${{ vars.CNB_WEB || 'https://cnb.cool' }}
+          mkdir -p lkm
+          for dir in ./*-android*-lkm; do
+            if [ -d "$dir" ]; then
+                echo "----- Rename $dir -----"
+                lkm_platform_name=$(basename "$dir")
+                lkm_platform_name="lkm-${lkm_platform_name%-lkm}_kernelsu.ko"
+                KO="$(ls $dir/*_kernelsu.ko)"
+                mv "$KO" "lkm/$lkm_platform_name"
+            fi
+          done
+      - name: Zip AnyKernel3
         run: |
-          set -eu
-          export RELEASE_TAG="${GITHUB_REF_NAME}"
-          export RELEASE_NAME="${GITHUB_REF_NAME}"
-          export RELEASE_PRERELEASE=false
-          RELEASE_BODY="$(printf 'Release assets built by CI.\n\n下载 / Download: %s/%s/-/releases/tag/%s\n' \
-            "$CNB_WEB" "$CNB_REPO" "$GITHUB_REF_NAME")"
-          export RELEASE_BODY
-          bash .github/scripts/ci/forgejo-release.sh
+          for dir in AnyKernel3-*; do
+            if [ -d "$dir" ]; then
+              echo "----- Zip $dir -----"
+              (cd $dir && zip -r9 "$dir".zip ./* -x .git .gitignore ./*.zip && mv *.zip ..)
+            fi
+          done
+
+      - name: Zip WSA kernel
+        run: |
+          for dir in kernel-WSA-*; do
+            if [ -d "$dir" ]; then
+              echo "------ Zip $dir ----------"
+              (cd $dir && zip -r9 "$dir".zip ./* -x .git .gitignore ./*.zip && mv *.zip ..)
+            fi
+          done
+
+      - name: Zip ChromeOS ARCVM kernel
+        run: |
+          for dir in kernel-ARCVM-*; do
+            if [ -d "$dir" ]; then
+              echo "------ Zip $dir ----------"
+              (cd $dir && zip -r9 "$dir".zip ./* -x .git .gitignore ./*.zip && mv *.zip ..)
+            fi
+          done
+
+      - name: Display structure of downloaded files
+        run: ls -R
+
+      - name: release
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+          files: |
+            Manager/*.apk
+            Manager-spoofed/*.apk
+            lkm/lkm-*_kernelsu.ko
+            ksud/ksud-*
+            ksuinit/*

@@ -1,9 +1,5 @@
 name: Build ksuinit
-
-# Self-hosted runner variant: no marketplace actions. NDK/rustup come from
-# .github/scripts/ci and artifacts go to ${CI_ARTIFACT_ROOT} on the runner host.
 on:
-  workflow_dispatch:
   workflow_call:
     inputs:
       os:
@@ -11,84 +7,110 @@ on:
         type: string
         default: ubuntu-latest
 jobs:
-  # Forgejo shows the calling job (ci.yml's `build-kuinit`) and this expanded
-  # job as two rows, and dedupes equal display names to `-1`. The caller already
-  # owns "build-kuinit", so this row is named after what it builds.
-  kuinit:
-    name: kuinit
+  build:
     runs-on: ${{ inputs.os }}
-    env:
-      CARGO_HOME: /ci/tools/cargo
-      RUSTUP_HOME: /usr/local/rustup
-      # Same reason as MAKEFLAGS in ddk-lkm: cap per-job parallelism.
-      CARGO_BUILD_JOBS: "6"
-      # Artifacts travel through CNB; without a token they stay on /ci only.
-      CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
-      CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-release' }}
-      CNB_ARTIFACT_REPO: ${{ vars.CNB_ARTIFACT_REPO || 'shirkneko/sukisu-artifacts' }}
     steps:
-      - name: Checkout
-        env:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: /ci/tools/bin/ci-checkout
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+        
+    - name: Setup rustup
+      run: |
+        rustup update stable
+        rustup target add aarch64-linux-android
+        rustup target add armv7-linux-androideabi
+        rustup target add x86_64-linux-android
 
-      - name: Check toolchain
-        run: |
-          set -eux
-          rustup toolchain list
-          rustup target list --installed
-          test -x "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
+    - uses: nttld/setup-ndk@v1
+      id: setup-ndk
+      with:
+        ndk-version: r29
 
-      # All four targets build the same way, so one loop replaces four copies of
-      # the same build-and-upload pair. Two things differ per target, and both
-      # are data here:
-      #
-      #   riscv64 needs the pinned nightly with -Z build-std, because no
-      #   prebuilt std ships for that target, and it alone links against API 35.
-      #
-      #   The clang runtime archive is named after the ABI, and armv7 drops the
-      #   "v7-linux-androideabi" part, so the suffix cannot be derived from the
-      #   triple mechanically.
-      #
-      #   <triple> <api level> <artifact name> <clang-rt ABI suffix>
-      - name: Build ksuinit for every target
-        run: |
-          set -eux
-          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
+    - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: . -> target
+        cache-targets: false
 
-          targets=(
-            "aarch64-linux-android 26 ksuinit-aarch64 aarch64"
-            "armv7-linux-androideabi 26 ksuinit-arm arm"
-            "x86_64-linux-android 26 ksuinit-x86_64 x86_64"
-            "riscv64-linux-android 35 ksuinit-riscv64 riscv64"
-          )
+    - name: Build ksuinit
+      env:
+        ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+      run: |
+        source .github/scripts/setup-rust-build.sh aarch64-linux-android 26
+        BUILTINS="$($CLANG_PATH --print-resource-dir)/lib/linux/libclang_rt.builtins-aarch64-android.a"
+        test -f "$BUILTINS"
+        export RUSTFLAGS="-C target-feature=+crt-static -C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wno-unused-command-line-argument -C link-arg=$BUILTINS"
+        cargo build --package ksuinit --target=aarch64-linux-android --release
 
-          for spec in "${targets[@]}"; do
-            read -r triple api artifact abi <<<"$spec"
-            echo "=== ${triple} (API ${api}) ==="
+    - name: Upload ksuinit artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: ksuinit-aarch64
+        path: target/aarch64-linux-android/release/ksuinit
 
-            source .github/scripts/setup-rust-build.sh "$triple" "$api"
-            builtins="$($CLANG_PATH --print-resource-dir)/lib/linux/libclang_rt.builtins-${abi}-android.a"
-            test -f "$builtins"
-            export RUSTFLAGS="-C target-feature=+crt-static -C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wno-unused-command-line-argument -C link-arg=$builtins"
+    - name: Build ksuinit ARMv7
+      env:
+        ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+      run: |
+        source .github/scripts/setup-rust-build.sh armv7-linux-androideabi 26
+        BUILTINS="$($CLANG_PATH --print-resource-dir)/lib/linux/libclang_rt.builtins-arm-android.a"
+        test -f "$BUILTINS"
+        export RUSTFLAGS="-C target-feature=+crt-static -C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wno-unused-command-line-argument -C link-arg=$BUILTINS"
+        cargo build --package ksuinit --target=armv7-linux-androideabi --release
 
-            case "$triple" in
-              riscv64-*)
-                cargo +nightly-2026-09-23 build --config .github/riscv64-cargo.toml \
-                  -Z build-std=std,panic_abort --package ksuinit \
-                  --target="$triple" --release
-                ;;
-              *)
-                cargo build --package ksuinit --target="$triple" --release
-                ;;
-            esac
+    - name: Upload ARMv7 ksuinit artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: ksuinit-arm
+        path: target/armv7-linux-androideabi/release/ksuinit
 
-            ci_artifact_put "$artifact" "target/${triple}/release/ksuinit"
-          done
+    - name: Build ksuinit x64
+      env:
+        ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+      run: |
+        source .github/scripts/setup-rust-build.sh x86_64-linux-android 26
+        BUILTINS="$($CLANG_PATH --print-resource-dir)/lib/linux/libclang_rt.builtins-x86_64-android.a"
+        test -f "$BUILTINS"
+        export RUSTFLAGS="-C target-feature=+crt-static -C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wno-unused-command-line-argument -C link-arg=$BUILTINS"
+        cargo build --package ksuinit --target=x86_64-linux-android --release
 
-      - name: Write the job summary
-        run: |
-          set -eux
-          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
-          ci_summary_artifacts \
-            "ksuinit-aarch64" "ksuinit-arm" "ksuinit-x86_64" "ksuinit-riscv64"
+    - name: Upload x64 ksuinit artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: ksuinit-x86_64
+        path: target/x86_64-linux-android/release/ksuinit
+
+  build-riscv64:
+    runs-on: ${{ inputs.os }}
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Setup Rust
+      run: rustup toolchain install nightly-2026-09-23 --profile minimal --component rust-src
+
+    - uses: nttld/setup-ndk@v1
+      id: setup-ndk
+      with:
+        ndk-version: r29
+
+    - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: . -> target
+        cache-targets: false
+
+    - name: Build RISC-V ksuinit
+      env:
+        ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+      run: |
+        source .github/scripts/setup-rust-build.sh riscv64-linux-android 35
+        BUILTINS="$($CLANG_PATH --print-resource-dir)/lib/linux/libclang_rt.builtins-riscv64-android.a"
+        test -f "$BUILTINS"
+        export RUSTFLAGS="-C target-feature=+crt-static -C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wno-unused-command-line-argument -C link-arg=$BUILTINS"
+        cargo +nightly-2026-09-23 build --config .github/riscv64-cargo.toml -Z build-std=std,panic_abort --package ksuinit --target=riscv64-linux-android --release
+
+    - name: Upload RISC-V ksuinit artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: ksuinit-riscv64
+        path: target/riscv64-linux-android/release/ksuinit

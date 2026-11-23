@@ -1,13 +1,6 @@
 name: ShellCheck
 
-# Rewritten for the self-hosted Forgejo runner: no `uses:` actions, so the job
-# never needs github.com. ShellCheck comes from the distribution packages.
-#
-# The checkout uses the public HTTPS URL, not the EasyTier address the runner
-# itself talks to: build containers get their own network namespace and cannot
-# reach the WSL tunnel (tun0), while the public endpoint is reachable from both.
 on:
-  workflow_dispatch:
   push:
     branches:
       - 'main'
@@ -25,34 +18,12 @@ on:
 
 jobs:
   shellcheck:
-    runs-on: base
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        env:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: /ci/tools/bin/ci-checkout
-
-      - name: Check toolchain
-        run: shellcheck --version | head -2
+      - uses: actions/checkout@v6
 
       - name: Run ShellCheck
-        run: |
-          set -eux
-          # Scripts contain UTF-8 text (job summaries); under the C locale
-          # shellcheck aborts with "cannot encode character".
-          export LC_ALL=C.UTF-8 LANG=C.UTF-8
-          shellcheck --version | head -2
-          # Same exclusions as the previous marketplace action config.
-          mapfile -t files < <(
-            git ls-files '*.sh' \
-              | grep -v -E '(^|/)(gradlew)$' \
-              | grep -v -E '^userspace/ksud/src/installer\.sh$' \
-              | grep -v -E '^\.github/scripts/setup-rust-build\.sh$' \
-            || true
-          )
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo "no shell scripts to check"
-            exit 0
-          fi
-          printf 'checking %d files\n' "${#files[@]}"
-          shellcheck -x "${files[@]}"
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          ignore_names: gradlew
+          ignore_paths: ./userspace/ksud/src/installer.sh ./.github/scripts/setup-rust-build.sh

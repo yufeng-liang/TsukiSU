@@ -1,9 +1,6 @@
 name: Rustfmt check
 
-# Self-hosted runner variant: no marketplace actions. rustfmt needs the nightly
-# toolchain because the repo uses unstable formatting options.
 on:
-  workflow_dispatch:
   push:
     branches:
       - 'main'
@@ -11,9 +8,6 @@ on:
     paths:
       - '.github/workflows/rustfmt.yml'
       - 'userspace/**'
-      - 'rustfmt.toml'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
   pull_request:
     branches:
       - 'main'
@@ -21,35 +15,19 @@ on:
     paths:
       - '.github/workflows/rustfmt.yml'
       - 'userspace/**'
-      - 'rustfmt.toml'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
 
 permissions:
   checks: write
 
-env:
-  RUSTUP_HOME: /usr/local/rustup
-  CARGO_HOME: /ci/tools/cargo
-
 jobs:
   format:
-    runs-on: rust
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        env:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: /ci/tools/bin/ci-checkout
+      - uses: actions/checkout@v6
 
-      - name: Check toolchain
-        run: |
-          set -eux
-          rustup toolchain list
-          rustup run nightly rustfmt --version
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
 
       - name: Run rustfmt
-        run: |
-          set -eux
-          # The stable toolchain is the default; the repo formats with nightly
-          # because rustfmt.toml uses unstable options.
-          cargo +nightly fmt --all --check
+        run: cargo fmt --all --check

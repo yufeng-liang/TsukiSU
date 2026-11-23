@@ -1,10 +1,6 @@
 name: Clippy check
 
-# Self-hosted runner variant. actions/checkout, Swatinem/rust-cache and
-# nttld/setup-ndk are replaced with plain scripts; rustup and the NDK are cached
-# under /ci/tools on the runner host so repeat runs skip the downloads.
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
@@ -12,11 +8,6 @@ on:
     paths:
       - '.github/workflows/clippy.yml'
       - 'userspace/**'
-      - '.github/scripts/ci/**'
-      - '.github/scripts/setup-rust-build.sh'
-      - '.github/riscv64-cargo.toml'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
   pull_request:
     branches:
       - main
@@ -24,42 +15,34 @@ on:
     paths:
       - '.github/workflows/clippy.yml'
       - 'userspace/**'
-      - '.github/scripts/ci/**'
-      - '.github/scripts/setup-rust-build.sh'
-      - '.github/riscv64-cargo.toml'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
 
 env:
   RUSTFLAGS: '-Dwarnings'
-  CARGO_HOME: /ci/tools/cargo
-  RUSTUP_HOME: /usr/local/rustup
-  # Cap per-job parallelism: several job containers run at once.
-  CARGO_BUILD_JOBS: "6"
 
 jobs:
   clippy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        env:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: /ci/tools/bin/ci-checkout
+      - uses: actions/checkout@v6
 
-      - name: Check toolchain
-        run: |
-          set -eux
-          cargo --version
-          cargo clippy --version
-          rustup target list --installed
-          "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" --version | head -1
+      - run: rustup update stable
+      
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: userspace/ksud
+
+      - uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r29
 
       - name: Run clippy
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
-          set -eux
-          # Same targets ksud is built for, except riscv64: that one needs
-          # nightly with -Z build-std, which clippy does not support cleanly.
-          for triple in aarch64-linux-android armv7-linux-androideabi x86_64-linux-android; do
-            source .github/scripts/setup-rust-build.sh "$triple" 26
-            cargo clippy --target "$triple" --release
-          done
+          rustup target add aarch64-linux-android
+          rustup target add x86_64-linux-android
+          source .github/scripts/setup-rust-build.sh aarch64-linux-android 26
+          source .github/scripts/setup-rust-build.sh x86_64-linux-android 26
+          cargo clippy --target aarch64-linux-android --release
+          cargo clippy --target x86_64-linux-android --release

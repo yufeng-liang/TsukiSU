@@ -1,10 +1,6 @@
 name: ClangFormat check
 
-# Self-hosted runner variant: no marketplace actions, so nothing is fetched
-# from github.com. Checkout pulls from the public Forgejo endpoint because build
-# containers cannot reach the WSL EasyTier tunnel.
 on:
-  workflow_dispatch:
   push:
     branches:
       - 'main'
@@ -28,15 +24,9 @@ permissions:
 
 jobs:
   format:
-    runs-on: base
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        env:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: /ci/tools/bin/ci-checkout
-
-      - name: Check toolchain
-        run: clang-format --version
+      - uses: actions/checkout@v6
 
       - name: check
         working-directory: kernel

@@ -1,24 +1,9 @@
 name: Build ksud
-
-# Self-hosted runner variant: checkout, artifact download/upload and the NDK are
-# plain scripts. Cross-job files come from ${CI_ARTIFACT_ROOT} (a host directory
-# mounted into every job container) instead of the GitHub artifact service.
 on:
-  # Dispatchable on its own (all four targets) and callable with a subset:
-  # `targets` is a comma separated list, the matrix keeps every target so a
-  # caller can pick one without duplicating the job.
-  workflow_dispatch:
-    inputs:
-      targets_json:
-        description: 'JSON array of targets, e.g. ["x86_64-linux-android"]'
-        required: false
-        default: '["aarch64-linux-android","x86_64-linux-android","armv7-linux-androideabi","riscv64-linux-android"]'
   workflow_call:
     inputs:
-      targets_json:
-        description: 'JSON array of targets'
-        required: false
-        default: '["aarch64-linux-android","x86_64-linux-android","armv7-linux-androideabi","riscv64-linux-android"]'
+      target:
+        required: true
         type: string
       pack_lkm:
         required: false
@@ -28,140 +13,78 @@ on:
         required: false
         type: boolean
         default: false
-      pack_builtzygisk:
+      version_code:
+        description: 'Unified KernelSU version code shared with LKM and manager'
         required: false
-        type: boolean
-        default: false
+        default: ''
+        type: string
 jobs:
-  # The caller owns "build-ksud"; this expanded row is named after what it
-  # builds, and the matrix value keeps the four targets apart. See ksuinit.yml.
-  ksud:
-    name: ksud (${{ matrix.target }})
-    strategy:
-      fail-fast: false
-      matrix:
-        # A JSON array so a caller can ask for a subset; a job-level `if:` cannot
-        # reference matrix values.
-        target: ${{ fromJson(inputs.targets_json) }}
+  build:
     runs-on: ubuntu-latest
-    env:
-      CARGO_HOME: /ci/tools/cargo
-      RUSTUP_HOME: /usr/local/rustup
-      # Artifacts travel through CNB; without a token they stay on /ci only.
-      CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
-      CNB_REPO: ${{ vars.CNB_REPO || 'shirkneko/sukisu-release' }}
-      CNB_ARTIFACT_REPO: ${{ vars.CNB_ARTIFACT_REPO || 'shirkneko/sukisu-artifacts' }}
     steps:
-      - name: Checkout
-        env:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: /ci/tools/bin/ci-checkout
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
 
-      # Jobs may land on different runners, so artifacts are passed through
-      # Forgejo instead of the per-host /ci volume.
-      - name: Provide node and the action sources
-        run: |
-          set -eux
-          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
-          ci_provide_node
-      - name: Download the build artifacts
-        id: download_build
-        continue-on-error: true
-        env:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -eux
-          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
-          ci_download_all_artifacts "${GITHUB_WORKSPACE}/artifacts"
+    - name: Download artifacts
+      uses: actions/download-artifact@v8
+    
+    - name: Prepare LKM files
+      if: ${{ inputs.pack_lkm }}
+      run: |
+        cp aarch64-android*-lkm/*_kernelsu.ko ./userspace/ksud/bin/aarch64/
+        cp x86_64-android*-lkm/*_kernelsu.ko ./userspace/ksud/bin/x86_64/
+    
+    - name: Prepare ksuinit
+      if: ${{ inputs.pack_ksuinit }}
+      run: |
+        mv ksuinit-aarch64/ksuinit ./userspace/ksud/bin/aarch64/
+        mv ksuinit-arm/ksuinit ./userspace/ksud/bin/arm/
+        mv ksuinit-x86_64/ksuinit ./userspace/ksud/bin/x86_64/
+        mv ksuinit-riscv64/ksuinit ./userspace/ksud/bin/riscv64/
+        
+    - name: Setup rustup
+      run: |
+        if [ "${{ inputs.target }}" = riscv64-linux-android ]; then
+          rustup toolchain install nightly-2026-09-23 --profile minimal --component rust-src
+        else
+          rustup update stable
+          rustup target add ${{ inputs.target }}
+        fi
 
-      - name: Download the build artifacts (Forgejo fallback)
-        if: steps.download_build.outcome == 'failure'
-        uses: ./.ci-actions/download-artifact
-        with:
-          path: artifacts
+    - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: userspace/ksud
+        cache-targets: false
 
-      - name: Prepare LKM files
-        if: ${{ inputs.pack_lkm }}
-        run: |
-          set -eux
-          cp artifacts/aarch64-android*-lkm/*_kernelsu.ko ./userspace/ksud/bin/aarch64/
-          cp artifacts/x86_64-android*-lkm/*_kernelsu.ko ./userspace/ksud/bin/x86_64/
+    - uses: nttld/setup-ndk@v1
+      id: setup-ndk
+      with:
+        ndk-version: r29
 
-      - name: Prepare ksuinit
-        if: ${{ inputs.pack_ksuinit }}
-        run: |
-          set -eux
-          mv artifacts/ksuinit-aarch64/ksuinit ./userspace/ksud/bin/aarch64/
-          mv artifacts/ksuinit-arm/ksuinit ./userspace/ksud/bin/arm/
-          mv artifacts/ksuinit-x86_64/ksuinit ./userspace/ksud/bin/x86_64/
-          mv artifacts/ksuinit-riscv64/ksuinit ./userspace/ksud/bin/riscv64/
+    - name: Build ksud
+      env:
+        ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        # build.rs 优先采信这个值；为空时回退到数 git（本地构建路径）。
+        KSU_VERSION_CODE: ${{ inputs.version_code }}
+      run: |
+        # PR 变体的包名同样来自仓库根的 manager-package.properties（build.rs 读取），
+        # 这里只声明"这是 PR 构建"，不再写字面量，避免与内核侧取值各写一份。
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          export KSU_IS_PR_BUILD=1
+        fi
+        if [ "${{ inputs.target }}" = riscv64-linux-android ]; then
+          source .github/scripts/setup-rust-build.sh riscv64-linux-android 35
+          BUILTINS="$($CLANG_PATH --print-resource-dir)/lib/linux/libclang_rt.builtins-riscv64-android.a"
+          test -f "$BUILTINS"
+          cargo +nightly-2026-09-23 build --config .github/riscv64-cargo.toml -Z build-std=std,panic_abort --target "$TRIPLE" --release --manifest-path ./userspace/ksud/Cargo.toml
+        else
+          source .github/scripts/setup-rust-build.sh ${{ inputs.target }} 26
+          cargo build --target "$TRIPLE" --release --manifest-path ./userspace/ksud/Cargo.toml
+        fi
 
-      - name: Prepare BuiltZygisk
-        if: ${{ inputs.pack_builtzygisk }}
-        run: |
-          set -eux
-          # Accept both layouts: files directly in the artifact, or wrapped in a
-          # directory named after the arch (what an older builder produced). A
-          # wrapped copy ends up as bin/<arch>/<arch>/zygiskd, and rust-embed then
-          # keys the payload as <arch>/zygiskd, which ksud never looks up.
-          for arch in aarch64 arm x86_64 riscv64; do
-            src="artifacts/builtzygisk-$arch"
-            [ -d "$src" ] || continue
-            [ -d "$src/$arch" ] && src="$src/$arch"
-            cp -rf "$src"/. "./userspace/ksud/bin/$arch/"
-            echo "packed $arch: $(ls "$PWD/userspace/ksud/bin/$arch" | tr '\n' ' ')"
-          done
-
-      - name: Check toolchain
-        run: |
-          set -eux
-          cargo --version
-          rustup toolchain list
-          rustup target list --installed
-          test -x "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
-
-      - name: Pick cargo parallelism
-        run: |
-          set -eux
-          . .github/scripts/ci/parallel.sh
-          jobs=$(ci_parallel_acquire 6 "${GITHUB_RUN_ID}-${{ matrix.target }}")
-          echo "CARGO_BUILD_JOBS=$jobs" >> "$GITHUB_ENV"
-          echo "cargo -j$jobs, slots in use: $(find /ci/slots -type f | wc -l)"
-
-      - name: Build ksud
-        run: |
-          set -eux
-          if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ]; then
-            export KSU_PACKAGE_NAME="com.sukisu.nova.pr"
-          fi
-          if [ "${{ matrix.target }}" = riscv64-linux-android ]; then
-            source .github/scripts/setup-rust-build.sh riscv64-linux-android 35
-            BUILTINS="$($CLANG_PATH --print-resource-dir)/lib/linux/libclang_rt.builtins-riscv64-android.a"
-            test -f "$BUILTINS"
-            cargo +nightly-2026-09-23 build --config .github/riscv64-cargo.toml \
-              -Z build-std=std,panic_abort --target "$TRIPLE" --release \
-              --manifest-path ./userspace/ksud/Cargo.toml
-          else
-            source .github/scripts/setup-rust-build.sh "${{ matrix.target }}" 26
-            cargo build --target "$TRIPLE" --release \
-              --manifest-path ./userspace/ksud/Cargo.toml
-          fi
-
-      - name: Upload ksud artifact
-        run: |
-          set -eux
-          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
-          ci_artifact_put "ksud-${{ matrix.target }}" \
-            "target/${{ matrix.target }}/release/ksud"
-
-      - name: Write the job summary
-        run: |
-          set -eux
-          . "${GITHUB_WORKSPACE}/.github/scripts/ci/common.sh"
-          ci_summary_artifacts "ksud-${{ matrix.target }}"
-      - name: Release the parallelism slot
-        if: always()
-        run: |
-          set -eux
-          . .github/scripts/ci/parallel.sh
-          ci_parallel_release "${GITHUB_RUN_ID}-${{ matrix.target }}"
+    - name: Upload ksud artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: ksud-${{ inputs.target }}
+        path: target/${{ inputs.target }}/release/ksud
