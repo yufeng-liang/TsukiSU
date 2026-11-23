@@ -176,7 +176,14 @@ fun AboutScreenMaterial(
                         {
                             SegmentedListItem(
                                 onClick = { actions.onOpenLink(linkInfo.url) },
-                                headlineContent = { Text(linkInfo.fullText) }
+                                headlineContent = { Text(linkInfo.fullText) },
+                                // 第二行小字给出仓库地址本身
+                                supportingContent = {
+                                    Text(
+                                        text = linkInfo.url,
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
                             )
                         }
                     }

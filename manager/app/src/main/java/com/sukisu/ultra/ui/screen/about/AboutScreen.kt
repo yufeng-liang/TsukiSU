@@ -37,10 +37,10 @@ fun AboutScreen() {
     val uriHandler = LocalUriHandler.current
     val viewModel = viewModel<SettingsViewModel>()
     val settingsState by viewModel.uiState.collectAsStateWithLifecycle()
+    // 关于页只留仓库入口（Telegram 频道那一行已删）；地址本身在列表行下面用小字补出来
     val htmlString = stringResource(
         id = R.string.about_source_code,
-        "<b><a href=\"https://github.com/yufeng-liang/SukiSU-Ultra\">GitHub</a></b>",
-        "<b><a href=\"https://t.me/SukiKSU\">Telegram</a></b>",
+        "<b><a href=\"https://github.com/yufeng-liang/TsukiSU\">GitHub</a></b>",
     )
     val state = AboutUiState(
         title = customText(CustomTextKey.PAGE_ABOUT),

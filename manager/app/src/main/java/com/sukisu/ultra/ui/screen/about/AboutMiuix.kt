@@ -534,6 +534,8 @@ private fun AboutContent(
                         state.links.forEach {
                             ArrowPreference(
                                 title = it.fullText,
+                                // 第二行小字给出地址本身，截图/录屏里也能直接看到仓库在哪
+                                summary = it.url,
                                 onClick = {
                                     actions.onOpenLink(it.url)
                                 }
