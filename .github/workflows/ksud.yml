@@ -13,6 +13,11 @@ on:
         required: false
         type: boolean
         default: false
+      pack_builtzygisk:
+        description: '把 builtzygisk-<arch> 产物放进 ksud 的 bin/<arch>' 
+        required: false
+        type: boolean
+        default: false
       version_code:
         description: 'Unified KernelSU version code shared with LKM and manager'
         required: false
@@ -43,6 +48,21 @@ jobs:
         mv ksuinit-x86_64/ksuinit ./userspace/ksud/bin/x86_64/
         mv ksuinit-riscv64/ksuinit ./userspace/ksud/bin/riscv64/
         
+    - name: Prepare BuiltZygisk payload
+      if: ${{ inputs.pack_builtzygisk }}
+      run: |
+        set -eux
+        # builtzygisk-<arch> 内是 zygiskd / zygisk-ptrace / libzygisk.so /
+        # libzygisk32.so / zygisk-sepolicy.rule / zygisk-module.prop，
+        # 由 rust-embed 打进 ksud 的 bin/<arch>，运行时 stage 成 bin/zygiskd64 等。
+        for arch in aarch64 arm x86_64 riscv64; do
+          src="builtzygisk-${arch}"
+          test -d "$src"
+          mkdir -p "./userspace/ksud/bin/${arch}"
+          cp "$src"/* "./userspace/ksud/bin/${arch}/"
+        done
+        ls -l ./userspace/ksud/bin/aarch64/
+
     - name: Setup rustup
       run: |
         if [ "${{ inputs.target }}" = riscv64-linux-android ]; then

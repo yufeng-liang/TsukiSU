@@ -226,9 +226,14 @@ jobs:
   build-ksuinit:
     uses: ./.github/workflows/ksuinit.yml
 
+  # 内置 Zygisk 的运行时 payload（zygiskd / zygisk-ptrace / libzygisk.so /
+  # libzygisk32.so / zygisk-sepolicy.rule / zygisk-module.prop），由 external/BuiltZygisk
+  # 子模块编译，产物 builtzygisk-<arch> 被下面的 build-ksud 下载后放进 bin/<arch>。
+  build-builtzygisk:
+    uses: ./.github/workflows/builtzygisk.yml
 
   build-ksud:
-    needs: [build-lkm, build-ksuinit, determine-version]
+    needs: [build-lkm, build-ksuinit, build-builtzygisk, determine-version]
 
     strategy:
       fail-fast: false
@@ -244,6 +249,7 @@ jobs:
       target: ${{ matrix.target }}
       pack_lkm: true
       pack_ksuinit: true
+      pack_builtzygisk: true
       version_code: ${{ needs.determine-version.outputs.version_code }}
 
 
