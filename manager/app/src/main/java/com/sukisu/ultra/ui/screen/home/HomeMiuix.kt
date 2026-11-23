@@ -804,19 +804,6 @@ private fun SupportLinks(
         colors = backgroundAwareCardColors(),
     ) {
         ArrowPreference(
-            title = stringResource(R.string.home_support_title),
-            summary = stringResource(R.string.home_support_content),
-            startAction = {
-                Icon(
-                    imageVector = Icons.Filled.VolunteerActivism,
-                    contentDescription = stringResource(R.string.home_support_title),
-                    modifier = Modifier.padding(end = 6.dp),
-                    tint = colorScheme.onBackground,
-                )
-            },
-            onClick = { onOpenUrl("https://opencollective.com/sukisu-ultra") },
-        )
-        ArrowPreference(
             title = stringResource(R.string.home_learn_kernelsu),
             summary = stringResource(R.string.home_click_to_learn_kernelsu),
             startAction = {
