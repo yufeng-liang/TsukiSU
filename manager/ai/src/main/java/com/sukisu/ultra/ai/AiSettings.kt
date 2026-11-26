@@ -321,6 +321,23 @@ object AiSettings {
     fun prefs(): SharedPreferences =
         aiContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
+    /** suggest_setting 只允许修改的低风险布尔键：模型键名 -> SharedPreferences 键名。 */
+    private val BOOLEAN_SETTING_KEYS = mapOf(
+        "allowWebAccess" to KEY_ALLOW_WEB,
+        "allowThemeRead" to KEY_ALLOW_THEME_READ,
+        "allowModuleAccess" to KEY_ALLOW_MODULE,
+        "allowExtensionAccess" to KEY_ALLOW_EXTENSION,
+    )
+
+    fun isBooleanSetting(key: String): Boolean = BOOLEAN_SETTING_KEYS.containsKey(key)
+
+    /** 只改一个布尔键，避免审批等待期间覆盖用户在设置页做的其他修改。 */
+    fun updateBoolean(key: String, value: Boolean): Boolean {
+        val prefKey = BOOLEAN_SETTING_KEYS[key] ?: return false
+        prefs().edit { putBoolean(prefKey, value) }
+        return true
+    }
+
     /**
      * Missing key means "all features" (migration from the old coarse switches);
      * an explicit empty set means the user deselected every feature.

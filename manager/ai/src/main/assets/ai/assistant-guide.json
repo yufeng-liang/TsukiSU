@@ -1,0 +1,1250 @@
+{
+  "version": 2,
+  "entries": [
+    {
+      "id": "overview-what-is-assistant",
+      "topic": "overview",
+      "title": {
+        "en": "What the assistant is",
+        "zh": "这个助手是什么"
+      },
+      "aliases": {
+        "en": [
+          "what is the assistant",
+          "what are you",
+          "introduce yourself",
+          "who are you"
+        ],
+        "zh": [
+          "助手是什么",
+          "这个助手是干嘛的",
+          "是干嘛的",
+          "介绍一下助手",
+          "这是什么东西",
+          "你有啥用"
+        ]
+      },
+      "body": {
+        "en": "The assistant is built into the manager app, not a separate product. It combines a language model you configure yourself (endpoint, apiKey and model, any OpenAI-compatible service) with a set of local tools the app provides for reading and changing theme, modules, superuser and kernel-hiding settings. The model interprets your request and picks tools; the app executes them and shows confirmation cards. It starts read-only: writing, root and network abilities each need your explicit switch in settings, and a tool call without that grant shows an inline toggle in the conversation so you can decide on the spot. Questions about its own abilities are answered from this built-in guide, so you can simply ask what it can do. The top-level enabled switch controls whether the assistant runs at all.",
+        "zh": "这是内置在管理器 App 里的 AI 助手，不是一个独立应用。它由两部分组成：一是你自己配置的大模型服务商（endpoint、apiKey、model，兼容 OpenAI 格式即可），二是 App 提供的一组本地工具，用来读写主题、模块、超级用户、内核隐藏等设置。模型负责理解你的话并挑选工具，App 负责真正执行并弹确认卡。助手默认只读不写，写入、root、联网等能力都要你在设置里单独授权；授权后工具才会真正执行，未授权的调用会在对话里弹出内联开关让你当场决定。它会先查这份指南再回答关于自身能力的问题，所以你可以直接问「你能干什么」或「主题颜色在哪改」。"
+      },
+      "related": [
+        "overview-first-setup",
+        "capabilities-overview",
+        "tools-visibility"
+      ],
+      "covers": {
+        "tools": [],
+        "settings": [
+          "enabled"
+        ]
+      }
+    },
+    {
+      "id": "overview-first-setup",
+      "topic": "overview",
+      "title": {
+        "en": "First-time setup",
+        "zh": "第一次使用怎么配"
+      },
+      "aliases": {
+        "en": [
+          "how to set up",
+          "api key",
+          "endpoint",
+          "provider",
+          "first run"
+        ],
+        "zh": [
+          "怎么配置",
+          "api key",
+          "模型填什么",
+          "服务商",
+          "第一次用"
+        ]
+      },
+      "body": {
+        "en": "Three things to set up on first use. First open Settings - AI - Model and fill in endpoint, apiKey and model; any OpenAI Chat Completions compatible service works, and the test button tells you whether it responds. Second, make sure toolCalling is on: the model must support function calling, otherwise it only chats and never reads themes or installs modules. Third, turn on the read, write, root and network grants you actually need and leave the rest off. enabled is the master switch; with it off the chat screen still opens but no request is sent. When the model is not configured, tools do not execute and the assistant asks you to finish setup. A provider is just the service entry, and one provider can hold several models.",
+        "zh": "第一次使用要配三件事。第一步在「设置 - AI - 模型」里填 endpoint、apiKey 和 model，任何兼容 OpenAI Chat Completions 格式的服务都可以，填完点测试连接确认可用。第二步确认「工具调用」是打开的：模型必须支持 function calling，否则它只会聊天，不会读主题、装模块。第三步按需打开读取、写入、root、联网等授权开关，不用的保持关闭更安全。enabled 是助手总开关，关掉后对话入口还在但不会发出任何请求。模型没配好时（isConfigured 为 false），工具不会执行，助手会提示你先去配置。名字里的 provider 就是服务商，一个 provider 里可以放多个模型。"
+      },
+      "related": [
+        "overview-what-is-assistant",
+        "settings-behavior",
+        "troubleshooting-model-errors"
+      ],
+      "covers": {
+        "tools": [],
+        "settings": [
+          "enabled",
+          "toolCalling"
+        ]
+      }
+    },
+    {
+      "id": "overview-privacy",
+      "topic": "overview",
+      "title": {
+        "en": "Data and context",
+        "zh": "数据与上下文"
+      },
+      "aliases": {
+        "en": [
+          "privacy",
+          "data",
+          "context",
+          "history",
+          "token cost"
+        ],
+        "zh": [
+          "隐私",
+          "数据",
+          "上下文",
+          "历史对话",
+          "聊天记录",
+          "聊天记录会保存到哪里",
+          "省token"
+        ]
+      },
+      "body": {
+        "en": "includeContext decides whether every request carries an environment snapshot: device model, system version, root state, installed modules and extension states. With it off, the assistant has to call get_environment itself, which is slower but cheaper in tokens. keepHistory decides whether earlier turns are sent back; turning it off saves a lot of tokens but makes the assistant forget mid-task, which is risky for long multi-step work. Conversations are stored in the app private directory on this device and are uploaded nowhere except the model provider you configured, which of course sees everything you send, including tool results. Think twice before pasting keys or personal identifiers.",
+        "zh": "includeContext 控制每次请求是否附带环境快照，内容包括机型、系统版本、root 状态、已装模块和扩展状态等；关掉后助手需要主动调用 get_environment 才能知道这些，回答会慢一点但更省 token。keepHistory 控制是否把历史对话带回上下文，关掉能显著省 token，但助手在多轮任务里会「失忆」，做到一半的改动容易前后矛盾，所以做长任务时建议保持开启。会话记录保存在本机 App 私有目录，除了你配置的模型服务商之外不会上传到别处；也就是说服务商能看到你发送的对话内容，包括工具返回的结果。涉及密钥、身份证号之类的信息，发出去之前先想一下。"
+      },
+      "related": [
+        "settings-behavior",
+        "capabilities-app-navigation"
+      ],
+      "covers": {
+        "tools": [],
+        "settings": [
+          "includeContext",
+          "keepHistory"
+        ]
+      }
+    },
+    {
+      "id": "capabilities-overview",
+      "topic": "capabilities",
+      "title": {
+        "en": "What the assistant can do",
+        "zh": "助手能做什么"
+      },
+      "aliases": {
+        "en": [
+          "what can you do",
+          "capabilities",
+          "features",
+          "abilities"
+        ],
+        "zh": [
+          "能干什么",
+          "有什么功能",
+          "你会什么",
+          "能力"
+        ]
+      },
+      "body": {
+        "en": "The abilities fall into ten groups: app and appearance (theme, custom text, extension state), theme images (generate, replace, export), root and superuser management, module lookup and installation, kernel-level hiding (SUSFS config, unmount, device and CPU spoofing, KPM), web research (page fetch, GitHub search and releases), shell and code, the column wizard, detector reference answers, and this guide. Each group maps to one or more settings switches; a switch only decides whether execution is allowed, never whether the tool is offered to the model. To learn how to do something, just ask in plain language and the assistant consults the guide first, citing the entry id so you can follow up.",
+        "zh": "能力大致分十组：应用与外观（主题、自定义文案、扩展状态）、主题图片（生成、替换、导出）、root 与超级用户管理、模块查询与安装、内核级隐藏（SUSFS 配置、卸载、机型与 CPU 伪装、KPM）、联网检索（网页抓取、GitHub 搜索与发行版）、Shell 与代码执行、专栏向导、检测器参考条目检索、助手指南检索。每组都对应一个或几个设置开关，开关只决定「能不能执行」，不影响工具是否出现在模型面前。想知道具体某一项怎么做，直接用自然语言问，例如「把主题换成深色」，助手会先查这份指南再回答，并在回答里引用条目 id，你可以据此继续追问细节。"
+      },
+      "related": [
+        "capabilities-appearance",
+        "capabilities-superuser",
+        "capabilities-modules",
+        "settings-permissions-overview"
+      ],
+      "covers": {
+        "tools": [],
+        "settings": []
+      }
+    },
+    {
+      "id": "capabilities-appearance",
+      "topic": "capabilities",
+      "title": {
+        "en": "Appearance, theme and custom text",
+        "zh": "外观、主题与自定义文案"
+      },
+      "aliases": {
+        "en": [
+          "theme",
+          "appearance",
+          "colors",
+          "custom text",
+          "font"
+        ],
+        "zh": [
+          "主题",
+          "外观",
+          "颜色",
+          "自定义文案",
+          "改字体"
+        ]
+      },
+      "body": {
+        "en": "Reading and writing appearance. theme_get returns the current theme JSON, theme_options lists what can be changed (colors, fonts, corner radius, component styles), theme_set applies changes from your description, theme_reset_appearance restores defaults, custom_text_list, custom_text_set and custom_text_reset_all manage on-screen strings, clear_theme_image drops a theme image, and export_theme_package packages the current theme. Reads need allowThemeRead, writes need allowThemeWrite, and every write shows a confirmation card naming the keys and values. Theme keys are long, so letting the assistant edit them beats hunting a key by hand; verify with theme_get afterwards.",
+        "zh": "外观相关的读取与写入。theme_get 读当前主题的 JSON，theme_options 列出可选项（颜色、字体、圆角、组件样式等），theme_set 按你的描述改一项或多项，theme_reset_appearance 恢复默认外观，custom_text_list、custom_text_set、custom_text_reset_all 管理界面上的自定义文案，clear_theme_image 清掉某张主题图，export_theme_package 把当前主题打包导出。读取受 allowThemeRead 控制，写入受 allowThemeWrite 控制，写入类调用都会先弹确认卡，卡片里写明要改的键和值。主题键名很长，让助手改比手动找键稳，改完可以用 theme_get 复核。"
+      },
+      "related": [
+        "capabilities-theme-images",
+        "settings-permissions-overview"
+      ],
+      "covers": {
+        "tools": [
+          "theme_get",
+          "theme_options",
+          "theme_set",
+          "theme_reset_appearance",
+          "custom_text_list",
+          "custom_text_set",
+          "custom_text_reset_all",
+          "clear_theme_image",
+          "export_theme_package"
+        ],
+        "settings": [
+          "allowThemeRead",
+          "allowThemeWrite"
+        ]
+      }
+    },
+    {
+      "id": "capabilities-theme-images",
+      "topic": "capabilities",
+      "title": {
+        "en": "Theme images",
+        "zh": "主题图片生成与替换"
+      },
+      "aliases": {
+        "en": [
+          "generate image",
+          "picture",
+          "background",
+          "draw"
+        ],
+        "zh": [
+          "生成图片",
+          "配图",
+          "背景图",
+          "画一张"
+        ]
+      },
+      "body": {
+        "en": "The theme image pipeline. generate_image creates a picture with the image model (configure a separate image model first), edit_theme_image modifies an existing picture, set_theme_image assigns a picture to a slot such as home, lock screen or dialog background, and export_theme_image writes it to the gallery or a file. Generation and replacement count as writes, require allowThemeWrite and always show a confirmation card. Without an image model, generation fails and the assistant can only reuse existing pictures. Images take space and export_theme_package bundles the ones in use, so export before deleting.",
+        "zh": "主题图片链路。generate_image 用图片模型生成一张图，需要另外配置图片模型；edit_theme_image 在已有图片上做局部修改；set_theme_image 把图片设为某个位置的背景，例如首页、锁屏、对话框；export_theme_image 把某张主题图导出到相册或文件。生成与替换都算写入，受 allowThemeWrite 控制，并且每次都会弹确认卡。图片模型没配置时生成会直接报错，这时助手只能改用现有图片。图片本身占空间，主题包导出时会把用到的图一起打包，删图之前最好先导出一次留底。"
+      },
+      "related": [
+        "capabilities-appearance",
+        "settings-permissions-overview"
+      ],
+      "covers": {
+        "tools": [
+          "generate_image",
+          "edit_theme_image",
+          "set_theme_image",
+          "export_theme_image"
+        ],
+        "settings": [
+          "allowThemeWrite"
+        ]
+      }
+    },
+    {
+      "id": "capabilities-superuser",
+      "topic": "capabilities",
+      "title": {
+        "en": "Root and superuser management",
+        "zh": "root 与超级用户管理"
+      },
+      "aliases": {
+        "en": [
+          "root",
+          "superuser",
+          "grant root",
+          "temporary root"
+        ],
+        "zh": [
+          "root授权",
+          "超级用户",
+          "给应用root",
+          "临时root"
+        ]
+      },
+      "body": {
+        "en": "Root and superuser. superuser_apps lists granted apps, superuser_app_info shows one app grant, superuser_capabilities reports what the kernel supports (su compatibility, temporary root, global switch), superuser_set_root grants or revokes an app root, superuser_set_temporary_root gives time-limited root, and superuser_set_global_su flips the global su behaviour. Reads need allowSuperuserAccess; the three write tools additionally need allowSuperuserRootControl, allowSuperuserTemporaryRoot and allowSuperuserSwitch. Revoking root hits the app running background processes immediately, so check what that app is busy with first.",
+        "zh": "root 与超级用户。superuser_apps 列出已授权的应用，superuser_app_info 看单个应用的授权详情，superuser_capabilities 说明当前内核支持哪些能力（su 兼容、临时 root、全局开关等），superuser_set_root 打开或关闭某个应用的 root 授权，superuser_set_temporary_root 给应用一段临时 root，superuser_set_global_su 切换全局 su 行为。查询需要 allowSuperuserAccess，三个写入分别还要 allowSuperuserRootControl、allowSuperuserTemporaryRoot、allowSuperuserSwitch。收回某个应用的 root 会立刻影响它正在运行的后台进程，撤回前先确认那个应用在干什么。"
+      },
+      "related": [
+        "settings-superuser",
+        "capabilities-modules"
+      ],
+      "covers": {
+        "tools": [
+          "superuser_apps",
+          "superuser_app_info",
+          "superuser_capabilities",
+          "superuser_set_root",
+          "superuser_set_temporary_root",
+          "superuser_set_global_su"
+        ],
+        "settings": [
+          "allowSuperuserAccess",
+          "allowSuperuserRootControl",
+          "allowSuperuserTemporaryRoot",
+          "allowSuperuserSwitch"
+        ]
+      }
+    },
+    {
+      "id": "capabilities-modules",
+      "topic": "capabilities",
+      "title": {
+        "en": "Module lookup and installation",
+        "zh": "模块查询与安装"
+      },
+      "aliases": {
+        "en": [
+          "module",
+          "install module",
+          "module repo",
+          "modules"
+        ],
+        "zh": [
+          "模块",
+          "装模块",
+          "模块仓库",
+          "卸载模块"
+        ]
+      },
+      "body": {
+        "en": "Modules. installed_modules lists installed modules and their enabled state, module_capabilities reports what the module system supports, module_search queries the module repo, module_install installs from a local zip, and module_install_github installs from a GitHub repository. Lookups need allowModuleAccess, the two install tools need allowModuleInstall. Installing touches system partitions and counts as a high-risk write: the confirmation card shows the module name and source, and a reboot is usually required afterwards, which the assistant never does by itself. Read the search results and check package name and author first.",
+        "zh": "模块相关。installed_modules 列出已装模块及其启用状态，module_capabilities 说明本机模块系统支持哪些操作，module_search 在模块仓库里按关键词找模块，module_install 从本地 zip 安装，module_install_github 直接按 GitHub 仓库安装。查询受 allowModuleAccess 控制，两个安装工具受 allowModuleInstall 控制。安装会改动系统分区，属于高风险写入：确认卡会显示模块名与来源，安装后通常要重启才生效，助手只负责装，不会自动重启。装之前建议先看 module_search 的返回，核对包名和作者，别装同名假冒包。"
+      },
+      "related": [
+        "settings-modules",
+        "capabilities-kernel-hiding"
+      ],
+      "covers": {
+        "tools": [
+          "installed_modules",
+          "module_capabilities",
+          "module_search",
+          "module_install",
+          "module_install_github"
+        ],
+        "settings": [
+          "allowModuleAccess",
+          "allowModuleInstall"
+        ]
+      }
+    },
+    {
+      "id": "capabilities-kernel-hiding",
+      "topic": "capabilities",
+      "title": {
+        "en": "Kernel-level hiding and spoofing",
+        "zh": "内核级隐藏与伪装"
+      },
+      "aliases": {
+        "en": [
+          "susfs",
+          "hiding",
+          "spoof",
+          "kpm",
+          "umount",
+          "kernel"
+        ],
+        "zh": [
+          "susfs",
+          "隐藏",
+          "伪装",
+          "kpm",
+          "卸载",
+          "内核"
+        ]
+      },
+      "body": {
+        "en": "Kernel-level hiding and spoofing, the riskiest group. susfs_config_get reads the SUSFS config, susfs_config_set changes SUSFS fields (known keys only), susfs_set toggles SUSFS or one feature, umount_action performs unload-style actions that detach module mounts from a target process, version_spoof_set fakes the system version, cpu_spoof_set fakes CPU details, kpm_action loads, unloads or lists kernel modules, and dynamic_manager_action handles the dynamic manager. All need allowRootAccess and every call shows a confirmation card. These changes can leave the device unbootable, so record the state with get_environment first and verify after a reboot.",
+        "zh": "内核级隐藏与伪装，是风险最高的一组。susfs_config_get 读当前 SUSFS 配置，susfs_config_set 改 SUSFS 字段（只接受已知键），susfs_set 切换 SUSFS 总开关或某个功能，umount_action 执行卸载相关动作，把模块挂载从目标进程里摘掉，version_spoof_set 伪装系统版本，cpu_spoof_set 伪装 CPU 信息，kpm_action 管理内核模块（加载、卸载、列出），dynamic_manager_action 处理动态管理器相关操作。全部受 allowRootAccess 控制，每次都会弹确认卡。这些改动可能让设备无法开机，动手前先用 get_environment 记录当前状态，改完重启验证。"
+      },
+      "related": [
+        "settings-permissions-overview",
+        "capabilities-modules"
+      ],
+      "covers": {
+        "tools": [
+          "susfs_config_get",
+          "susfs_config_set",
+          "susfs_set",
+          "umount_action",
+          "version_spoof_set",
+          "cpu_spoof_set",
+          "kpm_action",
+          "dynamic_manager_action"
+        ],
+        "settings": [
+          "allowRootAccess"
+        ]
+      }
+    },
+    {
+      "id": "capabilities-web",
+      "topic": "capabilities",
+      "title": {
+        "en": "Web research",
+        "zh": "联网检索"
+      },
+      "aliases": {
+        "en": [
+          "web",
+          "search",
+          "github",
+          "fetch page",
+          "internet"
+        ],
+        "zh": [
+          "联网",
+          "搜索",
+          "网页",
+          "github",
+          "抓取网页"
+        ]
+      },
+      "body": {
+        "en": "Web research. web_search queries the web through the search service you configured, fetch_url pulls the text of a given URL, github_search looks for repositories and code on GitHub, and github_releases lists a repository releases. All four need allowWebAccess. Page content is treated as untrusted text and its instructions are not followed. The search service lives on its own settings page and is not the model provider; without it web_search fails while fetch_url and the GitHub tools usually still work. Fetched pages are capped in length, so ask for a more specific URL when you need more.",
+        "zh": "联网检索。web_search 用你配置的搜索服务查网页，fetch_url 抓取指定网址的正文，github_search 在 GitHub 上搜仓库与代码，github_releases 列某个仓库的发行版。四个工具都受 allowWebAccess 控制，网页内容会被当作不可信文本交给模型，助手不会照着网页里的指令行事。搜索服务本身在「搜索」页单独配置，和模型服务商不是一回事；没配搜索服务时 web_search 会失败，但 fetch_url 和两个 GitHub 工具往往还能用。取回的正文有长度上限，超长部分会被截断，需要更多内容就换更具体的网址再抓。"
+      },
+      "related": [
+        "settings-web",
+        "settings-search"
+      ],
+      "covers": {
+        "tools": [
+          "web_search",
+          "fetch_url",
+          "github_search",
+          "github_releases"
+        ],
+        "settings": [
+          "allowWebAccess"
+        ]
+      }
+    },
+    {
+      "id": "capabilities-shell",
+      "topic": "capabilities",
+      "title": {
+        "en": "Shell and code",
+        "zh": "Shell 与代码执行"
+      },
+      "aliases": {
+        "en": [
+          "shell",
+          "command",
+          "run command",
+          "root command"
+        ],
+        "zh": [
+          "命令",
+          "shell",
+          "跑命令",
+          "root命令"
+        ]
+      },
+      "body": {
+        "en": "Shell and code. run_shell executes a command on this device and returns stdout and stderr; it runs as the app by default and only elevates to root when allowRootAccess is on. allowCodeExecution is a separate gate: it controls whether a code block in the assistant reply can be run with the local run button. With it off the run button is unavailable, while the run_shell tool path still works. A bad command can damage the system, so the confirmation card shows the full text; read it before approving. Output is capped, so have long results written to a file and read in parts.",
+        "zh": "Shell 与代码。run_shell 在本机执行命令并返回标准输出与错误，默认以当前应用身份运行，只有在 allowRootAccess 打开时才会提权执行 root 命令。allowCodeExecution 是另一道门，它管的是「助手回复里的代码块能不能一键运行」这条本地执行通道：关掉后代码块的运行按钮不可用，但 run_shell 这条模型工具路径不受影响。命令很容易改坏系统，确认卡会显示完整命令文本，逐字看完再点同意。输出有长度上限，超长会被截断，需要更多内容就让助手把结果写到文件里再分段读。"
+      },
+      "related": [
+        "settings-code-execution",
+        "troubleshooting-denied"
+      ],
+      "covers": {
+        "tools": [
+          "run_shell"
+        ],
+        "settings": [
+          "allowRootAccess",
+          "allowCodeExecution"
+        ]
+      }
+    },
+    {
+      "id": "capabilities-extensions",
+      "topic": "capabilities",
+      "title": {
+        "en": "Extensions",
+        "zh": "扩展能力"
+      },
+      "aliases": {
+        "en": [
+          "extension",
+          "extensions",
+          "extension config"
+        ],
+        "zh": [
+          "扩展",
+          "extension",
+          "扩展开关",
+          "扩展配置"
+        ]
+      },
+      "body": {
+        "en": "Extensions. extensions_get reads installed extensions and their state, extension_capabilities lists what the extension system currently supports and which options exist, and extension_set changes an extension enabled state or its configuration. Reads need allowExtensionAccess, writes need allowExtensionWrite, and writes go through a confirmation card. Options change between versions, so the assistant checks capabilities before writing to avoid a stale key. Disabling an extension can affect features that depend on it, so verify with extensions_get afterwards.",
+        "zh": "扩展。extensions_get 读已装扩展及其状态，extension_capabilities 列出扩展系统当前支持的能力和可配置项，extension_set 修改某个扩展的启用状态或配置。读取受 allowExtensionAccess 控制，写入受 allowExtensionWrite 控制，写入同样要过确认卡。扩展的配置项随版本变化，助手会先查扩展能力再改，避免用旧键名写坏配置。关掉某个扩展可能影响依赖它的其他功能，改完建议用 extensions_get 复核一次，确认状态真的变了再继续下一步。"
+      },
+      "related": [
+        "settings-permissions-overview",
+        "capabilities-appearance"
+      ],
+      "covers": {
+        "tools": [
+          "extensions_get",
+          "extension_capabilities",
+          "extension_set"
+        ],
+        "settings": [
+          "allowExtensionAccess",
+          "allowExtensionWrite"
+        ]
+      }
+    },
+    {
+      "id": "capabilities-app-navigation",
+      "topic": "capabilities",
+      "title": {
+        "en": "In-app navigation and environment snapshot",
+        "zh": "应用内导航与环境快照"
+      },
+      "aliases": {
+        "en": [
+          "environment",
+          "navigate",
+          "open page",
+          "device info"
+        ],
+        "zh": [
+          "环境",
+          "打开设置页",
+          "导航",
+          "设备信息"
+        ]
+      },
+      "body": {
+        "en": "In-app navigation and the environment snapshot. get_environment returns device model, system version, kernel, root state, SELinux, installed modules, extension states and current appearance; it is usually the first step of any diagnosis. app_features lists the app feature pages and openable entries, and open_app_page jumps to one of them (AI settings, module list, superuser) and can carry a section to land on a specific block. For the AI settings page the accepted section values are model, search, read_scope, write_scope and behavior, landing on the connection, search, read-scope, write-permission and behaviour groups in that order. These three need no grant because they only read or navigate. Navigation merely brings the screen up; the actual change is still yours to tap.",
+        "zh": "应用内导航与环境快照。get_environment 返回一份环境快照：机型、系统版本、内核、root 状态、SELinux、已装模块、扩展状态和当前外观，通常是排查问题的第一步。app_features 列出本 App 有哪些功能页和可打开的入口，open_app_page 按入口名跳到对应页面，例如 AI 设置、模块列表、超级用户，还能带上 section 参数直接定位到某一节。AI 设置页的 section 支持 model、search、read_scope、write_scope、behavior 五个值，分别落到连接、搜索、读取范围、写入权限、行为这五组，跳过去会自动滚到那一组并高亮一下。三个工具默认可用，不需要额外授权，因为它们只读或只做页面跳转，不改变任何设置。跳转只是把界面带过去，真正的改动仍然要你自己点。"
+      },
+      "related": [
+        "overview-privacy",
+        "settings-search"
+      ],
+      "covers": {
+        "tools": [
+          "get_environment",
+          "app_features",
+          "open_app_page"
+        ],
+        "settings": []
+      }
+    },
+    {
+      "id": "capabilities-column-wizard",
+      "topic": "capabilities",
+      "title": {
+        "en": "Column wizard",
+        "zh": "专栏向导"
+      },
+      "aliases": {
+        "en": [
+          "column",
+          "wizard",
+          "walkthrough",
+          "hiding guide"
+        ],
+        "zh": [
+          "专栏",
+          "向导",
+          "隐藏环境",
+          "column"
+        ]
+      },
+      "body": {
+        "en": "The column wizard. column_wizard reads shipped columns such as the hiding-environment walkthrough: call it with no arguments for the column and topic list, then drill down with column_id and topic_id, where each step returns an explanation and the next options. column_wizard_run performs the steps and understands resume, mark_done, opt_in and overwrite; a missing argument can make it refuse. Column content changes between versions, so when a column is not found, call column_wizard again for the current index. Neither tool needs a grant, but the steps they run can write files and writes still show a confirmation card.",
+        "zh": "专栏向导。column_wizard 用来读「隐藏环境」这类专栏的内容：先不带参数拿专栏和主题列表，再用 column_id 和 topic_id 逐层深入，每一步返回一段说明和可选的下一步。column_wizard_run 负责执行向导里的操作步骤，支持 resume 续跑、mark_done 标记完成、opt_in 显式同意和 overwrite 覆盖已有文件，参数缺一个都可能让向导拒绝执行。向导内容随版本更新，遇到「找不到专栏」先重新调一次 column_wizard 拿最新目录。两个工具不需要额外授权，但它们执行的操作可能写文件，写入前仍会弹确认卡。"
+      },
+      "related": [
+        "capabilities-kernel-hiding",
+        "tools-visibility"
+      ],
+      "covers": {
+        "tools": [
+          "column_wizard",
+          "column_wizard_run"
+        ],
+        "settings": []
+      }
+    },
+    {
+      "id": "capabilities-detector-answers",
+      "topic": "capabilities",
+      "title": {
+        "en": "Detector reference answers",
+        "zh": "检测器参考条目"
+      },
+      "aliases": {
+        "en": [
+          "detector",
+          "integrity",
+          "tee",
+          "play integrity",
+          "answers"
+        ],
+        "zh": [
+          "检测器",
+          "完整性检测",
+          "tee损坏",
+          "play integrity",
+          "答案库"
+        ]
+      },
+      "body": {
+        "en": "Detector reference answers. search_detector_answers searches the built-in detector answer library for common problems such as broken TEE, Play Integrity, Keystore and failing SUSFS hiding; each answer gives how it is detected, why it happens and how to fix it. The library is remote with a local cache, so the first query needs network and later ones are fast. This is separate from the assistant guide: the guide explains what the assistant can do and where switches live, while detector answers explain why the device gets detected. For a question about failing integrity, the assistant usually uses both.",
+        "zh": "检测器参考条目。search_detector_answers 在内置的检测器答案库里按关键词检索，覆盖 TEE 损坏、Play Integrity、Keystore、SUSFS 隐藏失效等常见问题，每条给出检测方式、成因和修复建议。它走的是远端答案库加本机缓存，第一次查询需要联网，之后命中缓存会快很多。这个工具和助手指南是两回事：指南讲助手自己能做什么、开关在哪，检测器答案讲设备为什么被检测到。问「为什么我的设备过不了完整性检测」时，助手通常会同时用这两条路径。"
+      },
+      "related": [
+        "tools-search-guide",
+        "capabilities-kernel-hiding"
+      ],
+      "covers": {
+        "tools": [
+          "search_detector_answers"
+        ],
+        "settings": []
+      }
+    },
+    {
+      "id": "settings-permissions-overview",
+      "topic": "settings",
+      "title": {
+        "en": "Permission switches at a glance",
+        "zh": "权限开关总览"
+      },
+      "aliases": {
+        "en": [
+          "permission",
+          "switch",
+          "grant",
+          "which switch"
+        ],
+        "zh": [
+          "权限",
+          "开关",
+          "授权",
+          "哪个开关"
+        ]
+      },
+      "body": {
+        "en": "Permission switches at a glance. allowRootAccess decides whether root commands may run (shell, SUSFS, spoofing, KPM), allowSuperuserAccess whether the superuser list is readable, allowModuleAccess whether modules are readable, allowExtensionAccess whether extensions are readable, allowWebAccess whether the network is reachable, allowThemeRead and allowThemeWrite cover theme reads and writes, and allowExtensionWrite covers extension writes. Key point: tools stay visible to the model; an unauthorized call does not vanish silently but shows an inline switch so you can decide on the spot, and that one-off refusal never changes the long-term value on the settings page. Ask the assistant which grant you need whenever unsure.",
+        "zh": "权限开关总览。allowRootAccess 决定助手能否执行 root 命令，Shell、SUSFS、伪装、KPM 都靠它；allowSuperuserAccess 决定能否查看超级用户；allowModuleAccess 决定能否查看模块；allowExtensionAccess 决定能否查看扩展；allowWebAccess 决定能否联网；allowThemeRead 与 allowThemeWrite 分别管主题的读和写；allowExtensionWrite 管扩展写入。重点：工具始终对模型可见，未授权的调用不会静默消失，而是在对话里弹出内联开关让你当场决定，这次拒绝不会改变设置页里的长期值。分不清该开哪个时，直接问助手「改主题要开什么」，它会查指南回答。"
+      },
+      "related": [
+        "settings-superuser",
+        "settings-modules",
+        "settings-web",
+        "tools-visibility"
+      ],
+      "covers": {
+        "tools": [],
+        "settings": [
+          "allowRootAccess",
+          "allowSuperuserAccess",
+          "allowModuleAccess",
+          "allowExtensionAccess",
+          "allowWebAccess",
+          "allowThemeRead",
+          "allowThemeWrite",
+          "allowExtensionWrite"
+        ]
+      }
+    },
+    {
+      "id": "settings-superuser",
+      "topic": "settings",
+      "title": {
+        "en": "Superuser switches",
+        "zh": "超级用户相关开关"
+      },
+      "aliases": {
+        "en": [
+          "superuser switch",
+          "root control",
+          "global su"
+        ],
+        "zh": [
+          "超级用户开关",
+          "root控制",
+          "全局su"
+        ]
+      },
+      "body": {
+        "en": "How the four superuser switches split up. allowSuperuserAccess only opens queries: list granted apps, read details, report kernel capabilities. allowSuperuserRootControl allows granting or revoking root for an app, the most direct effect, since revoking strips a running background process immediately. allowSuperuserTemporaryRoot allows time-limited root, good for one-off work, expiring on its own. allowSuperuserSwitch allows flipping the global su behaviour, which affects every app at once. Keep reads on and open the three write switches only while needed; even if page content misleads the model, the worst case is an inline switch you must tap.",
+        "zh": "超级用户四个开关的分工。allowSuperuserAccess 只放行查询：列出已授权应用、看详情、看内核支持的能力。allowSuperuserRootControl 放行给某个应用授予或收回 root，影响最直接，收回会让正在运行的后台进程立刻失去权限。allowSuperuserTemporaryRoot 放行临时 root，适合只跑一次的场景，到期自动失效。allowSuperuserSwitch 放行全局 su 行为切换，会同时影响所有应用。建议查询常开，三个写开关按需临时打开、用完就关；这样即使模型被网页内容误导，也只能弹出一个需要你点的开关，而不是直接生效。"
+      },
+      "related": [
+        "capabilities-superuser",
+        "settings-permissions-overview"
+      ],
+      "covers": {
+        "tools": [],
+        "settings": [
+          "allowSuperuserAccess",
+          "allowSuperuserRootControl",
+          "allowSuperuserTemporaryRoot",
+          "allowSuperuserSwitch"
+        ]
+      }
+    },
+    {
+      "id": "settings-modules",
+      "topic": "settings",
+      "title": {
+        "en": "Module switches",
+        "zh": "模块相关开关"
+      },
+      "aliases": {
+        "en": [
+          "module switch",
+          "install permission",
+          "install module permission"
+        ],
+        "zh": [
+          "模块开关",
+          "安装模块权限",
+          "安装模块",
+          "安装模块要开",
+          "安装模块要开哪个权限"
+        ]
+      },
+      "body": {
+        "en": "The two module switches. allowModuleAccess opens lookups: installed modules, module capabilities, and repository search. allowModuleInstall opens installation, both from a local zip and from a GitHub repository. Installing touches system partitions and a wrong module can prevent booting, so keep this off by default and turn it on only when you know what you are installing. A reboot is usually required afterwards; the assistant never reboots for you and never picks a version for you. After module_search, check the package name and author before installing.",
+        "zh": "模块两个开关。allowModuleAccess 放行查询：看已装模块、看模块系统支持什么、在仓库里搜索。allowModuleInstall 放行安装，包括从本地 zip 和从 GitHub 仓库两条路径。安装会改系统分区，装错模块可能导致无法开机，所以这个开关建议默认关闭，只在明确要装某个模块时打开。安装完成后通常要重启才生效，助手不会自动重启，也不会替你决定装哪个版本。用 module_search 找到目标后，先核对包名和作者，再让助手安装，能避开同名假冒包。"
+      },
+      "related": [
+        "capabilities-modules",
+        "settings-permissions-overview"
+      ],
+      "covers": {
+        "tools": [],
+        "settings": [
+          "allowModuleAccess",
+          "allowModuleInstall"
+        ]
+      }
+    },
+    {
+      "id": "settings-web",
+      "topic": "settings",
+      "title": {
+        "en": "Web access switch",
+        "zh": "联网开关"
+      },
+      "aliases": {
+        "en": [
+          "web switch",
+          "allowWebAccess",
+          "no network",
+          "network permission"
+        ],
+        "zh": [
+          "联网开关",
+          "联网权限开关",
+          "联网权限开关叫什么",
+          "allowWebAccess",
+          "不能上网",
+          "联网权限"
+        ]
+      },
+      "body": {
+        "en": "The network switch allowWebAccess covers four tools (web_search, fetch_url, github_search, github_releases) and also gates mcp_list and mcp_call. With it off the assistant cannot reach the network at all and answers only from the environment snapshot and this guide. Once on, two caveats: fetched page content is untrusted text whose instructions are not followed, and long pages are truncated. The search service itself needs an engine and key on the Search settings page; those are AiSearchSettings fields, not switches here, and suggest_setting cannot touch them because credential fields are never writable.",
+        "zh": "联网开关 allowWebAccess 管四个工具：web_search、fetch_url、github_search、github_releases，另外 mcp_list 和 mcp_call 也走这条联网能力。关掉后助手完全不能访问网络，只能靠环境快照和这份指南回答。打开后注意两点：网页内容会被当成不可信文本，助手不会执行网页里写的指令；抓回的正文有长度上限，超长会截断。搜索服务需要在「搜索」页单独配置引擎和密钥，那是 AiSearchSettings 的字段，不属于这里的开关，suggest_setting 也改不了它们，凭据类字段一律不允许由助手修改。"
+      },
+      "related": [
+        "capabilities-web",
+        "settings-search",
+        "settings-mcp"
+      ],
+      "covers": {
+        "tools": [],
+        "settings": [
+          "allowWebAccess"
+        ]
+      }
+    },
+    {
+      "id": "settings-confirmation",
+      "topic": "settings",
+      "title": {
+        "en": "Confirmation cards and requireConfirmation",
+        "zh": "确认卡与 requireConfirmation"
+      },
+      "aliases": {
+        "en": [
+          "confirm",
+          "confirmation",
+          "approve",
+          "requireConfirmation"
+        ],
+        "zh": [
+          "确认",
+          "确认卡",
+          "requireConfirmation",
+          "同意"
+        ]
+      },
+      "body": {
+        "en": "requireConfirmation is the master switch for the write confirmation card, on by default. When on, every write first shows a card with the tool name, the target keys and values, and the assistant reason; approving executes, denying returns a refusal result to the model. With it off writes execute directly, which is only reasonable for a short session where you fully trust the output. One exception: even with this switch off, suggest_setting still forces a card, because it changes long-term configuration rather than performing a one-off action. The card shows the raw arguments, so deny anything you do not recognize and ask for an explanation.",
+        "zh": "requireConfirmation 是写入前的确认卡总开关，默认开启。开启时每个写操作都会先弹一张卡片，写明工具名、目标键和值，以及助手的理由，你点同意才执行，点拒绝就返回一句拒绝结果给模型。关掉后写入会直接执行，只适合在完全信任模型输出的场景短时使用。有一点要记牢：即使这个开关关着，suggest_setting 改设置仍然强制弹确认卡，因为改的是长期配置而不是一次性操作。确认卡上显示的参数是模型提交的原文，出现看不懂的键名就点拒绝，再让助手解释。"
+      },
+      "related": [
+        "settings-suggest-setting",
+        "troubleshooting-denied"
+      ],
+      "covers": {
+        "tools": [],
+        "settings": [
+          "requireConfirmation"
+        ]
+      }
+    },
+    {
+      "id": "settings-code-execution",
+      "topic": "settings",
+      "title": {
+        "en": "Code execution switch",
+        "zh": "代码执行开关"
+      },
+      "aliases": {
+        "en": [
+          "code execution",
+          "allowCodeExecution",
+          "run code block"
+        ],
+        "zh": [
+          "代码执行",
+          "allowCodeExecution",
+          "运行代码块"
+        ]
+      },
+      "body": {
+        "en": "allowCodeExecution controls whether a code block in the assistant reply can be run with the local run button; with it off the block is still shown but the button is unavailable. It is a separate gate from allowRootAccess: one covers reply code blocks, the other covers whether run_shell and similar model tools are elevated. With both on, a single command can damage the system, so keep code execution for occasional use and root only while reading or writing system partitions. The confirmation card shows the full command; approve what you understand and ask for an explanation otherwise.",
+        "zh": "allowCodeExecution 控制助手回复里的代码块能否一键运行，也就是本地那条执行通道；关掉后代码块照常显示，只是运行按钮不可用。它和 allowRootAccess 是两道独立的门：前者管回复里的代码块，后者管 run_shell 这类模型工具的命令是否提权。两个都开时，一条命令就可能改坏系统；日常建议代码执行按需打开，root 只在读写系统分区时临时开。运行前确认卡会显示完整命令，看懂再点同意，看不懂就让助手先解释这条命令做什么、失败会怎样。"
+      },
+      "related": [
+        "capabilities-shell",
+        "settings-behavior"
+      ],
+      "covers": {
+        "tools": [],
+        "settings": [
+          "allowCodeExecution",
+          "allowRootAccess"
+        ]
+      }
+    },
+    {
+      "id": "settings-behavior",
+      "topic": "settings",
+      "title": {
+        "en": "Behaviour switches",
+        "zh": "行为类开关"
+      },
+      "aliases": {
+        "en": [
+          "streaming",
+          "toolCalling",
+          "keep history",
+          "advanced mode",
+          "behavior"
+        ],
+        "zh": [
+          "流式",
+          "streaming",
+          "toolCalling",
+          "保留历史",
+          "高级模式"
+        ]
+      },
+      "body": {
+        "en": "Behaviour switches. enabled is the master switch; off means no request is sent. streaming controls whether the reply appears as it is generated; off makes it arrive in one piece at the end, steadier on bad networks but slower to feel. toolCalling decides whether tools are offered at all: with it off the whole tool table is withheld and the assistant can only chat, so check it first when the assistant seems idle. keepHistory controls sending history back and includeContext controls the environment snapshot; both affect token cost. advancedMode reveals finer options such as temperature, system prompt and thinking mode; it is for debugging, not daily use.",
+        "zh": "行为类开关。enabled 是助手总开关，关掉后不发任何请求。streaming 控制回复是否边生成边显示，关掉后在结束时一次出现，网络差时更稳但等待感更强。toolCalling 控制是否允许模型调用工具，关掉后整张工具表都不下发给模型，助手只能聊天，读主题、装模块全都做不了，排查「助手不干活」时先看它。keepHistory 决定是否带回历史，includeContext 决定是否附带环境快照，两者都影响 token 消耗。advancedMode 打开后设置页会显示更细的选项，例如温度、系统提示词、思考模式，适合调试，日常不用开。"
+      },
+      "related": [
+        "overview-privacy",
+        "troubleshooting-tool-not-called"
+      ],
+      "covers": {
+        "tools": [],
+        "settings": [
+          "enabled",
+          "streaming",
+          "toolCalling",
+          "keepHistory",
+          "includeContext",
+          "advancedMode"
+        ]
+      }
+    },
+    {
+      "id": "settings-suggest-setting",
+      "topic": "settings",
+      "title": {
+        "en": "Let the assistant change a switch",
+        "zh": "让助手替你改设置"
+      },
+      "aliases": {
+        "en": [
+          "suggest_setting",
+          "change setting",
+          "turn on switch",
+          "turn off switch"
+        ],
+        "zh": [
+          "suggest_setting",
+          "帮我改设置",
+          "打开开关",
+          "关闭开关"
+        ]
+      },
+      "body": {
+        "en": "suggest_setting lets the assistant change a switch instead of telling you to go tap it. It submits key, value and reason; key must be one of 4 low-risk boolean switches: allowWebAccess, allowThemeRead, allowModuleAccess, allowExtensionAccess. High-risk switches — allowRootAccess, allowSuperuserAccess, allowSuperuserRootControl, allowSuperuserTemporaryRoot, allowSuperuserSwitch, allowModuleInstall, allowThemeWrite, allowExtensionWrite, requireConfirmation and allowCodeExecution — must be changed by the user on the settings page; the assistant never changes them through suggest_setting. The app validates the key, then forces a confirmation card, and writes nothing unless you approve. Credential fields such as endpoint, apiKey, model, format and providers can never be changed this way.",
+        "zh": "suggest_setting 让助手替你改设置，而不是只告诉你「去设置里点」。它提交 key、value 和 reason，key 只能是 4 个低风险布尔开关之一：allowWebAccess、allowThemeRead、allowModuleAccess、allowExtensionAccess。root、superuser、模块安装、主题写入、扩展写入、requireConfirmation、allowCodeExecution 等高风险开关必须由用户去设置页手动修改，助手不会通过 suggest_setting 改动它们。App 先校验 key，未知值会返回允许清单；随后强制弹确认卡，你同意才写盘，拒绝则什么都不改。endpoint、apiKey、model、format、providers 等凭据字段也不能改，且不支持「总是同意」的记住式放行，每次都要点确认。"
+      },
+      "related": [
+        "settings-confirmation",
+        "settings-permissions-overview"
+      ],
+      "covers": {
+        "tools": [
+          "suggest_setting"
+        ],
+        "settings": []
+      }
+    },
+    {
+      "id": "settings-search",
+      "topic": "settings",
+      "title": {
+        "en": "Search settings are not AiConfig",
+        "zh": "搜索设置不是 AiConfig 字段"
+      },
+      "aliases": {
+        "en": [
+          "search service",
+          "search settings",
+          "engine",
+          "search key"
+        ],
+        "zh": [
+          "搜索服务",
+          "搜索设置",
+          "搜索引擎",
+          "api key 搜索"
+        ]
+      },
+      "body": {
+        "en": "Search settings are not AiConfig. The search engine, its endpoint and its key live in AiSearchSettings and are edited in the Search section of the settings page; no tool can change them, since suggest_setting only accepts 4 low-risk boolean switches and rejects credential fields. Two consequences: switching the search service is manual, and allowWebAccess only decides whether the network is reachable, not which engine is used. When a search fails, check in order whether allowWebAccess is on, whether the search service has a key, and whether the quota is exhausted. open_app_page can focus the search section for you.",
+        "zh": "搜索设置不属于 AiConfig。搜索服务的引擎、接口地址和密钥保存在 AiSearchSettings 里，在设置页的「搜索」分节单独编辑，助手没有工具能改它们：suggest_setting 只认 4 个低风险布尔开关，凭据类字段一律拒绝。这带来两个后果：换搜索服务要你自己动手，助手只能提醒位置；allowWebAccess 只决定「能不能联网」，不决定「用哪个引擎」。排查搜索失败时按顺序看三件事：allowWebAccess 是否打开、搜索服务是否配好密钥、额度是否用完。想让助手带你到页面，可以让它用 open_app_page 打开 AI 设置并定位到搜索一节。"
+      },
+      "related": [
+        "settings-web",
+        "capabilities-app-navigation"
+      ],
+      "covers": {
+        "tools": [],
+        "settings": []
+      }
+    },
+    {
+      "id": "settings-mcp",
+      "topic": "settings",
+      "title": {
+        "en": "MCP is not an AiConfig field either",
+        "zh": "MCP 也不是 AiConfig 字段"
+      },
+      "aliases": {
+        "en": [
+          "mcp",
+          "mcp server",
+          "mcp config"
+        ],
+        "zh": [
+          "mcp",
+          "mcp服务器",
+          "mcp配置"
+        ]
+      },
+      "body": {
+        "en": "MCP is not an AiConfig field either. MCP servers (address, transport, auth headers, tool list) live in the MCP settings and form a third configuration, separate from the model provider and the search service. At runtime the assistant uses mcp_list to see servers and tools and mcp_call to invoke one tool, with arguments defined by the server. Both tools belong to the network ability and need allowWebAccess; the tools stay visible to the model at all times, and with allowWebAccess off a call to mcp_list or mcp_call returns a permission error and shows an inline switch instead of disappearing. Adding or removing an MCP server is manual, and suggest_setting cannot touch MCP auth headers since it only accepts the four low-risk boolean switches.",
+        "zh": "MCP 也不是 AiConfig 字段。MCP 服务器（地址、传输方式、认证头、工具清单）在 MCP 设置里维护，和模型服务商、搜索服务是三套独立配置。运行时助手用 mcp_list 看有哪些服务与工具，用 mcp_call 调用某个服务的某个工具，参数由服务端定义。这两个工具属于联网能力，受 allowWebAccess 控制；工具始终对模型可见，关闭 allowWebAccess 时调用 mcp_list 或 mcp_call 会返回权限错误，并在对话里显示内联开关，而不是把工具藏起来。新增或删除 MCP 服务必须你自己在设置页操作，助手只能读和调用，不能替你加服务；也不要指望 suggest_setting 去改 MCP 的认证头，它只认 4 个低风险布尔开关。"
+      },
+      "related": [
+        "settings-web",
+        "capabilities-web"
+      ],
+      "covers": {
+        "tools": [
+          "mcp_list",
+          "mcp_call"
+        ],
+        "settings": []
+      }
+    },
+    {
+      "id": "tools-visibility",
+      "topic": "tools",
+      "title": {
+        "en": "Why tools are always visible",
+        "zh": "工具为什么始终可见"
+      },
+      "aliases": {
+        "en": [
+          "tool hidden",
+          "no tools",
+          "tool list",
+          "inline switch"
+        ],
+        "zh": [
+          "工具看不见",
+          "没有工具",
+          "工具列表",
+          "内联开关"
+        ]
+      },
+      "body": {
+        "en": "Tools are always visible to the model by design. Permission switches never filter them; an unauthorized call is stopped at execution time and an inline switch appears in the conversation, effective immediately if you turn it on. This keeps the model from inventing abilities because it cannot see a tool, and lets you grant something for one request without touching long-term settings. An inline switch affects only that request. The one exception is toolCalling, the master gate: with it off the whole tool table is withheld and the model can only chat. If the model never calls anything at all, that is toolCalling or model ability, not permission. requireConfirmation controls whether each change shows a confirmation card first.",
+        "zh": "工具始终对模型可见，这是设计上的选择。权限开关不参与筛选，未授权的调用会在执行阶段被拦下，并在对话里弹出内联开关：点开就当场生效，点关就返回拒绝结果。这样模型不会因为看不见工具而编造能力，你也总能临时放行一次。内联开关只影响这一次请求，不改设置页里的长期值。唯一的例外是 toolCalling：它是工具通道的总闸，关掉后整张工具表都不下发，模型只能聊天。如果模型压根没发起调用，那是 toolCalling 或模型能力的问题，不是权限问题。"
+      },
+      "related": [
+        "settings-permissions-overview",
+        "troubleshooting-tool-not-called"
+      ],
+      "covers": {
+        "tools": [],
+        "settings": [
+          "requireConfirmation",
+          "toolCalling"
+        ]
+      }
+    },
+    {
+      "id": "tools-ask-user",
+      "topic": "tools",
+      "title": {
+        "en": "ask_user: the assistant asks you",
+        "zh": "ask_user：助手向你提问"
+      },
+      "aliases": {
+        "en": [
+          "ask user",
+          "options",
+          "choice",
+          "ask_user"
+        ],
+        "zh": [
+          "问你",
+          "选项",
+          "ask_user",
+          "选择题"
+        ]
+      },
+      "body": {
+        "en": "ask_user is how the assistant asks you a question; it is not an approval. It submits one question with 2 to 6 options, the app shows them above the input box, and unless allow_custom is false you can type your own answer. It has no side effects and does not mean you approved anything. The guide tells the assistant to use it whenever a route must be chosen (back up first, or edit first) instead of listing A/B/C in prose. After you answer, the same task continues; if you dismiss it, the turn stops until you send another message.",
+        "zh": "ask_user 是助手向你提问的工具，不是审批。它提交一个问题和 2 到 6 个选项，App 把选项显示在输入框上方，除非把 allow_custom 设为 false，否则你还能自己输入答案。它没有副作用，也不代表你同意了任何操作。指南要求助手在需要你选路线时用它，例如「先备份还是先改」，而不是在正文里列 A、B、C。你回答之后助手会继续同一轮任务；如果点掉不答，这一轮就停在那里，需要重新发一条消息推动它。"
+      },
+      "related": [
+        "tools-visibility",
+        "capabilities-column-wizard"
+      ],
+      "covers": {
+        "tools": [
+          "ask_user"
+        ],
+        "settings": []
+      }
+    },
+    {
+      "id": "tools-search-guide",
+      "topic": "tools",
+      "title": {
+        "en": "search_assistant_guide: search this guide",
+        "zh": "search_assistant_guide：查这份指南"
+      },
+      "aliases": {
+        "en": [
+          "search guide",
+          "assistant guide",
+          "search_assistant_guide"
+        ],
+        "zh": [
+          "查指南",
+          "助手指南",
+          "搜指南",
+          "search_assistant_guide"
+        ]
+      },
+      "body": {
+        "en": "search_assistant_guide searches this very guide. It takes query and an optional topic, one of overview, capabilities, settings, tools or troubleshooting, and has no capability gate: it is the app own read-only documentation, callable under any configuration, even before a model is configured. Results come back ranked with id, title, body and related ids, and answers cite the id so you can follow up. When nothing matches it says so instead of guessing a setting. For questions about where a switch lives, why something was denied or what the assistant can do, it should call this first and then answer.",
+        "zh": "search_assistant_guide 查的就是这份指南，参数是 query 和可选的 topic，topic 只能是 overview、capabilities、settings、tools、troubleshooting 五选一。它没有任何能力门禁：这是自家只读文档，任何配置下都能调用，包括刚装好还没配模型的时候。返回按相关度排序的条目，带 id、标题、正文和相关条目，回答里引用 id 方便你追问。指南查不到时它会明确说没有，不允许猜设置项。问「某个开关在哪」「为什么被拒」「你能干什么」这类问题，助手都应该先调它再组织答案。"
+      },
+      "related": [
+        "capabilities-detector-answers",
+        "troubleshooting-guide-miss"
+      ],
+      "covers": {
+        "tools": [
+          "search_assistant_guide"
+        ],
+        "settings": []
+      }
+    },
+    {
+      "id": "troubleshooting-denied",
+      "topic": "troubleshooting",
+      "title": {
+        "en": "What a denial means",
+        "zh": "操作被拒怎么办"
+      },
+      "aliases": {
+        "en": [
+          "denied",
+          "refused",
+          "no permission",
+          "failed"
+        ],
+        "zh": [
+          "被拒",
+          "拒绝",
+          "没权限",
+          "为什么失败"
+        ]
+      },
+      "body": {
+        "en": "Two kinds of denial. The first is a missing grant: the result names the authorization and an inline switch appears in the conversation, effective for the rest of that request once turned on. The second is your deny tap on the confirmation card: the model receives the refusal text and must change plan or stop and ask. A third common case is an invalid argument, for example a misspelled suggest_setting key or an unknown susfs_config_set field; the result then lists the allowed values, so fix and retry. A permission denial is not a bug, and opening every switch to bypass it is worse than granting one thing once. requireConfirmation decides whether a confirmation card appears at all; when it is off, only permission denials remain.",
+        "zh": "被拒有两种，先分清。第一种是权限未授予：结果里会说缺少某种授权，对话里同时出现内联开关，点开即当场生效，这次请求内后续调用就能过。第二种是你在确认卡上点了拒绝：结果里是拒绝文案，模型只能换方案或停下来问你。还有常见的第三种：参数不合法，例如 suggest_setting 的 key 拼错、susfs_config_set 用了未知字段，这时会返回允许值列表，照着改就行。不要把权限拒绝当成 bug，也不要为了绕过去一次性打开所有开关；按需临时放行更安全。"
+      },
+      "related": [
+        "settings-permissions-overview",
+        "settings-confirmation"
+      ],
+      "covers": {
+        "tools": [],
+        "settings": [
+          "requireConfirmation"
+        ]
+      }
+    },
+    {
+      "id": "troubleshooting-tool-not-called",
+      "topic": "troubleshooting",
+      "title": {
+        "en": "The assistant never calls tools",
+        "zh": "助手不调用工具"
+      },
+      "aliases": {
+        "en": [
+          "does not call tools",
+          "tools not used",
+          "assistant idle"
+        ],
+        "zh": [
+          "不调用工具",
+          "工具没反应",
+          "助手不干活"
+        ]
+      },
+      "body": {
+        "en": "When the assistant never calls tools, check in order. First, toolCalling: with it off the whole tool table is withheld and the model can only chat. Second, whether the model supports function calling; some small or reasoning-only models never call tools and answer in prose. Third, streaming and the network: if a middle layer cuts the stream mid-arguments, a tool call can arrive incomplete, which looks like a failed attempt, so retry with streaming off and compare. Fourth, your own prompt: if you asked it to just talk, it obeys. If all that is fine, have it report the environment with get_environment to prove the tool path works.",
+        "zh": "助手不调用工具时按顺序排查。第一步看 toolCalling 是否打开，关掉后整张工具表都不下发，模型只能聊天，永远不会发起调用。第二步看模型是否支持 function calling，部分小模型或纯推理模型不支持工具，会一直用文字回答。第三步看 streaming 与网络：流式被中间层截断时，工具调用参数可能收到一半就断，表现为「想调但没调成」，关掉 streaming 重试往往能看到差异。第四步看提示词：如果你要求「只聊天别动手」，模型会遵守。确认以上都不是，再让助手用 get_environment 回报一次环境，看工具路径本身是否通。"
+      },
+      "related": [
+        "settings-behavior",
+        "tools-visibility"
+      ],
+      "covers": {
+        "tools": [],
+        "settings": [
+          "toolCalling",
+          "streaming"
+        ]
+      }
+    },
+    {
+      "id": "troubleshooting-guide-miss",
+      "topic": "troubleshooting",
+      "title": {
+        "en": "The guide finds nothing",
+        "zh": "指南查不到条目"
+      },
+      "aliases": {
+        "en": [
+          "not found",
+          "no result",
+          "guide miss"
+        ],
+        "zh": [
+          "查不到",
+          "搜不到",
+          "指南没有"
+        ]
+      },
+      "body": {
+        "en": "What to do when the guide finds nothing. Rephrase first: if a Chinese query misses, try English keywords, since aliases cover both languages and many phrasings only hit on one side. Then drop the topic filter, because naming a topic hides entries in other categories. Still nothing? Start from an overview entry such as capabilities-overview and follow related ids down. When an entry truly does not exist, the assistant must say the guide has nothing rather than invent a setting; that is a hard rule in its prompt. It also means this guide needs a new entry, so report the gap.",
+        "zh": "指南查不到时的处理顺序。先换说法：中文查不到就用英文关键词再查一次，指南的别名覆盖两种语言，很多说法只有一侧命中。再放宽 topic：指定 topic 会过滤掉其他分类的条目，去掉 topic 再查一次。还不行就从 capabilities-overview 这类总览条目定位大方向，再顺着 related 往下找。确实没有的条目，助手应当直接说「指南里没有」，不要凭印象编一个设置项，这是它提示词里的硬规则。遇到这种情况也说明这份指南该补条目了，可以把问题反馈给维护者。"
+      },
+      "related": [
+        "tools-search-guide",
+        "capabilities-overview"
+      ],
+      "covers": {
+        "tools": [],
+        "settings": []
+      }
+    },
+    {
+      "id": "troubleshooting-model-errors",
+      "topic": "troubleshooting",
+      "title": {
+        "en": "Reading model errors",
+        "zh": "模型报错怎么读"
+      },
+      "aliases": {
+        "en": [
+          "error",
+          "401",
+          "404",
+          "429",
+          "cannot connect"
+        ],
+        "zh": [
+          "报错",
+          "401",
+          "404",
+          "429",
+          "连不上"
+        ]
+      },
+      "body": {
+        "en": "Model errors: identify the layer first. 401 or 403 usually means an invalid apiKey, exhausted quota or missing access; 404 is normally a wrong endpoint path (missing a /v1 style suffix) or a misspelled model name; 429 is rate limiting, so wait or switch models; timeouts and connection resets are network problems. All of these happen in the request layer and have nothing to do with tool grants, so flipping switches will not help. The assistant prints the raw error, and the status code tells you more than the message. If chat works but tool calls fail, the model lacks function calling; switch models instead of changing the app. If the master enabled switch is off, there is no request at all, not an error.",
+        "zh": "模型报错先分辨层级。401 或 403 多半是 apiKey 无效、额度用完或没权限；404 通常是 endpoint 路径不对，例如少了 /v1 之类的后缀，或者 model 名字写错；429 是限流，等一会儿或换模型；超时与连接重置多是网络问题。这些错误发生在请求层，和工具授权无关，怎么改开关都没用。助手会把错误原文贴出来，照着状态码看比看文案快。如果只有工具调用失败而聊天正常，那是模型不支持 function calling，换一个支持工具的模型就行，不用改 App。"
+      },
+      "related": [
+        "overview-first-setup",
+        "settings-behavior"
+      ],
+      "covers": {
+        "tools": [],
+        "settings": [
+          "enabled"
+        ]
+      }
+    }
+  ]
+}

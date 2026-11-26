@@ -201,6 +201,7 @@
     <string name="ai_approval_column_topic">允许本专题的常规步骤</string>
     <string name="ai_approval_column_reboot">重启设备</string>
     <string name="ai_approval_column_rollback">撤销专栏改动</string>
+    <string name="ai_approval_setting">修改助手设置</string>
     <string name="ai_allow_theme_read">允许读取主题数据</string>
     <string name="ai_allow_theme_read_summary">读取外观、颜色、布局和自定义文字设置。</string>
     <string name="ai_superuser_section">超级用户控制</string>
@@ -269,6 +270,8 @@
     <string name="ai_risk_body_module_install">允许助手下载并安装模块。恶意或不兼容的模块可能导致无法开机或设备被入侵。</string>
     <string name="ai_risk_body_code_execution">允许助手提供 shell 代码块，并在你确认后使用管理器的 root shell 执行。命令可以修改任意文件或设置。</string>
     <string name="ai_risk_body_advanced_api">高级 API 模式会开放请求超时、重试、生成参数、自定义 HTTP 请求头和原始请求体覆盖。错误的值可能导致所有请求失败、把数据发往错误地址或泄露 API Key。仅在你了解提供商 API 时启用</string>
+    <string name="ai_risk_body_theme_write">开启后会允许助手修改外观、颜色、自定义文案与图标，且默认覆盖全部主题写入特性，助手因此能改动整个应用的观感。只有在你希望助手管理外观时才开启。</string>
+    <string name="ai_page_icon_text">应用图标与文字</string>
     <string name="ai_advanced_mode">高级 API 模式</string>
     <string name="ai_advanced_mode_summary">仅限专家的请求选项。默认隐藏，启用时需要输入确认短语。</string>
     <string name="ai_advanced_phrase">输入 ADVANCED 以确认</string>

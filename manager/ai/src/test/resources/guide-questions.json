@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "questions": [
+    {
+      "query": "你能干什么",
+      "expect": "capabilities-overview"
+    },
+    {
+      "query": "这个助手是干嘛的",
+      "expect": "overview-what-is-assistant"
+    },
+    {
+      "query": "第一次用要填什么",
+      "expect": "overview-first-setup"
+    },
+    {
+      "query": "聊天记录会保存到哪里",
+      "expect": "overview-privacy"
+    },
+    {
+      "query": "怎么改主题颜色",
+      "expect": "capabilities-appearance"
+    },
+    {
+      "query": "能生成背景图片吗",
+      "expect": "capabilities-theme-images"
+    },
+    {
+      "query": "怎么给应用临时 root",
+      "expect": "capabilities-superuser"
+    },
+    {
+      "query": "帮我找一个模块装上",
+      "expect": "capabilities-modules"
+    },
+    {
+      "query": "susfs 是做什么的",
+      "expect": "capabilities-kernel-hiding"
+    },
+    {
+      "query": "你能联网搜索吗",
+      "expect": "capabilities-web"
+    },
+    {
+      "query": "能跑 shell 命令吗",
+      "expect": "capabilities-shell"
+    },
+    {
+      "query": "扩展功能在哪",
+      "expect": "capabilities-extensions"
+    },
+    {
+      "query": "你怎么知道设备信息",
+      "expect": "capabilities-app-navigation"
+    },
+    {
+      "query": "专栏向导怎么用",
+      "expect": "capabilities-column-wizard"
+    },
+    {
+      "query": "检测器红了怎么排查",
+      "expect": "capabilities-detector-answers"
+    },
+    {
+      "query": "联网权限开关叫什么",
+      "expect": "settings-web"
+    },
+    {
+      "query": "超级用户相关开关有哪些",
+      "expect": "settings-superuser"
+    },
+    {
+      "query": "安装模块要开哪个权限",
+      "expect": "settings-modules"
+    },
+    {
+      "query": "每次操作都要弹确认吗",
+      "expect": "settings-confirmation"
+    },
+    {
+      "query": "allowCodeExecution 是干什么的",
+      "expect": "settings-code-execution"
+    },
+    {
+      "query": "流式输出怎么关闭",
+      "expect": "settings-behavior"
+    },
+    {
+      "query": "你可以帮我改设置吗",
+      "expect": "settings-suggest-setting"
+    },
+    {
+      "query": "搜索服务配置在哪里改",
+      "expect": "settings-search"
+    },
+    {
+      "query": "MCP 服务器怎么添加",
+      "expect": "settings-mcp"
+    },
+    {
+      "query": "工具列表为什么是空的",
+      "expect": "tools-visibility"
+    },
+    {
+      "query": "ask_user 是什么",
+      "expect": "tools-ask-user"
+    },
+    {
+      "query": "怎么搜索这个助手指南",
+      "expect": "tools-search-guide"
+    },
+    {
+      "query": "操作被拒绝了怎么办",
+      "expect": "troubleshooting-denied"
+    },
+    {
+      "query": "助手一直不调用工具",
+      "expect": "troubleshooting-tool-not-called"
+    },
+    {
+      "query": "模型报 401 错误",
+      "expect": "troubleshooting-model-errors"
+    }
+  ]
+}

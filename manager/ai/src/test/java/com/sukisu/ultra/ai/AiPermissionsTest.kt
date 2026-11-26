@@ -121,7 +121,7 @@ class AiPermissionsTest {
         assertEquals(AiRiskKind.EXTENSION_WRITE, AiCapability.EXTENSIONS.riskKind())
         assertEquals(AiRiskKind.MODULE_INSTALL, AiCapability.MODULES.riskKind())
         assertEquals(null, AiCapability.SUPERUSER.riskKind())
-        assertEquals(null, AiCapability.THEME.riskKind())
+        assertEquals(AiRiskKind.THEME_WRITE, AiCapability.THEME.riskKind())
         assertEquals(null, AiCapability.WEB.riskKind())
     }
 

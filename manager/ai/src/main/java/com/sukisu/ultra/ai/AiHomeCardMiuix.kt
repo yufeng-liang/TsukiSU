@@ -1,5 +1,7 @@
 package com.sukisu.ultra.ai
 
+import com.sukisu.ultra.ai.api.AiSettingsTarget
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -203,8 +205,11 @@ internal fun AiConfigEditorMiuix(
     onFetchModels: (Boolean) -> Unit = {},
     // 联网搜索与 MCP 分组插在「连接」之后、「自定义指令」之前，由设置页从外部传入。
     beforeSystemPrompt: @Composable () -> Unit = {},
-    // 从聊天页快捷条跳进来时，把锚点挂到连接卡上并描一圈边。
+    // 从聊天页快捷条或助手工具跳进来时，把锚点挂到对应分组卡上并描一圈边。
     focusCard: Modifier = Modifier,
+    focusReadScope: Modifier = Modifier,
+    focusWriteScope: Modifier = Modifier,
+    focusBehavior: Modifier = Modifier,
     highlight: AiSettingsTarget? = null,
 ) {
     var pendingRiskKind by remember { mutableStateOf<AiRiskKind?>(null) }
@@ -746,7 +751,10 @@ internal fun AiConfigEditorMiuix(
             )
         }
         }
-        AiSettingsCardMiuix {
+        AiSettingsCardMiuix(
+            modifier = focusReadScope,
+            highlighted = highlight == AiSettingsTarget.ReadScope,
+        ) {
         Text(
             text = stringResource(R.string.ai_scope_section),
             style = MiuixTheme.textStyles.title4,
@@ -874,7 +882,10 @@ internal fun AiConfigEditorMiuix(
         )
 
         }
-        AiSettingsCardMiuix {
+        AiSettingsCardMiuix(
+            modifier = focusWriteScope,
+            highlighted = highlight == AiSettingsTarget.WriteScope,
+        ) {
         Text(
             text = stringResource(R.string.ai_write_section),
             style = MiuixTheme.textStyles.title4,
@@ -884,13 +895,19 @@ internal fun AiConfigEditorMiuix(
             summary = stringResource(R.string.ai_allow_theme_summary),
             checked = draft.allowThemeWrite,
             onCheckedChange = { enabled ->
-                onDraftChange(
-                    draft.copy(
-                        allowThemeWrite = enabled,
-                        allowThemeRead = enabled || draft.allowThemeRead,
-                        themeWriteFeatures = if (enabled) AiThemeFeature.ALL_IDS else draft.themeWriteFeatures,
-                    )
-                )
+                if (!enabled) {
+                    onDraftChange(draft.copy(allowThemeWrite = false))
+                } else {
+                    requestRisk(AiRiskKind.THEME_WRITE) {
+                        onDraftChange(
+                            draft.copy(
+                                allowThemeWrite = true,
+                                allowThemeRead = true,
+                                themeWriteFeatures = AiThemeFeature.ALL_IDS,
+                            )
+                        )
+                    }
+                }
             },
         )
         if (draft.allowThemeWrite) {
@@ -959,7 +976,10 @@ internal fun AiConfigEditorMiuix(
             onCheckedChange = { onDraftChange(draft.copy(requireConfirmation = it)) },
         )
         }
-        AiSettingsCardMiuix {
+        AiSettingsCardMiuix(
+            modifier = focusBehavior,
+            highlighted = highlight == AiSettingsTarget.Behavior,
+        ) {
         Text(
             text = stringResource(R.string.ai_behavior_section),
             style = MiuixTheme.textStyles.title4,

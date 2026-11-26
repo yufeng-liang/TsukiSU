@@ -11,28 +11,6 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 
 /**
- * 输入框快捷条上点「助手设置」时要落到哪一组。
- *
- * 只登记真正能滚到位的区域：连接配置（模型与推理强度都在这里）和联网搜索。
- */
-enum class AiSettingsTarget { Model, Search }
-
-/**
- * 一次性信使：聊天页写、设置页读一次就清空。
- *
- * 不落盘，所以用户自己从别处进设置页时，不会被上一次的目标带着跳。
- */
-internal object AiSettingsFocus {
-    private var pending: AiSettingsTarget? = null
-
-    fun request(target: AiSettingsTarget) {
-        pending = target
-    }
-
-    fun consume(): AiSettingsTarget? = pending.also { pending = null }
-}
-
-/**
  * 跳转落点的高亮描边：目标卡亮一圈再淡出，卡片底色不动，免得看着像被选中。
  */
 @Composable

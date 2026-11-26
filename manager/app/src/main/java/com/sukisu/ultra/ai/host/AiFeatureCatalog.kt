@@ -24,6 +24,8 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
+import java.util.Locale
+
 /**
  * Host-specific destinations understood by the manager navigator. The library
  * only sees the [AiNavigationTarget] marker and hands the object back untouched.
@@ -37,7 +39,10 @@ sealed interface ManagerAiTarget : AiNavigationTarget {
         val pageIndex: Int get() = destination.ordinal
     }
 
-    data class Push(val route: Route) : ManagerAiTarget
+    data class Push(
+        val route: Route,
+        override val settingsFocus: AiSettingsTarget? = null,
+    ) : ManagerAiTarget
 }
 
 data class AiFeatureAvailability(
@@ -79,6 +84,13 @@ object AiFeatureCatalog : AiFeatureService {
     private var cachedRootProbe = true
     private var cachedExtensionRead = true
     private const val CACHE_MS = 15_000L
+
+    /** section 归一：trim → camelCase 拆词 → 小写 → 空格/连字符转下划线；让 readScope、write-scope、read scope 都归一成 read_scope。 */
+    internal fun normalizeSection(raw: String): String =
+        raw.trim()
+            .replace(Regex("([a-z0-9])([A-Z])")) { it.groupValues[1] + "_" + it.groupValues[2] }
+            .lowercase(Locale.ROOT)
+            .replace(Regex("""[\s-]+"""), "_")
 
     suspend fun availability(
         allowRootProbe: Boolean = true,
@@ -155,7 +167,7 @@ object AiFeatureCatalog : AiFeatureService {
                 entries(availability).forEach { entry ->
                     add(buildJsonObject {
                         put("id", entry.id)
-                        put("title", entry.title)
+                        put("title", AiFeatureTitles.displayTitle(entry.title))
                         put("summary", entry.summary)
                         put("supported", entry.supported)
                         put("openable", entry.openable)
@@ -275,7 +287,7 @@ object AiFeatureCatalog : AiFeatureService {
                     text = "A navigation button for the column " + targetColumnId + " is shown below. " +
                         "The user can tap it to browse its topics and guides.",
                     target = ManagerAiTarget.Push(Route.ModuleColumn(targetColumnId)),
-                    title = "Column · " + targetColumnId,
+                    title = AiFeatureTitles.displayTitle("Column · " + targetColumnId),
                 )
             }
             val targetTopicId = topicId?.trim()?.takeIf { it.isNotEmpty() }
@@ -286,7 +298,7 @@ object AiFeatureCatalog : AiFeatureService {
                 text = "A navigation button for the topic wizard " + targetTopicId + " is shown below. " +
                     "The wizard runs the same steps as column_wizard_run and keeps the ledger in sync.",
                 target = ManagerAiTarget.Push(Route.ColumnWizard(targetColumnId, targetTopicId)),
-                title = "Wizard · " + targetTopicId,
+                title = AiFeatureTitles.displayTitle("Wizard · " + targetTopicId),
             )
         }
 
@@ -297,7 +309,7 @@ object AiFeatureCatalog : AiFeatureService {
 
         // Optional precise section/tab overrides for generic ids.
         if (normalized == "settings" && !section.isNullOrBlank()) {
-            val anchor = section.trim().lowercase().replace('-', '_')
+            val anchor = normalizeSection(section)
             if (anchor !in SettingsSection.ALL) {
                 return AiOpenPageResult(
                     "Unknown Settings section '$section'. Use one of: " +
@@ -307,7 +319,28 @@ object AiFeatureCatalog : AiFeatureService {
             return AiOpenPageResult(
                 text = "A navigation button for Settings > $anchor is shown below.",
                 target = ManagerAiTarget.Tab(BottomBarDestination.Setting, anchor),
-                title = "Settings · $anchor",
+                title = AiFeatureTitles.displayTitle("Settings · $anchor"),
+            )
+        }
+        // AI 助手设置页的分节落点：目标挂在导航按钮上，用户真点击时再写入一次性信使，避免提前消费。
+        if (normalized == "ai_settings" && !section.isNullOrBlank()) {
+            val anchor = normalizeSection(section)
+            val focusTarget = when (anchor) {
+                "model" -> AiSettingsTarget.Model
+                "search" -> AiSettingsTarget.Search
+                "read_scope", "read" -> AiSettingsTarget.ReadScope
+                "write_scope", "write" -> AiSettingsTarget.WriteScope
+                "behavior", "behaviour" -> AiSettingsTarget.Behavior
+                else -> null
+            } ?: return AiOpenPageResult(
+                "Unknown assistant settings section '$section'. Use one of: " +
+                    AI_SETTINGS_ANCHORS.joinToString() + "."
+            )
+            return AiOpenPageResult(
+                text = "A navigation button for Assistant settings > $anchor is shown below. " +
+                    "The assistant settings page scrolls to that group and highlights it.",
+                target = ManagerAiTarget.Push(Route.AiSettings, focusTarget),
+                title = AiFeatureTitles.displayTitle("Assistant settings · $anchor"),
             )
         }
         if (normalized == "appearance" && !section.isNullOrBlank()) {
@@ -321,7 +354,7 @@ object AiFeatureCatalog : AiFeatureService {
             return AiOpenPageResult(
                 text = "A navigation button for Appearance > $appearanceSection is shown below.",
                 target = ManagerAiTarget.Push(Route.ColorPalette(appearanceSection)),
-                title = "Appearance · $appearanceSection",
+                title = AiFeatureTitles.displayTitle("Appearance · $appearanceSection"),
             )
         }
         if (normalized == "susfs" && !tab.isNullOrBlank()) {
@@ -334,7 +367,7 @@ object AiFeatureCatalog : AiFeatureService {
             return AiOpenPageResult(
                 text = "A navigation button for SuSFS > $suSfsTab is shown below.",
                 target = ManagerAiTarget.Push(Route.SuSFS(suSfsTab)),
-                title = "SuSFS · $suSfsTab",
+                title = AiFeatureTitles.displayTitle("SuSFS · $suSfsTab"),
             )
         }
 
@@ -359,7 +392,7 @@ object AiFeatureCatalog : AiFeatureService {
         return AiOpenPageResult(
             text = "A navigation button for '${entry.title}' is shown below. The user can tap it to go there.",
             target = target,
-            title = entry.title,
+            title = AiFeatureTitles.displayTitle(entry.title),
         )
     }
 
@@ -1024,6 +1057,12 @@ object AiFeatureCatalog : AiFeatureService {
     private val SU_SFS_TABS = listOf(
         "basic", "features", "sus_paths", "sus_loop_paths", "sus_maps", "kstat",
         "priority_uid", "enabled_features",
+    )
+
+    /** AiSettings 页可用的分节名（open_page 的 section 参数），别名与规范名都列在这里。 */
+    private val AI_SETTINGS_ANCHORS = listOf(
+        "model", "search", "read_scope", "read", "write_scope", "write",
+        "behavior", "behaviour",
     )
 
     private const val KERNEL_REASON = "No SukiSU kernel is active (preview mode)."

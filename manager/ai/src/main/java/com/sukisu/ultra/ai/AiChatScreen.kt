@@ -1,6 +1,8 @@
 package com.sukisu.ultra.ai
 
 import com.sukisu.ultra.ai.api.AiNavigationTarget
+import com.sukisu.ultra.ai.api.AiSettingsFocus
+import com.sukisu.ultra.ai.api.AiSettingsTarget
 
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult

@@ -1,5 +1,8 @@
 package com.sukisu.ultra.ai
 
+import com.sukisu.ultra.ai.api.AiSettingsFocus
+import com.sukisu.ultra.ai.api.AiSettingsTarget
+
 import android.annotation.SuppressLint
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -216,6 +219,9 @@ fun AiSettingsScreen(
     var focusHighlight by remember { mutableStateOf(focusTarget) }
     val cardAnchor = remember { BringIntoViewRequester() }
     val searchAnchor = remember { BringIntoViewRequester() }
+    val readScopeAnchor = remember { BringIntoViewRequester() }
+    val writeScopeAnchor = remember { BringIntoViewRequester() }
+    val behaviorAnchor = remember { BringIntoViewRequester() }
     LaunchedEffect(focusTarget) {
         if (focusTarget == null) return@LaunchedEffect
         // 目标卡要先完成一次布局，滚过去才有落点。
@@ -223,6 +229,9 @@ fun AiSettingsScreen(
         when (focusTarget) {
             AiSettingsTarget.Model -> cardAnchor.bringIntoView()
             AiSettingsTarget.Search -> searchAnchor.bringIntoView()
+            AiSettingsTarget.ReadScope -> readScopeAnchor.bringIntoView()
+            AiSettingsTarget.WriteScope -> writeScopeAnchor.bringIntoView()
+            AiSettingsTarget.Behavior -> behaviorAnchor.bringIntoView()
         }
         // 亮 1.4 秒就撤，别一直描着边影响阅读。
         delay(1400)
@@ -239,6 +248,9 @@ fun AiSettingsScreen(
             onFetchModels = fetchModels,
             focusCard = Modifier.bringIntoViewRequester(cardAnchor),
             focusSearch = Modifier.bringIntoViewRequester(searchAnchor),
+            focusReadScope = Modifier.bringIntoViewRequester(readScopeAnchor),
+            focusWriteScope = Modifier.bringIntoViewRequester(writeScopeAnchor),
+            focusBehavior = Modifier.bringIntoViewRequester(behaviorAnchor),
             highlight = focusHighlight,
             onBack = {
                 advancedOptionsError()?.let { reportAdvancedOptionsError(it) }
@@ -255,6 +267,9 @@ fun AiSettingsScreen(
             onFetchModels = fetchModels,
             focusCard = Modifier.bringIntoViewRequester(cardAnchor),
             focusSearch = Modifier.bringIntoViewRequester(searchAnchor),
+            focusReadScope = Modifier.bringIntoViewRequester(readScopeAnchor),
+            focusWriteScope = Modifier.bringIntoViewRequester(writeScopeAnchor),
+            focusBehavior = Modifier.bringIntoViewRequester(behaviorAnchor),
             highlight = focusHighlight,
             onBack = {
                 advancedOptionsError()?.let { reportAdvancedOptionsError(it) }
@@ -274,6 +289,9 @@ private fun AiSettingsMaterial(
     onFetchModels: (Boolean) -> Unit,
     focusCard: Modifier = Modifier,
     focusSearch: Modifier = Modifier,
+    focusReadScope: Modifier = Modifier,
+    focusWriteScope: Modifier = Modifier,
+    focusBehavior: Modifier = Modifier,
     highlight: AiSettingsTarget? = null,
     onBack: () -> Unit,
 ) {
@@ -322,6 +340,9 @@ private fun AiSettingsMaterial(
                 onFetchModels = onFetchModels,
                 focusCard = focusCard,
                 focusSearch = focusSearch,
+                focusReadScope = focusReadScope,
+                focusWriteScope = focusWriteScope,
+                focusBehavior = focusBehavior,
                 highlight = highlight,
             )
         }
@@ -338,6 +359,9 @@ private fun AiSettingsMiuix(
     onFetchModels: (Boolean) -> Unit,
     focusCard: Modifier = Modifier,
     focusSearch: Modifier = Modifier,
+    focusReadScope: Modifier = Modifier,
+    focusWriteScope: Modifier = Modifier,
+    focusBehavior: Modifier = Modifier,
     highlight: AiSettingsTarget? = null,
     onBack: () -> Unit,
 ) {
@@ -393,6 +417,9 @@ private fun AiSettingsMiuix(
                 fetchingModels = fetchingModels,
                 onFetchModels = onFetchModels,
                 focusCard = focusCard,
+                focusReadScope = focusReadScope,
+                focusWriteScope = focusWriteScope,
+                focusBehavior = focusBehavior,
                 highlight = highlight,
                 beforeSystemPrompt = {
                     AiSettingsSectionMiuix(

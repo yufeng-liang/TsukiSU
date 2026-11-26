@@ -6,6 +6,8 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.foundation.lazy.items
 
 import com.sukisu.ultra.ai.api.AiNavigationTarget
+import com.sukisu.ultra.ai.api.AiSettingsFocus
+import com.sukisu.ultra.ai.api.AiSettingsTarget
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -775,7 +777,10 @@ private fun AiMessageBubbleMaterial(
                     val navigation = message.navigation
                     if (navigation != null) {
                         Button(
-                            onClick = { onNavigate(navigation) },
+                            onClick = {
+                                navigation.settingsFocus?.let(AiSettingsFocus::request)
+                                onNavigate(navigation)
+                            },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Icon(

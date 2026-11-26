@@ -202,6 +202,7 @@
     <string name="ai_approval_column_topic">Allow the regular steps of this topic</string>
     <string name="ai_approval_column_reboot">Restart the device</string>
     <string name="ai_approval_column_rollback">Undo column changes</string>
+    <string name="ai_approval_setting">Change assistant setting</string>
     <string name="ai_allow_theme_read">Allow theme data</string>
     <string name="ai_allow_theme_read_summary">Read appearance, colors, layout and custom text settings.</string>
     <string name="ai_superuser_section">Superuser control</string>
@@ -270,6 +271,8 @@
     <string name="ai_risk_body_module_install">The assistant can download and install modules. A malicious or incompatible module can break boot or compromise the device.</string>
     <string name="ai_risk_body_code_execution">The assistant can propose shell code blocks and run them with the root shell provided by the manager after your confirmation. Commands can change any file or setting.</string>
     <string name="ai_risk_body_advanced_api">Advanced API mode exposes request timeouts, retries, generation parameters, custom HTTP headers and raw request-body overrides. Incorrect values can break every request, send data to the wrong endpoint, or expose your API key. Only enable this if you understand the provider API;</string>
+    <string name="ai_risk_body_theme_write">Enabling this lets the assistant change appearance, colors, custom texts and icons. It covers every theme-write feature by default, so the assistant can edit the look of the whole app. Turn it on only if you want the assistant to manage appearance.</string>
+    <string name="ai_page_icon_text">App icon &amp; text</string>
     <string name="ai_advanced_mode">Advanced API mode</string>
     <string name="ai_advanced_mode_summary">Expert-only request options. Hidden until enabled; requires typing a confirmation phrase.</string>
     <string name="ai_advanced_phrase">Type ADVANCED to confirm</string>

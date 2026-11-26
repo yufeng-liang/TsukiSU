@@ -41,24 +41,29 @@ data class AiApprovalRequest(
     val grantKey: String get() = if (scope.isBlank()) tool else scope
 }
 
-enum class AiCapability(val modelLabel: String) {
-    ROOT("root access"),
-    SUPERUSER("superuser data"),
-    SUPERUSER_ROOT("permanent app root control"),
-    SUPERUSER_TEMP_ROOT("temporary app root control"),
-    SUPERUSER_SWITCH("global su switch"),
-    MODULE_DATA("module data"),
-    EXTENSION_DATA("extension data"),
-    WEB("web access"),
-    THEME_READ("theme data"),
+/**
+ * 能力项。toggleKey 是设置页里对应的布尔开关名，权限失败时直接告诉模型该提议打开哪个键；
+ * THEME / EXTENSIONS 是特性集合，没有单一开关，保持 null。
+ */
+enum class AiCapability(val modelLabel: String, val toggleKey: String? = null) {
+    ROOT("root access", "allowRootAccess"),
+    SUPERUSER("superuser data", "allowSuperuserAccess"),
+    SUPERUSER_ROOT("permanent app root control", "allowSuperuserRootControl"),
+    SUPERUSER_TEMP_ROOT("temporary app root control", "allowSuperuserTemporaryRoot"),
+    SUPERUSER_SWITCH("global su switch", "allowSuperuserSwitch"),
+    MODULE_DATA("module data", "allowModuleAccess"),
+    EXTENSION_DATA("extension data", "allowExtensionAccess"),
+    WEB("web access", "allowWebAccess"),
+    THEME_READ("theme data", "allowThemeRead"),
     THEME("theme changes"),
     EXTENSIONS("extension changes"),
-    MODULES("module installation"),
+    MODULES("module installation", "allowModuleInstall"),
 }
 
 class AiPermissionRequiredException(
     val capability: AiCapability,
     detail: String? = null,
+    val toggleKey: String? = capability.toggleKey,
 ) : Exception(detail ?: "${capability.modelLabel} are disabled in the assistant settings")
 
 /**
@@ -76,6 +81,12 @@ object AiTools {
     const val SEARCH_ANSWERS_TOOL = "search_detector_answers"
     const val MCP_LIST_TOOL = "mcp_list"
     const val MCP_CALL_TOOL = "mcp_call"
+
+    /** 检索内置的「助手用户指南」资产。 */
+    const val SEARCH_GUIDE_TOOL = "search_assistant_guide"
+
+    /** 建议修改一个布尔助手开关，由 App 弹审批卡后写盘。 */
+    const val SUGGEST_SETTING_TOOL = "suggest_setting"
 
     /** 「隐藏环境」专栏：只读动作（清单 / 进度 / 步骤 / 自检）。 */
     const val COLUMN_WIZARD_TOOL = "column_wizard"
@@ -143,6 +154,8 @@ object AiTools {
         add(searchAnswersTool)
         add(mcpListTool)
         add(mcpCallTool)
+        add(searchGuideTool)
+        add(suggestSettingTool)
     }
 
     suspend fun execute(
@@ -154,6 +167,7 @@ object AiTools {
         onImage: (String) -> Unit = {},
         onPickFile: suspend (AiFilePickerMode, String, String) -> Uri? = { _, _, _ -> null },
         ask: suspend (AiUserQuestion) -> String? = { null },
+        onConfigChanged: () -> Unit = {},
         approve: suspend (AiApprovalRequest) -> Boolean,
     ): String {
         val args = parseArguments(call.arguments)
@@ -362,6 +376,7 @@ object AiTools {
                     }
 
                     "save" -> {
+                        requireThemeWrite(config, AiThemeFeature.IMAGES)
                         require(files.size == 1) { "Save one image at a time; use target background or home_card." }
                         val source = files.first()
                         val suggested = when (target) {
@@ -433,7 +448,10 @@ object AiTools {
                 )
             }
 
-            "module_capabilities" -> host.modules.moduleCapabilities()
+            "module_capabilities" -> {
+                requirePermission(config.allowModuleAccess, AiCapability.MODULE_DATA)
+                host.modules.moduleCapabilities()
+            }
 
             "module_search" -> {
                 requirePermission(config.allowModuleAccess, AiCapability.MODULE_DATA)
@@ -519,6 +537,7 @@ object AiTools {
             }
 
             "superuser_set_global_su" -> {
+                requirePermission(config.allowSuperuserAccess, AiCapability.SUPERUSER)
                 requirePermission(config.allowSuperuserSwitch, AiCapability.SUPERUSER_SWITCH)
                 requireRoot(config, rootGranted)
                 val mode = args.requiredString("mode")
@@ -609,6 +628,7 @@ object AiTools {
                 if (mode == "share") {
                     host.theme.shareThemePackage()
                 } else {
+                    requireThemeWrite(config, AiThemeFeature.THEME_PACKAGE)
                     onProgress("Waiting for an export location…")
                     val uri = onPickFile(
                         AiFilePickerMode.CREATE_FILE,
@@ -1076,6 +1096,8 @@ object AiTools {
                     return "Refused: ${verdict.reason.ifBlank { "this command is not allowed" }}. " +
                         "Do not retry the same command; explain why it is blocked and propose a safer way."
                 }
+                // root 能力先判定再弹确认卡：没开 root 时不该先让用户点一次无意义的确认。
+                requirePermission(rootGranted || config.allowRootAccess, AiCapability.ROOT)
                 if (verdict.decision == AiCommandDecision.NEEDS_APPROVAL) {
                     val approved = confirm(
                         config = config,
@@ -1089,7 +1111,6 @@ object AiTools {
                     )
                     if (!approved) return denied()
                 }
-                requirePermission(rootGranted || config.allowRootAccess, AiCapability.ROOT)
                 val result = host.executeRootShell(command)
                 buildString {
                     append("exit ${result.exitCode}")
@@ -1152,6 +1173,54 @@ object AiTools {
                 AiMcpClient.callTool(server, toolName, argumentsJson)
             }
 
+            SEARCH_GUIDE_TOOL -> {
+                // 自家只读文档，不做能力门禁：任何配置下都能用。
+                val query = args.requiredString("query").trim()
+                if (query.isEmpty()) {
+                    return "Error: the query is empty. Ask the user what they want to know."
+                }
+                AssistantGuide.search(query, args.string("topic"), (args.int("limit") ?: 4).coerceIn(1, 8))
+            }
+
+            SUGGEST_SETTING_TOOL -> {
+                val key = args.requiredString("key").trim()
+                val value = args.requiredBoolean("value")
+                val rawReason = args.string("reason").orEmpty().trim()
+                val reason = if (rawReason.length > 200) rawReason.take(200) + "…" else rawReason
+                val current = AiSettings.load()
+                val toggle = SETTING_TOGGLES[key]
+                    ?: return "Unknown setting '" + key + "'. Allowed keys: " +
+                        SETTING_TOGGLES.keys.sorted().joinToString()
+                if (toggle.first(current) == value) {
+                    return settingLabel(key) + " is already " + onOff(value) + "."
+                }
+                val approved = confirm(
+                    current,
+                    approve,
+                    call.name,
+                    aiContext.getString(R.string.ai_approval_setting),
+                    settingLabel(key) + ": " + onOff(toggle.first(current)) + " -> " + onOff(value) +
+                        (if (reason.isBlank()) "" else "\nAssistant note: " + reason),
+                    force = true,
+                    allowRemember = false,
+                )
+                if (!approved) return denied()
+                if (!AiSettings.updateBoolean(key, value)) {
+                    return "Error: could not save '" + key + "'."
+                }
+                onConfigChanged()
+                val updated = AiSettings.load()
+                return buildString {
+                    append(settingLabel(key))
+                    append(" is now ")
+                    append(onOff(value))
+                    append(". It takes effect on the next tool call in this request.")
+                    appendLine()
+                    appendLine()
+                    append(scopeSnapshot(updated))
+                }
+            }
+
             else -> throw IllegalArgumentException("Unknown tool '${call.name}'")
         }
     }
@@ -1181,7 +1250,9 @@ object AiTools {
             - Be concise, technical and explicit. Use the user's language.
             - When a choice is needed, call ask_user with one short question and 2-6 concrete, mutually exclusive options, recommended first. Never invent the user's choice.
             - Do not use ask_user for open-ended questions; ask those normally.
-            - When a tool returns a permission error, the app shows an inline switch. Ask the user to enable it and do not retry until they confirm.
+            - When a tool returns a permission error, the message names the exact setting key and the app shows an inline switch. Explain what the missing scope is, then ask the user to enable it; do not retry until they confirm.
+            - Low-risk scopes (allowWebAccess, allowThemeRead, allowModuleAccess, allowExtensionAccess) may be offered directly: ask "Shall I turn it on for you?" and, if the user agrees, call suggest_setting.
+            - High-impact scopes (allowRootAccess, allowSuperuserAccess, allowSuperuserRootControl, allowSuperuserTemporaryRoot, allowSuperuserSwitch, allowModuleInstall) need one short sentence about the consequence before you ask. allowThemeWrite and allowExtensionWrite each open every feature at once, so the user must enable them in Assistant settings > Write permissions, feature by feature; never change them through suggest_setting. If the user declines twice in the same request, stop offering and point them to Assistant settings > Access scopes.
 
             Tool policy:
             - Read before write. Use get_environment for manager/device state, theme_get/theme_options/custom_text_list for theme, extensions_get/extension_capabilities for extensions, superuser_capabilities/superuser_apps/superuser_app_info for superuser, and installed_modules/module_search/module_capabilities for modules.
@@ -1189,6 +1260,11 @@ object AiTools {
             - Before an extension or superuser write, call the matching capabilities tool and use only commands reported as available.
             - Prefer the narrowest tool and the exact page id; never use a broad tab when a precise page exists.
             - The API endpoint, key, model and advanced API options are user-managed. You cannot change them; direct the user to Assistant settings and do not ask for secrets in chat.
+            - When the user asks what you can do, where a setting lives, why an action was refused, or how to configure the assistant, call search_assistant_guide first, answer from the returned entries and cite their ids, and never invent a setting the guide does not contain.
+            - When the guide has no matching entry, say so plainly instead of guessing.
+            - To change a low-risk scope (allowWebAccess, allowThemeRead, allowModuleAccess, allowExtensionAccess), call suggest_setting instead of telling the user to go change it themselves. The app shows a confirmation card, so always say the change needs the user's confirmation.
+            - After suggest_setting succeeds, trust the scope summary it returns as the current state instead of assuming the old value.
+            - Never claim a tool does not exist because its scope is off: every tool stays visible, and an unauthorized call shows an inline switch.
 
             Theme and appearance:
             - Read: theme_get, theme_options, custom_text_list. Write: theme_set, custom_text_set, theme_reset_appearance, custom_text_reset_all, generate_image, edit_theme_image, set_theme_image, clear_theme_image, export_theme_image, export_theme_package.
@@ -1821,6 +1897,41 @@ object AiTools {
         ),
     )
 
+    private val searchGuideTool = AiToolSpec(
+        name = SEARCH_GUIDE_TOOL,
+        description = "Search the bundled assistant user guide: what this assistant can do, where " +
+            "a setting lives, which tools exist and why an action was refused. Pass the user's own " +
+            "words as query; the optional topic narrows to overview, capabilities, settings, tools " +
+            "or troubleshooting. Answer from the returned entries and cite their ids; never " +
+            "invent a setting that the guide does not contain.",
+        parameters = objectSchema(
+            "query" to stringSchema("What the user wants to know, in their own words."),
+            "topic" to enumSchema(
+                "Optional guide section: overview, capabilities, settings, tools or troubleshooting.",
+                AssistantGuide.TOPICS,
+            ),
+            "limit" to intSchema("Optional number of entries to return, 1-8. Defaults to 4."),
+            required = listOf("query"),
+        ),
+    )
+
+    private val suggestSettingTool = AiToolSpec(
+        name = SUGGEST_SETTING_TOOL,
+        description = "Ask the app to change one boolean assistant setting for the user. Only the " +
+            "4 low-risk switches allowWebAccess, allowThemeRead, allowModuleAccess and " +
+            "allowExtensionAccess are accepted; root, superuser, module-install, theme-write, " +
+            "extension-write, requireConfirmation and allowCodeExecution must be changed by the " +
+            "user in Assistant settings. The endpoint, API key, model, format and providers cannot " +
+            "be changed this way. The app shows a confirmation card and writes the value only if " +
+            "the user approves.",
+        parameters = objectSchema(
+            "key" to stringSchema("Setting name, e.g. allowWebAccess. Must be one of the allowed switch names."),
+            "value" to boolSchema("New value: true to enable the setting, false to disable it."),
+            "reason" to stringSchema("One short sentence, in the user's language, explaining why."),
+            required = listOf("key", "value"),
+        ),
+    )
+
     private val columnWizardTool = AiToolSpec(
         name = COLUMN_WIZARD_TOOL,
         description = "Read the hide-environment column: topics (a topic is a tier), the run ledger, one " +
@@ -1910,6 +2021,45 @@ object AiTools {
     }
 
     private fun denied(): String = "User denied the operation. Do not retry unless the user asks."
+
+    /**
+     * 助手可建议修改的开关：只收 4 个低风险布尔值。
+     * 高风险键（root/superuser/模块安装/主题写入/扩展写入等）必须由用户去设置页自行打开；
+     * endpoint / apiKey / model / format / providers 等凭据与连接字段也不在表内。
+     */
+    internal val SETTING_TOGGLES: Map<String, Pair<(AiConfig) -> Boolean, (AiConfig, Boolean) -> AiConfig>> =
+        mapOf(
+            "allowWebAccess" to Pair(
+                { config: AiConfig -> config.allowWebAccess },
+                { config: AiConfig, value: Boolean -> config.copy(allowWebAccess = value) },
+            ),
+            "allowThemeRead" to Pair(
+                { config: AiConfig -> config.allowThemeRead },
+                { config: AiConfig, value: Boolean -> config.copy(allowThemeRead = value) },
+            ),
+            "allowModuleAccess" to Pair(
+                { config: AiConfig -> config.allowModuleAccess },
+                { config: AiConfig, value: Boolean -> config.copy(allowModuleAccess = value) },
+            ),
+            "allowExtensionAccess" to Pair(
+                { config: AiConfig -> config.allowExtensionAccess },
+                { config: AiConfig, value: Boolean -> config.copy(allowExtensionAccess = value) },
+            ),
+        )
+
+    /** 单测入口：suggest_setting 支持的键就是这 4 个低风险开关。 */
+    internal fun supportedSettingKeys(): Set<String> = SETTING_TOGGLES.keys
+
+    /** 审批卡里给用户看的开关名。 */
+    private fun settingLabel(key: String): String = aiContext.getString(
+        when (key) {
+            "allowWebAccess" -> R.string.ai_allow_web
+            "allowThemeRead" -> R.string.ai_allow_theme_read
+            "allowModuleAccess" -> R.string.ai_allow_module_data
+            "allowExtensionAccess" -> R.string.ai_allow_extension_data
+            else -> R.string.ai_approval_setting
+        },
+    )
 
     private fun requirePermission(allowed: Boolean, capability: AiCapability) {
         if (!allowed) throw AiPermissionRequiredException(capability)
@@ -2014,12 +2164,41 @@ object AiTools {
         return enabled.joinToString { it.id }.ifEmpty { "none" }
     }
 
+    /** 会被工具门禁读取的作用域布尔；suggest_setting 改完后一次性回报给模型。 */
+    private val SCOPE_TOGGLES: List<Pair<String, (AiConfig) -> Boolean>> = listOf(
+        "allowRootAccess" to { config: AiConfig -> config.allowRootAccess },
+        "allowSuperuserAccess" to { config: AiConfig -> config.allowSuperuserAccess },
+        "allowSuperuserRootControl" to { config: AiConfig -> config.allowSuperuserRootControl },
+        "allowSuperuserTemporaryRoot" to { config: AiConfig -> config.allowSuperuserTemporaryRoot },
+        "allowSuperuserSwitch" to { config: AiConfig -> config.allowSuperuserSwitch },
+        "allowModuleAccess" to { config: AiConfig -> config.allowModuleAccess },
+        "allowModuleInstall" to { config: AiConfig -> config.allowModuleInstall },
+        "allowExtensionAccess" to { config: AiConfig -> config.allowExtensionAccess },
+        "allowWebAccess" to { config: AiConfig -> config.allowWebAccess },
+        "allowThemeRead" to { config: AiConfig -> config.allowThemeRead },
+        "allowThemeWrite" to { config: AiConfig -> config.allowThemeWrite },
+        "allowExtensionWrite" to { config: AiConfig -> config.allowExtensionWrite },
+    )
+
+    private fun scopeSnapshot(config: AiConfig): String = buildString {
+        append("Scopes now: ")
+        append(SCOPE_TOGGLES.joinToString(", ") { (key, getter) -> key + "=" + onOff(getter(config)) })
+        append(", themeWriteFeatures=")
+        append(enabledThemeFeatures(config))
+        append(", extensionWriteFeatures=")
+        append(enabledExtensionFeatures(config))
+        append(".")
+    }
+
     private fun parseArguments(raw: String): JsonObject =
         runCatching { json.parseToJsonElement(raw.ifBlank { "{}" }) as JsonObject }
             .getOrElse { throw IllegalArgumentException("Tool arguments must be a JSON object") }
 
     private fun JsonObject.string(key: String): String? =
         (this[key] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+
+    private fun JsonObject.int(key: String): Int? =
+        (this[key] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
 
     private fun JsonObject.boolean(key: String): Boolean? {
         val value = string(key)?.lowercase() ?: return null

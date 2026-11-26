@@ -48,6 +48,11 @@ android {
     }
 }
 
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    inputs.file("src/main/assets/ai/assistant-guide.json")
+    inputs.file("src/test/resources/guide-questions.json")
+}
+
 kotlin {
     compilerOptions {
         freeCompilerArgs.addAll(

@@ -1,5 +1,7 @@
 package com.sukisu.ultra.ai
 
+import com.sukisu.ultra.ai.api.AiSettingsTarget
+
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Slider
@@ -226,9 +228,12 @@ internal fun AiConfigEditorMaterial(
     onTest: () -> Unit,
     fetchingModels: Boolean = false,
     onFetchModels: (Boolean) -> Unit = {},
-    // 从聊天页快捷条跳进来时，把锚点挂到对应分组上并描一圈边。
+    // 从聊天页快捷条或助手工具跳进来时，把锚点挂到对应分组上并描一圈边。
     focusCard: Modifier = Modifier,
     focusSearch: Modifier = Modifier,
+    focusReadScope: Modifier = Modifier,
+    focusWriteScope: Modifier = Modifier,
+    focusBehavior: Modifier = Modifier,
     highlight: AiSettingsTarget? = null,
 ) {
     var showKey by remember { mutableStateOf(false) }
@@ -755,6 +760,8 @@ internal fun AiConfigEditorMaterial(
         SettingsSection(
             title = stringResource(R.string.ai_scope_section),
             subtitle = stringResource(R.string.ai_scope_summary),
+            modifier = focusReadScope,
+            highlighted = highlight == AiSettingsTarget.ReadScope,
         ) {
             AiToggleRow(
                 title = stringResource(R.string.ai_allow_root),
@@ -873,19 +880,27 @@ internal fun AiConfigEditorMaterial(
         // ⑦ 写入权限
         SettingsSection(
             title = stringResource(R.string.ai_write_section),
+            modifier = focusWriteScope,
+            highlighted = highlight == AiSettingsTarget.WriteScope,
         ) {
             AiToggleRow(
                 title = stringResource(R.string.ai_allow_theme),
                 summary = stringResource(R.string.ai_allow_theme_summary),
                 checked = draft.allowThemeWrite,
                 onCheckedChange = { enabled ->
-                    onDraftChange(
-                        draft.copy(
-                            allowThemeWrite = enabled,
-                            allowThemeRead = enabled || draft.allowThemeRead,
-                            themeWriteFeatures = if (enabled) AiThemeFeature.ALL_IDS else draft.themeWriteFeatures,
-                        )
-                    )
+                    if (!enabled) {
+                        onDraftChange(draft.copy(allowThemeWrite = false))
+                    } else {
+                        requestRisk(AiRiskKind.THEME_WRITE) {
+                            onDraftChange(
+                                draft.copy(
+                                    allowThemeWrite = true,
+                                    allowThemeRead = true,
+                                    themeWriteFeatures = AiThemeFeature.ALL_IDS,
+                                )
+                            )
+                        }
+                    }
                 },
             )
             if (draft.allowThemeWrite) {
@@ -959,6 +974,8 @@ internal fun AiConfigEditorMaterial(
         // ⑧ 行为
         SettingsSection(
             title = stringResource(R.string.ai_behavior_section),
+            modifier = focusBehavior,
+            highlighted = highlight == AiSettingsTarget.Behavior,
         ) {
             AiToggleRow(
                 title = stringResource(R.string.ai_include_context),

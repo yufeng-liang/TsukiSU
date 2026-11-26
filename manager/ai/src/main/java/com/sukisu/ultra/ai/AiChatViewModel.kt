@@ -150,6 +150,8 @@ class AiChatViewModel : ViewModel() {
     private var filePickerDeferred: CompletableDeferred<Uri?>? = null
     private var rootGrantedForRequest = false
     private var rootRequestDeferred: CompletableDeferred<Boolean>? = null
+    /** 设置页每改一次配置就加一；审批等待期间配置变了，这次授权作废。 */
+    private var configRevision = 0
 
     private fun initialState(): AiChatUiState {
         val config = AiSettings.load()
@@ -250,6 +252,7 @@ class AiChatViewModel : ViewModel() {
     }
 
     fun refreshConfig() {
+        configRevision++
         val config = AiSettings.load()
         val search = AiSearchSettings.load()
         _uiState.update { it.copy(config = config, searchConfig = search) }
@@ -258,6 +261,7 @@ class AiChatViewModel : ViewModel() {
     /** Persist edits from the settings page without starting a chat turn. */
     fun updateConfig(config: AiConfig) {
         val previous = _uiState.value.config
+        configRevision++
         AiSettings.save(config)
         if (previous.keepHistory && !config.keepHistory) AiSettings.clearHistory()
         _uiState.update { it.copy(config = config) }
@@ -347,6 +351,7 @@ class AiChatViewModel : ViewModel() {
             )
             AiCapability.SUPERUSER_SWITCH -> config.copy(
                 allowSuperuserSwitch = enabled,
+                allowSuperuserAccess = enabled || config.allowSuperuserAccess,
                 allowRootAccess = enabled || config.allowRootAccess,
             )
             AiCapability.MODULE_DATA -> config.copy(allowModuleAccess = enabled)
@@ -946,6 +951,7 @@ class AiChatViewModel : ViewModel() {
                 var resultText: String? = null
                 while (resultText == null) {
                     val toolConfig = AiSettings.load()
+                    val configRevisionAtCall = configRevision
                     try {
                         resultText = AiTools.execute(
                             call = call,
@@ -963,7 +969,12 @@ class AiChatViewModel : ViewModel() {
                                 requestFile(mode, title, suggestedName)
                             },
                             ask = { question -> requestQuestion(question) },
-                        ) { request -> requestApproval(request) }
+                            onConfigChanged = { refreshConfig() },
+                        ) { request ->
+                            val approved = requestApproval(request)
+                            // 等待审批期间用户改了设置：按新权限重新发起，不能沿用旧快照。
+                            approved && configRevision == configRevisionAtCall
+                        }
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (required: AiPermissionRequiredException) {
@@ -995,8 +1006,14 @@ class AiChatViewModel : ViewModel() {
                             break
                         }
                         if (required.capability == AiCapability.ROOT) capability = null
-                        resultText = "${required.message ?: "Permission required for ${required.capability.modelLabel}."} " +
-                            "The user has been shown a switch to enable it; do not retry until they confirm."
+                        val toggle = required.toggleKey
+                        val missing = if (toggle != null) {
+                            "The missing setting is $toggle. If the user agrees, call suggest_setting with key=\"$toggle\" and value=true after explaining what it enables."
+                        } else {
+                            "This scope is a feature set with no single switch: ask the user to open Assistant settings > Write permissions and enable the specific feature."
+                        }
+                        resultText = "${required.message ?: "Permission required for ${required.capability.modelLabel}."} $missing " +
+                            "The user has also been shown an inline switch; do not retry until they confirm."
                     } catch (error: Exception) {
                         resultText = "Error: ${error.message ?: error.javaClass.simpleName}"
                     }

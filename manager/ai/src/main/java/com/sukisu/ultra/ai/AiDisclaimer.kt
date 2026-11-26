@@ -17,6 +17,7 @@ enum class AiRiskKind(@StringRes val bodyRes: Int) {
     GLOBAL_SU(R.string.ai_risk_body_global_su),
     EXTENSION_WRITE(R.string.ai_risk_body_extension_write),
     MODULE_INSTALL(R.string.ai_risk_body_module_install),
+    THEME_WRITE(R.string.ai_risk_body_theme_write),
     CODE_EXECUTION(R.string.ai_risk_body_code_execution),
     ADVANCED_API(R.string.ai_risk_body_advanced_api),
 }
@@ -29,12 +30,12 @@ fun AiCapability.riskKind(): AiRiskKind? = when (this) {
     AiCapability.SUPERUSER_SWITCH -> AiRiskKind.GLOBAL_SU
     AiCapability.EXTENSIONS -> AiRiskKind.EXTENSION_WRITE
     AiCapability.MODULES -> AiRiskKind.MODULE_INSTALL
+    AiCapability.THEME -> AiRiskKind.THEME_WRITE
     AiCapability.SUPERUSER,
     AiCapability.MODULE_DATA,
     AiCapability.EXTENSION_DATA,
     AiCapability.WEB,
     AiCapability.THEME_READ,
-    AiCapability.THEME,
     -> null
 }
 

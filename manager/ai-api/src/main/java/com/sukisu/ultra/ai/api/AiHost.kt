@@ -61,7 +61,9 @@ data class AiShellOutput(
 )
 
 
-interface AiNavigationTarget
+interface AiNavigationTarget {
+    val settingsFocus: AiSettingsTarget? get() = null
+}
 
 data class AiOpenPageResult(
     val text: String,
