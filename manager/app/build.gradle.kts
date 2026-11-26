@@ -402,6 +402,11 @@ val downloadKpmTools = tasks.register("downloadKpmTools") {
             val target = temporaryDir.resolve(name)
             target.delete()
             val url = "$baseUrl/$name"
+            // The Forgejo instance requires auth for every download. Without the
+            // header the request is 303'd to the login page, and that HTML passes
+            // the size check and only fails the ELF check.
+            val authToken = System.getenv("KPM_TOOLS_TOKEN")
+            val needsAuth = url.startsWith("https://git.zako.shirkneko.top:20004")
             try {
                 val connection = URI(url).toURL().openConnection() as HttpURLConnection
                 try {
@@ -409,6 +414,9 @@ val downloadKpmTools = tasks.register("downloadKpmTools") {
                     connection.readTimeout = 20_000
                     connection.useCaches = false
                     connection.setRequestProperty("User-Agent", "SukiSU-Manager-build")
+                    if (needsAuth && !authToken.isNullOrBlank()) {
+                        connection.setRequestProperty("Authorization", "token $authToken")
+                    }
                     check(connection.responseCode == HttpURLConnection.HTTP_OK) {
                         "HTTP ${connection.responseCode}"
                     }
@@ -424,10 +432,14 @@ val downloadKpmTools = tasks.register("downloadKpmTools") {
                 }
             } catch (networkError: Exception) {
                 logger.warn("Java HTTPS download failed for $url (${networkError.message}); retrying with curl")
-                val process = ProcessBuilder(
+                val curlCommand = mutableListOf(
                     "curl", "--fail", "--location", "--retry", "3", "--silent", "--show-error",
-                    "--output", target.absolutePath, url,
-                ).redirectErrorStream(true).start()
+                )
+                if (needsAuth && !authToken.isNullOrBlank()) {
+                    curlCommand += listOf("--header", "Authorization: token $authToken")
+                }
+                curlCommand += listOf("--output", target.absolutePath, url)
+                val process = ProcessBuilder(*curlCommand.toTypedArray()).redirectErrorStream(true).start()
                 val output = process.inputStream.bufferedReader().use { it.readText() }
                 check(process.waitFor() == 0 && target.length() >= 1024) {
                     "curl failed for $url: ${output.trim()}"

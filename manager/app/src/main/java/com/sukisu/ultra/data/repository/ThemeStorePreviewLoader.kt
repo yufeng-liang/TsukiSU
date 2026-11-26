@@ -52,6 +52,9 @@ object ThemeStorePreviewLoader {
         val client = ksuApp.okhttpClient.newBuilder()
             .addInterceptor(ThemeMediaInterceptor)
             .protectThemeStoreRedirectCredentials()
+            // Added after the redirect guard so the request tag still holds the store URL:
+            // rewriting to CNB then looks cross-origin and the credential is stripped.
+            .addInterceptor(ThemeStoreMediaOffload)
             .dispatcher(dispatcher)
             .build()
         return ImageLoader.Builder(context)

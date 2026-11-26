@@ -43,6 +43,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
@@ -50,6 +52,7 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -293,6 +296,15 @@ class ThemeStoreViewModel(application: Application) : AndroidViewModel(applicati
         const val MAX_PREVIEW_BACKFILL = 12
         /** How long after the last tap before queued history is flushed to the account. */
         const val HISTORY_FLUSH_DELAY_MS = 1500L
+        /**
+         * Gap between silent catalog revalidations. Entering the store already triggers one
+         * immediately; after that the store answers 304 for an unchanged catalog and a few
+         * bytes for unflushed counters, so a tick costs a pair of tiny requests and a
+         * publish shows up within a minute.
+         */
+        private val CATALOG_WATCH_INTERVAL = 60_000L.milliseconds
+        /** How long an entry-triggered sync waits for the first paint or full load. */
+        private val ENTER_SYNC_WAIT = 15_000L.milliseconds
         val THEME_ID_PATTERN = Regex("^[a-z0-9][a-z0-9-]{0,63}$")
         val AUTHOR_ID_PATTERN = Regex("^[A-Za-z0-9._~-]{16,128}$")
     }
@@ -307,6 +319,8 @@ class ThemeStoreViewModel(application: Application) : AndroidViewModel(applicati
     private var editPrefillJob: kotlinx.coroutines.Job? = null
     private var followsJob: kotlinx.coroutines.Job? = null
     private var loadJob: kotlinx.coroutines.Job? = null
+    private var catalogWatcher: kotlinx.coroutines.Job? = null
+    private var quietSyncJob: kotlinx.coroutines.Job? = null
     /** (baseUrl, kind, themeId) events awaiting a flush; duplicates collapse. */
     private val pendingHistory = LinkedHashSet<Triple<String, String, String>>()
     private var historyFlushJob: kotlinx.coroutines.Job? = null
@@ -328,19 +342,190 @@ class ThemeStoreViewModel(application: Application) : AndroidViewModel(applicati
 
     init {
         if (initialConsent != null) {
-            load()
-        }
-        viewModelScope.launch {
-            while (true) {
-                delay((10 * 60 * 1000L).milliseconds)
-                if (!_uiState.value.needsConsent) {
+            viewModelScope.launch(Dispatchers.IO) {
+                if (!paintCachedCatalog()) {
+                    // First visit of this installation (or after clearing app data):
+                    // nothing on disk yet, so this is the one full download.
                     load()
+                } else {
+                    // Paint is already on screen; pull the web R18 choice and then apply
+                    // whatever changed since that catalog was stored. No spinner involved.
+                    withTimeoutOrNull(5_000.milliseconds) {
+                        preferencesSyncLock.withLock {
+                            syncPreferencesNow(_uiState.value.accounts, force = false)
+                        }
+                    }
+                    // Shares the deduplicated entry-sync path, so a screen that already
+                    // triggered one does not fetch the catalog twice.
+                    syncOnEnter()
                 }
             }
         }
+        startCatalogWatcher()
         viewModelScope.launch(Dispatchers.IO) {
             repository.cleanupStaleCache()
         }
+    }
+
+    /**
+     * Runs one silent catalog sync. The store screen calls this every time it appears, so
+     * entering the screen always shows current numbers even inside the one-minute window.
+     * Deduplicated: a second call while one is in flight is ignored.
+     *
+     * The request waits for the first paint or the first full load to settle instead of
+     * giving up: the screen appears before either finishes, and dropping the sync there
+     * would leave the numbers stale until the next watcher tick.
+     */
+    fun syncOnEnter() {
+        if (_uiState.value.needsConsent) return
+        if (quietSyncJob?.isActive == true) return
+        quietSyncJob = viewModelScope.launch(Dispatchers.IO) {
+            withTimeoutOrNull(ENTER_SYNC_WAIT) {
+                uiState.first { it.loaded && !it.loading && !it.refreshing }
+            }
+            runCatching { syncCatalogQuietly() }
+        }
+    }
+
+    /**
+     * Puts the stored catalog on screen without any request.
+     *
+     * Returns false when this installation has never completed a catalog download, in
+     * which case the caller falls back to the visible first load. Adult rows are withheld
+     * for signed-in users until the web preference arrives: the local consent flag may be
+     * stale, and this paints before that pull runs.
+     */
+    private suspend fun paintCachedCatalog(): Boolean {
+        account.reload()
+        val sources = configuredSources()
+        if (sources.isEmpty()) return false
+        val accounts = accountsFor(sources)
+        val cached = sources.mapNotNull { source ->
+            repository.cachedCatalog(source.baseUrl)?.let { source to it }
+        }
+        if (cached.isEmpty()) return false
+        val holdR18 = accounts.isNotEmpty()
+        val items = buildItems(sources, cached).filterNot { holdR18 && it.entry.r18 }
+        _uiState.update {
+            it.copy(
+                loaded = true,
+                loading = false,
+                refreshing = false,
+                items = items,
+                sources = sources,
+                accounts = accounts,
+                fromCache = true,
+                maintenance = isMaintenance(cached),
+                failedSources = 0,
+                unauthorized = false,
+                error = false,
+                needsConfig = false,
+            )
+        }
+        refreshFollows(accounts)
+        return true
+    }
+
+    /**
+     * First open fetches the whole list once; after that the store only hot-updates.
+     *
+     * Each tick revalidates the catalog (304 in the common case) and folds in the
+     * store's unflushed download deltas, then swaps [ThemeStoreUiState.items] only when
+     * something actually changed. Nothing here touches `loading`/`refreshing`, so the
+     * update never shows a refresh indicator or blanks the grid — the list simply
+     * gains new themes or new numbers in place.
+     */
+    private fun startCatalogWatcher() {
+        catalogWatcher?.cancel()
+        catalogWatcher = viewModelScope.launch(Dispatchers.IO) {
+            while (isActive) {
+                delay(CATALOG_WATCH_INTERVAL)
+                runCatching { syncCatalogQuietly() }
+            }
+        }
+    }
+
+    private suspend fun syncCatalogQuietly() {
+        val state = _uiState.value
+        if (state.needsConsent || state.needsConfig) return
+        // A foreground load or an explicit refresh owns the state while it runs.
+        if (!state.loaded || state.loading || state.refreshing) return
+        val sources = state.sources
+        if (sources.isEmpty()) return
+
+        val results = coroutineScope {
+            sources.map { source -> async { loadSource(source) } }.awaitAll()
+        }
+        val catalogs = results.mapNotNull { (source, result) ->
+            result.getOrNull()?.let { source to it }
+        }
+        // A transient failure keeps the list that is already on screen.
+        if (catalogs.isEmpty()) return
+
+        val items = buildItems(sources, catalogs, state.items.associateBy { it.key })
+        val maintenance = isMaintenance(catalogs)
+        val fromCache = catalogs.any { it.second.fromCache }
+        if (items == state.items &&
+            maintenance == state.maintenance &&
+            fromCache == state.fromCache
+        ) {
+            return
+        }
+        _uiState.update { current ->
+            // A foreground load may have started while the requests were in flight.
+            if (current.loading || current.refreshing) current
+            else current.copy(
+                items = items,
+                maintenance = maintenance,
+                fromCache = fromCache,
+                failedSources = results.size - catalogs.size,
+                error = false,
+            )
+        }
+    }
+
+    /**
+     * Catalog rows in source order, without the maintenance-flagged stores.
+     *
+     * Rows that are unchanged keep their previous [ThemeStoreItem] instance: the
+     * constructor builds a lowercased search body per theme, and rebuilding a few
+     * hundred of those every poll is the one part of a hot update that could cost a
+     * frame. Reusing the instance also keeps the grid's keys and content identical, so
+     * only rows whose numbers moved are redrawn.
+     */
+    private fun buildItems(
+        sources: List<ThemeStoreSource>,
+        catalogs: List<Pair<ThemeStoreSource, ThemeCatalogLoad>>,
+        previous: Map<String, ThemeStoreItem> = emptyMap(),
+    ): List<ThemeStoreItem> {
+        val sourceOrder = sources.mapIndexed { index, source -> source.id to index }.toMap()
+        return catalogs
+            .filterNot { it.second.catalog.maintenance }
+            .flatMap { (source, load) ->
+                load.catalog.themes.map { entry ->
+                    val key = "${source.id}:${entry.id}"
+                    previous[key]?.takeIf { it.entry == entry && it.source == source }
+                        ?: ThemeStoreItem(entry, source)
+                }
+            }
+            .distinctBy { it.key }
+            .sortedWith(
+                compareBy(
+                    { sourceOrder[it.source.id] ?: Int.MAX_VALUE },
+                    { it.entry.name.lowercase() },
+                ),
+            )
+    }
+
+    /**
+     * True when every store that answered reports maintenance. Cached catalogs are only
+     * consulted when nothing live came back, so a stale copy cannot mask a live store.
+     */
+    private fun isMaintenance(catalogs: List<Pair<ThemeStoreSource, ThemeCatalogLoad>>): Boolean {
+        if (catalogs.isEmpty()) return false
+        val live = catalogs.filterNot { it.second.fromCache }
+        val considered = live.ifEmpty { catalogs }
+        return considered.all { it.second.catalog.maintenance }
     }
 
     fun load() {
@@ -400,23 +585,8 @@ class ThemeStoreViewModel(application: Application) : AndroidViewModel(applicati
                 .awaitAll()
             val successes = results.filter { it.second.isSuccess }
             val catalogs = successes.map { (source, result) -> source to result.getOrThrow() }
-            val sourceOrder = sources.mapIndexed { index, source -> source.id to index }.toMap()
-            val liveCatalogs = catalogs.filterNot { it.second.fromCache }
-            val maintenanceCatalogs = liveCatalogs.ifEmpty { catalogs }
-            val maintenance = maintenanceCatalogs.isNotEmpty() &&
-                maintenanceCatalogs.all { it.second.catalog.maintenance }
-            val items = catalogs
-                .filterNot { it.second.catalog.maintenance }
-                .flatMap { (source, load) ->
-                    load.catalog.themes.map { ThemeStoreItem(it, source) }
-                }
-                .distinctBy { it.key }
-                .sortedWith(
-                    compareBy(
-                        { sourceOrder[it.source.id] ?: Int.MAX_VALUE },
-                        { it.entry.name.lowercase() },
-                    ),
-                )
+            val maintenance = isMaintenance(catalogs)
+            val items = buildItems(sources, catalogs, current.items.associateBy { it.key })
             val failures = results.size - successes.size
             val unauthorized = successes.isEmpty() &&
                 results.any { it.second.exceptionOrNull() is ThemeStoreUnauthorizedException }

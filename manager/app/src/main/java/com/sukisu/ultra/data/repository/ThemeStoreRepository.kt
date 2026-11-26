@@ -25,6 +25,7 @@ import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import okio.Buffer
 import okio.BufferedSink
 import okio.ForwardingSink
@@ -50,6 +51,13 @@ data class ThemeCatalogLoad(
 private data class CatalogFetch(
     val catalog: ThemeStoreCatalog,
     val notModified: Boolean,
+)
+
+/** Body of `catalog-stats.json`: downloads the store has not flushed yet. */
+@Serializable
+private data class ThemeStoreCatalogStats(
+    val generatedAt: String = "",
+    val downloads: Map<String, Long> = emptyMap(),
 )
 
 
@@ -206,6 +214,14 @@ class ThemeStoreRepository(
 
         
         private const val MAX_CATALOG_BYTES = 8L * 1024L * 1024L
+
+        /**
+         * Download deltas the store has not flushed into `catalog.json` yet. The body is a
+         * few bytes per downloaded theme, so polling it keeps counters current without
+         * moving the (multi-MiB) catalog off its stable ETag.
+         */
+        private const val STATS_ENDPOINT = "catalog-stats.json"
+        private const val MAX_STATS_BYTES = 1L * 1024L * 1024L
         
         const val MAX_PACKAGE_BYTES = 128L * 1024L * 1024L
         private const val BUFFER_SIZE = 64 * 1024
@@ -283,6 +299,49 @@ class ThemeStoreRepository(
             }
             return base + path.removePrefix("/")
         }
+
+        private fun isCnbHost(host: String): Boolean =
+            host == "cnb.cool" || host.endsWith(".cnb.cool")
+
+        /**
+         * CNB raw prefix that maps a store package path onto the mirror, or null when
+         * [finalUrl] is not a redirected package URL we can reuse.
+         *
+         * `https://cnb.cool/o/r/-/git/raw/main/themes/a-v1.sukisu` with path
+         * `themes/a-v1.sukisu` yields `https://cnb.cool/o/r/-/git/raw/main/`.
+         */
+        internal fun packagePrefix(finalUrl: String, path: String): String? {
+            val target = finalUrl.toHttpUrlOrNull() ?: return null
+            val cleanPath = path.removePrefix("/")
+            if (cleanPath.isEmpty() || cleanPath.contains("..")) return null
+            val tail = cleanPath.split('/').filter { it.isNotEmpty() }
+            return ThemeCnbPrefixes.prefixForTail(target, tail)
+        }
+
+        /**
+         * Adds the unflushed download deltas from `catalog-stats.json` to [catalog].
+         *
+         * `heat` is `downloads + recent * HEAT_RECENT_WEIGHT`, and one download moves
+         * both terms by one, so both fields take the same delta. Unknown ids are ignored:
+         * the store can carry a count for a theme this catalog no longer lists.
+         */
+        internal fun mergeDownloadDeltas(
+            catalog: ThemeStoreCatalog,
+            deltas: Map<String, Long>,
+        ): ThemeStoreCatalog {
+            val applied = deltas.filterValues { it > 0 }
+            if (applied.isEmpty()) return catalog
+            var changed = false
+            val themes = catalog.themes.map { entry ->
+                val delta = applied[entry.id] ?: return@map entry
+                changed = true
+                entry.copy(
+                    downloads = entry.downloads + delta,
+                    heat = entry.heat + delta,
+                )
+            }
+            return if (changed) catalog.copy(themes = themes) else catalog
+        }
     }
 
     private val access = ThemeStoreAccessRepository(context)
@@ -297,6 +356,13 @@ class ThemeStoreRepository(
 
     private val cacheDir = File(context.cacheDir, "theme_store")
     private val downloadDir = File(cacheDir, "downloads")
+
+    /**
+     * Catalog bodies live in `filesDir`, not the cache, so a cold start after the system
+     * trims the cache can still paint the list immediately and hot-update it instead of
+     * paying for a full download again. Only packages and previews belong in the cache.
+     */
+    private val catalogDir = File(context.filesDir, "theme_store")
 
     // Theme data has its own verified file cache; bypass OkHttp's shared cache
     // so ETag/304 handling and download counting stay deterministic.
@@ -350,14 +416,17 @@ class ThemeStoreRepository(
         withContext(Dispatchers.IO) {
             val base = normalizeBaseUrl(baseUrl)
                 ?: return@withContext Result.failure(IOException("Invalid theme store URL"))
-            runCatching { fetchCatalog(base, access.resolve(base, token)) }
-                .map {
-                    ThemeCatalogLoad(
-                        catalog = it.catalog,
-                        fromCache = false,
-                        notModified = it.notModified,
-                    )
-                }
+            runCatching {
+                val credentials = access.resolve(base, token)
+                val fetched = fetchCatalog(base, credentials)
+                ThemeCatalogLoad(
+                    // Counters that have not been flushed yet are fetched separately and
+                    // merged here, so the catalog body keeps its stable ETag.
+                    catalog = applyPendingDownloads(base, credentials, fetched.catalog),
+                    fromCache = false,
+                    notModified = fetched.notModified,
+                )
+            }
                 .recoverCatching { error ->
                     if (error is ThemeStoreUnauthorizedException) throw error
                     readCachedCatalog(base) ?: throw error
@@ -471,8 +540,12 @@ class ThemeStoreRepository(
             }
 
             val resumeFrom = tempFile.takeIf { it.isFile }?.length() ?: 0L
+            // Set when the bytes came from the mirror prefix instead of the store: the
+            // store never saw that request, so the download is reported afterwards.
+            var mirrorDirect = false
             val downloaded = downloadThemePackage(
                 entry = entry,
+                base = base,
                 url = base + entry.path.removePrefix("/"),
                 token = token,
                 tempFile = tempFile,
@@ -482,9 +555,11 @@ class ThemeStoreRepository(
                 onProgress = onProgress,
                 onTransferred = onTransferred,
                 allowRestart = resumeFrom > 0,
+                onMirrorDownloaded = { mirrorDirect = true },
             )
             moveDownloadedFile(downloaded, finalFile)
             writeVerifiedMarker(finalFile, entry.size, expectedSha)
+            if (mirrorDirect) reportPackageDownload(base, token, entry.path)
             onProgress(1f)
             onTransferred(entry.size, entry.size)
             finalFile
@@ -537,6 +612,7 @@ class ThemeStoreRepository(
      */
     private fun downloadThemePackage(
         entry: ThemeStoreEntry,
+        base: String,
         url: String,
         token: String,
         tempFile: File,
@@ -546,16 +622,42 @@ class ThemeStoreRepository(
         onProgress: (Float) -> Unit,
         onTransferred: (Long, Long) -> Unit,
         allowRestart: Boolean,
+        onMirrorDownloaded: () -> Unit,
     ): File {
         // A fresh download can be served by the CNB mirror directly. The server
         // only redirects requests without `Range`, so probe once before the
         // ranged downloader; an interrupted direct download falls back to the
         // ranged (local) path, which can resume from the partial file.
-        if (resumeFrom == 0L && !metaFile.isFile && probeDirectPackage(url, token)) {
-            return downloadThemePackageSequential(
-                entry, url, token, tempFile, 0, expectedSha,
-                onProgress, onTransferred, false,
-            )
+        if (resumeFrom == 0L && !metaFile.isFile) {
+            // Packages after the first one go straight to the prefix learned from an
+            // earlier redirect: no store round trip, no credential sent to CNB.
+            val learned = ThemeCnbPrefixes.get(base)?.let { prefix -> prefix + entry.path.removePrefix("/") }
+            if (learned != null) {
+                try {
+                    val file = downloadThemePackageSequential(
+                        entry, learned, "", tempFile, 0, expectedSha,
+                        onProgress, onTransferred, false,
+                    )
+                    onMirrorDownloaded()
+                    return file
+                } catch (error: ThemeStoreUnauthorizedException) {
+                    throw error
+                } catch (_: IOException) {
+                    // The mirror moved or dropped the object; forget the prefix and retry
+                    // through the store so the next download learns the current location.
+                    ThemeCnbPrefixes.forget(base)
+                    tempFile.delete()
+                }
+            }
+            val redirected = probeDirectPackage(url, token)
+            if (redirected != null) {
+                ThemeStoreRepository.packagePrefix(redirected.toString(), entry.path)
+                    ?.let { ThemeCnbPrefixes.remember(base, it) }
+                return downloadThemePackageSequential(
+                    entry, url, token, tempFile, 0, expectedSha,
+                    onProgress, onTransferred, false,
+                )
+            }
         }
         val probe = probePackageRange(entry, url, token)
         if (probe.totalSize > 0L && probe.totalSize != entry.size) {
@@ -612,13 +714,42 @@ class ThemeStoreRepository(
 
     
     /**
-     * True when a Range-less HEAD redirects to the CNB raw host. CNB only serves
-     * the mirror redirect for requests without `Range`, and raw does not support
-     * ranged reads, so a hit here means "download the whole package from CNB".
-     * Mirrors on other hosts are left to the ranged path so their parallel
-     * chunking keeps working.
+     * Reports a download that came from the mirror prefix instead of the store.
+     *
+     * The store counts a download while answering the redirect that points at the
+     * mirror, so a client reusing that prefix is invisible to the counter. Reporting
+     * the finished download keeps totals and heat correct without routing the bytes
+     * back through the store. Failures are ignored: a lost count must not fail an
+     * otherwise verified package.
      */
-    private fun probeDirectPackage(url: String, token: String): Boolean {
+    private fun reportPackageDownload(base: String, token: String, path: String) {
+        val cleanPath = path.removePrefix("/")
+        if (cleanPath.isEmpty()) return
+        runCatching {
+            val request = Request.Builder()
+                .url(base + "themes-count/" + cleanPath)
+                .header("X-Requested-With", "SukiSUThemeAdmin")
+                .withToken(token)
+                .post(ByteArray(0).toRequestBody(null))
+                .build()
+            downloadClient.newCall(request).execute().use { response ->
+                if (response.code == 401) throw ThemeStoreUnauthorizedException()
+                if (!response.isSuccessful) throw IOException("HTTP ${response.code} for $cleanPath")
+            }
+        }
+    }
+
+    /**
+     * Resolves where a Range-less HEAD redirects. CNB only serves the mirror
+     * redirect for requests without `Range`, and raw does not support ranged
+     * reads, so a CNB host here means "download the whole package from CNB".
+     * Mirrors on other hosts return null and keep using the ranged path so
+     * their parallel chunking keeps working.
+     *
+     * Returns the final URL, not just a flag: the caller stores its prefix so
+     * later packages skip the store hop entirely.
+     */
+    private fun probeDirectPackage(url: String, token: String): HttpUrl? {
         val request = Request.Builder()
             .url(url)
             .cacheControl(CacheControl.Builder().noCache().build())
@@ -629,15 +760,15 @@ class ThemeStoreRepository(
         return try {
             downloadClient.newCall(request).execute().use { response ->
                 if (response.code == 401) throw ThemeStoreUnauthorizedException()
-                if (!response.isSuccessful) return false
-                val host = response.request.url.host
-                host == "cnb.cool" || host.endsWith(".cnb.cool")
+                if (!response.isSuccessful) return null
+                val finalUrl = response.request.url
+                finalUrl.takeIf { ThemeStoreRepository.isCnbHost(it.host) }
             }
         } catch (error: ThemeStoreUnauthorizedException) {
             throw error
         } catch (_: IOException) {
             // CNB unreachable: fall back to the server's ranged download.
-            false
+            null
         }
     }
 
@@ -1225,6 +1356,10 @@ class ThemeStoreRepository(
         val response = catalogClient.newCall(requestBuilder.build()).execute()
         response.use { response ->
             if (response.code == 304) {
+                // Still in use: keep both cache files fresh so the age-based cleanup in
+                // cleanupStaleCache only removes stores nobody has opened for a month.
+                touch(catalogCacheFile(base))
+                touch(catalogCacheEtagFile(base))
                 return CatalogFetch(
                     catalog = cachedCatalog
                         ?: throw IOException("HTTP 304 without cached catalog"),
@@ -1250,11 +1385,95 @@ class ThemeStoreRepository(
         }
     }
 
+    /**
+     * Folds the download deltas the store has not flushed yet into [catalog].
+     *
+     * The catalog body is only rewritten in batches, so its counters trail the last
+     * flush. The store publishes those deltas on a tiny separate endpoint whose ETag
+     * changes with the deltas alone; that keeps the catalog on its stable ETag while
+     * the numbers still arrive current. One download moves `downloads` and `heat` by
+     * one each, so both take the same delta.
+     *
+     * Every failure path returns [catalog] untouched: fresh counters are a bonus, not a
+     * reason to show the store as broken.
+     */
+    private fun applyPendingDownloads(
+        base: String,
+        token: String,
+        catalog: ThemeStoreCatalog,
+    ): ThemeStoreCatalog {
+        val stats = fetchDownloadDeltas(base, token) ?: return catalog
+        return mergeDownloadDeltas(catalog, stats)
+    }
+
+    private fun fetchDownloadDeltas(base: String, token: String): Map<String, Long>? {
+        val cacheFile = catalogStatsFile(base)
+        val cachedEtag = catalogStatsEtagFile(base)
+            .takeIf { it.isFile }
+            ?.let { runCatching { it.readText().trim() }.getOrNull() }
+            ?.takeIf { it.isNotEmpty() }
+        val requestBuilder = Request.Builder()
+            .url(base + STATS_ENDPOINT)
+            .cacheControl(CacheControl.Builder().noCache().build())
+            .withToken(token)
+        if (cachedEtag != null && cacheFile.isFile) {
+            requestBuilder.header("If-None-Match", cachedEtag)
+        }
+        return runCatching {
+            catalogClient.newCall(requestBuilder.build()).execute().use { response ->
+                if (response.code == 401) throw ThemeStoreUnauthorizedException()
+                // An older store has no stats endpoint; keep the flushed counters.
+                if (response.code == 404 || !response.isSuccessful && response.code != 304) {
+                    return@use null
+                }
+                if (response.code == 304) {
+                    // Same deltas as the cached copy, while the catalog may have been
+                    // revalidated: reuse them so the merged numbers do not disappear.
+                    return@use readCachedStats(cacheFile)
+                }
+                val body = response.body
+                if (body.contentLength() > MAX_STATS_BYTES) return@use null
+                val source = body.source()
+                if (source.request(MAX_STATS_BYTES + 1)) return@use null
+                val raw = source.readUtf8()
+                val parsed = json.decodeFromString(ThemeStoreCatalogStats.serializer(), raw)
+                cacheDir.mkdirs()
+                runCatching { cacheFile.writeText(raw) }
+                writeStatsEtag(base, response.header("ETag"))
+                parsed.downloads.filterValues { it > 0 }
+            }
+        }.getOrNull()
+    }
+
+    private fun readCachedStats(file: File): Map<String, Long>? = runCatching {
+        if (!file.isFile) return@runCatching null
+        val stats = json.decodeFromString(ThemeStoreCatalogStats.serializer(), file.readText())
+        touch(file)
+        stats.downloads.filterValues { it > 0 }
+    }.getOrNull()
+
+    private fun catalogStatsFile(base: String): File =
+        File(catalogDir, "catalog-${base.hashCode().toUInt().toString(16)}.stats.json")
+
+    private fun catalogStatsEtagFile(base: String): File =
+        File(catalogDir, "catalog-${base.hashCode().toUInt().toString(16)}.stats.etag")
+
+    private fun writeStatsEtag(base: String, etag: String?) {
+        runCatching {
+            val file = catalogStatsEtagFile(base)
+            val value = etag?.trim().orEmpty()
+            if (value.isEmpty()) file.delete() else {
+                cacheDir.mkdirs()
+                file.writeText(value)
+            }
+        }
+    }
+
     private fun catalogCacheFile(base: String): File =
-        File(cacheDir, "catalog-${base.hashCode().toUInt().toString(16)}.json")
+        File(catalogDir, "catalog-${base.hashCode().toUInt().toString(16)}.json")
 
     private fun catalogCacheEtagFile(base: String): File =
-        File(cacheDir, "catalog-${base.hashCode().toUInt().toString(16)}.etag")
+        File(catalogDir, "catalog-${base.hashCode().toUInt().toString(16)}.etag")
 
     private fun writeCatalogEtag(base: String, etag: String?) {
         runCatching {
@@ -1276,15 +1495,33 @@ class ThemeStoreRepository(
             val raw = file.readText()
             val catalog = json.decodeFromString(ThemeStoreCatalog.serializer(), raw)
             if (catalog.schema > 1) return null
+            touch(file)
             ThemeCatalogLoad(catalog, fromCache = true)
         }.getOrNull()
     }
 
+    /** Marks [file] as used; the cleanup only ages out stores that are never opened. */
+    private fun touch(file: File, now: Long = System.currentTimeMillis()) {
+        runCatching { if (file.isFile) file.setLastModified(now) }
+    }
+
+    /**
+     * The last catalog stored for [baseUrl], without touching the network.
+     *
+     * A store that already has one is painted from disk and then hot-updated, so the
+     * manager only downloads the full list on the first visit of an installation (or
+     * after the app's data is cleared).
+     */
+    fun cachedCatalog(baseUrl: String): ThemeCatalogLoad? {
+        val base = normalizeBaseUrl(baseUrl) ?: return null
+        return readCachedCatalog(base)
+    }
+
     private fun writeCatalogCache(base: String, raw: String) {
         runCatching {
-            cacheDir.mkdirs()
+            catalogDir.mkdirs()
             val target = catalogCacheFile(base)
-            val temp = File(cacheDir, "${target.name}.tmp")
+            val temp = File(catalogDir, "${target.name}.tmp")
             temp.writeText(raw)
             if (!temp.renameTo(target)) {
                 temp.copyTo(target, overwrite = true)
@@ -1308,12 +1545,23 @@ class ThemeStoreRepository(
             if (file.isOlderThan(maxAge, now)) runCatching { file.delete() }
         }
         trimDownloadCache(now)
+        // Catalogs live in filesDir so a cold start can paint before any request; drop a
+        // store that has not been opened for a month instead of growing forever.
+        catalogDir.listFiles()?.forEach { file ->
+            if (file.isFile && file.name.startsWith("catalog-") &&
+                file.isOlderThan(30L * day, now)
+            ) {
+                runCatching { file.delete() }
+            }
+        }
         cacheDir.listFiles()?.forEach { file ->
             if (!file.isFile) return@forEach
             when {
+                // Left by builds that kept catalogs in the cache directory.
                 file.name.startsWith("catalog-") &&
-                    (file.name.endsWith(".json") || file.name.endsWith(".etag")) &&
-                    file.isOlderThan(30L * day, now) -> runCatching { file.delete() }
+                    (file.name.endsWith(".json") || file.name.endsWith(".etag")) -> runCatching {
+                    file.delete()
+                }
 
                 // The upload screen's "current preset" export lives directly in cacheDir and
                 // is not covered by the theme_import_* temporary-file rule above.

@@ -267,6 +267,10 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    env:
+      # downloadKpmTools 从实例的 release assets 下载 KPM 工具，实例要求鉴权。
+      KPM_TOOLS_TOKEN: ${{ secrets.CHECKOUT_TOKEN || vars.CHECKOUT_TOKEN || secrets.GITHUB_TOKEN }}
+
     strategy:
       fail-fast: false
       matrix:

@@ -229,6 +229,11 @@ fun ThemeStoreScreen(
     val catalogItems = remember(state.items, state.showR18) {
         if (state.showR18) state.items else state.items.filterNot { it.isR18Theme() }
     }
+    // Entering the screen revalidates the catalog once in the background; the periodic
+    // watcher runs only once a minute, so numbers would otherwise wait for its next tick.
+    LaunchedEffect(Unit) {
+        viewModel.syncOnEnter()
+    }
     var deepLinkHandled by rememberSaveable(initialThemeId, initialSourceBaseUrl) { mutableStateOf(false) }
     LaunchedEffect(initialThemeId, initialSourceBaseUrl, catalogItems, state.loaded, state.loading) {
         if (initialThemeId.isNullOrBlank() || deepLinkHandled || !state.loaded || state.loading) return@LaunchedEffect
