@@ -48,6 +48,7 @@
     <string name="home_support_title">Wesprzyj nas</string>
     <string name="home_support_content">SukiSU jest i zawsze będzie darmowy oraz otwarty. Niemniej jednak możesz nam pokazać, że Ci zależy, wysyłając darowiznę.</string>
     <string name="about_source_code"><![CDATA[Przejrzyj kod źródłowy na %1$s]]></string>
+    <string name="about_build_time">Czas kompilacji: %1$s</string>
     <string name="profile" translatable="false">Profil aplikacji</string>
     <string name="profile_default">Domyślny</string>
     <string name="profile_template">Szablon</string>

@@ -8,6 +8,7 @@ data class AboutUiState(
     val title: String,
     val appName: String,
     val versionName: String,
+    val buildTime: String,
     val icon: BuiltinAppIcon,
     val links: List<LinkInfo>,
     val checkUpdate: Boolean = true,

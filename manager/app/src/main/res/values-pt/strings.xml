@@ -42,6 +42,7 @@
     <string name="home_click_to_learn_kernelsu">Aprenda a instalar o SukiSU e usar os módulos</string>
     <string name="home_support_content">O SukiSU é, e sempre será, gratuito e de código aberto. No entanto, você pode nos mostrar que se importa fazendo uma doação.</string>
     <string name="about_source_code"><![CDATA[Veja o código-fonte em %1$s]]></string>
+    <string name="about_build_time">Hora de compilação: %1$s</string>
     <string name="profile_namespace_individual">Individual</string>
     <string name="profile_namespace_global">Global</string>
     <string name="profile_namespace_inherited">Herdado</string>

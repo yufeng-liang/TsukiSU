@@ -21,6 +21,7 @@
     <string name="home_click_to_learn_kernelsu">Ismerje meg a SukiSU telepítését és a modulok használatát</string>
     <string name="home_support_title">Támogasson minket</string>
     <string name="about_source_code"><![CDATA[Tekintse meg a forráskódot a %1$s-on]]></string>
+    <string name="about_build_time">Fordítási idő: %1$s</string>
     <string name="profile_default">Alapértelmezett</string>
     <string name="profile_template">Sablon</string>
     <string name="profile_custom">Egyedi</string>

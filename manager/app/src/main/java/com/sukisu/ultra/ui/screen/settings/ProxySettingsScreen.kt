@@ -52,6 +52,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sukisu.ultra.R
+import com.sukisu.ultra.data.proxy.DIRECT_ID
 import com.sukisu.ultra.data.proxy.ProxyEntry
 import com.sukisu.ultra.data.proxy.ProxyHealth
 import com.sukisu.ultra.data.proxy.ProxyMode
@@ -146,6 +147,7 @@ private fun ProxySettingsContentMaterial(
     val proxyMode = ProxyMode.from(uiState.proxyMode)
     val proxyPinned = proxyMode == ProxyMode.PINNED
     val proxyHealthById = uiState.proxyHealth.associateBy { it.id }
+    val proxyRows = buildProxyListRows(uiState.proxyEntries, proxyHealthById)
     // 存下来的 id 可能已经不在列表里（下发源下线或改了 id）。这时下载会悄悄退回直连，
     // 界面却还停在「指定代理」上，所以要和「还没选」分开提示。
     // 列表本身为空时判断不了是 id 失效还是列表没拉到，这种情况交给下面的空态文案。
@@ -204,45 +206,68 @@ private fun ProxySettingsContentMaterial(
                         )
                     }
                 }
+                proxyRows.forEach { row ->
+                    add {
+                        val health = proxyHealthById[row.id]
+                        val entry = row.entry
+                        if (entry == null) {
+                            // 直连不是代理，不能在「指定代理」里选中；保留与单选按钮同宽的占位，
+                            // 让域名和下面的代理行对齐。
+                            SegmentedListItem(
+                                headlineContent = {
+                                    Text(stringResource(R.string.settings_proxy_direct_name))
+                                },
+                                leadingContent = { Box(Modifier.size(24.dp)) },
+                                trailingContent = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (uiState.proxyTesting && health == null) {
+                                            ProxyTestingWave(MaterialTheme.colorScheme.primary)
+                                        } else {
+                                            Text(proxyLatencyLabel(health))
+                                            Spacer(Modifier.width(8.dp))
+                                            ProxyStatusDot(health, enabled = true)
+                                        }
+                                    }
+                                }
+                            )
+                        } else {
+                            SegmentedListItem(
+                                // 只有「指定代理」模式下这些行才是可点的
+                                onClick = if (proxyPinned) {
+                                    { actions.onSetProxyPinnedId(entry.id) }
+                                } else {
+                                    null
+                                },
+                                enabled = proxyPinned,
+                                headlineContent = { Text(entry.name) },
+                                leadingContent = {
+                                    RadioButton(
+                                        selected = entry.id == uiState.proxyPinnedId,
+                                        onClick = null,
+                                        enabled = proxyPinned
+                                    )
+                                },
+                                trailingContent = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (uiState.proxyTesting && health == null) {
+                                            ProxyTestingWave(MaterialTheme.colorScheme.primary)
+                                        } else {
+                                            Text(proxyLatencyLabel(health))
+                                            Spacer(Modifier.width(8.dp))
+                                            // 行的可交互性跟着「指定代理」模式走，状态点同样变灰
+                                            ProxyStatusDot(health, enabled = proxyPinned)
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
                 if (uiState.proxyEntries.isEmpty()) {
                     add {
                         SegmentedListItem(
                             headlineContent = {
                                 Text(stringResource(R.string.settings_proxy_empty))
-                            }
-                        )
-                    }
-                }
-                uiState.proxyEntries.forEach { entry ->
-                    add {
-                        val health = proxyHealthById[entry.id]
-                        SegmentedListItem(
-                            // 只有「指定代理」模式下这些行才是可点的
-                            onClick = if (proxyPinned) {
-                                { actions.onSetProxyPinnedId(entry.id) }
-                            } else {
-                                null
-                            },
-                            enabled = proxyPinned,
-                            headlineContent = { Text(entry.name) },
-                            leadingContent = {
-                                RadioButton(
-                                    selected = entry.id == uiState.proxyPinnedId,
-                                    onClick = null,
-                                    enabled = proxyPinned
-                                )
-                            },
-                            trailingContent = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (uiState.proxyTesting) {
-                                        ProxyTestingWave(MaterialTheme.colorScheme.primary)
-                                    } else {
-                                        Text(proxyLatencyLabel(health))
-                                        Spacer(Modifier.width(8.dp))
-                                        // 行的可交互性跟着「指定代理」模式走，状态点同样变灰
-                                        ProxyStatusDot(health, enabled = proxyPinned)
-                                    }
-                                }
                             }
                         )
                     }
@@ -355,6 +380,7 @@ private fun ProxySettingsContentMiuix(
     val proxyMode = ProxyMode.from(uiState.proxyMode)
     val proxyPinned = proxyMode == ProxyMode.PINNED
     val proxyHealthById = uiState.proxyHealth.associateBy { it.id }
+    val proxyRows = buildProxyListRows(uiState.proxyEntries, proxyHealthById)
     val proxyPinnedMissing = proxyPinned &&
         uiState.proxyPinnedId.isNotBlank() &&
         uiState.proxyEntries.isNotEmpty() &&
@@ -400,27 +426,34 @@ private fun ProxySettingsContentMiuix(
                 )
             }
         }
-        if (uiState.proxyEntries.isEmpty()) {
-            AppCard(modifier = Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
-                MiuixText(
-                    text = stringResource(R.string.settings_proxy_empty),
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    fontSize = 13.sp,
-                )
-            }
-        } else {
-            AppCard(modifier = Modifier.fillMaxWidth(), insideMargin = PaddingValues(8.dp)) {
-                Column {
-                    uiState.proxyEntries.forEach { entry ->
+        AppCard(modifier = Modifier.fillMaxWidth(), insideMargin = PaddingValues(8.dp)) {
+            Column {
+                proxyRows.forEach { row ->
+                    val health = proxyHealthById[row.id]
+                    val entry = row.entry
+                    if (entry == null) {
+                        DirectProxyRowMiuix(
+                            health = health,
+                            testing = uiState.proxyTesting,
+                        )
+                    } else {
                         ProxyEntryRowMiuix(
                             entry = entry,
-                            health = proxyHealthById[entry.id],
+                            health = health,
                             selected = entry.id == uiState.proxyPinnedId,
                             enabled = proxyPinned,
                             testing = uiState.proxyTesting,
                             onClick = { actions.onSetProxyPinnedId(entry.id) },
                         )
                     }
+                }
+                if (uiState.proxyEntries.isEmpty()) {
+                    MiuixText(
+                        text = stringResource(R.string.settings_proxy_empty),
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+                    )
                 }
             }
         }
@@ -493,6 +526,32 @@ private fun rememberTestingSpin(rotating: Boolean): Float {
     ).value
 }
 
+/**
+ * 设置页列表中的一行：entry 为 null 表示官方直连。
+ * 直连不是代理，不参与「指定代理」选择，只参与测速和展示。
+ */
+private data class ProxyListRow(
+    val id: String,
+    val entry: ProxyEntry?,
+)
+
+/**
+ * 把官方直连和代理拼成同一张列表，按测速延迟升序排列。
+ * 未测或不可达的条目统一排在最后；[sortedWith] 是稳定排序，会保留原有相对顺序。
+ */
+private fun buildProxyListRows(
+    entries: List<ProxyEntry>,
+    health: Map<String, ProxyHealth>,
+): List<ProxyListRow> = buildList {
+    add(ProxyListRow(DIRECT_ID, null))
+    entries.forEach { entry -> add(ProxyListRow(entry.id, entry)) }
+}.sortedWith(
+    compareBy<ProxyListRow> { row ->
+        val item = health[row.id]
+        if (item == null || !item.reachable) Long.MAX_VALUE else item.latencyMs
+    },
+)
+
 @Composable
 private fun ProxyModeRowMiuix(
     title: String,
@@ -553,6 +612,43 @@ private fun ProxyEntryRowMiuix(
             )
             Spacer(Modifier.width(8.dp))
             ProxyStatusDotMiuix(health = health, enabled = enabled)
+        }
+    }
+}
+
+/**
+ * 官方直连行：只展示测速结果，不参与「指定代理」选择。
+ */
+@Composable
+private fun DirectProxyRowMiuix(
+    health: ProxyHealth?,
+    testing: Boolean,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        // 和代理行里的 MiuixRadioButton 占同样宽度，文字才对齐；直连没有可选项。
+        Spacer(Modifier.width(24.dp))
+        MiuixText(
+            text = stringResource(R.string.settings_proxy_direct_name),
+            color = MiuixTheme.colorScheme.onSurface,
+            fontSize = 15.sp,
+            modifier = Modifier.weight(1f),
+        )
+        if (testing && health == null) {
+            ProxyTestingWave(MiuixTheme.colorScheme.primary)
+        } else {
+            MiuixText(
+                text = miuixProxyLatencyLabel(health),
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                fontSize = 12.sp,
+            )
+            Spacer(Modifier.width(8.dp))
+            ProxyStatusDotMiuix(health = health, enabled = true)
         }
     }
 }

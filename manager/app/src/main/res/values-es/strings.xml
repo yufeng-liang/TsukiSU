@@ -49,6 +49,7 @@
     <string name="home_support_title">Apóyanos</string>
     <string name="home_support_content">SukiSU es, y siempre será, gratuito y de código abierto. Sin embargo, puedes demostrarnos que te importamos haciendo una donación.</string>
     <string name="about_source_code"><![CDATA[Ver código fuente en %1$s]]></string>
+    <string name="about_build_time">Hora de compilación: %1$s</string>
     <string name="profile_default">Predeterminado</string>
     <string name="profile_template">Plantilla</string>
     <string name="profile_custom">Personalizado</string>

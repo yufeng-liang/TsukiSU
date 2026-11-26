@@ -50,6 +50,7 @@
     <string name="send_log">Pošaljite Izvještaj</string>
     <string name="home_learn_kernelsu">Naučite SukiSU</string>
     <string name="about_source_code"><![CDATA[Pogledajte izvornu kodu na %1$s]]></string>
+    <string name="about_build_time">Vrijeme izrade: %1$s</string>
     <string name="profile_selinux_domain">Domena</string>
     <string name="profile_selinux_rules">Pravila</string>
     <string name="failed_to_update_sepolicy">Neuspješno ažuriranje SELinux pravila za: %s</string>

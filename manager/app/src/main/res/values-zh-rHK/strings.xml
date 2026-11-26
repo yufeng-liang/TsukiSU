@@ -89,6 +89,7 @@
     <string name="home_gki_warning">由 v3.0.0 起 GKI 模式僅限測試環境使用，不建議日常長期使用且不再提供鏡像檔</string>
     <string name="home_support_content">TsukiSU 承諾永久免費且開源，歡迎捐款支持</string>
     <string name="about_source_code"><![CDATA[在 %1$s 中檢視原始碼]]></string>
+    <string name="about_build_time">建置時間：%1$s</string>
     <string name="profile_default">預設</string>
     <string name="profile_template">模板</string>
     <string name="profile_custom">自訂</string>
@@ -671,6 +672,7 @@
     <string name="settings_proxy_mode_official">官方直連</string>
     <string name="settings_proxy_mode_auto">自動選優</string>
     <string name="settings_proxy_mode_pinned">指定代理</string>
+    <string name="settings_proxy_direct_name">github.com（官方直連）</string>
     <string name="settings_proxy_latency">%1$d 毫秒</string>
     <string name="settings_proxy_unavailable">無法使用</string>
     <string name="settings_proxy_untested">未測</string>

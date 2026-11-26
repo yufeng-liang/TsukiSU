@@ -194,7 +194,8 @@ fun SettingPagerMiuix(
                         AboutPreference(actions = actions)
                     }
                 }
-                item { Spacer(Modifier.height(bottomInnerPadding)) }
+                // M3 底栏自带 12dp 顶部留白，Miuix 底栏没有；这里补上同样的呼吸空间。
+                item { Spacer(Modifier.height(bottomInnerPadding + 12.dp)) }
             }
         }
     }

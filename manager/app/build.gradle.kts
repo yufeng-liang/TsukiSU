@@ -3,6 +3,9 @@
 import com.google.protobuf.gradle.id
 import java.net.HttpURLConnection
 import java.net.URI
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.Properties
 
 plugins {
@@ -192,6 +195,9 @@ android {
         // 干净的品牌标签（"mod"）。versionName 已带版本号，凡是要拼文件名或当
         // KSU_VER 用的地方都取这个，别取 VERSION_NAME。
         buildConfigField("String", "MANAGER_VERSION_TAG", "\"$managerVersionTag\"")
+        // 构建时间：每次构建时生成，显示在「关于」页版本号下方。
+        val buildTime = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date())
+        buildConfigField("String", "BUILD_TIME", "\"$buildTime\"")
         // LKM 指纹：kernel/ 子树的 tree hash。内核编译时会把同一个值编进版本串
         // （v4.3.0-<commit>@<branch>+lkm.<rev>），首页据此判断这次升级是否真的带来了
         // 新的 .ko —— 指纹一致就不催用户再刷一次内核。CI 通过 -PlkmRev 显式传入，

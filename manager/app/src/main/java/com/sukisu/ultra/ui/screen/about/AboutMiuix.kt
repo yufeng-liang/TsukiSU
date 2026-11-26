@@ -399,6 +399,20 @@ private fun AboutContent(
                 fontSize = 14.sp,
                 textAlign = TextAlign.Center,
             )
+            Text(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp)
+                    .graphicsLayer {
+                        alpha = 1 - versionCodeProgress
+                        scaleX = 1 - (versionCodeProgress * 0.05f)
+                        scaleY = 1 - (versionCodeProgress * 0.05f)
+                    },
+                color = colorScheme.onSurfaceVariantSummary,
+                text = stringResource(R.string.about_build_time, state.buildTime),
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
+            )
         }
 
         // Scrollable content

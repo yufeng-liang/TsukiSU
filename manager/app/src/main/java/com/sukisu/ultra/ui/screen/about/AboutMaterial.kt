@@ -131,6 +131,12 @@ fun AboutScreenMaterial(
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontFamily = FontFamily.Monospace,
                             )
+                            Text(
+                                text = stringResource(R.string.about_build_time, state.buildTime),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
                 }

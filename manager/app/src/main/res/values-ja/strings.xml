@@ -49,6 +49,7 @@
     <string name="home_gki_warning">バージョン 3.0.0 以降、GKI ワークモードはテスト環境でのみ使用されます。日常的な使用には推奨されません。また、イメージファイルの提供も停止されます。</string>
     <string name="home_support_content">SukiSU はこれからもずっと無料でオープンソースです。寄付をして頂くことで、開発を支援していただけます。</string>
     <string name="about_source_code"><![CDATA[%1$s でソースコードを表示]]></string>
+    <string name="about_build_time">ビルド日時：%1$s</string>
     <string name="profile">アプリのプロファイル</string>
     <string name="profile_default">既定</string>
     <string name="profile_template">テンプレート</string>
@@ -359,6 +360,7 @@
     <string name="settings_proxy_mode_official">公式直接接続</string>
     <string name="settings_proxy_mode_auto">自動（最速）</string>
     <string name="settings_proxy_mode_pinned">プロキシを指定</string>
+    <string name="settings_proxy_direct_name">github.com（公式直接接続）</string>
     <string name="settings_proxy_latency">%1$d ミリ秒</string>
     <string name="settings_proxy_unavailable">利用不可</string>
     <string name="settings_proxy_untested">未測定</string>

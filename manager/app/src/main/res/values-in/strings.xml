@@ -84,6 +84,7 @@
     <string name="home_gki_warning">Mulai dari v3.0.0, fungsi mode GKI dibatasi untuk lingkungan pengujian. Kami tidak menyarankan untuk penggunaan harian, dan berkas image tidak akan lagi disediakan.</string>
     <string name="home_support_content">SukiSU gratis dan sumber terbuka, sekarang dan selamanya. Namun, Anda dapat menunjukkan kepedulian Anda kepada kami dengan memberikan donasi.</string>
     <string name="about_source_code"><![CDATA[Lihat kode sumber di %1$s]]></string>
+    <string name="about_build_time">Waktu build: %1$s</string>
     <string name="profile">Profil Aplikasi</string>
     <string name="profile_default">Bawaan</string>
     <string name="profile_template">Templat</string>

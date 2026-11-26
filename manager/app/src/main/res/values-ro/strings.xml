@@ -48,6 +48,7 @@
     <string name="home_support_title">Suport</string>
     <string name="home_support_content">SukiSU este, și va fi întotdeauna, gratuit și cu codul sursă deschis. Cu toate acestea, ne poți arăta că îți pasă făcând o donație.</string>
     <string name="about_source_code"><![CDATA[Vezi codul sursă la %1$s]]></string>
+    <string name="about_build_time">Ora compilării: %1$s</string>
     <string name="profile_default">Implicit</string>
     <string name="profile_template">Șablon</string>
     <string name="profile_custom">Personalizat</string>

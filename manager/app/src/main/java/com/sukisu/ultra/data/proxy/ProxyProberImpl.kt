@@ -59,10 +59,12 @@ class ProxyProberImpl(
         entries: List<ProxyEntry>,
         sampleUrl: String?,
         timeoutMs: Long,
+        includeDirect: Boolean,
         onResult: (suspend (ProxyHealth) -> Unit)?,
     ): List<ProxyHealth> = coroutineScope {
-        if (entries.isEmpty()) return@coroutineScope emptyList()
         val budget = timeoutMs.coerceAtLeast(MIN_TIMEOUT_MS)
+        val targets = buildProbeTargets(entries, sampleUrl, includeDirect)
+        if (targets.isEmpty()) return@coroutineScope emptyList()
         // 用 Channel 收集：谁先测完谁先回填，最慢的那条（可能打满 8 秒超时）不再拖住全部结果。
         // UNLIMITED 是因为最多也就几条到十几条代理，没必要让探测协程等消费者。
         val finished = Channel<ProxyHealth>(Channel.UNLIMITED)
@@ -76,8 +78,8 @@ class ProxyProberImpl(
         }
         // 一个代理卡住不该拖住其他代理的结果：每个探测自己带超时，失败也只是它自己那条
         // 变成 unreachable。
-        entries.map { entry ->
-            launch(Dispatchers.IO) { finished.send(probe(entry, sampleUrl, budget)) }
+        targets.map { (id, target) ->
+            launch(Dispatchers.IO) { finished.send(probeTarget(id, target, budget)) }
         }.forEach { it.join() }
         finished.close()
         collector.join()
@@ -141,18 +143,17 @@ class ProxyProberImpl(
     }
 
     /**
-     * 探测单个代理。
+     * 探测单个通道（代理或官方直连）。
      *
-     * 没有 [sampleUrl] 时只探代理根路径，用来回答「这个地址还活着吗」；有样本时探的是
-     * 「代理 + 一个真实 release 地址」，能顺带验证它真的会转发 GitHub 的内容。
+     * [target] 已经是最终要请求的地址：代理是「代理 + 一个真实 release 地址」，
+     * 直连则是原始 GitHub 样本地址；这样能顺带验证它真的会转发 GitHub 的内容。
      */
-    private suspend fun probe(
-        entry: ProxyEntry,
-        sampleUrl: String?,
+    private suspend fun probeTarget(
+        id: String,
+        target: String,
         timeoutMs: Long,
     ): ProxyHealth {
         val startedAt = System.currentTimeMillis()
-        val target = if (sampleUrl.isNullOrBlank()) entry.baseUrl else ProxyUrl.build(entry, sampleUrl)
         var reachable = false
         var message = ""
         try {
@@ -171,7 +172,7 @@ class ProxyProberImpl(
         }
         val finishedAt = System.currentTimeMillis()
         return ProxyHealth(
-            id = entry.id,
+            id = id,
             reachable = reachable,
             latencyMs = finishedAt - startedAt,
             checkedAt = finishedAt,
@@ -222,8 +223,28 @@ class ProxyProberImpl(
         return call.execute()
     }
 
-    private companion object {
+    internal companion object {
         /** 0 或负数的超时在 `withTimeout` 里等于「立刻失败」，没有诊断价值，兜到 1ms 起。 */
-        const val MIN_TIMEOUT_MS = 1L
+        private const val MIN_TIMEOUT_MS = 1L
+
+        /** 没有样本地址时，直连默认探 GitHub 首页，至少能验证 GitHub 本身是否可达。 */
+        private const val DEFAULT_DIRECT_PROBE_URL = "https://github.com"
+
+        /**
+         * 组装这一轮要探测的「通道 id → 实际 URL」列表。
+         * 直连不是代理，不能走 [ProxyUrl.build]；它只是设置页列表里的一条「通道」。
+         */
+        internal fun buildProbeTargets(
+            entries: List<ProxyEntry>,
+            sampleUrl: String?,
+            includeDirect: Boolean,
+        ): List<Pair<String, String>> = buildList {
+            if (includeDirect) {
+                add(DIRECT_ID to (sampleUrl?.takeIf { it.isNotBlank() } ?: DEFAULT_DIRECT_PROBE_URL))
+            }
+            entries.forEach { entry ->
+                add(entry.id to if (sampleUrl.isNullOrBlank()) entry.baseUrl else ProxyUrl.build(entry, sampleUrl))
+            }
+        }
     }
 }

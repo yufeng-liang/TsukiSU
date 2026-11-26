@@ -54,6 +54,7 @@
     <string name="profile_namespace_individual">वैयक्तिक</string>
     <string name="profile_capabilities">क्षमता</string>
     <string name="about_source_code"><![CDATA[%1$s वर स्रोत कोड पहा]]></string>
+    <string name="about_build_time">बिल्ड वेळ: %1$s</string>
     <string name="profile_name">प्रोफाइल नाव</string>
     <string name="profile_namespace_inherited">इनहेरीटेड</string>
     <string name="profile_namespace_global">जागतिक</string>

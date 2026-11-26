@@ -2853,7 +2853,7 @@ homePillScale = repo.homePillScale,
     }
 
     /**
-     * 测速全部代理。结果只用于展示；下载选路仍由 [ProxyMode.AUTO] 的排序决定。
+     * 测速官方直连与全部代理。结果只用于展示；下载选路仍由 [ProxyMode.AUTO] 的排序决定。
      *
      * @param force true 表示用户手动点「测试全部」，跳过 3 分钟缓存强制重测。
      */
@@ -2886,6 +2886,7 @@ homePillScale = repo.homePillScale,
                     ProxyRuntime.prober.probeAll(
                         entries,
                         sampleUrl = PROXY_TEST_SAMPLE_URL,
+                        includeDirect = true,
                         onResult = { single ->
                             partial[single.id] = single
                             _uiState.update { state ->

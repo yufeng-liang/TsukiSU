@@ -211,15 +211,18 @@ interface ProxyListRepository {
 /** 健康检查与首包竞速。 */
 interface ProxyProber {
     /**
-     * 并发探测每个代理的可用性与延迟。
+     * 并发探测每个通道的可用性与延迟。
+     * @param includeDirect 是否把官方直连也加入这一轮探测。设置页要把直连和代理放在同一张表里排序，
+     * 所以传 true；下载链路的竞速另有 [race]，不依赖这里。
      * @param sampleUrl 用于探测的原始 GitHub Release 地址；为空时只看连通性（探测代理根路径）。
      */
     suspend fun probeAll(
         entries: List<ProxyEntry>,
         sampleUrl: String? = null,
         timeoutMs: Long = 8_000,
+        includeDirect: Boolean = false,
         /**
-         * 每测完一个代理就回调一次，用于让界面边测边显示；不需要逐条结果时可以不传。
+         * 每测完一个通道就回调一次，用于让界面边测边显示；不需要逐条结果时可以不传。
          * 回调按「谁先测完谁先回调」的顺序串行执行，不会并发进入。
          */
         onResult: (suspend (ProxyHealth) -> Unit)? = null,

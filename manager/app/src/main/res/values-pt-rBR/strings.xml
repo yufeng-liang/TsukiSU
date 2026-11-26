@@ -157,6 +157,7 @@
     <string name="about_contributors_hint">Arraste para explorar, pince para dar zoom, toque em um avatar para abrir o perfil.</string>
     <string name="about_wordmark_hint">Cada letra é o nome de um colaborador. Pince para ampliar.</string>
     <string name="about_source_code"><![CDATA[Veja o código-fonte no %1$s]]></string>
+    <string name="about_build_time">Hora da compilação: %1$s</string>
     <string name="profile_default">Padrão</string>
     <string name="profile_template">Modelo</string>
     <string name="profile_custom">Personalizado</string>

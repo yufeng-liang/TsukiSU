@@ -48,6 +48,7 @@
     <string name="home_support_title">สนับสนุนพวกเรา</string>
     <string name="home_support_content">SukiSU จะเป็นโอเพ่นซอร์สฟรีเสมอ อย่างไรก็ตาม คุณสามารถแสดงความห่วงใยได้ด้วยการบริจาค</string>
     <string name="about_source_code"><![CDATA[ดูซอร์สโค้ดได้ที่ %1$s]]></string>
+    <string name="about_build_time">เวลาสร้าง: %1$s</string>
     <string name="profile_custom">กำหนดเอง</string>
     <string name="profile_default">ค่าเริ่มต้น</string>
     <string name="profile_template">เทมเพลต</string>

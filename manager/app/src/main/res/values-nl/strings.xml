@@ -48,6 +48,7 @@
     <string name="home_support_title">Ondersteun ons</string>
     <string name="home_support_content">SukiSU is en blijft gratis en open source. U kunt ons echter laten zien dat u ons steunt door een donatie te doen.</string>
     <string name="about_source_code"><![CDATA[Bekijk source code op %1$s]]></string>
+    <string name="about_build_time">Buildtijd: %1$s</string>
     <string name="profile" translatable="false">App profiel</string>
     <string name="profile_default">Standaard</string>
     <string name="profile_template">Sjabloon</string>

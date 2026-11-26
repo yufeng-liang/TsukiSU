@@ -29,6 +29,7 @@
     <string name="home_learn_kernelsu_url">https://sukisu.org/guide/</string>
     <string name="home_click_to_learn_kernelsu">Naučite se, kako namestiti SukiSU in uporabiti module</string>
     <string name="about_source_code"><![CDATA[Glej odprto kodo na %1$s]]></string>
+    <string name="about_build_time">Čas izgradnje: %1$s</string>
     <string name="profile_default">Privzeto</string>
     <string name="profile_template">Predloga</string>
     <string name="profile_namespace">Imenski prostor vmestitve</string>

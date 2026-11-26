@@ -48,6 +48,7 @@
     <string name="home_support_title">إدعمنا</string>
     <string name="home_support_content">SukiSU سيظل دائماً مجانياً ومفتوح المصدر. مع ذلك، يمكنك متى ما استطعت أن تظهر لنا أنك تهتم بالتبرع.</string>
     <string name="about_source_code"><![CDATA[أنظر إلى مصدر البرمجة في %1$s]]></string>
+    <string name="about_build_time">وقت البناء: %1$s</string>
     <string name="profile_capabilities">القدرات</string>
     <string name="module_update">تحديث</string>
     <string name="module_downloading">تحميل الإضافة: %s</string>
