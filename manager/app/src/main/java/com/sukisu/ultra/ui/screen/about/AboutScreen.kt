@@ -47,7 +47,7 @@ fun AboutScreen() {
         appName = stringResource(R.string.app_name),
         // 版本名本身就带版本号（"mod (41284)"，见 getVersionName），这里原样显示。
         versionName = BuildConfig.VERSION_NAME,
-        buildTime = BuildConfig.BUILD_TIME,
+        buildTime = formatBuildTime(BuildConfig.BUILD_TIME_EPOCH_MS),
         icon = BuiltinAppIcons.find(settingsState.appIconId),
         links = extractLinks(htmlString),
         checkUpdate = settingsState.checkUpdate,
