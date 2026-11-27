@@ -12,7 +12,7 @@ import com.sukisu.ultra.data.registry.RegistryUrls
  * - [ProxyPreference] → `ProxyPreferenceImpl.kt`
  *
  * 安全底线：代理是 TLS 终点，能看见也能改写下载内容。因此
- * 1. 只有 [RegistryUrls.isAllowedReleaseDownloadUrl] 认可的原始 GitHub Release 地址才允许套代理；
+ * 1. 只有 [RegistryUrls.isAccelerableGithubUrl] 认可的 GitHub 下载地址才允许套代理；
  * 2. 校验用的哈希必须来自直连（见 `checkLatestRelease` 与各下载器的 `expected`）；
  * 3. 代理地址本身必须是 https 且只含 host（不带路径/查询/片段）。
  */
@@ -28,7 +28,7 @@ enum class ProxyMode(val value: String) {
     ;
 
     companion object {
-        fun from(value: String?): ProxyMode = entries.firstOrNull { it.value == value } ?: OFFICIAL
+        fun from(value: String?): ProxyMode = entries.firstOrNull { it.value == value } ?: AUTO
     }
 }
 
@@ -91,7 +91,7 @@ object ProxyUrl {
             val prefix = entry.baseUrl.trimEnd('/') + "/"
             if (url.startsWith(prefix, ignoreCase = true)) {
                 val inner = url.substring(prefix.length)
-                if (RegistryUrls.isAllowedReleaseDownloadUrl(inner)) return inner
+                if (RegistryUrls.isAccelerableGithubUrl(inner)) return inner
             }
         }
         return null
@@ -105,7 +105,7 @@ object ProxyUrl {
     /**
      * 只看形状：路径里是否还套着另一个绝对 URL（`https://代理/<https://github.com/...>`）。
      *
-     * 给「没有哈希、因而必须直连」的下载做纵深防御——这类地址不该经过任何代理。
+     * 给「没有哈希」的下载做纵深防御——先看形状，再交给服务层确认内层是 GitHub 下载地址。
      * 不依赖代理列表，所以服务层拿不到 entries 时也能判。
      */
     fun looksLikeProxied(url: String): Boolean {
@@ -132,7 +132,7 @@ const val DIRECT_ID: String = "direct"
 object GithubProxyRouter {
 
     /**
-     * @param originalUrl 原始 GitHub Release 地址；不是 release 地址时永远只返回它自己。
+     * @param originalUrl 原始 GitHub 下载地址；不是可加速的 GitHub 地址时永远只返回它自己。
      * @param mode 用户选择的模式。
      * @param entries 当前可用代理（已过滤启用状态）。
      * @param pinnedId [ProxyMode.PINNED] 时用户指定的代理 id。
@@ -147,7 +147,7 @@ object GithubProxyRouter {
         lastGoodId: String? = null,
         ranking: List<String> = emptyList(),
     ): List<String> {
-        if (!RegistryUrls.isAllowedReleaseDownloadUrl(originalUrl)) return listOf(originalUrl)
+        if (!RegistryUrls.isAccelerableGithubUrl(originalUrl)) return listOf(originalUrl)
         if (entries.isEmpty()) return listOf(originalUrl)
 
         val usable = entries.filter { ProxyUrl.isValidBaseUrl(it.baseUrl) }

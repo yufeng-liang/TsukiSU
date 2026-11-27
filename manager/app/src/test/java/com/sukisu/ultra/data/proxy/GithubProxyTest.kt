@@ -50,10 +50,10 @@ class GithubProxyTest {
     }
 
     @Test
-    fun unwrapRejectsInnerUrlsThatAreNotReleaseDownloads() {
-        // 代理前缀 + 任意地址（比如首页）不算合法封装，否则代理能把下载重定向到任意站。
-        val homepage = "https://gh-proxy.org/https://github.com/owner/repo"
-        assertNull(ProxyUrl.unwrap(homepage, listOf(entry)))
+    fun unwrapAcceptsGithubDownloadUrlsAndRejectsForeignHosts() {
+        val raw = "https://raw.githubusercontent.com/owner/repo/main/module.zip"
+        assertEquals(raw, ProxyUrl.unwrap(ProxyUrl.build(entry, raw), listOf(entry)))
+        assertNull(ProxyUrl.unwrap("https://gh-proxy.org/https://evil.com/module.zip", listOf(entry)))
         assertNull(ProxyUrl.unwrap("https://gh-proxy.org.evil.com/$releaseUrl", listOf(entry)))
     }
 
@@ -110,12 +110,24 @@ class GithubProxyTest {
     }
 
     @Test
-    fun nonReleaseUrlsAreNeverProxied() {
-        val githubPage = "https://github.com/owner/repo"
+    fun acceleratesGithubDownloadUrlsButNotArbitraryHosts() {
+        val raw = "https://raw.githubusercontent.com/owner/repo/main/module.zip"
         assertEquals(
-            listOf(githubPage),
-            GithubProxyRouter.candidates(githubPage, ProxyMode.AUTO, BUILTIN_PROXIES),
+            listOf(ProxyUrl.build(entry, raw), raw),
+            GithubProxyRouter.candidates(raw, ProxyMode.AUTO, listOf(entry)),
         )
+        val evil = "https://evil.com/module.zip"
+        assertEquals(
+            listOf(evil),
+            GithubProxyRouter.candidates(evil, ProxyMode.AUTO, listOf(entry)),
+        )
+    }
+
+    @Test
+    fun proxyModeDefaultsToAuto() {
+        assertEquals(ProxyMode.AUTO, ProxyMode.from(null))
+        assertEquals(ProxyMode.AUTO, ProxyMode.from("unknown"))
+        assertEquals(ProxyMode.OFFICIAL, ProxyMode.from("official"))
     }
 
     @Test

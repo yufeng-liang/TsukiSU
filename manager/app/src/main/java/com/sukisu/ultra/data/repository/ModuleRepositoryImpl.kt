@@ -6,6 +6,9 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import com.sukisu.ultra.data.model.Module
 import com.sukisu.ultra.data.model.ModuleUpdateInfo
+import com.sukisu.ultra.data.proxy.GithubProxyRouter
+import com.sukisu.ultra.data.proxy.ProxyMode
+import com.sukisu.ultra.data.proxy.ProxyRuntime
 import com.sukisu.ultra.ksuApp
 import com.sukisu.ultra.ui.util.isNetworkAvailable
 import com.sukisu.ultra.ui.util.listModules
@@ -67,9 +70,7 @@ class ModuleRepositoryImpl : ModuleRepository {
             }
 
             val url = module.updateJson
-            val result = ksuApp.okhttpClient.newCall(
-                Request.Builder().url(url).build()
-            ).awaitModuleUpdateBody()
+            val result = fetchModuleUpdateBody(url)
 
             if (result.isEmpty()) {
                 return@runCatching ModuleUpdateInfo.Empty
@@ -81,8 +82,8 @@ class ModuleRepositoryImpl : ModuleRepository {
             val versionCode = updateJson.optLong("versionCode", 0L)
             val zipUrl = updateJson.optString("zipUrl", "")
             val changelog = updateJson.optString("changelog", "")
-            // updateJson 允许声明 sha256 / size：声明了才做完整性校验，
-            // 也只有声明了才允许这单下载走 GitHub 加速（代理是 TLS 终点，校验不了的字节不能过第三方）。
+            // updateJson 允许声明 sha256 / size：声明了才做完整性校验。
+            // 是否走 GitHub 加速只取决于 zipUrl 是否为可加速的 GitHub 地址，与有没有 sha256 无关。
             val sha256 = updateJson.optString("sha256", "")
             val size = updateJson.optLong("size", 0L)
 
@@ -92,6 +93,62 @@ class ModuleRepositoryImpl : ModuleRepository {
                 ModuleUpdateInfo(zipUrl, version, changelog, versionCode, sha256, size)
             }
         }.onFailure { if (it is CancellationException) throw it }
+    }
+
+    /**
+     * 拉取模块更新描述。GitHub 地址按当前加速设置展开候选（与下载同一条路由），
+     * 其它地址仍然只直连；候选都拿不到内容时抛最后一次网络错误。
+     */
+    private suspend fun fetchModuleUpdateBody(url: String): String {
+        val proxies = try {
+            ProxyRuntime.list.load()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            emptyList()
+        }
+        val mode = try {
+            ProxyRuntime.prefs.mode()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            ProxyMode.AUTO
+        }
+        val pinnedId = try {
+            ProxyRuntime.prefs.pinnedId()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+        val lastGoodId = try {
+            ProxyRuntime.prefs.lastGoodId()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+        val candidates = GithubProxyRouter.candidates(url, mode, proxies, pinnedId, lastGoodId)
+        var lastFailure: Exception? = null
+        for (candidate in candidates) {
+            try {
+                val body = ksuApp.okhttpClient.newCall(
+                    Request.Builder().url(candidate).build()
+                ).awaitModuleUpdateBody()
+                val parsed = runCatching { JSONObject(body) }.getOrNull()
+                if (body.isNotEmpty() && parsed != null &&
+                    (parsed.has("version") || parsed.has("versionCode") || parsed.has("zipUrl"))
+                ) {
+                    return body
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                lastFailure = e
+            }
+        }
+        lastFailure?.let { throw it }
+        return ""
     }
 }
 

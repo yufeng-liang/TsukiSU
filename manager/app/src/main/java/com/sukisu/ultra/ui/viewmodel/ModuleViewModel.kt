@@ -624,8 +624,8 @@ class ModuleViewModel(
                 module = module,
                 downloadUrl = updateInfo.downloadUrl,
                 fileName = "${module.name}-${updateInfo.version}.zip",
-                // updateJson 声明了 sha256 才带期望值：有了它下载才会走 GitHub 加速，
-                // 且落地后由 Flash 步骤再校验一次；没声明就还是原来的直连行为。
+                // updateJson 声明了 sha256 才带期望值：有哈希时落地后由 Flash 步骤再校验一次；
+                // 没有哈希也照样走 GitHub 加速，只是少一层完整性校验。
                 expected = updateInfo.sha256.trim().takeIf { it.isNotEmpty() }?.let {
                     ExpectedFile(size = updateInfo.size, sha256 = it)
                 },

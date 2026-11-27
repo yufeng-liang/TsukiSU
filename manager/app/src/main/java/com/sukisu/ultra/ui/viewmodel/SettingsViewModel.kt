@@ -267,7 +267,7 @@ class SettingsViewModel(
         // 内核 feature 状态留给真正展示它的页面（设置页与三个二级页）触发：
         // 任何页面都不进设置时，启动过程不再多起两条 root shell。
         // 代理配置不在 SettingsRepository 里，启动时单独读一次再填进 UI 状态，
-        // 否则设置页会先闪一下默认的「官方直连」。
+        // 否则设置页会先闪一下默认的「自动选优」。
         viewModelScope.launch {
             try {
                 val (mode, pinnedId) = withContext(Dispatchers.IO) {
@@ -277,7 +277,7 @@ class SettingsViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                // 读不到就保持默认值（官方直连），设置页照常可用
+                // 读不到就保持默认值（自动选优），设置页照常可用
             }
             refreshProxyEntries()
         }

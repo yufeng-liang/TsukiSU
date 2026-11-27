@@ -170,11 +170,11 @@ class DownloadService : Service() {
     }
 
     /**
-     * Registry downloads ([expected] != null) may only come from GitHub Release download URLs
+     * Verified downloads ([expected] != null) may only come from accelerable GitHub download URLs
      * and their CDN redirect targets; every hop is checked.
      *
      * 走加速时代理本身就是被请求的主机，它不在 GitHub 的域名表里，所以额外放行
-     * 「[proxyBase] + 白名单内层地址」这种形状，见 [proxiedInnerReleaseUrl]。
+     * 「[proxyBase] + 白名单内层地址」这种形状，见 [proxiedInnerGithubUrl]。
      */
     private fun registryClient(proxyBase: String?): OkHttpClient = ksuApp.okhttpClient.newBuilder()
         .followSslRedirects(false)
@@ -193,7 +193,7 @@ class DownloadService : Service() {
     /** 单跳放行：白名单域名，或「入队时记下的代理前缀 + 白名单内层地址」。 */
     private fun isAllowedRegistryHop(url: String, proxyBase: String?): Boolean {
         if (RegistryUrls.isAllowedDownloadHop(url)) return true
-        return proxiedInnerReleaseUrl(url, proxyBase) != null
+        return proxiedInnerGithubUrl(url, proxyBase) != null
     }
 
     /**
@@ -201,15 +201,15 @@ class DownloadService : Service() {
      *
      * 前缀取自入队时的候选快照：下载途中远程清单被刷新、过期、甚至暂时读不出来，都不该让一个
      * 已经排到队首的候选当场失效（旧实现每次下载都重新 load 一遍，最长还要等 15 秒网络）。
-     * 前缀必须是无路径的 https 基址，内层必须通过 [RegistryUrls.isAllowedReleaseDownloadUrl]，
+     * 前缀必须是无路径的 https 基址，内层必须通过 [RegistryUrls.isAccelerableGithubUrl]，
      * 所以放行代理域名不会变成放行任意 host。
      */
-    private fun proxiedInnerReleaseUrl(url: String, proxyBase: String?): String? {
+    private fun proxiedInnerGithubUrl(url: String, proxyBase: String?): String? {
         val base = proxyBase?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() } ?: return null
         if (!ProxyUrl.isValidBaseUrl(base)) return null
         if (!url.startsWith("$base/", ignoreCase = true)) return null
         return url.substring(base.length + 1)
-            .takeIf { RegistryUrls.isAllowedReleaseDownloadUrl(it) }
+            .takeIf { RegistryUrls.isAccelerableGithubUrl(it) }
     }
 
     private fun startDownload(
@@ -239,8 +239,8 @@ class DownloadService : Service() {
                 } else {
                     // 没有哈希也能走加速：只要「代理前缀 + 白名单内层地址」成立就放行。
                     // 这里不再要求代理仍出现在最新列表里——清单刷新不该让已在跑的候选作废；
-                    // 但内层必须是 GitHub release 地址，否则代理就成了任意 URL 转发器。
-                    if (ProxyUrl.looksLikeProxied(url) && proxiedInnerReleaseUrl(url, proxyBase) == null) {
+                    // 但内层必须是 GitHub 下载地址，否则代理就成了任意 URL 转发器。
+                    if (ProxyUrl.looksLikeProxied(url) && proxiedInnerGithubUrl(url, proxyBase) == null) {
                         throw DownloadVerificationException(
                             DownloadVerificationException.Reason.URL_NOT_ALLOWED,
                             "Download URL not allowed"
@@ -353,12 +353,12 @@ class DownloadService : Service() {
     private fun registryStoreRoot(): File = File(filesDir, RegistryDownloadStore.DIR_NAME)
 
     /**
-     * Registry release ZIP: only GitHub Release URLs (and their CDN redirect targets), streamed
-     * into app-private storage while size + SHA-256 are checked. A mismatching file is deleted
-     * and never published; the flash step re-verifies the stored bytes before installing.
+     * Verified GitHub asset: only accelerable GitHub download URLs (and their CDN redirect
+     * targets), streamed into app-private storage while size + SHA-256 are checked. A mismatching
+     * file is deleted and never published; the flash step re-verifies the stored bytes before installing.
      *
-     * 允许的地址有两类：直连的 GitHub Release 地址，以及「已知加速代理 + 白名单内层地址」。
-     * 后者只是换一条到同一个 release 资产的路，sha256 仍然由直连拿到的登记值把关，
+     * 允许的地址有两类：直连的 GitHub 下载地址，以及「已知加速代理 + 白名单内层地址」。
+     * 后者只是换一条到同一个下载资产的路，sha256 仍然由直连拿到的登记值把关，
      * 所以代理看到/改写内容也骗不过校验。
      */
     private suspend fun CoroutineScope.downloadVerified(
@@ -368,9 +368,9 @@ class DownloadService : Service() {
         expected: ExpectedFile,
         proxyBase: String?,
     ): Uri {
-        // 直连直接放行；加速地址只认「入队快照里的代理 + 白名单内层」，不接受任意 host。
-        val direct = RegistryUrls.isAllowedReleaseDownloadUrl(url)
-        if (!direct && proxiedInnerReleaseUrl(url, proxyBase) == null) {
+        // 直连只放行 GitHub 下载域名；加速地址只认「入队快照里的代理 + 白名单内层」，不接受任意 host。
+        val direct = RegistryUrls.isAccelerableGithubUrl(url)
+        if (!direct && proxiedInnerGithubUrl(url, proxyBase) == null) {
             throw DownloadVerificationException(
                 DownloadVerificationException.Reason.URL_NOT_ALLOWED,
                 "Download URL not allowed"

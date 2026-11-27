@@ -17,6 +17,40 @@ class RegistryUrlsTest {
     }
 
     @Test
+    fun accelerableGithubUrlsAreBroadButStillGithubOnly() {
+        val good = listOf(
+            "https://github.com/o/r",
+            "https://github.com/o/r/archive/refs/tags/v1.zip",
+            "https://github.com/o/r/releases/download/v1/module.zip?x=1",
+            "https://www.github.com/o/r",
+            "https://gist.github.com/user/id",
+            "https://raw.githubusercontent.com/o/r/main/a.zip",
+            "https://gist.githubusercontent.com/user/id/raw/a.zip",
+            "https://codeload.github.com/o/r/zip/refs/heads/main",
+            "https://media.githubusercontent.com/media/o/r/main/a.zip",
+            "https://objects.githubusercontent.com/x?sig=1",
+            "https://release-assets.githubusercontent.com/x?sp=r",
+        )
+        for (url in good) assertTrue(url, RegistryUrls.isAccelerableGithubUrl(url))
+
+        val bad = listOf(
+            "http://github.com/o/r",
+            "https://github.com.evil.com/o/r",
+            "https://evil.com/o/r",
+            "https://github.com:8443/o/r",
+            "https://user@github.com/o/r",
+            "https://github.com/o/r#frag",
+            "https://github.com/o/%2e%2e/r",
+            "https://github.com/o/a%2Fb",
+            "https://github.com//r",
+            "https://github.com/",
+            "not a url",
+            "",
+        )
+        for (url in bad) assertFalse(url, RegistryUrls.isAccelerableGithubUrl(url))
+    }
+
+    @Test
     fun rejectsEverythingElse() {
         val bad = listOf(
             "http://github.com/owner/repo/releases/download/v1/module.zip",
@@ -46,7 +80,7 @@ class RegistryUrlsTest {
         assertTrue(RegistryUrls.isAllowedDownloadHop("https://objects.githubusercontent.com/github-production-release-asset/1?sig=x"))
         assertTrue(RegistryUrls.isAllowedDownloadHop("https://release-assets.githubusercontent.com/github-production-release-asset/1?sp=r"))
         assertFalse(RegistryUrls.isAllowedDownloadHop("http://objects.githubusercontent.com/x"))
-        assertFalse(RegistryUrls.isAllowedDownloadHop("https://raw.githubusercontent.com/x"))
+        assertTrue(RegistryUrls.isAllowedDownloadHop("https://raw.githubusercontent.com/x"))
         assertFalse(RegistryUrls.isAllowedDownloadHop("https://evil.com/x"))
     }
 

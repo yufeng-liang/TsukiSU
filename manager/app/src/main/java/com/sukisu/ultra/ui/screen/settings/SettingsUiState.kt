@@ -182,7 +182,7 @@ data class SettingsUiState(
 
     // GitHub 下载加速
     // 下载链接改写是纯客户端配置，和 root 状态无关，所以放在通用设置的独立卡片里。
-    val proxyMode: String = ProxyMode.OFFICIAL.value,
+    val proxyMode: String = ProxyMode.AUTO.value,
     val proxyPinnedId: String = "",
     val proxyEntries: List<ProxyEntry> = emptyList(),
     val proxyHealth: List<ProxyHealth> = emptyList(),
