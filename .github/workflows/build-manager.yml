@@ -421,6 +421,23 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       # --------------------------------------------------------
+      # --------------------------------------------------------
+      # Android SDK 组件（compileSdk 37.2 需要 platforms;android-37.2）
+      # --------------------------------------------------------
+
+      - name: Install Android SDK components
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager="$(command -v sdkmanager || true)"
+          if [ -z "$sdkmanager" ]; then
+            sdkmanager="$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools" -maxdepth 3 -type f -name sdkmanager | head -1)"
+          fi
+          [ -n "$sdkmanager" ] || { echo "::error::runner 镜像里找不到 sdkmanager"; exit 1; }
+          yes | "$sdkmanager" --licenses > /dev/null 2>&1 || true
+          "$sdkmanager" --install "platforms;android-37.2" "build-tools;37.0.0"
+
+      # --------------------------------------------------------
       # Download ksud artifacts
       # --------------------------------------------------------
 
