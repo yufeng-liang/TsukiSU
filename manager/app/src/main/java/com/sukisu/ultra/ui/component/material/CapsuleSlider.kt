@@ -75,7 +75,7 @@ fun CapsuleSlider(
         state = state,
         modifier = modifier,
         enabled = enabled,
-        onValueChange = null,
+        onValueChange = {},
         onValueChangeFinished = onValueChangeFinished,
         interactionSource = interactionSource,
         thumb = { CapsuleThumb(interactionSource, enabled) },

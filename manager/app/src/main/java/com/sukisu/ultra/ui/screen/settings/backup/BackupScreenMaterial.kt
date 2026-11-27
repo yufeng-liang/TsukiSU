@@ -697,6 +697,7 @@ private fun RetentionSliderMaterial(
         }
         Slider(
             state = sliderState,
+            onValueChange = {},
             // 松手才落盘：拖动途中每个整数都写一次偏好项，等于把一次操作变成十几次磁盘写入。
             onValueChangeFinished = { onCommit(sliderState.value.roundToInt()) },
             modifier = Modifier.fillMaxWidth(),

@@ -71,7 +71,7 @@ fun ExpressiveSlider(
         state = state,
         modifier = modifier,
         enabled = enabled,
-        onValueChange = null,
+        onValueChange = {},
         onValueChangeFinished = onValueChangeFinished,
         interactionSource = interactionSource,
         thumb = { ExpressiveSliderThumb(interactionSource, enabled) },
